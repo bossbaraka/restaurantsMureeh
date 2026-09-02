@@ -1,7 +1,10 @@
-import { prisma } from './prisma';
+import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_OFFERS } from '../../src/data/sampleMenu';
+
+dotenv.config();
+const { prisma } = await import('./prisma');
 
 export async function seedDatabase() {
   console.log('🌱 Seeding PostgreSQL Database with Production Data...');
