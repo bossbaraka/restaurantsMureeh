@@ -7,17 +7,11 @@ import {
   Eye,
   EyeOff,
   ShieldCheck,
-  UserCheck,
-  ArrowLeft,
   Key,
   Users,
-  Utensils,
-  CreditCard,
   AlertTriangle,
   Clock,
-  Sparkles,
   CheckCircle2,
-  Delete,
 } from 'lucide-react';
 
 export const LoginModal: React.FC = () => {
@@ -33,7 +27,7 @@ export const LoginModal: React.FC = () => {
   } = useAuth();
   const { showToast, setViewMode } = useRestaurant();
 
-  const [authTab, setAuthTab] = useState<'MANAGERS' | 'STAFF_PIN' | 'DEMO_PRESETS'>('MANAGERS');
+  const [authTab, setAuthTab] = useState<'MANAGERS' | 'STAFF_PIN'>('MANAGERS');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -104,68 +98,6 @@ export const LoginModal: React.FC = () => {
       }
     }
   };
-
-  const handleQuickPreset = async (email: string, pass: string, role: string) => {
-    setIsLoading(true);
-    setErrorMsg('');
-    const res = await login(email, pass);
-    setIsLoading(false);
-    if (res.success) {
-      showToast('success', 'تم تسجيل الدخول', `أهلاً بك كـ ${role}`);
-      setIsLoginModalOpen(false);
-      if (email.includes('admin')) {
-        setViewMode('PLATFORM_ADMIN');
-      } else if (email.includes('manager')) {
-        setViewMode('MANAGER');
-      } else {
-        setViewMode('CUSTOMER');
-      }
-    } else {
-      setErrorMsg(res.error || 'تعذر الدخول');
-    }
-  };
-
-  const presetAccounts = [
-    {
-      role: 'مدير المطعم التجريبي (للعرض فقط)',
-      name: 'مدير العرض التجريبي',
-      email: 'demo.manager@merar-promo.com',
-      pass: 'Demo@2026Promo!',
-      badge: 'DEMO READ-ONLY',
-      color: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
-    },
-    {
-      role: 'مدير مطعم مِيرار الفاخر',
-      name: 'عمر القاسم',
-      email: 'manager@merar-dining.com',
-      pass: 'Merar@123456',
-      badge: 'PRO MANAGER',
-      color: 'border-gold-500/40 bg-gold-500/10 text-gold-300',
-    },
-    {
-      role: 'مشرف المنصة العام (Platform Owner)',
-      name: 'مالك المنصة',
-      email: 'admin@merar-saas.com',
-      pass: 'Admin@123456',
-      badge: 'SUPER ADMIN',
-      color: 'border-purple-500/40 bg-purple-500/10 text-purple-300',
-    },
-    {
-      role: 'مديرة بيسترو لوميير الفرنسي',
-      name: 'سارة لوروا',
-      email: 'manager@bistro-lumiere.com',
-      pass: 'Lumiere@123456',
-      badge: 'ENTERPRISE',
-      color: 'border-blue-500/40 bg-blue-500/10 text-blue-300',
-    },
-  ];
-
-  const staffPresets = [
-    { role: 'نادل / ويتر (Waiter)', name: 'كريم المنصور', pin: '4455', icon: <UserCheck className="w-4 h-4 text-blue-400" /> },
-    { role: 'شيف المطبخ (Kitchen Chef)', name: 'الشيف أنطوان', pin: '9900', icon: <Utensils className="w-4 h-4 text-amber-400" /> },
-    { role: 'كاشير المطعم (Cashier)', name: 'سارة عبد الله', pin: '1122', icon: <CreditCard className="w-4 h-4 text-emerald-400" /> },
-    { role: 'مدير الصالة (Manager)', name: 'عمر القاسم', pin: '1234', icon: <ShieldCheck className="w-4 h-4 text-gold-400" /> },
-  ];
 
   return (
     <div className="fixed inset-0 z-60 overflow-y-auto flex items-center justify-center p-3 sm:p-4">
@@ -242,21 +174,6 @@ export const LoginModal: React.FC = () => {
             <span>العمال (PIN)</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setAuthTab('DEMO_PRESETS');
-              setErrorMsg('');
-            }}
-            className={`flex-1 py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              authTab === 'DEMO_PRESETS'
-                ? 'bg-purple-600 text-white shadow-sm'
-                : 'text-purple-300 hover:text-purple-100 hover:bg-luxury-850'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>تجربة سريعة</span>
-          </button>
         </div>
 
         {/* Modal Body */}
@@ -403,27 +320,6 @@ export const LoginModal: React.FC = () => {
                 </button>
               </div>
 
-              {/* Quick Staff Preset Shortcuts */}
-              <div className="pt-2 border-t border-luxury-800 space-y-1.5 text-right">
-                <span className="text-[11px] text-luxury-400 font-bold block">رموز تجريبية للعمال:</span>
-                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                  {staffPresets.map((s) => (
-                    <button
-                      key={s.pin}
-                      type="button"
-                      onClick={() => {
-                        setPinInput(s.pin);
-                        handlePinSubmit(s.pin);
-                      }}
-                      className="p-2 rounded-lg bg-luxury-950 border border-luxury-800 hover:border-gold-500/50 flex items-center justify-between text-right cursor-pointer"
-                    >
-                      <span className="text-luxury-200">{s.name}</span>
-                      <span className="font-mono text-gold-400 font-bold">{s.pin}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {errorMsg && (
                 <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
                   {errorMsg}
@@ -432,36 +328,6 @@ export const LoginModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 3: ONE-CLICK DEMO ACCOUNTS */}
-          {authTab === 'DEMO_PRESETS' && (
-            <div className="space-y-2">
-              <span className="text-xs text-luxury-400 block mb-2 font-medium">
-                اختر حساباً للدخول الفوري أثناء العرض والاجتماعات:
-              </span>
-              {presetAccounts.map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => handleQuickPreset(acc.email, acc.pass, acc.role)}
-                  disabled={isLoading}
-                  className={`w-full p-3.5 rounded-2xl border text-right transition-all hover:scale-[1.01] flex items-center justify-between cursor-pointer ${acc.color}`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-luxury-100">{acc.role}</span>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase border border-current">
-                        {acc.badge}
-                      </span>
-                    </div>
-                    <span className="text-[11px] opacity-80 block mt-1 font-mono">
-                      {acc.email} · {acc.pass}
-                    </span>
-                  </div>
-                  <ArrowLeft className="w-4 h-4 shrink-0" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Footer */}
