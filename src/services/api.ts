@@ -23,7 +23,9 @@ export interface ApiResponse<T> {
   statusCode: number;
 }
 
-const configuredApiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
+const configuredApiUrl = import.meta.env.VITE_API_URL
+  ?.replace(/\/+$/, '')
+  .replace(/\/api$/, '');
 const API_BASE = typeof window !== 'undefined'
   ? `${configuredApiUrl || ''}/api`
   : 'http://localhost:3001/api';
