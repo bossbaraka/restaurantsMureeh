@@ -203,6 +203,7 @@ docker compose exec app npx tsx server/db/seed.ts
 - لا تنشر الـ Backend كـ Static Site؛ ملف `render.yaml` ينشئ الخدمتين منفصلتين.
 - في الواجهة، اضبط `VITE_API_URL` على رابط خدمة الـ API، مثل `https://restaurant-api.onrender.com`.
 - في خدمة الـ API، اضبط `DATABASE_URL` و `JWT_SECRET` و `CORS_ORIGIN` و `APP_URL`.
+- قبل تشغيل seed، اضبط أيضًا `PLATFORM_ADMIN_EMAIL` و `PLATFORM_ADMIN_PASSWORD`، بالإضافة إلى `MANAGER_1_NAME` و`MANAGER_1_EMAIL` و`MANAGER_1_PASSWORD`، ونفس الحقول للمديرين `2` و`3`.
 - يجب أن تكون قيمة `CORS_ORIGIN` هي رابط الواجهة النهائي، مثل `https://restaurant-frontend.onrender.com` أو رابط Vercel.
 
 ---

@@ -27,8 +27,14 @@ export async function seedDatabase() {
   const platformAdminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
   const demoManagerEmail = process.env.DEMO_MANAGER_EMAIL;
   const demoManagerPassword = process.env.DEMO_MANAGER_PASSWORD;
-  if (!platformAdminEmail || !platformAdminPassword || !demoManagerEmail || !demoManagerPassword) {
-    throw new Error('Platform and demo manager credentials must be configured before seeding');
+  const additionalManagers = [1, 2, 3].map((number) => ({
+    id: `user-manager-${number}`,
+    name: process.env[`MANAGER_${number}_NAME`],
+    email: process.env[`MANAGER_${number}_EMAIL`],
+    password: process.env[`MANAGER_${number}_PASSWORD`],
+  }));
+  if (!platformAdminEmail || !platformAdminPassword || !demoManagerEmail || !demoManagerPassword || additionalManagers.some((manager) => !manager.name || !manager.email || !manager.password)) {
+    throw new Error('Platform, demo manager, and three manager credentials must be configured before seeding');
   }
 
   // 2. Plans
@@ -151,6 +157,18 @@ export async function seedDatabase() {
       role: 'RESTAURANT_MANAGER',
       status: 'ACTIVE',
     },
+  });
+
+  await prisma.restaurantUser.createMany({
+    data: additionalManagers.map((manager) => ({
+      id: manager.id,
+      restaurantId: demoRestaurant.id,
+      name: manager.name!,
+      email: manager.email!.toLowerCase(),
+      passwordHash: bcrypt.hashSync(manager.password!, 12),
+      role: 'RESTAURANT_MANAGER' as const,
+      status: 'ACTIVE',
+    })),
   });
 
   await prisma.table.createMany({

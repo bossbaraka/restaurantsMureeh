@@ -16,6 +16,32 @@ services:
         sync: false
       - key: APP_URL
         sync: false
+      - key: PLATFORM_ADMIN_EMAIL
+        sync: false
+      - key: PLATFORM_ADMIN_PASSWORD
+        sync: false
+      - key: DEMO_MANAGER_EMAIL
+        sync: false
+      - key: DEMO_MANAGER_PASSWORD
+        sync: false
+      - key: MANAGER_1_NAME
+        sync: false
+      - key: MANAGER_1_EMAIL
+        sync: false
+      - key: MANAGER_1_PASSWORD
+        sync: false
+      - key: MANAGER_2_NAME
+        sync: false
+      - key: MANAGER_2_EMAIL
+        sync: false
+      - key: MANAGER_2_PASSWORD
+        sync: false
+      - key: MANAGER_3_NAME
+        sync: false
+      - key: MANAGER_3_EMAIL
+        sync: false
+      - key: MANAGER_3_PASSWORD
+        sync: false
 
   - type: static
     name: restaurant-frontend
