@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: merar_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the production environment}
+      POSTGRES_DB: restaurant_saas
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: merar_app
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/restaurant_saas?schema=public"
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the production environment}
+      CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in the production environment}
+      APP_URL: ${APP_URL:?Set APP_URL in the production environment}
+    ports:
+      - "3001:3001"
+    volumes:
+      - uploads_data:/app/uploads
+      - backups_data:/app/backups
+
+volumes:
+  postgres_data:
+  uploads_data:
+  backups_data:

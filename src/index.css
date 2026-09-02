@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+@layer base {
+  body {
+    @apply bg-[#0A0B0D] text-[#F8FAFC];
+  }
+}
+
+/* Custom Utilities for Luxury UI */
+.bg-subtle-pattern {
+  background-image: radial-gradient(rgba(197, 168, 128, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Luxury card borders */
+.luxury-border {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.luxury-border-gold {
+  border: 1px solid rgba(197, 168, 128, 0.25);
+}
+
+.gold-gradient-text {
+  background: linear-gradient(135deg, #FFF6DD 0%, #E6C86E 50%, #C5A880 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
