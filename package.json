@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "db:push": "prisma db push",
     "db:seed": "tsx server/db/seed.ts",
+    "db:provision-admins": "tsx server/db/provision-admins.ts",
     "test": "vitest run",
     "lint": "oxlint"
   },
