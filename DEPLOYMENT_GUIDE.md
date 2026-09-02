@@ -193,6 +193,18 @@ docker compose exec app npx tsx server/db/seed.ts
   - Output Directory: `dist`
   - أضف متغير البيئة `VITE_API_URL` برابط الباك إند على Render/Railway.
 
+### إعدادات Render و Vercel الجاهزة
+
+يوجد في جذر المشروع ملفا `render.yaml` و `vercel.json` لتطبيق إعدادات النشر تلقائيًا.
+إذا كان المستودع يحتوي على مجلد `restaurant-system`، اجعله **Root Directory** في إعدادات المنصة.
+
+- **Render Static Site**: يستخدم `npm ci && npm run build` وينشر مجلد `dist`.
+- **Render Web Service**: يستخدم `npm ci && npx prisma generate && npx prisma db push` ثم `npm run start:server`.
+- لا تنشر الـ Backend كـ Static Site؛ ملف `render.yaml` ينشئ الخدمتين منفصلتين.
+- في الواجهة، اضبط `VITE_API_URL` على رابط خدمة الـ API، مثل `https://restaurant-api.onrender.com`.
+- في خدمة الـ API، اضبط `DATABASE_URL` و `JWT_SECRET` و `CORS_ORIGIN` و `APP_URL`.
+- يجب أن تكون قيمة `CORS_ORIGIN` هي رابط الواجهة النهائي، مثل `https://restaurant-frontend.onrender.com` أو رابط Vercel.
+
 ---
 
 ## 5. إعداد شهادة الأمان SSL (HTTPS) مجاناً

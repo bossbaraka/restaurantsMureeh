@@ -23,7 +23,10 @@ export interface ApiResponse<T> {
   statusCode: number;
 }
 
-const API_BASE = typeof window !== 'undefined' ? '/api' : 'http://localhost:3001/api';
+const configuredApiUrl = import.meta.env.VITE_API_URL?.replace(/\/$/, '');
+const API_BASE = typeof window !== 'undefined'
+  ? `${configuredApiUrl || ''}/api`
+  : 'http://localhost:3001/api';
 
 export async function resolvePublicRestaurantCatalog(
   _slug: string,
