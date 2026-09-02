@@ -150,6 +150,22 @@ class RestaurantApiService {
     };
   }
 
+  public async getCurrentUser(): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null }>> {
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem('merar_auth_token')) {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: this.getAuthHeader(),
+        });
+        const json = await res.json();
+        if (res.ok && json?.success && json.data?.user) return json;
+      }
+    } catch {
+      // Treat an unavailable or invalid session as logged out.
+    }
+
+    return { success: false, error: 'جلسة الدخول غير صالحة', statusCode: 401 };
+  }
+
   // =========================================================================
   // PUBLIC / CUSTOMER ANONYMOUS ENDPOINTS (Scoped by Tenant Slug)
   // =========================================================================

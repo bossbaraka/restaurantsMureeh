@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { RestaurantUser, Restaurant, TenantRole } from '../types/restaurant';
 import { api } from '../services/api';
 import { db } from '../services/db';
-import { SEED_USERS } from '../data/seedData';
 
 interface AuthContextType {
   currentUser: RestaurantUser | null;
@@ -56,17 +55,9 @@ const LOCKOUT_DURATION_SEC = 60;
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<RestaurantUser | null>(() => {
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch {
-          return SEED_USERS[1];
-        }
-      }
-      return SEED_USERS[1]; // MÉRAR Manager
+      return null;
     }
-    return SEED_USERS[1];
+    return null;
   });
 
   const [currentManagerRestaurant, setCurrentManagerRestaurant] = useState<Restaurant | null>(() => {
@@ -81,6 +72,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [lockoutRemainingSeconds, setLockoutRemainingSeconds] = useState(0);
 
   // Lockout countdown timer
+  useEffect(() => {
+    let isMounted = true;
+
+    const restoreSession = async () => {
+      if (typeof window === 'undefined' || !localStorage.getItem(TOKEN_STORAGE_KEY)) return;
+
+      const res = await api.getCurrentUser();
+      if (isMounted && res.success && res.data) {
+        setCurrentUser(res.data.user);
+        setCurrentManagerRestaurant(res.data.restaurant);
+      } else if (isMounted) {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      }
+    };
+
+    void restoreSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (lockoutRemainingSeconds > 0) {
       const timer = setInterval(() => {
