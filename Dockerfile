@@ -28,4 +28,9 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 
-CMD ["npx", "tsx", "server/index.ts"]
+<<<<<<< HEAD
+# CMD ["npx", "tsx", "server/index.ts"]
+=======
+# CMD ["npx", "tsx", "server/index.ts"]
+CMD ["sh", "-c", "npx prisma db push && npm run db:seed && npx tsx server/index.ts"]
+>>>>>>> 19046ab (add local Dockerfile)
