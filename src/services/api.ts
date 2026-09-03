@@ -843,6 +843,21 @@ class RestaurantApiService {
     return { success: false, error: 'تعذر تحميل القائمة من قاعدة البيانات', statusCode: 503 };
   }
 
+  public async getManagerTables(restaurantId: string): Promise<ApiResponse<RestaurantTable[]>> {
+    try {
+      if (typeof window !== 'undefined') {
+        const res = await fetch(`${API_BASE}/manager/tables?restaurantId=${encodeURIComponent(restaurantId)}`, {
+          headers: this.getAuthHeader(),
+        });
+        const json = await res.json();
+        if (res.ok && json.success && Array.isArray(json.data)) return json;
+      }
+    } catch {
+      // Fallback to local data.
+    }
+    return { success: false, error: 'تعذر تحميل الطاولات من قاعدة البيانات', statusCode: 503 };
+  }
+
   public async saveCategory(user: RestaurantUser, restaurantId: string, category: Category): Promise<ApiResponse<{ category: Category }>> {
     if (!this.verifyManagerAccess(user, restaurantId)) return { success: false, error: 'غير مصرح بالوصول', statusCode: 403 };
     try {

@@ -261,6 +261,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setCategories(menuRes.data.categories);
         setProducts(menuRes.data.products);
       });
+      api.getManagerTables(tenantId).then((tablesRes) => {
+        if (tablesRes.success && tablesRes.data) setTables(tablesRes.data);
+      });
     }
 
     if (currentCats.length > 0 && !currentCats.some((c) => c.id === selectedCategoryId)) {
