@@ -805,8 +805,71 @@ class RestaurantApiService {
       return { success: false, error: 'غير مصرح بالوصول', statusCode: 403 };
     }
 
+    try {
+      if (typeof window !== 'undefined') {
+        const isNew = product.id.startsWith('prod-');
+        const res = await fetch(`${API_BASE}/manager/menu/products${isNew ? '' : `/${encodeURIComponent(product.id)}`}`, {
+          method: isNew ? 'POST' : 'PUT',
+          headers: { 'Content-Type': 'application/json', ...this.getAuthHeader() },
+          body: JSON.stringify({ restaurantId, ...product, image: product.image, isAvailable: product.isAvailable }),
+        });
+        const json = await res.json();
+        if (res.ok && json.success) return { success: true, data: { product: json.data.product || json.data }, statusCode: res.status };
+      }
+    } catch {
+      // Fallback to the local demo database when the API is unavailable.
+    }
+
     db.saveProduct(product);
     return { success: true, data: { product }, statusCode: 200 };
+  }
+
+  public async getManagerMenu(restaurantId: string): Promise<ApiResponse<{ categories: Category[]; products: Product[] }>> {
+    try {
+      if (typeof window !== 'undefined') {
+        const [categoriesRes, productsRes] = await Promise.all([
+          fetch(`${API_BASE}/manager/menu/categories?restaurantId=${encodeURIComponent(restaurantId)}`, { headers: this.getAuthHeader() }),
+          fetch(`${API_BASE}/manager/menu/products?restaurantId=${encodeURIComponent(restaurantId)}`, { headers: this.getAuthHeader() }),
+        ]);
+        const categoriesJson = await categoriesRes.json();
+        const productsJson = await productsRes.json();
+        if (categoriesRes.ok && productsRes.ok && categoriesJson.success && productsJson.success) {
+          return { success: true, data: { categories: categoriesJson.data, products: productsJson.data }, statusCode: 200 };
+        }
+      }
+    } catch {
+      // Fallback to local data.
+    }
+    return { success: false, error: 'تعذر تحميل القائمة من قاعدة البيانات', statusCode: 503 };
+  }
+
+  public async saveCategory(user: RestaurantUser, restaurantId: string, category: Category): Promise<ApiResponse<{ category: Category }>> {
+    if (!this.verifyManagerAccess(user, restaurantId)) return { success: false, error: 'غير مصرح بالوصول', statusCode: 403 };
+    try {
+      const res = await fetch(`${API_BASE}/manager/menu/categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...this.getAuthHeader() },
+        body: JSON.stringify({ restaurantId, name: category.name, nameEn: category.nameEn }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) return { success: true, data: { category: json.data }, statusCode: res.status };
+    } catch {
+      // Fallback to local data.
+    }
+    db.saveCategory(category);
+    return { success: true, data: { category }, statusCode: 200 };
+  }
+
+  public async deleteManagerProduct(user: RestaurantUser, restaurantId: string, productId: string): Promise<ApiResponse<null>> {
+    if (!this.verifyManagerAccess(user, restaurantId)) return { success: false, error: 'غير مصرح بالوصول', statusCode: 403 };
+    try {
+      const res = await fetch(`${API_BASE}/manager/menu/products/${encodeURIComponent(productId)}?restaurantId=${encodeURIComponent(restaurantId)}`, { method: 'DELETE', headers: this.getAuthHeader() });
+      if (res.ok) return { success: true, data: null, statusCode: 200 };
+    } catch {
+      // Fallback to local data.
+    }
+    db.deleteProduct(restaurantId, productId);
+    return { success: true, data: null, statusCode: 200 };
   }
 
   // Manager Settle Table Bill

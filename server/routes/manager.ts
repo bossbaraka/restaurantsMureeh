@@ -15,6 +15,9 @@ function getTenantId(req: Request): string | undefined {
 
 router.use(requireAuth);
 
+// Menu operations must remain tenant-scoped, including read requests.
+router.use('/menu', requireTenantAccess((req) => getTenantId(req)));
+
 router.use((req: Request, res: Response, next) => {
   if (
     process.env.DEMO_MANAGER_EMAIL &&

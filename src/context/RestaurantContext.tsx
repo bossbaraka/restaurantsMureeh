@@ -255,6 +255,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setOrders(currentOrds);
     setWaiterRequests(currentWaits);
 
+    if (typeof window !== 'undefined' && localStorage.getItem('merar_auth_token')) {
+      api.getManagerMenu(tenantId).then((menuRes) => {
+        if (!menuRes.success || !menuRes.data) return;
+        setCategories(menuRes.data.categories);
+        setProducts(menuRes.data.products);
+      });
+    }
+
     if (currentCats.length > 0 && !currentCats.some((c) => c.id === selectedCategoryId)) {
       setSelectedCategoryId(currentCats[0].id);
     }
@@ -780,23 +788,30 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       id: `prod-${Date.now()}`,
       restaurantId: currentRestaurant.id,
     };
-    db.saveProduct(newProduct);
-    refreshTenantData();
-    showToast('success', 'تمت إضافة طبق جديد للقائمة', newProduct.name);
-  }, [currentRestaurant, refreshTenantData, showToast]);
+    void api.saveProduct(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, newProduct).then((result) => {
+      if (!result.success) return showToast('error', 'تعذر حفظ الطبق', result.error);
+      refreshTenantData();
+      showToast('success', 'تمت إضافة طبق جديد للقائمة', newProduct.name);
+    });
+  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
 
   const updateProduct = useCallback((product: Product) => {
-    db.saveProduct(product);
-    refreshTenantData();
-    showToast('success', 'تم تعديل بيانات الطبق', product.name);
-  }, [refreshTenantData, showToast]);
+    if (!currentRestaurant) return;
+    void api.saveProduct(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, product).then((result) => {
+      if (!result.success) return showToast('error', 'تعذر تعديل الطبق', result.error);
+      refreshTenantData();
+      showToast('success', 'تم تعديل بيانات الطبق', product.name);
+    });
+  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
 
   const deleteProduct = useCallback((productId: string) => {
     if (!currentRestaurant) return;
-    db.deleteProduct(currentRestaurant.id, productId);
-    refreshTenantData();
-    showToast('info', 'تم حذف الطبق من القائمة');
-  }, [currentRestaurant, refreshTenantData, showToast]);
+    void api.deleteManagerProduct(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, productId).then((result) => {
+      if (!result.success) return showToast('error', 'تعذر حذف الطبق', result.error);
+      refreshTenantData();
+      showToast('info', 'تم حذف الطبق من القائمة');
+    });
+  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
 
   const addCategory = useCallback((name: string, nameEn?: string) => {
     if (!currentRestaurant) return;
@@ -808,10 +823,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       nameEn,
       sortOrder: currentCats.length + 1,
     };
-    db.saveCategory(newCat);
-    refreshTenantData();
-    showToast('success', 'تمت إضافة تصنيف جديد', name);
-  }, [currentRestaurant, refreshTenantData, showToast]);
+    void api.saveCategory(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, newCat).then((result) => {
+      if (!result.success) return showToast('error', 'تعذر حفظ التصنيف', result.error);
+      refreshTenantData();
+      showToast('success', 'تمت إضافة تصنيف جديد', name);
+    });
+  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
 
   const updateCategory = useCallback((category: Category) => {
     db.saveCategory(category);
