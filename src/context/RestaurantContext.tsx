@@ -299,6 +299,19 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             setCurrentRestaurant(res.data.restaurant);
             setActiveTableId(res.data.table.id);
             setCurrentTableSession(res.data.session);
+
+            api.getPublicRestaurantBySlug(res.data.restaurant.slug, qrToken).then((catalogRes) => {
+              if (!catalogRes.success || !catalogRes.data) return;
+              setCategories(catalogRes.data.categories);
+              setProducts(catalogRes.data.products);
+              setOffers(catalogRes.data.offers);
+              setCurrentRestaurant(catalogRes.data.restaurant);
+              setSelectedCategoryId((currentId) =>
+                catalogRes.data!.categories.some((category) => category.id === currentId)
+                  ? currentId
+                  : catalogRes.data!.categories[0]?.id || ''
+              );
+            });
           }
         });
       }
