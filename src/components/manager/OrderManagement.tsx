@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Calendar,
   Sparkles,
+  Printer,
 } from 'lucide-react';
 
 export const OrderManagement: React.FC = () => {
@@ -22,6 +23,18 @@ export const OrderManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAggregateTableId, setSelectedAggregateTableId] = useState<string | null>(null);
+
+  const handlePrintInvoice = (order: Order) => {
+    const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=720,height=800');
+    if (!printWindow) return;
+
+    const itemsHtml = order.items
+      .map((item) => `<tr><td>${item.quantity} × ${item.productName}</td><td>${formatPrice(item.totalPrice)}</td></tr>`)
+      .join('');
+    const restaurantName = 'مُريح | MUREEH';
+    printWindow.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة ${order.id}</title><style>body{font-family:Tahoma,Arial,sans-serif;color:#111;max-width:620px;margin:32px auto;padding:0 20px}header{border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:20px;display:flex;justify-content:space-between}h1{font-size:22px;margin:0 0 6px}p{margin:4px 0;color:#555;font-size:13px}table{width:100%;border-collapse:collapse;margin:20px 0}td{padding:10px 4px;border-bottom:1px solid #ddd;font-size:14px}td:last-child{text-align:left;font-weight:bold}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:bold;border-top:2px solid #111;padding-top:14px}@media print{body{margin:0}}</style></head><body><header><div><h1>${restaurantName}</h1><p>فاتورة طلب ${order.id}</p></div><div><p>التاريخ: ${formatTime(order.createdAt)}</p><p>الطاولة: ${order.tableId.replace('TABLE-', '')}</p></div></header><table>${itemsHtml}</table><div class="total"><span>الإجمالي</span><span>${formatPrice(order.total)}</span></div><p style="text-align:center;margin-top:32px">شكرًا لزيارتكم</p><script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}</script></body></html>`);
+    printWindow.document.close();
+  };
 
   // Filter orders
   const filteredOrders = useMemo(() => {
@@ -222,6 +235,14 @@ export const OrderManagement: React.FC = () => {
 
                   {/* State Machine Transition Actions */}
                   <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handlePrintInvoice(order)}
+                      className="p-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 text-luxury-200 border border-luxury-700 transition-colors"
+                      title="طباعة الفاتورة"
+                      aria-label={`طباعة فاتورة ${order.id}`}
+                    >
+                      <Printer className="w-4 h-4" />
+                    </button>
                     {order.status === 'PENDING' && (
                       <button
                         onClick={() => updateOrderStatus(order.id, 'PREPARING')}

@@ -42,6 +42,19 @@ export const SaaSLandingPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#07080A] text-luxury-50 font-sans selection:bg-gold-500/20 selection:text-gold-300" dir="rtl">
+      <header className="max-w-6xl mx-auto w-full px-4 sm:px-6 pt-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-sky-400 to-blue-700 flex items-center justify-center shadow-lg shadow-sky-900/30">
+            <Sparkles className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <div className="text-xl font-extrabold tracking-wide text-sky-300">مُريح</div>
+            <div className="text-[10px] font-semibold tracking-[0.18em] text-luxury-400 uppercase">MUREEH</div>
+          </div>
+        </div>
+        <span className="text-xs text-luxury-400 hidden sm:block">منصة الخدمات الإلكترونية للمطاعم</span>
+      </header>
+
       {/* Hero Section */}
       <section className="relative overflow-hidden py-16 sm:py-24 px-4 sm:px-6 border-b border-luxury-850">
         <div className="absolute inset-0 bg-radial-gradient from-gold-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />

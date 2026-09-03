@@ -16,7 +16,7 @@ const AppContent: React.FC = () => {
   const { viewMode, isOnboardingOpen, setIsOnboardingOpen } = useRestaurant();
   const { canAccessView, isLoginModalOpen } = useAuth();
 
-  const safeViewMode = canAccessView(viewMode) ? viewMode : 'CUSTOMER';
+  const safeViewMode = canAccessView(viewMode) || viewMode === 'SAAS_LANDING' ? viewMode : 'CUSTOMER';
 
   if (isLoginModalOpen) {
     return (

@@ -10,12 +10,14 @@ const required = (name: string) => {
   return value;
 };
 
-const managers = [1, 2, 3].map((number) => ({
-  id: `user-manager-${number}`,
-  name: required(`MANAGER_${number}_NAME`),
-  email: required(`MANAGER_${number}_EMAIL`).toLowerCase(),
-  password: required(`MANAGER_${number}_PASSWORD`),
-}));
+const managers = [1, 2, 3]
+  .map((number) => ({
+    id: `user-manager-${number}`,
+    name: process.env[`MANAGER_${number}_NAME`]?.trim(),
+    email: process.env[`MANAGER_${number}_EMAIL`]?.trim().toLowerCase(),
+    password: process.env[`MANAGER_${number}_PASSWORD`],
+  }))
+  .filter((manager) => manager.name && manager.email && manager.password);
 
 const platformAdmin = {
   email: required('PLATFORM_ADMIN_EMAIL').toLowerCase(),

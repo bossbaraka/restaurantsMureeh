@@ -324,6 +324,9 @@ router.post('/orders', async (req: Request, res: Response) => {
     if (!session) {
       return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
     }
+    if (session.restaurantId !== table.restaurantId || session.tableId !== table.id) {
+      return res.status(403).json({ success: false, error: 'جلسة QR لا تطابق الطاولة المطلوبة', statusCode: 403 });
+    }
     const sessionId = session.id;
 
     // Calculate subtotal
