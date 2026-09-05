@@ -102,17 +102,24 @@ class RestaurantApiService {
   public async login(email: string, password = 'password'): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
     try {
       if (typeof window !== 'undefined') {
+        const actualPassword = password === 'password' ? (email.includes('merar') ? 'Merar@123456' : email.includes('admin') ? 'Admin@123456' : 'Lumiere@123456') : password;
         const res = await fetch(`${API_BASE}/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email,
-            password: password === 'password' ? (email.includes('merar') ? 'Merar@123456' : email.includes('admin') ? 'Admin@123456' : 'Lumiere@123456') : password,
+            password: actualPassword,
           }),
         });
         const json = await res.json();
         if (json.success && json.data?.token) {
           localStorage.setItem('merar_auth_token', json.data.token);
+          if (json.data.user) {
+            localStorage.setItem('saas_auth_user_v3', JSON.stringify(json.data.user));
+          }
+          return json;
+        }
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
           return json;
         }
       }
@@ -141,6 +148,10 @@ class RestaurantApiService {
       }
     }
 
+    if (typeof window !== 'undefined') {
+      if (user.token) localStorage.setItem('merar_auth_token', user.token);
+      localStorage.setItem('saas_auth_user_v3', JSON.stringify(user));
+    }
     db.addAuditLog(user.restaurantId || undefined, user.name, user.role, 'LOGIN', 'تسجيل دخول ناجح للمنصة');
 
     return {
@@ -157,10 +168,27 @@ class RestaurantApiService {
           headers: this.getAuthHeader(),
         });
         const json = await res.json();
-        if (res.ok && json?.success && json.data?.user) return json;
+        if (res.ok && json?.success && json.data?.user) {
+          localStorage.setItem('saas_auth_user_v3', JSON.stringify(json.data.user));
+          return json;
+        }
+        if (res.status === 401) {
+          return { success: false, error: json?.error || 'جلسة الدخول منتهية', statusCode: 401 };
+        }
       }
     } catch {
-      // Treat an unavailable or invalid session as logged out.
+      // Server offline fallback
+    }
+
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('saas_auth_user_v3');
+      if (stored) {
+        try {
+          const user = JSON.parse(stored) as RestaurantUser;
+          const restaurant = user.restaurantId ? db.getRestaurantById(user.restaurantId) : null;
+          return { success: true, data: { user, restaurant }, statusCode: 200 };
+        } catch {}
+      }
     }
 
     return { success: false, error: 'جلسة الدخول غير صالحة', statusCode: 401 };

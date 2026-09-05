@@ -55,7 +55,14 @@ const LOCKOUT_DURATION_SEC = 60;
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<RestaurantUser | null>(() => {
     if (typeof window !== 'undefined') {
-      return null;
+      const savedUser = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (savedUser) {
+        try {
+          return JSON.parse(savedUser);
+        } catch {
+          return null;
+        }
+      }
     }
     return null;
   });
@@ -71,20 +78,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutRemainingSeconds, setLockoutRemainingSeconds] = useState(0);
 
-  // Lockout countdown timer
+  // Lockout countdown timer & session restoration
   useEffect(() => {
     let isMounted = true;
 
     const restoreSession = async () => {
-      if (typeof window === 'undefined' || !localStorage.getItem(TOKEN_STORAGE_KEY)) return;
+      if (typeof window === 'undefined') return;
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!token) return;
 
       const res = await api.getCurrentUser();
       if (isMounted && res.success && res.data) {
         setCurrentUser(res.data.user);
-        setCurrentManagerRestaurant(res.data.restaurant);
-      } else if (isMounted) {
+        if (res.data.restaurant) {
+          setCurrentManagerRestaurant(res.data.restaurant);
+        }
+      } else if (isMounted && res.statusCode === 401) {
         localStorage.removeItem(AUTH_STORAGE_KEY);
         localStorage.removeItem(TOKEN_STORAGE_KEY);
+        setCurrentUser(null);
+        setCurrentManagerRestaurant(null);
       }
     };
 
@@ -113,14 +126,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (currentUser) {
       localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
       if (currentUser.restaurantId) {
-        setCurrentManagerRestaurant(db.getRestaurantById(currentUser.restaurantId));
+        const rest = db.getRestaurantById(currentUser.restaurantId);
+        if (rest) setCurrentManagerRestaurant(rest);
       } else {
         setCurrentManagerRestaurant(db.getRestaurantById('rest-merar'));
       }
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      setCurrentManagerRestaurant(null);
     }
   }, [currentUser]);
 
@@ -217,6 +227,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const logout = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
     setCurrentUser(null);
     setCurrentManagerRestaurant(null);
   }, []);
