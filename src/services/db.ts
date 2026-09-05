@@ -203,9 +203,9 @@ class MultiTenantDatabase {
 
   public saveProduct(product: Product): void {
     const all = this.getItem(DB_KEYS.PRODUCTS, SEED_PRODUCTS);
-    const idx = all.findIndex((p) => p.id === product.id && p.restaurantId === product.restaurantId);
+    const idx = all.findIndex((p) => p.id === product.id);
     if (idx >= 0) {
-      all[idx] = product;
+      all[idx] = { ...all[idx], ...product };
     } else {
       all.push(product);
     }
@@ -279,7 +279,7 @@ class MultiTenantDatabase {
     const all = this.getItem(DB_KEYS.ORDERS, SEED_ORDERS);
     const idx = all.findIndex((o) => o.id === order.id && o.restaurantId === order.restaurantId);
     if (idx >= 0) {
-      all[idx] = { ...order, updatedAt: new Date().toISOString() };
+      all[idx] = order;
     } else {
       all.unshift(order);
     }
@@ -334,6 +334,17 @@ class MultiTenantDatabase {
   public getActiveSessionByTable(restaurantId: string, tableId: string): TableSession | null {
     const sessions = this.getSessions();
     return sessions.find((s) => s.restaurantId === restaurantId && s.tableId === tableId && s.status === 'ACTIVE') || null;
+  }
+
+  public closeActiveSessionsByTable(restaurantId: string, tableId: string): void {
+    const sessions = this.getSessions();
+    sessions.forEach((s) => {
+      if (s.restaurantId === restaurantId && s.tableId === tableId && s.status === 'ACTIVE') {
+        s.status = 'CLOSED';
+        s.expiresAt = new Date().toISOString();
+      }
+    });
+    this.setItem(DB_KEYS.SESSIONS, sessions);
   }
 
   public saveSession(session: TableSession): void {
