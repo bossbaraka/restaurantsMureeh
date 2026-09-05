@@ -29,4 +29,4 @@ ENV NODE_ENV=production
 ENV PORT=3001
 
 
-CMD ["sh", "-c", "npx prisma db push && npm run db:seed && npx tsx server/index.ts"]
+CMD ["npx", "tsx", "server/index.ts"]

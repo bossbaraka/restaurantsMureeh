@@ -25,7 +25,14 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 app.use(cors({
-  origin: allowedOrigins.length > 0 ? allowedOrigins : false,
+  origin: (origin, callback) => {
+    // السماح بالطلبات التي لا تحتوي على origin (مثل طلبات curl أو الصحة /api/health)
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
   credentials: true,
 }));
 app.use(compression());
@@ -72,8 +79,9 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
+// تعديل السطر الخاص بالاستماع في نهاية ملف server/index.ts
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 MÉRAR SaaS API Server listening on http://0.0.0.0:${PORT}`);
   });
 }
