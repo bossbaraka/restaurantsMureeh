@@ -4,17 +4,25 @@
 
 :root {
   color-scheme: dark;
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  --font-serif: 'Amiri', 'Playfair Display', Georgia, serif;
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
   body {
-    @apply bg-[#0A0B0D] text-[#F8FAFC];
+    @apply bg-[#0A0B0D] text-[#F8FAFC] antialiased selection:bg-gold-500/20 selection:text-gold-300;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
-/* Custom Utilities for Luxury UI */
+/* Custom Utilities for Luxury Responsive UI */
 .bg-subtle-pattern {
-  background-image: radial-gradient(rgba(197, 168, 128, 0.05) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(197, 168, 128, 0.06) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
@@ -26,7 +34,23 @@
   scrollbar-width: none;
 }
 
-/* Luxury card borders */
+/* Custom Sleek Scrollbar for Desktop */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0D0E12;
+}
+::-webkit-scrollbar-thumb {
+  background: #262933;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C5A880;
+}
+
+/* Luxury card borders & glassmorphism */
 .luxury-border {
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
@@ -35,8 +59,26 @@
   border: 1px solid rgba(197, 168, 128, 0.25);
 }
 
+.glass-panel {
+  background: rgba(18, 20, 26, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .gold-gradient-text {
   background: linear-gradient(135deg, #FFF6DD 0%, #E6C86E 50%, #C5A880 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.gold-glow {
+  box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.25);
+}
+
+/* Mobile Responsive Touch Optimizations */
+@media (max-width: 640px) {
+  button, input, select {
+    min-height: 38px;
+  }
 }

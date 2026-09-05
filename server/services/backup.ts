@@ -11,10 +11,10 @@ export async function createDatabaseBackup(): Promise<{ success: boolean; filePa
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFile = path.join(backupDir, `backup-restaurant-saas-${timestamp}.sql`);
 
-  const dumpCommand = `PGPASSWORD=postgres pg_dump -h localhost -U postgres -d restaurant_saas -F p -f "${backupFile}"`;
+  const dumpCommand = `pg_dump -h localhost -U postgres -d restaurant_saas -F p -f "${backupFile}"`;
 
   return new Promise((resolve) => {
-    exec(dumpCommand, (error, _stdout, stderr) => {
+    exec(dumpCommand, { env: { ...process.env, PGPASSWORD: process.env.DB_PASSWORD || 'postgres' } }, (error, _stdout, stderr) => {
       if (error) {
         console.error('Database backup error:', error, stderr);
         resolve({ success: false, error: stderr || error.message });

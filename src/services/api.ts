@@ -774,6 +774,20 @@ class RestaurantApiService {
       return { success: false, error: 'غير مصرح بالوصول', statusCode: 403 };
     }
 
+    try {
+      if (typeof window !== 'undefined') {
+        const res = await fetch(`${API_BASE}/manager/waiter-requests/${encodeURIComponent(requestId)}/status`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...this.getAuthHeader() },
+          body: JSON.stringify({ status, restaurantId }),
+        });
+        const json = await res.json();
+        if (res.ok && json.success) return { success: true, data: { request: json.data }, statusCode: 200 };
+      }
+    } catch {
+      // Fallback to local data
+    }
+
     const waiters = db.getWaiterRequests(restaurantId);
     const req = waiters.find((w) => w.id === requestId);
     if (!req) return { success: false, error: 'الطلب غير موجود', statusCode: 404 };
@@ -897,6 +911,20 @@ class RestaurantApiService {
       return { success: false, error: 'غير مصرح بالوصول', statusCode: 403 };
     }
 
+    try {
+      if (typeof window !== 'undefined') {
+        const res = await fetch(`${API_BASE}/manager/tables/${encodeURIComponent(tableId)}/settle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...this.getAuthHeader() },
+          body: JSON.stringify({ restaurantId }),
+        });
+        const json = await res.json();
+        if (res.ok && json.success) return json;
+      }
+    } catch {
+      // Fallback to local data
+    }
+
     const orders = db.getOrders(restaurantId);
     orders.forEach((o) => {
       if (o.tableId === tableId && (o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY')) {
@@ -961,6 +989,18 @@ class RestaurantApiService {
       return { success: false, error: 'صلاحيات المشرف العام مطلوبة (Super Admin Only)', statusCode: 403 };
     }
 
+    try {
+      if (typeof window !== 'undefined') {
+        const res = await fetch(`${API_BASE}/admin/overview`, {
+          headers: this.getAuthHeader(),
+        });
+        const json = await res.json();
+        if (res.ok && json.success && json.data) return json;
+      }
+    } catch {
+      // Fallback to local data
+    }
+
     const restaurants = db.getRestaurants();
     const subscriptions = db.getSubscriptions();
     const plans = db.getPlans();
@@ -996,6 +1036,22 @@ class RestaurantApiService {
   ): Promise<ApiResponse<Restaurant>> {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'PLATFORM_ADMIN') {
       return { success: false, error: 'غير مصرح لك بتعديل حالة المشتركين', statusCode: 403 };
+    }
+
+    try {
+      if (typeof window !== 'undefined') {
+        const res = await fetch(`${API_BASE}/admin/restaurants/${encodeURIComponent(restaurantId)}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...this.getAuthHeader() },
+          body: JSON.stringify({ status }),
+        });
+        const json = await res.json();
+        if (res.ok && json.success && json.data?.restaurant) {
+          return { success: true, data: json.data.restaurant, statusCode: 200 };
+        }
+      }
+    } catch {
+      // Fallback
     }
 
     const restaurant = db.getRestaurantById(restaurantId);

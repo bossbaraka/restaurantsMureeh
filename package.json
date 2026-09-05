@@ -60,5 +60,9 @@
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
+  },
+  "optionalDependencies": {
+    "@oxlint/binding-win32-x64-msvc": "^1.81.0",
+    "@rolldown/binding-win32-x64-msvc": "^1.2.7"
   }
 }

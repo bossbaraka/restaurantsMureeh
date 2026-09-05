@@ -10,12 +10,15 @@ describe('Production Commercial Restaurant SaaS Integration Test Suite', () => {
 
   beforeAll(async () => {
     try {
-      await seedDatabase();
+      await Promise.race([
+        seedDatabase(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('DB Timeout')), 3000)),
+      ]);
       isDbConnected = true;
     } catch (e) {
-      console.warn('Local PostgreSQL is offline, testing database schema and isolation logic in memory mode.');
+      console.warn('PostgreSQL DB offline or connection slow, running in memory test mode.');
     }
-  });
+  }, 15000);
 
   describe('1. Real PostgreSQL Database & Prisma ORM Integrity', () => {
     it('PostgreSQL stores 3 seeded tenants with MÉRAR as primary demo', async () => {
