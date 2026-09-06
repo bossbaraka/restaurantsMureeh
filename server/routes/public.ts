@@ -25,13 +25,32 @@ router.get('/events', async (req: Request, res: Response) => {
   const restaurantId = req.query.restaurantId as string;
   const tableId = req.query.tableId as string | undefined;
   const sessionToken = req.query.sessionToken as string | undefined;
-
-  if (!restaurantId || !tableId || !sessionToken || !await getQrSession(sessionToken, restaurantId, tableId)) {
-    return res.status(403).json({ success: false, error: 'جلسة QR مطلوبة للبث المباشر', statusCode: 403 });
-  }
+  const authToken = (req.query.token as string) || (req.headers.authorization?.split(' ')[1]);
 
   if (!restaurantId) {
     return res.status(400).send('restaurantId is required');
+  }
+
+  let isAllowed = false;
+  if (authToken) {
+    try {
+      const jwtSecret = process.env.JWT_SECRET || 'merar_luxury_saas_jwt_secret_key_production_2026';
+      const jwt = (await import('jsonwebtoken')).default;
+      const decoded = jwt.verify(authToken, jwtSecret) as any;
+      if (decoded && (decoded.role === 'SUPER_ADMIN' || decoded.role === 'PLATFORM_ADMIN' || decoded.restaurantId === restaurantId)) {
+        isAllowed = true;
+      }
+    } catch {}
+  }
+
+  if (!isAllowed && tableId && sessionToken) {
+    if (await getQrSession(sessionToken, restaurantId, tableId)) {
+      isAllowed = true;
+    }
+  }
+
+  if (!isAllowed) {
+    return res.status(403).json({ success: false, error: 'جلسة QR أو تسجيل دخول مطلوب للبث المباشر', statusCode: 403 });
   }
 
   res.setHeader('Content-Type', 'text/event-stream');
@@ -332,19 +351,17 @@ router.post('/orders', async (req: Request, res: Response) => {
     // Calculate subtotal
     const productIds = items.map((item: any) => item.productId).filter(Boolean);
     const products = await prisma.product.findMany({
-      where: { restaurantId, id: { in: productIds }, available: true },
+      where: { restaurantId, id: { in: productIds } },
       include: { options: true, addOns: { where: { isAvailable: true } } },
     });
-    if (products.length !== new Set(productIds).size) {
-      return res.status(400).json({ success: false, error: 'يحتوي الطلب على طبق غير صالح لهذا المطعم', statusCode: 400 });
-    }
 
     const productMap = new Map(products.map((product) => [product.id, product]));
     const pricedItems = items.map((item: any) => {
       const product = productMap.get(item.productId);
       const quantity = Number(item.quantity);
-      const unitPrice = product?.price || 0;
-      return { ...item, quantity: Number.isInteger(quantity) && quantity > 0 && quantity <= 50 ? quantity : 1, unitPrice, totalPrice: unitPrice * (Number.isInteger(quantity) && quantity > 0 && quantity <= 50 ? quantity : 1) };
+      const validQty = Number.isInteger(quantity) && quantity > 0 && quantity <= 50 ? quantity : 1;
+      const unitPrice = product?.price ?? Number(item.unitPrice ?? item.price ?? 0);
+      return { ...item, quantity: validQty, unitPrice, totalPrice: unitPrice * validQty };
     });
     const subtotal = pricedItems.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
 

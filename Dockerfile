@@ -32,4 +32,4 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 
-CMD ["npx", "tsx", "server/index.ts"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npx tsx server/index.ts"]
