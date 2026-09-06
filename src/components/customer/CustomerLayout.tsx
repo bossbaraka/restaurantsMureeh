@@ -11,6 +11,7 @@ import { OrderTrackingDrawer } from './OrderTrackingDrawer';
 import { WaiterCallModal } from './WaiterCallModal';
 import { DirectTableEntryModal } from './DirectTableEntryModal';
 import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
+import { OrderCompletedModal } from './OrderCompletedModal';
 import { LuxuryWelcomeScreen } from './LuxuryWelcomeScreen';
 import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 
@@ -203,6 +204,7 @@ export const CustomerLayout: React.FC = () => {
       <OrderTrackingDrawer />
       <WaiterCallModal />
       <DirectTableEntryModal />
+      <OrderCompletedModal />
     </div>
   );
 };
