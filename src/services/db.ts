@@ -11,6 +11,8 @@ import {
   Offer,
   TableSession,
   AuditLog,
+  PaymentRecord,
+  Branch,
 } from '../types/restaurant';
 import {
   SEED_RESTAURANTS,
@@ -21,10 +23,17 @@ import {
   SEED_PRODUCTS,
   SEED_TABLES,
   SEED_ORDERS,
+  SEED_PAID_ORDER_HISTORY,
+  SEED_PAYMENTS,
+  SEED_BRANCHES,
   SEED_WAITER_REQUESTS,
   SEED_OFFERS,
   SEED_AUDIT_LOGS,
 } from '../data/seedData';
+
+// Orders seeded with the initial live orders + closed sales history so the
+// sales analytics and cashier reports show meaningful multi-day data.
+export const SEED_ORDERS_FULL: Order[] = [...SEED_ORDERS, ...SEED_PAID_ORDER_HISTORY];
 
 const DB_KEYS = {
   RESTAURANTS: 'saas_db_restaurants_v2',
@@ -39,6 +48,8 @@ const DB_KEYS = {
   OFFERS: 'saas_db_offers_v2',
   SESSIONS: 'saas_db_sessions_v2',
   AUDIT_LOGS: 'saas_db_audit_logs_v2',
+  PAYMENTS: 'saas_db_payments_v2',
+  BRANCHES: 'saas_db_branches_v2',
 };
 
 class MultiTenantDatabase {
@@ -266,7 +277,7 @@ class MultiTenantDatabase {
 
   // --- ORDERS (Tenant-Scoped) ---
   public getOrders(restaurantId: string): Order[] {
-    const all = this.getItem(DB_KEYS.ORDERS, SEED_ORDERS);
+    const all = this.getItem(DB_KEYS.ORDERS, SEED_ORDERS_FULL);
     return all.filter((o) => o.restaurantId === restaurantId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
@@ -358,6 +369,75 @@ class MultiTenantDatabase {
     this.setItem(DB_KEYS.SESSIONS, all);
   }
 
+  // --- BRANCHES (Multi-Branch Management) ---
+  public getBranches(restaurantId: string): Branch[] {
+    const all = this.getItem<Branch[]>(DB_KEYS.BRANCHES, SEED_BRANCHES);
+    return all.filter((b) => b.restaurantId === restaurantId).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  }
+
+  public getBranchById(restaurantId: string, branchId: string): Branch | null {
+    return this.getBranches(restaurantId).find((b) => b.id === branchId) || null;
+  }
+
+  public saveBranch(branch: Branch): void {
+    const all = this.getItem<Branch[]>(DB_KEYS.BRANCHES, []);
+    const idx = all.findIndex((b) => b.id === branch.id && b.restaurantId === branch.restaurantId);
+    if (idx >= 0) {
+      all[idx] = branch;
+    } else {
+      all.push(branch);
+    }
+    this.setItem(DB_KEYS.BRANCHES, all);
+  }
+
+  public deleteBranch(restaurantId: string, branchId: string): void {
+    const all = this.getItem<Branch[]>(DB_KEYS.BRANCHES, []);
+    const filtered = all.filter((b) => !(b.id === branchId && b.restaurantId === restaurantId));
+    this.setItem(DB_KEYS.BRANCHES, filtered);
+    // Unassign tables that belonged to the deleted branch (keep data consistent)
+    const tables = this.getTables(restaurantId);
+    let changed = false;
+    tables.forEach((t) => {
+      if (t.branchId === branchId) {
+        t.branchId = undefined;
+        changed = true;
+      }
+    });
+    if (changed) this.setItem(DB_KEYS.TABLES, tables);
+  }
+
+  public assignTablesToBranch(restaurantId: string, branchId: string | null, tableIds: string[]): void {
+    const tables = this.getTables(restaurantId);
+    tables.forEach((t) => {
+      if (tableIds.includes(t.id)) {
+        t.branchId = branchId || undefined;
+      }
+    });
+    this.setItem(DB_KEYS.TABLES, tables);
+  }
+
+  // --- PAYMENTS (Cashier / POS Ledger) ---
+  public getPayments(restaurantId?: string): PaymentRecord[] {
+    const all = this.getItem<PaymentRecord[]>(DB_KEYS.PAYMENTS, SEED_PAYMENTS);
+    const scoped = restaurantId ? all.filter((p) => p.restaurantId === restaurantId) : all;
+    return scoped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  public savePayment(payment: PaymentRecord): void {
+    const all = this.getItem<PaymentRecord[]>(DB_KEYS.PAYMENTS, []);
+    const idx = all.findIndex((p) => p.id === payment.id);
+    if (idx >= 0) {
+      all[idx] = payment;
+    } else {
+      all.push(payment);
+    }
+    this.setItem(DB_KEYS.PAYMENTS, all);
+  }
+
+  public getNextReceiptSequence(restaurantId: string): number {
+    return this.getPayments(restaurantId).length + 1;
+  }
+
   // --- AUDIT LOGS ---
   public getAuditLogs(restaurantId?: string): AuditLog[] {
     const all = this.getItem(DB_KEYS.AUDIT_LOGS, SEED_AUDIT_LOGS);
@@ -402,6 +482,8 @@ class MultiTenantDatabase {
       localStorage.removeItem(DB_KEYS.OFFERS);
       localStorage.removeItem(DB_KEYS.SESSIONS);
       localStorage.removeItem(DB_KEYS.AUDIT_LOGS);
+      localStorage.removeItem(DB_KEYS.PAYMENTS);
+      localStorage.removeItem(DB_KEYS.BRANCHES);
     }
   }
 }

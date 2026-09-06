@@ -53,7 +53,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 تأكيد إرسال الطلب إلى المطبخ
               </h3>
               <p className="text-xs text-luxury-400">
-                {currentRestaurant?.name} · طاولة رقم {activeTableId?.replace('TABLE-', '')}
+                {currentRestaurant?.name} · طاولة رقم {activeTableId?.replace(/^(?:TABLE-|.*-T)/, '')}
               </p>
             </div>
           </div>

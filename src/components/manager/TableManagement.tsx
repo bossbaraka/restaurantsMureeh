@@ -211,7 +211,7 @@ export const TableManagement: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-sm font-bold text-luxury-100 font-mono flex items-center gap-1.5">
-                    <span>{table.id.replace('TABLE-', 'طاولة ')}</span>
+                    <span>{table.id.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}</span>
                   </span>
                   <span className="text-[10px] text-luxury-400 block mt-0.5">
                     {getTableZoneLabel(table.zone)} · {table.capacity} مقاعد

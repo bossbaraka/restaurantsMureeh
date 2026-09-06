@@ -13,6 +13,8 @@ import {
   TableSession,
   EntitlementKey,
   AuditLog,
+  PaymentRecord,
+  Branch,
 } from '../types/restaurant';
 import { db } from './db';
 
@@ -378,9 +380,10 @@ class RestaurantApiService {
       return { success: false, error: 'لا يمكن إرسال طلب بدون أصناف', statusCode: 400 };
     }
 
-    const tables = db.getTables(restaurantId);
-    const table = tables.find((t) => t.id === tableId);
-    if (!table) {
+    // Walk-in counter sales (POS) use the reserved '__WALKIN__' pseudo-table.
+    const isWalkIn = tableId === '__WALKIN__';
+    const table = isWalkIn ? null : db.getTables(restaurantId).find((t) => t.id === tableId);
+    if (!table && !isWalkIn) {
       return { success: false, error: 'رقم الطاولة غير موجود بالمطعم', statusCode: 404 };
     }
 
@@ -395,7 +398,7 @@ class RestaurantApiService {
       numericId: nextNum,
       restaurantId,
       tableId,
-      sessionId,
+      sessionId: isWalkIn ? undefined : sessionId,
       items,
       subtotal,
       total: subtotal,
@@ -409,11 +412,13 @@ class RestaurantApiService {
 
     db.saveOrder(newOrder);
 
-    // Update table state
-    table.status = 'OCCUPIED';
-    table.activeOrderIds = [...table.activeOrderIds, orderId];
-    table.lastActivityAt = new Date().toISOString();
-    db.saveTable(table);
+    // Update table state (skip the pseudo table — no physical table for walk-ins)
+    if (table) {
+      table.status = 'OCCUPIED';
+      table.activeOrderIds = [...table.activeOrderIds, orderId];
+      table.lastActivityAt = new Date().toISOString();
+      db.saveTable(table);
+    }
 
     return {
       success: true,
@@ -653,6 +658,15 @@ class RestaurantApiService {
   private verifyManagerAccess(user: RestaurantUser, targetRestaurantId: string): boolean {
     if (user.role === 'SUPER_ADMIN' || user.role === 'PLATFORM_ADMIN') return true;
     return user.role === 'RESTAURANT_MANAGER' && user.restaurantId === targetRestaurantId;
+  }
+
+  // Cashier role may use POS / payments endpoints only for their own tenant.
+  private verifyCashierAccess(user: RestaurantUser, targetRestaurantId: string): boolean {
+    if (user.role === 'SUPER_ADMIN' || user.role === 'PLATFORM_ADMIN') return true;
+    return (
+      (user.role === 'RESTAURANT_MANAGER' || user.role === 'CASHIER') &&
+      user.restaurantId === targetRestaurantId
+    );
   }
 
   public async getManagerDashboardStats(
@@ -985,6 +999,219 @@ class RestaurantApiService {
       data: { message: `تمت تسوية حساب ${tableId} بنجاح` },
       statusCode: 200,
     };
+  }
+
+  // =========================================================================
+  // CASHIER / POS & PAYMENT SYSTEM (Tenant Isolated)
+  // =========================================================================
+
+  public async getPayments(user: RestaurantUser, restaurantId: string): Promise<ApiResponse<PaymentRecord[]>> {
+    if (!this.verifyCashierAccess(user, restaurantId)) {
+      return { success: false, error: 'غير مصرح لك بالوصول لسجل الدفعات (Tenant Isolation Violation)', statusCode: 403 };
+    }
+    try {
+      if (typeof window !== 'undefined') {
+        const res = await fetch(`${API_BASE}/manager/payments?restaurantId=${encodeURIComponent(restaurantId)}`, {
+          headers: this.getAuthHeader(),
+        });
+        const json = await res.json();
+        if (res.ok && json.success && Array.isArray(json.data)) return json;
+      }
+    } catch {
+      // Fallback to local data.
+    }
+    const data = db.getPayments(restaurantId);
+    return { success: true, data, statusCode: 200 };
+  }
+
+  /**
+   * Process a cashier payment. Closes the given open orders, records the
+   * transaction in the POS ledger, frees the table and closes its session.
+   * Walk-in counter sales use tableId '__WALKIN__' (no table reservation).
+   */
+  public async processPayment(
+    user: RestaurantUser,
+    restaurantId: string,
+    params: {
+      tableId: string;
+      orderIds: string[];
+      method: string;
+      cashReceived?: number;
+      tip?: number;
+      note?: string;
+    }
+  ): Promise<ApiResponse<{ payment: PaymentRecord; orders: Order[] }>> {
+    if (!this.verifyCashierAccess(user, restaurantId)) {
+      return { success: false, error: 'غير مصرح لك بإجراء الدفع لهذا المطعم', statusCode: 403 };
+    }
+    if (!params.orderIds || params.orderIds.length === 0) {
+      return { success: false, error: 'لا توجد فواتير مفتوحة لإتمام الدفع', statusCode: 400 };
+    }
+
+    try {
+      if (typeof window !== 'undefined') {
+        const res = await fetch(`${API_BASE}/manager/payments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...this.getAuthHeader() },
+          body: JSON.stringify({ restaurantId, ...params }),
+        });
+        const json = await res.json();
+        if (res.ok && json.success) return json;
+      }
+    } catch {
+      // Fallback to local data.
+    }
+
+    const orders = db.getOrders(restaurantId);
+    const isWalkIn = params.tableId === '__WALKIN__';
+    const table = isWalkIn ? null : db.getTableById(restaurantId, params.tableId);
+
+    if (!isWalkIn && !table) {
+      return { success: false, error: 'الطاولة غير موجودة في هذا المطعم', statusCode: 404 };
+    }
+
+    const ordersToPay = orders.filter(
+      (o) =>
+        params.orderIds.includes(o.id) &&
+        o.status !== 'CANCELLED' &&
+        o.paymentStatus !== 'PAID'
+    );
+
+    if (ordersToPay.length === 0) {
+      return { success: false, error: 'كل الفواتير المحددة مدفوعة مسبقًا أو ملغاة', statusCode: 409 };
+    }
+
+    const subtotal = ordersToPay.reduce((sum, o) => sum + (o.subtotal || o.total || 0), 0);
+    const total = ordersToPay.reduce((sum, o) => sum + (o.total || 0), 0);
+    if (total <= 0) {
+      return { success: false, error: 'قيمة الفاتورة صفرية ولا يمكن إتمام الدفع', statusCode: 400 };
+    }
+
+    const now = new Date().toISOString();
+    const paidAt = now;
+    ordersToPay.forEach((o) => {
+      o.paymentStatus = 'PAID';
+      o.settledAt = paidAt;
+      o.paymentMethod = params.method;
+      o.status = 'SERVED';
+      o.updatedAt = paidAt;
+      db.saveOrder(o);
+    });
+
+    const tip = Math.max(0, params.tip || 0);
+    const cashReceived = params.method === 'CASH' ? params.cashReceived || total : undefined;
+    const changeDue =
+      params.method === 'CASH' && cashReceived !== undefined && cashReceived >= total + tip
+        ? Math.round((cashReceived - total - tip) * 100) / 100
+        : 0;
+
+    const seq = db.getNextReceiptSequence(restaurantId);
+    const year = new Date().getFullYear();
+    const payment: PaymentRecord = {
+      id: `pay-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      receiptNumber: `RC-${year}-${String(seq).padStart(4, '0')}`,
+      restaurantId,
+      branchId: table?.branchId,
+      tableId: params.tableId,
+      tableLabel: isWalkIn ? 'عميل مباشر (كاونتر)' : `طاولة ${table!.tableNumber}`,
+      orderIds: ordersToPay.map((o) => o.id),
+      itemsSummary: ordersToPay
+        .flatMap((o) => o.items.map((it) => it.productName || it.name))
+        .slice(0, 4)
+        .join('، '),
+      method: (params.method as PaymentRecord['method']) || 'CASH',
+      subtotal: Math.round(subtotal * 100) / 100,
+      total: Math.round(total * 100) / 100,
+      cashReceived: cashReceived !== undefined ? Math.round(cashReceived * 100) / 100 : undefined,
+      changeDue: changeDue > 0 ? Math.round(changeDue * 100) / 100 : undefined,
+      tip: tip > 0 ? Math.round(tip * 100) / 100 : undefined,
+      cashierId: user.id,
+      cashierName: user.name,
+      note: params.note,
+      createdAt: paidAt,
+    };
+    db.savePayment(payment);
+
+    if (!isWalkIn && table) {
+      table.status = 'AVAILABLE';
+      table.activeOrderIds = [];
+      table.hasWaiterCall = false;
+      table.lastActivityAt = paidAt;
+      db.saveTable(table);
+      db.closeActiveSessionsByTable(restaurantId, table.id);
+      db.getWaiterRequests(restaurantId).forEach((w) => {
+        if (w.tableId === table.id && w.status === 'PENDING') {
+          w.status = 'RESOLVED';
+          db.saveWaiterRequest(w);
+        }
+      });
+    }
+
+    db.addAuditLog(
+      restaurantId,
+      user.name,
+      user.role,
+      'PROCESS_PAYMENT',
+      `إيصال ${payment.receiptNumber} — ${payment.tableLabel} — ${payment.total} (${payment.method})`
+    );
+
+    return { success: true, data: { payment, orders: ordersToPay }, statusCode: 201 };
+  }
+
+  // =========================================================================
+  // MULTI-BRANCH MANAGEMENT (Tenant Isolated)
+  // =========================================================================
+
+  public async getManagerBranches(user: RestaurantUser, restaurantId: string): Promise<ApiResponse<Branch[]>> {
+    if (!this.verifyManagerAccess(user, restaurantId)) {
+      return { success: false, error: 'غير مصرح لك بالوصول للفروع', statusCode: 403 };
+    }
+    const data = db.getBranches(restaurantId);
+    return { success: true, data, statusCode: 200 };
+  }
+
+  public async saveBranch(user: RestaurantUser, restaurantId: string, branch: Branch): Promise<ApiResponse<{ branch: Branch }>> {
+    if (!this.verifyManagerAccess(user, restaurantId)) {
+      return { success: false, error: 'غير مصرح لك بتعديل الفروع', statusCode: 403 };
+    }
+    const clean: Branch = {
+      ...branch,
+      id: branch.id || `branch-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      restaurantId,
+      createdAt: branch.createdAt || new Date().toISOString(),
+    };
+    db.saveBranch(clean);
+    db.addAuditLog(restaurantId, user.name, user.role, 'SAVE_BRANCH', `حفظ فرع: ${clean.name}`);
+    return { success: true, data: { branch: clean }, statusCode: 200 };
+  }
+
+  public async deleteBranch(user: RestaurantUser, restaurantId: string, branchId: string): Promise<ApiResponse<null>> {
+    if (!this.verifyManagerAccess(user, restaurantId)) {
+      return { success: false, error: 'غير مصرح لك بحذف الفروع', statusCode: 403 };
+    }
+    db.deleteBranch(restaurantId, branchId);
+    db.addAuditLog(restaurantId, user.name, user.role, 'DELETE_BRANCH', `حذف فرع ${branchId}`);
+    return { success: true, data: null, statusCode: 200 };
+  }
+
+  public async assignTablesToBranch(
+    user: RestaurantUser,
+    restaurantId: string,
+    branchId: string | null,
+    tableIds: string[]
+  ): Promise<ApiResponse<{ message: string }>> {
+    if (!this.verifyManagerAccess(user, restaurantId)) {
+      return { success: false, error: 'غير مصرح لك بتعديل توزيع الطاولات', statusCode: 403 };
+    }
+    db.assignTablesToBranch(restaurantId, branchId, tableIds);
+    db.addAuditLog(
+      restaurantId,
+      user.name,
+      user.role,
+      'ASSIGN_TABLES_BRANCH',
+      `تم توزيع ${tableIds.length} طاولات على فرع ${branchId || 'غير مصنف'}`
+    );
+    return { success: true, data: { message: 'تم تحديث توزيع الطاولات' }, statusCode: 200 };
   }
 
   // Check Feature Entitlement

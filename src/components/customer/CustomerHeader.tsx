@@ -16,7 +16,7 @@ export const CustomerHeader: React.FC = () => {
     setIsOrderTrackingOpen,
   } = useRestaurant();
 
-  const tableNumberStr = activeTableId ? activeTableId.replace('TABLE-', '') : '—';
+  const tableNumberStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
   const hasActiveOrders = activeTableOrders.length > 0;
 
   const restName = currentRestaurant?.name || 'مطعم مِيرار';

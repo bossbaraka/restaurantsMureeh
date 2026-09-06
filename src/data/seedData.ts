@@ -10,6 +10,8 @@ import {
   WaiterRequest,
   Offer,
   AuditLog,
+  PaymentRecord,
+  Branch,
 } from '../types/restaurant';
 import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_OFFERS } from './sampleMenu';
 import { INITIAL_TABLES } from './sampleTables';
@@ -165,10 +167,10 @@ export const SEED_SUBSCRIPTIONS: Subscription[] = [
   {
     id: 'sub-merar-01',
     restaurantId: 'rest-merar',
-    planId: 'plan-pro',
+    planId: 'plan-enterprise',
     status: 'ACTIVE',
     currentPeriodStart: '2026-08-01T00:00:00.000Z',
-    currentPeriodEnd: '2026-09-01T00:00:00.000Z',
+    currentPeriodEnd: '2027-06-01T00:00:00.000Z',
     cancelAtPeriodEnd: false,
   },
   {
@@ -177,7 +179,7 @@ export const SEED_SUBSCRIPTIONS: Subscription[] = [
     planId: 'plan-enterprise',
     status: 'ACTIVE',
     currentPeriodStart: '2026-08-01T00:00:00.000Z',
-    currentPeriodEnd: '2026-09-01T00:00:00.000Z',
+    currentPeriodEnd: '2027-06-01T00:00:00.000Z',
     cancelAtPeriodEnd: false,
   },
   {
@@ -433,9 +435,23 @@ export const SEED_PRODUCTS: Product[] = [
 // ==========================================
 // 7. SEED TABLES (Mapped with restaurantId)
 // ==========================================
+// Demo branch assignment for MÉRAR's flagship location (multi-branch demo):
+// hall -> main branch, terrace -> terrace branch, garden -> mall counter,
+// VIP lounge stays unassigned so managers can try the assignment workflow.
+function withMerarBranches(tables: RestaurantTable[]): RestaurantTable[] {
+  return tables.map((t) => {
+    let branchId: string | undefined;
+    const n = t.tableNumber;
+    if (n >= 1 && n <= 20) branchId = 'branch-main';
+    else if (n >= 21 && n <= 32) branchId = 'branch-terrace';
+    else if (n >= 43 && n <= 50) branchId = 'branch-mall';
+    return { ...t, branchId };
+  });
+}
+
 export const SEED_TABLES: RestaurantTable[] = [
   // MÉRAR Tables (50 tables)
-  ...INITIAL_TABLES.map((t) => ({
+  ...withMerarBranches(INITIAL_TABLES).map((t) => ({
     ...t,
     restaurantId: 'rest-merar',
   })),
@@ -597,5 +613,197 @@ export const SEED_AUDIT_LOGS: AuditLog[] = [
     action: 'SUBSCRIPTION_RENEWAL',
     details: 'تجديد الاشتراك الشهري لباقة المحترفين الفاخرة بنجاح',
     timestamp: new Date(Date.now() - 86400000).toISOString(),
+  },
+];
+
+// ==========================================
+// 11. CLOSED SALES HISTORY (Paid orders + POS receipts)
+// Historical demo revenue so sales analytics / instant reports
+// render meaningful multi-day charts on first launch.
+// ==========================================
+
+const isoDaysAgo = (days: number, hour: number, minute = 0): string => {
+  const d = new Date(Date.now() - days * 24 * 3600 * 1000);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
+};
+
+export const SEED_PAID_ORDER_HISTORY: Order[] = [
+  {
+    id: '#1051',
+    numericId: 1051,
+    restaurantId: 'rest-merar',
+    tableId: 'TABLE-03',
+    status: 'SERVED',
+    paymentMethod: 'CARD',
+    paymentStatus: 'PAID',
+    notes: 'عشاء رومانسي',
+    createdAt: isoDaysAgo(6, 20, 14),
+    updatedAt: isoDaysAgo(6, 21, 42),
+    settledAt: isoDaysAgo(6, 21, 42),
+    estimatedPrepMinutes: 18,
+    subtotal: 270,
+    total: 270,
+    items: [
+      { id: 'hist-1-a', productId: 'prod-sig-1', productName: 'تندرلوين بلاك أنغوس المعتق بالترفل', quantity: 1, unitPrice: 135, totalPrice: 135 },
+      { id: 'hist-1-b', productId: 'prod-sig-2', productName: 'سلمون نرويجي مشوي بصوص البرتقال والزعفران', quantity: 1, unitPrice: 135, totalPrice: 135 },
+    ],
+  },
+  {
+    id: '#1052',
+    numericId: 1052,
+    restaurantId: 'rest-merar',
+    tableId: 'TABLE-11',
+    status: 'SERVED',
+    paymentMethod: 'CASH',
+    paymentStatus: 'PAID',
+    createdAt: isoDaysAgo(5, 19, 30),
+    updatedAt: isoDaysAgo(5, 20, 55),
+    settledAt: isoDaysAgo(5, 20, 55),
+    estimatedPrepMinutes: 15,
+    subtotal: 205,
+    total: 205,
+    items: [
+      { id: 'hist-2-a', productId: 'prod-main-1', productName: 'لحم غنم مشوي بالتوابل الشرقية', quantity: 1, unitPrice: 98, totalPrice: 98 },
+      { id: 'hist-2-b', productId: 'prod-app-2', productName: 'مشاوي مِيرار المختلطة', quantity: 1, unitPrice: 68, totalPrice: 68 },
+      { id: 'hist-2-c', productId: 'prod-app-3', productName: 'حمص بالكمأة', quantity: 1, unitPrice: 39, totalPrice: 39 },
+    ],
+  },
+  {
+    id: '#1053',
+    numericId: 1053,
+    restaurantId: 'rest-merar',
+    tableId: 'TABLE-09',
+    status: 'SERVED',
+    paymentMethod: 'CARD',
+    paymentStatus: 'PAID',
+    createdAt: isoDaysAgo(4, 13, 5),
+    updatedAt: isoDaysAgo(4, 14, 20),
+    settledAt: isoDaysAgo(4, 14, 20),
+    estimatedPrepMinutes: 12,
+    subtotal: 156,
+    total: 156,
+    items: [
+      { id: 'hist-3-a', productId: 'prod-sig-3', productName: 'غراتان الكمأة الإيطالي', quantity: 1, unitPrice: 118, totalPrice: 118 },
+      { id: 'hist-3-b', productId: 'prod-mock-1', productName: 'عصير رمان طازج', quantity: 2, unitPrice: 19, totalPrice: 38 },
+    ],
+  },
+  {
+    id: '#1054',
+    numericId: 1054,
+    restaurantId: 'rest-merar',
+    tableId: 'TABLE-07',
+    status: 'SERVED',
+    paymentMethod: 'MOBILE',
+    paymentStatus: 'PAID',
+    createdAt: isoDaysAgo(3, 21, 10),
+    updatedAt: isoDaysAgo(3, 22, 5),
+    settledAt: isoDaysAgo(3, 22, 5),
+    estimatedPrepMinutes: 20,
+    subtotal: 342,
+    total: 342,
+    items: [
+      { id: 'hist-4-a', productId: 'prod-sig-1', productName: 'تندرلوين بلاك أنغوس المعتق بالترفل', quantity: 2, unitPrice: 135, totalPrice: 270 },
+      { id: 'hist-4-b', productId: 'prod-des-1', productName: 'كوكو لافا بالشوكولاتة البلجيكية', quantity: 2, unitPrice: 36, totalPrice: 72 },
+    ],
+  },
+  {
+    id: '#1055',
+    numericId: 1055,
+    restaurantId: 'rest-merar',
+    tableId: 'TABLE-33',
+    status: 'SERVED',
+    paymentMethod: 'CASH',
+    paymentStatus: 'PAID',
+    createdAt: isoDaysAgo(2, 18, 45),
+    updatedAt: isoDaysAgo(2, 20, 10),
+    settledAt: isoDaysAgo(2, 20, 10),
+    estimatedPrepMinutes: 25,
+    subtotal: 470,
+    total: 470,
+    items: [
+      { id: 'hist-5-a', productId: 'prod-sig-1', productName: 'تندرلوين بلاك أنغوس المعتق بالترفل', quantity: 1, unitPrice: 135, totalPrice: 135 },
+      { id: 'hist-5-b', productId: 'prod-main-2', productName: 'ستيك ريب آي بلاك أنغوس المعتق', quantity: 1, unitPrice: 148, totalPrice: 148 },
+      { id: 'hist-5-c', productId: 'prod-soup-1', productName: 'سلطة الكينوا بالأفوكادو', quantity: 1, unitPrice: 62, totalPrice: 62 },
+      { id: 'hist-5-d', productId: 'prod-mock-2', productName: 'قهوة مختصة V60', quantity: 1, unitPrice: 25, totalPrice: 25 },
+    ],
+  },
+  {
+    id: '#1056',
+    numericId: 1056,
+    restaurantId: 'rest-merar',
+    tableId: 'TABLE-01',
+    status: 'SERVED',
+    paymentMethod: 'CARD',
+    paymentStatus: 'PAID',
+    createdAt: isoDaysAgo(1, 12, 30),
+    updatedAt: isoDaysAgo(1, 13, 45),
+    settledAt: isoDaysAgo(1, 13, 45),
+    estimatedPrepMinutes: 15,
+    subtotal: 121,
+    total: 121,
+    items: [
+      { id: 'hist-6-a', productId: 'prod-app-1', productName: 'مقبلات مِيرار الملكية', quantity: 1, unitPrice: 85, totalPrice: 85 },
+      { id: 'hist-6-b', productId: 'prod-mock-1', productName: 'عصير رمان طازج', quantity: 1, unitPrice: 19, totalPrice: 19 },
+      { id: 'hist-6-c', productId: 'prod-mock-3', productName: 'موهيتو بالنعناع', quantity: 1, unitPrice: 17, totalPrice: 17 },
+    ],
+  },
+];
+
+// POS receipts matching the closed history above (tenant isolated ledger)
+export const SEED_PAYMENTS: PaymentRecord[] = SEED_PAID_ORDER_HISTORY.map((order, index) => ({
+  id: `pay-seed-${index + 1}`,
+  receiptNumber: `RC-${new Date().getFullYear()}-${String(1051 + index).slice(-4)}`,
+  restaurantId: order.restaurantId,
+  tableId: order.tableId,
+  tableLabel: `طاولة ${order.tableId.replace(/^(?:TABLE-|.*-T)/, '')}`,
+  orderIds: [order.id],
+  itemsSummary: order.items.map((i) => i.productName).slice(0, 3).join('، '),
+  method: order.paymentMethod as PaymentRecord['method'],
+  subtotal: order.subtotal,
+  total: order.total,
+  cashReceived: order.paymentMethod === 'CASH' ? order.total : undefined,
+  changeDue: 0,
+  cashierName: 'ليان حداد',
+  createdAt: order.settledAt || order.updatedAt,
+}));
+
+// ==========================================
+// 12. MULTI-BRANCH MANAGEMENT SEEDS
+// ==========================================
+export const SEED_BRANCHES: Branch[] = [
+  {
+    id: 'branch-main',
+    restaurantId: 'rest-merar',
+    name: 'الفرع الرئيسي — وسط المدينة',
+    color: '#D4AF37',
+    isActive: true,
+    createdAt: isoDaysAgo(30, 9, 0),
+  },
+  {
+    id: 'branch-terrace',
+    restaurantId: 'rest-merar',
+    name: 'فرع تراس النخيل (التراس الخارجي)',
+    address: 'شارع النخيل — الواجهة البحرية',
+    color: '#4ADE80',
+    isActive: true,
+    createdAt: isoDaysAgo(21, 9, 0),
+  },
+  {
+    id: 'branch-mall',
+    restaurantId: 'rest-merar',
+    name: 'كاونتر المول — الطلبات الخارجية',
+    address: 'الطابق الثالث — مركز التسوق',
+    color: '#60A5FA',
+    isActive: true,
+    createdAt: isoDaysAgo(7, 9, 0),
+  },
+  {
+    id: 'branch-lum-main',
+    restaurantId: 'rest-lumiere',
+    name: 'الفرع الرئيسي — لوميير',
+    color: '#F87171',
+    isActive: true,
+    createdAt: isoDaysAgo(30, 9, 0),
   },
 ];

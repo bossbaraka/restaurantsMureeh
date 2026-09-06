@@ -10,7 +10,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
   const { currentRestaurant, activeTableId, tables } = useRestaurant();
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
-  const tableNumStr = activeTableId ? activeTableId.replace('TABLE-', '') : '12';
+  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '12';
   const restName = currentRestaurant?.name || 'مطعم مِيرار الفاخر';
   const restNameEn = currentRestaurant?.nameEn || 'MÉRAR LUXURY DINING';
   const coverImg = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';

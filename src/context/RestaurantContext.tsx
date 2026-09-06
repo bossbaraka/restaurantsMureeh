@@ -15,12 +15,14 @@ import {
   RestaurantUser,
   TableSession,
   EntitlementKey,
+  PaymentRecord,
+  Branch,
 } from '../types/restaurant';
 import { db } from '../services/db';
 import { api } from '../services/api';
 import { soundFX } from '../utils/audio';
 
-export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING';
+export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
 
 interface RestaurantContextType {
   // Current Tenant Info
@@ -66,6 +68,8 @@ interface RestaurantContextType {
   tables: RestaurantTable[];
   orders: Order[];
   waiterRequests: WaiterRequest[];
+  payments: PaymentRecord[];
+  branches: Branch[];
 
   // Customer Cart Management
   cartItems: CartItem[];
@@ -194,6 +198,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [tables, setTables] = useState<RestaurantTable[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [waiterRequests, setWaiterRequests] = useState<WaiterRequest[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]);
 
   // Toast state
@@ -247,6 +253,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const currentTabs = db.getTables(tenantId);
     const currentOrds = db.getOrders(tenantId);
     const currentWaits = db.getWaiterRequests(tenantId);
+    const currentPays = db.getPayments(tenantId);
+    const currentBranches = db.getBranches(tenantId);
 
     setCategories(currentCats);
     setProducts(currentProds);
@@ -254,6 +262,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setTables(currentTabs);
     setOrders(currentOrds);
     setWaiterRequests(currentWaits);
+    setPayments(currentPays);
+    setBranches(currentBranches);
 
     if (typeof window !== 'undefined' && localStorage.getItem('merar_auth_token')) {
       api.getManagerMenu(tenantId).then((menuRes) => {
@@ -339,6 +349,28 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       refreshTenantData();
     }
   }, [currentRestaurant?.id, refreshTenantData]);
+
+  // Live data sync: when another tab / window writes to the local database
+  // (customer order, cashier payment, kitchen status…), refresh this view so
+  // the Live Restaurant Screen and manager dashboards stay current.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith('saas_db_')) {
+        refreshTenantData();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    const interval = window.setInterval(() => {
+      // Gentle 20s poll keeps screens in sync even when changes happen on
+      // another device (server deployments broadcast through SSE instead).
+      refreshTenantData();
+    }, 20000);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.clearInterval(interval);
+    };
+  }, [refreshTenantData]);
 
   // Keep the active QR token in the public URL without exposing table numbers.
   useEffect(() => {
@@ -919,6 +951,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         tables,
         orders,
         waiterRequests,
+        payments,
+        branches,
         cartItems,
         addToCart,
         updateCartItemQuantity,

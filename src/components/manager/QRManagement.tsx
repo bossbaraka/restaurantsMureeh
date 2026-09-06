@@ -156,7 +156,7 @@ export const QRManagement: React.FC = () => {
               {/* Card Top */}
               <div className="flex items-center justify-between pb-2 border-b border-luxury-800 text-xs">
                 <span className="font-bold text-luxury-100 font-serif">
-                  {table.id.replace('TABLE-', 'طاولة ')}
+                  {table.id.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
                 </span>
                 <span className="text-[10px] text-luxury-400 bg-luxury-850 px-2 py-0.5 rounded-full border border-luxury-800">
                   {getTableZoneLabel(table.zone)}

@@ -73,7 +73,7 @@ export const WaiterRequestsList: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-luxury-50">
-                        {req.tableId.replace('TABLE-', 'طاولة ')}
+                        {req.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
                       </span>
                       <span className="text-[10px] text-luxury-400">
                         ({formatRelativeMinutes(req.createdAt)})
@@ -111,7 +111,7 @@ export const WaiterRequestsList: React.FC = () => {
               >
                 <div className="flex items-center gap-2.5">
                   <span className="font-bold text-luxury-200">
-                    {req.tableId.replace('TABLE-', 'طاولة ')}
+                    {req.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
                   </span>
                   <span>—</span>
                   <span>{req.reasonText}</span>

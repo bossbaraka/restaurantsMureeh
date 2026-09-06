@@ -12,6 +12,8 @@ import { AnalyticsView } from './AnalyticsView';
 import { BrandingSettingsView } from './BrandingSettingsView';
 import { SubscriptionView } from './SubscriptionView';
 import { StaffManagement } from './StaffManagement';
+import { CashierPOSView } from './CashierPOSView';
+import { BranchManagementView } from './BranchManagementView';
 import {
   LayoutDashboard,
   ChefHat,
@@ -27,6 +29,7 @@ import {
   Palette,
   CreditCard,
   Building2,
+  Calculator,
   ChevronDown,
   Plus,
   Users,
@@ -34,6 +37,8 @@ import {
 
 export type ManagerTab =
   | 'OVERVIEW'
+  | 'POS'
+  | 'BRANCHES'
   | 'ORDERS'
   | 'TABLES'
   | 'QR'
@@ -47,7 +52,7 @@ export type ManagerTab =
 
 export const ManagerLayout: React.FC = () => {
   const { orders, waiterRequests, setViewMode, currentRestaurant, tenantsList, setCurrentTenantBySlug, setIsOnboardingOpen } = useRestaurant();
-  const { currentUser, isSuperAdmin, isDemoAccount, canAccessManagerTab, setIsLoginModalOpen, switchManagerRestaurant } = useAuth();
+  const { isSuperAdmin, isDemoAccount, canAccessManagerTab, switchManagerRestaurant } = useAuth();
   const [activeTab, setActiveTab] = useState<ManagerTab>('OVERVIEW');
   const [isTenantDropdownOpen, setIsTenantDropdownOpen] = useState(false);
 
@@ -56,6 +61,7 @@ export const ManagerLayout: React.FC = () => {
 
   const navConfig: Array<{ id: ManagerTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string; section?: string }> = [
     { id: 'OVERVIEW', label: 'لوحة العمليات', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'POS', label: 'الكاشير (POS)', icon: <Calculator className="w-4 h-4" /> },
     {
       id: 'ORDERS',
       label: 'شاشة الطلبات والمطبخ',
@@ -78,6 +84,7 @@ export const ManagerLayout: React.FC = () => {
     { id: 'ANALYTICS', label: 'التحليلات والمبيعات', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'BRANDING', label: 'الهوية والمظهر', icon: <Palette className="w-4 h-4" /> },
     { id: 'SUBSCRIPTION', label: 'الباقة والاشتراك', icon: <CreditCard className="w-4 h-4" /> },
+  { id: 'BRANCHES', label: 'الفروع المتعددة', icon: <Building2 className="w-4 h-4" /> },
   ];
 
   const navItems = navConfig.filter((item) => canAccessManagerTab(item.id));
@@ -240,6 +247,8 @@ export const ManagerLayout: React.FC = () => {
           </div>
         )}
         {activeTab === 'OVERVIEW' && <DashboardOverview onNavigateTab={setActiveTab} />}
+        {activeTab === 'POS' && <CashierPOSView />}
+        {activeTab === 'BRANCHES' && <BranchManagementView />}
         {activeTab === 'ORDERS' && <OrderManagement />}
         {activeTab === 'TABLES' && <TableManagement />}
         {activeTab === 'QR' && <QRManagement />}

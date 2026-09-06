@@ -42,7 +42,7 @@ export const OrderTrackingDrawer: React.FC = () => {
 
   if (!isOrderTrackingOpen) return null;
 
-  const tableNumStr = activeTableId ? activeTableId.replace('TABLE-', '') : '—';
+  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
 
   const handleStartEditNotes = (order: Order) => {
     setEditingNotesOrderId(order.id);

@@ -12,6 +12,7 @@ import {
   QrCode,
   ShieldCheck,
   ChefHat,
+  MonitorPlay,
   Sparkles,
   User,
   Globe,
@@ -44,6 +45,7 @@ export const ViewSwitcher: React.FC = () => {
     { id: 'CUSTOMER', label: 'المنيو (الزبون)', icon: Smartphone, show: canAccessView('CUSTOMER') },
     { id: 'MANAGER', label: 'لوحة المطعم', icon: LayoutDashboard, show: canAccessView('MANAGER') },
     { id: 'KITCHEN_KDS', label: 'المطبخ (KDS)', icon: ChefHat, show: canAccessView('KITCHEN_KDS') },
+    { id: 'LIVE_SCREEN', label: 'الشاشة الحية', icon: MonitorPlay, show: canAccessView('LIVE_SCREEN') },
     { id: 'SAAS_LANDING', label: 'صفحة العرض (SaaS)', icon: Globe, show: canAccessView('SAAS_LANDING') },
     { id: 'PLATFORM_ADMIN', label: 'إدارة المنصة', icon: ShieldCheck, show: canAccessView('PLATFORM_ADMIN') },
     { id: 'SPLIT_PREVIEW', label: 'العرض المزدوج', icon: Columns, show: canAccessView('SPLIT_PREVIEW') },
@@ -142,7 +144,7 @@ export const ViewSwitcher: React.FC = () => {
             title="تغيير طاولة العميل الحالية"
           >
             <QrCode className="w-3.5 h-3.5 text-gold-400" />
-            <span>{activeTableId ? `طاولة ${activeTableId.replace('TABLE-', '')}` : 'اختر طاولة'}</span>
+            <span>{activeTableId ? `طاولة ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : 'اختر طاولة'}</span>
           </button>
 
           <button
