@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import {
   Palette,
@@ -70,6 +71,8 @@ async function fileToResizedBlob(file: File, maxDim: number): Promise<{ blob: Bl
 
 export const BrandingSettingsView: React.FC = () => {
   const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast } = useRestaurant();
+  const { currentUser } = useAuth();
+  const isDemo = currentUser?.email.toLowerCase().includes('demo');
 
   const [name, setName] = useState('');
   const [nameEn, setNameEn] = useState('');
@@ -140,8 +143,31 @@ export const BrandingSettingsView: React.FC = () => {
   const handleSave = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!currentRestaurant || isSaving) return;
-    setIsSaving(true);
 
+    if (isDemo) {
+      showToast(
+        'warning',
+        '🔒 تنبيه النسخة التجريبية',
+        'لا يمكن حفظ التعديل الدائم في النسخة التجريبية. لتأكيد وتطبيق الهوية البصرية الحقيقية على موقعك، اشترك في منصة مريح.'
+      );
+      if (currentRestaurant) {
+        setCurrentRestaurant({
+          ...currentRestaurant,
+          name: name.trim(),
+          nameEn: nameEn.trim(),
+          description: description.trim(),
+          phone: phone.trim(),
+          address: address.trim(),
+          logo: logo.trim(),
+          coverImage: coverImage.trim(),
+          primaryColor,
+          accentColor,
+        });
+      }
+      return;
+    }
+
+    setIsSaving(true);
     const res = await api.saveBranding(currentRestaurant.id, {
       name: name.trim(),
       nameEn: nameEn.trim(),

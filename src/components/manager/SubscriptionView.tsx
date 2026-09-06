@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { BrandLogo } from '../brand/BrandLogo';
 import { Subscription, Plan } from '../../types/restaurant';
@@ -51,6 +52,8 @@ const PLAN_DETAIL_LINES: Record<string, string[]> = {
 
 export const SubscriptionView: React.FC = () => {
   const { currentRestaurant, tables, products, categories, refreshTenantData, showToast } = useRestaurant();
+  const { currentUser } = useAuth();
+  const isDemo = currentUser?.email.toLowerCase().includes('demo');
 
   const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
   const [isChanging, setIsChanging] = useState(false);
@@ -78,6 +81,10 @@ export const SubscriptionView: React.FC = () => {
 
   const handleSelectPlan = async (planId: string) => {
     if (!currentRestaurant || isChanging) return;
+    if (isDemo) {
+      showToast('error', '🔒 تنبيه النسخة التجريبية', 'لا يمكن تغيير الاشتراك في النسخة التجريبية. هذا الحساب مخصص فقط لاستعراض ميزات منصة مريح.');
+      return;
+    }
     setIsChanging(true);
     const res = await api.changeSubscriptionPlan(currentRestaurant.id, planId);
     setIsChanging(false);
