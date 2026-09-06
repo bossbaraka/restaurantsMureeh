@@ -25,7 +25,7 @@ export const QRManagement: React.FC = () => {
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [selectedTableForPrint, setSelectedTableForPrint] = useState<RestaurantTable | null>(null);
 
-  const slug = currentRestaurant?.slug || 'merar';
+  const slug = currentRestaurant?.slug || 'mureeh';
 
   useEffect(() => {
     let isMounted = true;

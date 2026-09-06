@@ -236,7 +236,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                 <div>
                   <label className="block font-bold text-luxury-200 mb-1">الرابط المخصص (Slug) *</label>
                   <div className="flex items-center bg-luxury-950 border border-luxury-800 rounded-xl px-2.5 text-luxury-400 font-mono">
-                    <span>app.merar.com/r/</span>
+                    <span>restaurantsmureeh-2.onrender.com/r/</span>
                     <input
                       type="text"
                       required
