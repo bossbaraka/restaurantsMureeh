@@ -80,11 +80,11 @@ export const CustomerHeader: React.FC = () => {
           {hasActiveOrders && (
             <button
               onClick={() => setIsOrderTrackingOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gold-500/10 hover:bg-gold-500/20 text-gold-300 border border-gold-500/30 transition-all active:scale-95 text-xs font-medium"
-              title="متابعة حالة الطلبات"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gold-500/15 hover:bg-gold-500/25 text-gold-300 border border-gold-500/40 transition-all active:scale-95 text-xs font-bold shadow-gold-glow animate-pulse"
+              title="متابعة حالة الطلب المباشرة"
             >
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span>طلباتك ({activeTableOrders.length})</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>متابعة الطلب ({activeTableOrders.length})</span>
             </button>
           )}
 
