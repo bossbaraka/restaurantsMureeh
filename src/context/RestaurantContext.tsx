@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Restaurant,
   Category,
@@ -182,6 +182,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [urlHandledRef] = useState<{ done: boolean }>({ done: false });
+  const isFetchingRef = useRef(false);
 
   const showToast = useCallback((type: ToastMessage['type'], title: string, message?: string) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
@@ -206,24 +207,26 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   // -------------------------------------------------------------------------
-  // Real tenant data loading — every array below is hydrated ONLY from API
-  // responses backed by Prisma/PostgreSQL.
+  // Real tenant data loading — guarded against duplicate parallel requests
   // -------------------------------------------------------------------------
-  const refreshTenantData = useCallback(() => {
-    if (!currentRestaurant) return;
+  const refreshTenantData = useCallback(async () => {
+    if (!currentRestaurant?.id || isFetchingRef.current) return;
+    isFetchingRef.current = true;
     const tenantId = currentRestaurant.id;
 
-    if (currentUser) {
-      Promise.all([
-        api.getManagerMenu(tenantId),
-        api.getManagerOrders(tenantId),
-        api.getManagerTables(tenantId),
-        api.getManagerWaiterRequests(tenantId),
-        api.getManagerOffers(tenantId),
-        api.getPayments(currentUser, tenantId),
-        api.getManagerBranches(currentUser, tenantId),
-        api.getManagerSubscription(tenantId),
-      ]).then(([menuRes, ordersRes, tablesRes, waitersRes, offersRes, paymentsRes, branchesRes, subRes]) => {
+    try {
+      if (currentUser) {
+        const [menuRes, ordersRes, tablesRes, waitersRes, offersRes, paymentsRes, branchesRes, subRes] = await Promise.all([
+          api.getManagerMenu(tenantId),
+          api.getManagerOrders(tenantId),
+          api.getManagerTables(tenantId),
+          api.getManagerWaiterRequests(tenantId),
+          api.getManagerOffers(tenantId),
+          api.getPayments(currentUser, tenantId),
+          api.getManagerBranches(currentUser, tenantId),
+          api.getManagerSubscription(tenantId),
+        ]);
+
         if (menuRes.success && menuRes.data) {
           setCategories(menuRes.data.categories);
           setProducts(menuRes.data.products);
@@ -262,9 +265,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setSubscription(subRes.data.subscription);
           setPlans(subRes.data.plans);
         }
-      });
+      } else if (currentRestaurant?.slug && currentTableSession?.sessionToken) {
+        const catalogRes = await api.getPublicRestaurantBySlug(currentRestaurant.slug, currentTableSession.sessionToken);
+        if (catalogRes.success && catalogRes.data) {
+          setCategories(catalogRes.data.categories);
+          setProducts(catalogRes.data.products);
+          setOffers(catalogRes.data.offers);
+        }
+      }
+    } catch {
+      /* ignore transient background errors */
+    } finally {
+      isFetchingRef.current = false;
     }
-  }, [currentRestaurant, currentUser]);
+  }, [currentRestaurant?.id, currentRestaurant?.slug, currentUser?.id, currentTableSession?.sessionToken]);
 
   // Load the platform tenant directory for platform admins (used by the
   // tenant switcher, admin portal and manager header).
@@ -303,21 +317,17 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentManagerRestaurant?.id]);
 
-  // Automatically refresh catalog data whenever the active tenant changes.
+  // Fast 1.5-second background polling with in-flight lock (no duplicate concurrent requests)
   useEffect(() => {
-    if (currentRestaurant?.id) {
-      refreshTenantData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRestaurant?.id]);
+    if (!currentRestaurant?.id) return;
+    
+    // Initial fetch on tenant load/switch
+    void refreshTenantData();
 
-  // Fast 1-second background polling keeps all manager, kitchen, POS & customer screens updated instantly
-  useEffect(() => {
     const interval = window.setInterval(() => {
-      if (currentRestaurant?.id) {
-        refreshTenantData();
-      }
-    }, 1000); // 1000ms = 1 second ultra-fast update
+      void refreshTenantData();
+    }, 1500);
+
     return () => window.clearInterval(interval);
   }, [currentRestaurant?.id, refreshTenantData]);
 
