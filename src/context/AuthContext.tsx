@@ -49,29 +49,79 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_SEC = 60;
 
+const USER_SESSION_KEY = 'merar_user_session';
+const RESTAURANT_SESSION_KEY = 'merar_manager_restaurant';
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<RestaurantUser | null>(null);
-  const [currentManagerRestaurant, setCurrentManagerRestaurant] = useState<Restaurant | null>(null);
+  const [currentUser, setCurrentUser] = useState<RestaurantUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(USER_SESSION_KEY);
+      if (saved) {
+        try { return JSON.parse(saved); } catch {}
+      }
+    }
+    return null;
+  });
+
+  const [currentManagerRestaurant, setCurrentManagerRestaurant] = useState<Restaurant | null>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(RESTAURANT_SESSION_KEY);
+      if (saved) {
+        try { return JSON.parse(saved); } catch {}
+      }
+    }
+    return null;
+  });
+
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutRemainingSeconds, setLockoutRemainingSeconds] = useState(0);
 
-  // Boot: restore the JWT session exclusively from the real backend (/auth/me).
+  // Sync state changes with localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (currentUser) {
+      localStorage.setItem(USER_SESSION_KEY, JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem(USER_SESSION_KEY);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (currentManagerRestaurant) {
+      localStorage.setItem(RESTAURANT_SESSION_KEY, JSON.stringify(currentManagerRestaurant));
+    } else {
+      localStorage.removeItem(RESTAURANT_SESSION_KEY);
+    }
+  }, [currentManagerRestaurant]);
+
+  // Boot: restore and verify session with backend (/auth/me) while keeping UI logged-in seamlessly.
   useEffect(() => {
     let isMounted = true;
 
     const restoreSession = async () => {
       if (typeof window === 'undefined') return;
-      if (!localStorage.getItem(AUTH_TOKEN_KEY)) return;
+      if (!localStorage.getItem(AUTH_TOKEN_KEY)) {
+        setCurrentUser(null);
+        setCurrentManagerRestaurant(null);
+        localStorage.removeItem(USER_SESSION_KEY);
+        localStorage.removeItem(RESTAURANT_SESSION_KEY);
+        return;
+      }
 
       const res = await api.getCurrentUser();
       if (isMounted && res.success && res.data) {
         setCurrentUser(res.data.user);
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(res.data.user));
         if (res.data.restaurant) {
           setCurrentManagerRestaurant(res.data.restaurant);
+          localStorage.setItem(RESTAURANT_SESSION_KEY, JSON.stringify(res.data.restaurant));
         }
       } else if (isMounted && res.statusCode === 401) {
         localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(USER_SESSION_KEY);
+        localStorage.removeItem(RESTAURANT_SESSION_KEY);
         setCurrentUser(null);
         setCurrentManagerRestaurant(null);
       }
@@ -112,8 +162,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.success && res.data) {
         setFailedAttempts(0);
         setCurrentUser(res.data.user);
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(res.data.user));
         if (res.data.restaurant) {
           setCurrentManagerRestaurant(res.data.restaurant);
+          localStorage.setItem(RESTAURANT_SESSION_KEY, JSON.stringify(res.data.restaurant));
         }
         setIsLoginModalOpen(false);
         return { success: true };
@@ -151,8 +203,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.success && res.data) {
         setFailedAttempts(0);
         setCurrentUser(res.data.user);
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(res.data.user));
         if (res.data.restaurant) {
           setCurrentManagerRestaurant(res.data.restaurant);
+          localStorage.setItem(RESTAURANT_SESSION_KEY, JSON.stringify(res.data.restaurant));
         }
         setIsLoginModalOpen(false);
         return { success: true };
@@ -174,6 +228,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = useCallback(() => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(USER_SESSION_KEY);
+      localStorage.removeItem(RESTAURANT_SESSION_KEY);
     }
     void api.logout();
     setCurrentUser(null);

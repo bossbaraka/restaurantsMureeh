@@ -135,8 +135,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { currentUser, currentManagerRestaurant, setCurrentUser: authSetCurrentUser, logout: authLogout } = auth;
 
   const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
-  const [viewMode, setViewMode] = useState<AppViewMode>(() => {
+  const [viewMode, setViewModeState] = useState<AppViewMode>(() => {
     if (typeof window !== 'undefined') {
+      const savedView = localStorage.getItem('merar_view_mode') as AppViewMode;
+      if (savedView) return savedView;
       const isPublicRestaurantLink =
         window.location.pathname.startsWith('/r/') ||
         new URLSearchParams(window.location.search).has('qr');
@@ -144,6 +146,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     return 'SAAS_LANDING';
   });
+
+  const setViewMode = useCallback((mode: AppViewMode) => {
+    setViewModeState(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('merar_view_mode', mode);
+    }
+  }, []);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -302,16 +311,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurant?.id]);
 
-  // Gentle background polling keeps screens in sync across devices
-  // (SSE is used for instant events where available).
+  // Fast 1-second background polling keeps all manager, kitchen, POS & customer screens updated instantly
   useEffect(() => {
     const interval = window.setInterval(() => {
-      if (currentRestaurant?.id && currentUser) {
+      if (currentRestaurant?.id) {
         refreshTenantData();
       }
-    }, 15000);
+    }, 1000); // 1000ms = 1 second ultra-fast update
     return () => window.clearInterval(interval);
-  }, [currentRestaurant?.id, currentUser, refreshTenantData]);
+  }, [currentRestaurant?.id, refreshTenantData]);
 
   // -------------------------------------------------------------------------
   // URL / QR handling: customer opens /r/:slug?qr=<real-table-qr> which
