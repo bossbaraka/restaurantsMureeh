@@ -199,6 +199,37 @@ export const LoginModal: React.FC = () => {
           {/* TAB 1: MANAGER EMAIL & PASSWORD */}
           {authTab === 'MANAGERS' && (
             <form onSubmit={handleManagerLogin} className="space-y-3.5">
+              {/* 1-Click Demo Button for Stakeholder Presentations & Marketing */}
+              <button
+                type="button"
+                onClick={async () => {
+                  setEmailInput('demo@mureeh.com');
+                  setPasswordInput('demo');
+                  setIsLoading(true);
+                  setErrorMsg('');
+                  const res = await login('demo@mureeh.com', 'demo');
+                  setIsLoading(false);
+                  if (res.success) {
+                    showToast('success', 'تم الدخول بالحساب التجريبي الفاخر', 'مرحباً بك في لوحة تحكم المنظومة بكامل الصلاحيات والوظائف.');
+                    setIsLoginModalOpen(false);
+                    setViewMode('MANAGER');
+                  } else {
+                    setErrorMsg(res.error || 'تعذر الدخول بالحساب التجريبي');
+                  }
+                }}
+                disabled={lockoutRemainingSeconds > 0 || isLoading}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-white font-extrabold text-xs shadow-[0_0_24px_rgba(0,114,188,0.4)] transition-all cursor-pointer flex items-center justify-between group active:scale-98 border border-[#38BDF8]/40 mb-2"
+              >
+                <div className="flex items-center gap-2 text-right">
+                  <Sparkles className="w-4 h-4 text-[#38BDF8] animate-pulse shrink-0" />
+                  <div>
+                    <span className="block font-bold text-xs text-white">دخول الحساب التجريبي التجريبي (1-Click Demo)</span>
+                    <span className="text-[10px] text-[#E0F2FE] font-normal block">بكامل الوظائف والصلاحيات للعرض على أصحاب المصلحة</span>
+                  </div>
+                </div>
+                <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-mono text-white">تجربة حية ⚡</span>
+              </button>
+
               <div>
                 <label className="block text-xs font-medium text-luxury-300 mb-1.5">
                   البريد الإلكتروني الإداري *
@@ -256,6 +287,28 @@ export const LoginModal: React.FC = () => {
                 <Lock className="w-4 h-4" />
                 <span>{isLoading ? 'جاري التحقق والمصادقة...' : 'دخول لوحة التحكم'}</span>
               </button>
+
+              {/* Demo Credentials Card */}
+              <div className="p-3 rounded-2xl bg-[#081B33]/80 border border-[#0072BC]/40 text-xs space-y-1.5 mt-3">
+                <span className="text-[11px] font-bold text-[#38BDF8] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#38BDF8]" />
+                  بيانات الحساب التجريبي لتسويق المنصة:
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-[10.5px] text-slate-300 font-mono">
+                  <div className="bg-[#040D1A] p-2 rounded-lg border border-[#004B87]/50">
+                    <span className="text-slate-400 block text-[9.5px]">البريد الإلكتروني:</span>
+                    <strong className="text-white">demo@mureeh.com</strong>
+                  </div>
+                  <div className="bg-[#040D1A] p-2 rounded-lg border border-[#004B87]/50">
+                    <span className="text-slate-400 block text-[9.5px]">كلمة المرور:</span>
+                    <strong className="text-white">demo</strong>
+                  </div>
+                </div>
+                <div className="text-[10px] text-slate-400 pt-1 border-t border-[#004B87]/40 flex items-center justify-between">
+                  <span>رموز PIN للعمال:</span>
+                  <span className="text-[#38BDF8] font-mono">KDS: 9900 | POS: 1122 | Waiter: 4455</span>
+                </div>
+              </div>
             </form>
           )}
 

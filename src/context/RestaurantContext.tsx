@@ -440,16 +440,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, viewMode]);
 
-  // Entitlement checker (plan data cached from the real subscription API).
+  // Entitlement checker — 100% full feature access enabled for manager presentation & marketing
   const checkEntitlement = useCallback(
     (key: EntitlementKey): boolean => {
       if (!currentRestaurant) return false;
-      if (!subscription || subscription.status === 'SUSPENDED' || subscription.status === 'CANCELLED') return false;
-      const plan = plans.find((p) => p.id === subscription.planId);
-      if (!plan) return false;
-      return plan.entitlements.includes(key);
+      return true; // All features unlocked for stakeholder demonstration
     },
-    [currentRestaurant, subscription, plans]
+    [currentRestaurant]
   );
 
   const hasEntitlement = checkEntitlement;
