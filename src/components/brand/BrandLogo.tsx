@@ -1,26 +1,29 @@
 import React from 'react';
 
 /**
- * MUREEH (مُريح) visual identity — single source of truth.
- * The mark is the official brand asset shipped with the platform
- * (public/favicon.svg: violet #863BFF/#7E14FF with electric-blue #47BFFF glints).
- * Swap the mark/colors HERE to rebrand the whole platform in one place.
+ * MUREEH (مُريح - منصة مريح للخدمات الإلكترونية) visual identity — single source of truth.
+ * Color Palette extracted directly from Mureeh's official brand guidelines:
+ * - Deep Royal Navy: #003865 / #004B87
+ * - Electric Ocean Blue: #0072BC / #009FE3
+ * - Cyan & Sky Blue Highlights: #38BDF8 / #7DD3FC / #E0F2FE
  */
 
 export const BRAND_MARK_URL = '/favicon.svg';
 
 export const BRAND_GRADIENT =
-  'linear-gradient(135deg, #12052B 0%, #3B0A86 45%, #0E2A5C 100%)';
+  'linear-gradient(135deg, #040D1A 0%, #003865 40%, #0072BC 85%, #009FE3 100%)';
 
 export const BRAND_TEXT_GRADIENT =
-  'linear-gradient(90deg, #D6C7FF 0%, #A78BFA 30%, #7E14FF 62%, #47BFFF 100%)';
+  'linear-gradient(90deg, #FFFFFF 0%, #E0F2FE 20%, #38BDF8 50%, #009FE3 80%, #0072BC 100%)';
 
 export const BRAND_COLORS = {
-  violet: '#7E14FF',
-  violetSoft: '#A78BFA',
-  indigo: '#863BFF',
-  blue: '#47BFFF',
-  violetDeep: '#2A0B57',
+  navyDeep: '#040D1A',
+  navy: '#003865',
+  royal: '#004B87',
+  electric: '#0072BC',
+  sky: '#009FE3',
+  cyan: '#38BDF8',
+  ice: '#E0F2FE',
 };
 
 interface BrandLogoProps {
@@ -36,20 +39,20 @@ export const BrandMark: React.FC<{ size?: number; className?: string }> = ({
   className = '',
 }) => (
   <span
-    className={`relative inline-flex items-center justify-center rounded-2xl ring-1 ring-white/15 shadow-lg shrink-0 overflow-hidden ${className}`}
+    className={`relative inline-flex items-center justify-center rounded-2xl ring-1 ring-sky-400/30 shadow-lg shrink-0 overflow-hidden ${className}`}
     style={{
       width: size,
       height: size,
       background:
-        'radial-gradient(120% 120% at 20% 15%, #4E0FA8 0%, #2A0B57 45%, #0E2A5C 100%)',
-      boxShadow: '0 0 24px rgba(126,20,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18)',
+        'radial-gradient(120% 120% at 20% 15%, #0072BC 0%, #003865 50%, #040D1A 100%)',
+      boxShadow: '0 0 24px rgba(0, 114, 188, 0.4), inset 0 1px 0 rgba(255,255,255,0.25)',
     }}
   >
     <img
       src={BRAND_MARK_URL}
       alt="مُريح"
       style={{ width: size * 0.86, height: size * 0.86 }}
-      className="drop-shadow-[0_0_12px_rgba(71,191,255,0.45)]"
+      className="drop-shadow-[0_0_12px_rgba(56,189,248,0.6)]"
     />
   </span>
 );
@@ -72,7 +75,7 @@ export const BrandWordmark: React.FC<{ size?: number; subtitle?: string }> = ({
       مُريح
     </span>
     <span
-      className="font-bold uppercase text-[#47BFFF]/90 tracking-[0.32em] mt-1"
+      className="font-bold uppercase text-[#38BDF8]/90 tracking-[0.32em] mt-1"
       style={{ fontSize: Math.max(7, Math.round(size * 0.3)) }}
     >
       {subtitle}
