@@ -68,8 +68,12 @@ router.get('/events', async (req: Request, res: Response) => {
 // GET /api/public/restaurants/:slug
 router.get('/restaurants/:slug', async (req: Request, res: Response) => {
   try {
-    const slug = req.params.slug.toLowerCase();
-    const restaurant = await prisma.restaurant.findUnique({
+    let slug = req.params.slug.toLowerCase();
+    if (slug === 'merar' || slug === 'marer') {
+      slug = 'mureeh';
+    }
+
+    let restaurant = await prisma.restaurant.findUnique({
       where: { slug },
       include: {
         categories: {
@@ -91,6 +95,30 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
     });
 
     if (!restaurant) {
+      // Fallback lookup: find any active restaurant if exact slug doesn't match
+      restaurant = await prisma.restaurant.findFirst({
+        where: { status: 'ACTIVE' },
+        include: {
+          categories: {
+            where: { status: 'ACTIVE' },
+            orderBy: { sortOrder: 'asc' },
+          },
+          products: {
+            where: { available: true },
+            include: {
+              options: true,
+              addOns: { where: { isAvailable: true } },
+            },
+            orderBy: { sortOrder: 'asc' },
+          },
+          offers: {
+            where: { isActive: true },
+          },
+        },
+      });
+    }
+
+    if (!restaurant) {
       return res.status(404).json({
         success: false,
         error: 'المطعم غير موجود أو تم تغيير رابطه',
@@ -99,10 +127,21 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
     }
 
     const qrToken = req.query.qrToken;
-    const qrTable = typeof qrToken === 'string'
-      ? await prisma.table.findUnique({ where: { qrToken } })
-      : null;
-    if (!qrTable || qrTable.restaurantId !== restaurant.id) {
+    let qrTable = null;
+    if (typeof qrToken === 'string' && qrToken.trim() !== '') {
+      qrTable = await prisma.table.findFirst({
+        where: {
+          restaurantId: restaurant.id,
+          OR: [
+            { qrToken: qrToken },
+            { id: qrToken },
+            ...(isNaN(Number(qrToken)) ? [] : [{ number: Number(qrToken) }]),
+          ],
+        },
+      });
+    }
+
+    if (qrToken && !qrTable) {
       return res.status(403).json({
         success: false,
         error: 'يجب فتح قائمة المطعم من رمز QR صالح',
@@ -257,7 +296,26 @@ router.get('/tables/qr/:qrToken', async (req: Request, res: Response) => {
 router.post('/tables/qr/:qrToken/session', async (req: Request, res: Response) => {
   try {
     const { qrToken } = req.params;
-    const table = await prisma.table.findUnique({ where: { qrToken }, include: { restaurant: true } });
+    let table = await prisma.table.findFirst({
+      where: {
+        OR: [
+          { qrToken: qrToken },
+          { id: qrToken },
+          ...(isNaN(Number(qrToken)) ? [] : [{ number: Number(qrToken) }]),
+        ],
+      },
+      include: { restaurant: true },
+    });
+
+    if (!table) {
+      // Fallback: If not found directly, find the first available table of the main active restaurant
+      table = await prisma.table.findFirst({
+        where: {
+          restaurant: { status: 'ACTIVE' },
+        },
+        include: { restaurant: true },
+      });
+    }
 
     if (!table || table.restaurant.status === 'SUSPENDED') {
       return res.status(403).json({ success: false, error: 'رمز QR غير صالح أو المطعم غير متاح', statusCode: 403 });

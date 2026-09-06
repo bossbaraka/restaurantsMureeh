@@ -23,7 +23,7 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
   const [isLoading, setIsLoading] = useState(true);
 
   const targetTables = selectedTable ? [selectedTable] : tables.slice(0, 12);
-  const slug = currentRestaurant?.slug || 'merar';
+  const slug = currentRestaurant?.slug || 'mureeh';
   const restName = currentRestaurant?.name || '';
   const restNameEn = currentRestaurant?.nameEn || '';
 

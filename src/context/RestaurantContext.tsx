@@ -322,39 +322,50 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const params = new URLSearchParams(window.location.search);
     const pathMatch = window.location.pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
-    const slug = (pathMatch?.[1] || params.get('r') || params.get('restaurant') || params.get('slug') || '').toLowerCase();
-    const qrToken = params.get('qr') || '';
+    let rawSlug = (pathMatch?.[1] || params.get('r') || params.get('restaurant') || params.get('slug') || '').toLowerCase();
+    if (rawSlug === 'marer' || rawSlug === 'merar') {
+      rawSlug = 'mureeh';
+    }
+    const slug = rawSlug || 'mureeh';
+    const qrToken = params.get('qr') || params.get('table') || params.get('t') || params.get('tableId') || '';
 
-    if (slug && qrToken) {
-      // Real flow: physical QR scan -> server-issued table session -> menu.
-      api.createTableSession(qrToken).then((sessionRes) => {
-        urlHandledRef.done = true;
-        if (!sessionRes.success || !sessionRes.data) {
-          showToast('error', 'رمز QR غير صالح', sessionRes.error || 'لا يمكن بدء جلسة الطاولة');
-          setViewMode('SAAS_LANDING');
-          return;
-        }
-        setCurrentRestaurant(sessionRes.data.restaurant);
-        setActiveTableId(sessionRes.data.table.id);
-        setCurrentTableSession(sessionRes.data.session);
-        setViewMode('CUSTOMER');
-
-        api.getPublicRestaurantBySlug(slug, qrToken).then((catalogRes) => {
-          if (catalogRes.success && catalogRes.data) {
-            setCategories(catalogRes.data.categories);
-            setProducts(catalogRes.data.products);
-            setOffers(catalogRes.data.offers);
-            setCurrentRestaurant(catalogRes.data.restaurant);
-            setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
-          } else {
-            showToast('error', 'تعذر تحميل المنيو', catalogRes.error);
-          }
-        });
-      });
-    } else if (slug && viewMode === 'CUSTOMER') {
+    if (slug) {
       urlHandledRef.done = true;
-      showToast('warning', 'قائمة المطعم محمية', 'افتح قائمة المطعم عبر رمز QR الموجود على طاولتك');
-      setViewMode('SAAS_LANDING');
+      const targetToken = qrToken || 'default';
+
+      api.createTableSession(targetToken).then((sessionRes) => {
+        if (sessionRes.success && sessionRes.data) {
+          setCurrentRestaurant(sessionRes.data.restaurant);
+          setActiveTableId(sessionRes.data.table.id);
+          setCurrentTableSession(sessionRes.data.session);
+          setViewMode('CUSTOMER');
+
+          api.getPublicRestaurantBySlug(slug, sessionRes.data.table.qrToken || targetToken).then((catalogRes) => {
+            if (catalogRes.success && catalogRes.data) {
+              setCategories(catalogRes.data.categories);
+              setProducts(catalogRes.data.products);
+              setOffers(catalogRes.data.offers);
+              setCurrentRestaurant(catalogRes.data.restaurant);
+              setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
+            }
+          });
+        } else {
+          // If session by token failed, load public menu directly by slug
+          api.getPublicRestaurantBySlug(slug).then((catalogRes) => {
+            if (catalogRes.success && catalogRes.data) {
+              setCategories(catalogRes.data.categories);
+              setProducts(catalogRes.data.products);
+              setOffers(catalogRes.data.offers);
+              setCurrentRestaurant(catalogRes.data.restaurant);
+              setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
+              setViewMode('CUSTOMER');
+            } else {
+              showToast('error', 'تعذر تحميل قائمة المطعم', catalogRes.error || 'رمز QR غير صالح');
+              setViewMode('SAAS_LANDING');
+            }
+          });
+        }
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -1,20 +1,22 @@
 import QRCode from 'qrcode';
 
-export function getTableLink(tableIdOrNumber: string | number, restaurantSlug: string = 'merar', qrToken?: string): string {
+export function getTableLink(tableIdOrNumber: string | number, restaurantSlug: string = 'mureeh', qrToken?: string): string {
   const tableNum = typeof tableIdOrNumber === 'number'
     ? tableIdOrNumber
     : parseInt(String(tableIdOrNumber).replace(/\D/g, ''), 10) || 1;
 
   const token = qrToken || '';
+  const slug = restaurantSlug || 'mureeh';
+
   if (typeof window !== 'undefined') {
-    return `${window.location.origin}/r/${restaurantSlug}?qr=${encodeURIComponent(token)}`;
+    return `${window.location.origin}/r/${slug}?qr=${encodeURIComponent(token)}`;
   }
-  return `https://merar-dining.com/r/${restaurantSlug}?qr=${encodeURIComponent(token)}`;
+  return `https://restaurantsmureeh-2.onrender.com/r/${slug}?qr=${encodeURIComponent(token)}`;
 }
 
 export async function generateQrDataUrl(
   tableIdOrNumber: string | number,
-  restaurantSlug: string = 'merar',
+  restaurantSlug: string = 'mureeh',
   originUrl?: string,
   qrToken?: string
 ): Promise<string> {
@@ -38,7 +40,7 @@ export async function generateQrDataUrl(
 
 export async function generateQrSvgString(
   tableIdOrNumber: string | number,
-  restaurantSlug: string = 'merar',
+  restaurantSlug: string = 'mureeh',
   originUrl?: string,
   qrToken?: string
 ): Promise<string> {
@@ -59,3 +61,4 @@ export async function generateQrSvgString(
     return '';
   }
 }
+
