@@ -137,12 +137,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
   const [viewMode, setViewModeState] = useState<AppViewMode>(() => {
     if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const hasQr = new URLSearchParams(window.location.search).has('qr');
+      const isPublicRestaurantLink = pathname.startsWith('/r/') || hasQr;
+      if (isPublicRestaurantLink) return 'CUSTOMER';
+
+      const isRootPath = pathname === '/' || pathname === '';
+      if (isRootPath) return 'SAAS_LANDING';
+
       const savedView = localStorage.getItem('merar_view_mode') as AppViewMode;
       if (savedView) return savedView;
-      const isPublicRestaurantLink =
-        window.location.pathname.startsWith('/r/') ||
-        new URLSearchParams(window.location.search).has('qr');
-      return isPublicRestaurantLink ? 'CUSTOMER' : 'SAAS_LANDING';
     }
     return 'SAAS_LANDING';
   });

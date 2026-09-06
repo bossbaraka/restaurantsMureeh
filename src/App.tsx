@@ -21,14 +21,14 @@ const AppContent: React.FC = () => {
 
   if (isLoginModalOpen) {
     return (
-      <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col font-sans selection:bg-gold-500/20 selection:text-gold-300">
+      <div className="min-h-screen bg-[#040D1A] text-slate-100 flex flex-col font-sans selection:bg-[#0072BC]/30 selection:text-[#38BDF8]">
         <LoginModal />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col font-sans selection:bg-gold-500/20 selection:text-gold-300">
+    <div className="min-h-screen bg-[#040D1A] text-slate-100 flex flex-col font-sans selection:bg-[#0072BC]/30 selection:text-[#38BDF8]">
       {/* Top Prototype & Multi-Tenant Navigation Bar */}
       <ViewSwitcher />
 

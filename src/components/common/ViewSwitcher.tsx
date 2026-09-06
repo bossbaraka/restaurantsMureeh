@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
+import { BrandMark } from '../brand/BrandLogo';
 import {
   Smartphone,
   LayoutDashboard,
@@ -60,16 +61,14 @@ export const ViewSwitcher: React.FC = () => {
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         {/* Brand & Multi-Tenant Selector */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-luxury-950 shadow-gold-glow font-serif font-bold text-base cursor-pointer shrink-0"
-            style={{
-              background: `linear-gradient(135deg, ${currentRestaurant?.primaryColor || '#D4AF37'}, ${currentRestaurant?.accentColor || '#C5A880'})`,
-            }}
-            onClick={() => setViewMode('CUSTOMER')}
-            title="العودة لمنيو العميل الفاخر"
+          <button
+            onClick={() => setViewMode('SAAS_LANDING')}
+            className="flex items-center gap-1.5 cursor-pointer hover:opacity-90 transition-opacity"
+            title="الانتقال إلى صفحة منصة مريح الرئيسية (SaaS)"
           >
-            {currentRestaurant?.nameEn.charAt(0) || 'M'}
-          </div>
+            <BrandMark size={32} />
+            <span className="font-serif font-bold text-xs text-[#38BDF8] hidden lg:inline">منصة مريح</span>
+          </button>
 
           {isPlatformManager ? (
             <div className="relative">
