@@ -15,7 +15,7 @@ import { LuxuryWelcomeScreen } from './LuxuryWelcomeScreen';
 import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 
 export const CustomerLayout: React.FC = () => {
-  const { products, categories, selectedCategoryId, searchQuery, addToCart, currentRestaurant, activeTableId } = useRestaurant();
+  const { products, categories, selectedCategoryId, searchQuery, addToCart, currentRestaurant, activeTableId, setViewMode } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showWelcome, setShowWelcome] = useState<boolean>(() => {
     // Show welcome screen initially once per session
@@ -161,17 +161,24 @@ export const CustomerLayout: React.FC = () => {
           {/* Platform Branding & WhatsApp Support */}
           <div className="pt-3 border-t border-luxury-850/80 space-y-2">
             <p className="text-xs font-semibold text-luxury-300">
-              الخدمة تعمل بوساطة <strong className="text-gold-400">منصة مريح MUREEH</strong>
+              الخدمة تعمل بوساطة <strong className="text-[#38BDF8]">منصة مريح MUREEH</strong>
             </p>
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+              <button
+                onClick={() => setViewMode('SAAS_LANDING')}
+                className="text-[11px] text-[#38BDF8]/90 hover:text-[#38BDF8] hover:underline font-semibold transition-colors cursor-pointer"
+                title="التعرف على خدمات المنصة واشتراكات المطاعم"
+              >
+                هل تملك مطعماً؟ احصل على نظام مريح الذكي ⚡
+              </button>
               <a
                 href={`https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، أتواصل معكم عبر منصة مريح`)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold hover:bg-emerald-900 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0072BC]/20 border border-[#0072BC]/40 text-[#38BDF8] text-[11px] font-bold hover:bg-[#0072BC]/30 transition-colors"
               >
-                <span>واتساب التواصل والخدمة:</span>
-                <span className="font-mono text-emerald-300 font-bold direction-ltr">00970593498909</span>
+                <span>واتساب المبيعات:</span>
+                <span className="font-mono text-[#38BDF8] font-bold direction-ltr">00970593498909</span>
               </a>
             </div>
           </div>

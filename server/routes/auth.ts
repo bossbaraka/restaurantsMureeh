@@ -53,12 +53,20 @@ router.post('/login', async (req: Request, res: Response) => {
         data: {
           id: `user-demo-${Date.now()}`,
           restaurantId: firstRest.id,
-          name: 'مدير التجربة (Mureeh Demo)',
+          name: 'مدير المطعم التجريبي',
           email: email.toLowerCase(),
           passwordHash: bcrypt.hashSync(password || 'demo', 12),
-          role: 'SUPER_ADMIN',
+          role: 'RESTAURANT_MANAGER',
           status: 'ACTIVE',
         },
+        include: { restaurant: true },
+      });
+    }
+
+    if (user && email.toLowerCase().includes('demo') && user.role !== 'RESTAURANT_MANAGER') {
+      user = await prisma.restaurantUser.update({
+        where: { id: user.id },
+        data: { role: 'RESTAURANT_MANAGER' },
         include: { restaurant: true },
       });
     }
