@@ -46,7 +46,7 @@ const PLANS: PlanDef[] = [
   {
     id: 'starter',
     name: 'الباقة الأساسية',
-    tagline: 'للكافيهات والمطاعم الصغيرة التي تبدأ مشوارها الرقمي',
+    tagline: 'للكافيهات والمطاعم الصغيرة التي تبدأ مشوارها الرقمي مع مريح',
     priceMonthly: 149,
     priceYearly: 1490,
     priceYearlyPerMonth: Math.round(1490 / 12),
@@ -93,8 +93,11 @@ const PLANS: PlanDef[] = [
         ],
       },
       {
-        title: 'الدعم',
-        items: ['دعم فني عبر واتساب في أوقات العمل', 'لوحة تحكم عربية كاملة + لوحة تحكم بالإنجليزية'],
+        title: 'الدعم والتكامل',
+        items: [
+          'دعم فني فوري عبر واتساب (00970593498909)',
+          'لوحة تحكم عربية كاملة + لوحة تحكم بالإنجليزية من منصة مريح',
+        ],
       },
     ],
     cta: 'اشترك الآن',
@@ -210,15 +213,15 @@ const PLANS: PlanDef[] = [
         ],
       },
       {
-        title: 'الدعم والخدمة',
+        title: 'الدعم والخدمة من مريح',
         items: [
-          'دعم فني أولوية قصوى على مدار الساعة 24/7',
-          'جلسة تدريب وإعداد مجانية (Onboarding)',
+          'دعم فني أولوية قصوى على مدار الساعة 24/7 (00970593498909)',
+          'جلسة تدريب وإعداد مجانية (Onboarding) من فريق مريح',
           'استشارة تشغيلية دورية لفريقك',
         ],
       },
     ],
-    cta: 'تواصل مع المبيعات',
+    cta: 'تواصل مع مبيعات مريح',
     icon: Building2,
   },
 ];
@@ -247,37 +250,50 @@ export const SaaSLandingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#07080A] text-luxury-50 font-sans selection:bg-gold-500/20 selection:text-gold-300" dir="rtl">
+    <div className="min-h-screen bg-[#040D1A] text-slate-100 font-sans selection:bg-[#0072BC]/30 selection:text-[#38BDF8]" dir="rtl">
+      {/* Header with Mureeh Branding */}
       <header className="max-w-6xl mx-auto w-full px-4 sm:px-6 pt-6 flex items-center justify-between">
-        <BrandLogo size={44} subtitle="Restaurant OS" />
-        <span className="text-xs text-luxury-400 hidden sm:block">منصة الخدمات الإلكترونية للمطاعم</span>
+        <BrandLogo size={44} subtitle="MUREEH OS" />
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-[#38BDF8]/90 font-bold hidden sm:block bg-[#003865]/60 border border-[#0072BC]/40 px-3 py-1 rounded-full">
+            منصة مريح للخدمات الإلكترونية
+          </span>
+          <button
+            onClick={() => handleContactWhatsApp('تواصل عام')}
+            className="px-3.5 py-1.5 rounded-xl bg-[#0072BC]/20 hover:bg-[#0072BC]/30 border border-[#0072BC]/50 text-[#38BDF8] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>واتساب المبيعات</span>
+          </button>
+        </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-16 sm:py-24 px-4 sm:px-6 border-b border-luxury-850">
-        <div className="absolute inset-0 bg-radial-gradient from-gold-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+      {/* Hero Section with Official Mureeh Gradient */}
+      <section className="relative overflow-hidden py-16 sm:py-24 px-4 sm:px-6 border-b border-[#004B87]/40">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#0072BC]/20 via-[#003865]/10 to-transparent pointer-events-none" />
+        <div className="absolute top-1/4 right-10 w-96 h-96 bg-[#00A8FF]/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="max-w-5xl mx-auto text-center space-y-6 relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-luxury-900/90 border border-[#7E14FF]/50 text-[#C4B5FD] text-xs font-bold shadow-[0_0_20px_rgba(126,20,255,0.25)] backdrop-blur-md">
-            <Sparkles className="w-4 h-4 text-gold-400" />
-            <span>المنظومة السحابية الأرقى لإدارة المطاعم والطلب الرقمي للطاولات</span>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#003865]/80 border border-[#0072BC]/50 text-[#38BDF8] text-xs font-bold shadow-[0_0_24px_rgba(0,114,188,0.35)] backdrop-blur-md">
+            <Sparkles className="w-4 h-4 text-[#38BDF8]" />
+            <span>أحد منتجات منصة مريح للخدمات الإلكترونية</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold font-serif tracking-wide text-luxury-50 leading-tight">
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold font-serif tracking-wide text-white leading-tight">
             حوّل طاولات مطعمك إلى <br />
-            <span className="bg-gradient-to-l from-[#D6C7FF] via-[#A78BFA] to-[#47BFFF] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-l from-white via-[#E0F2FE] via-[#38BDF8] to-[#009FE3] bg-clip-text text-transparent">
               تجربة ضيافة استثنائية وأرباح مضاعفة
             </span>
           </h1>
 
-          <p className="text-sm sm:text-lg text-luxury-300 max-w-2xl mx-auto leading-relaxed">
-            منيو رقمي فاخر برمز QR لكل طاولة بدون تسجيل حساب للزبون، شاشة مطبخ حية (KDS)، نداء الويتر بضغطة زر، وإدارة كاملة لـ 50 طاولة بنظام سحابي معزول وآمن.
+          <p className="text-sm sm:text-lg text-slate-300 max-w-2xl mx-auto leading-relaxed">
+            منيو رقمي فاخر برمز QR لكل طاولة بدون تسجيل حساب للزبون، شاشة مطبخ حية (KDS)، نداء الويتر بضغطة زر، وإدارة كاملة لـ 50 طاولة بنظام سحابي آمن مخصص لمطعمك من منصة مريح.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
             <button
               onClick={openManagerConsole}
-              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-l from-[#7E14FF] to-[#47BFFF] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_28px_rgba(126,20,255,0.45)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_30px_rgba(0,114,188,0.45)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
             >
               <span>{currentUser ? 'دخول لوحة تحكم المطعم' : 'دخول لوحة تحكم المطعم'}</span>
               <ArrowLeft className="w-4 h-4" />
@@ -286,9 +302,9 @@ export const SaaSLandingPage: React.FC = () => {
             {isSuperAdmin && (
               <button
                 onClick={() => setViewMode('PLATFORM_ADMIN')}
-                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-luxury-900 hover:bg-luxury-850 border border-luxury-750 text-luxury-100 font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#081B33] hover:bg-[#0C274A] border border-[#0072BC]/40 text-[#E0F2FE] font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
-                <span>إدارة منصة المستأجرين</span>
+                <span>إدارة منصة المستأجرين (Mureeh Admin)</span>
               </button>
             )}
           </div>
@@ -298,37 +314,37 @@ export const SaaSLandingPage: React.FC = () => {
       {/* Feature Pillars Grid */}
       <section className="py-16 px-4 sm:px-6 max-w-6xl mx-auto">
         <div className="text-center space-y-2 mb-12">
-          <span className="text-xs font-bold text-gold-400 uppercase tracking-widest">لماذا يختارنا أصحاب المطاعم؟</span>
-          <h2 className="text-2xl sm:text-3xl font-bold font-serif text-luxury-50">حل متكامل يغنيك عن عشرات البرامج</h2>
+          <span className="text-xs font-bold text-[#38BDF8] uppercase tracking-widest">لماذا يختارنا أصحاب المطاعم؟</span>
+          <h2 className="text-2xl sm:text-3xl font-bold font-serif text-white">حل متكامل من منصة مريح يغنيك عن عشرات البرامج</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="p-6 rounded-3xl bg-luxury-900/70 border border-luxury-800 hover:border-gold-500/40 transition-all space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+          <div className="p-6 rounded-3xl bg-[#081B33]/80 border border-[#004B87]/50 hover:border-[#0072BC] transition-all space-y-4 shadow-lg">
+            <div className="w-12 h-12 rounded-2xl bg-[#0072BC]/15 border border-[#0072BC]/40 flex items-center justify-center text-[#38BDF8]">
               <QrCode className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold font-serif text-luxury-100">طلب ذكي بدون تسجيل حساب</h3>
-            <p className="text-xs text-luxury-400 leading-relaxed">
+            <h3 className="text-lg font-bold font-serif text-white">طلب ذكي بدون تسجيل حساب</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
               يمسح الزبون رمز الـ QR على الطاولة ويطلب فوراً مع خيارات تخصيص الوجبة (إضافات، استبعاد مكونات، أحجام) والدفع عند الكاشير.
             </p>
           </div>
 
-          <div className="p-6 rounded-3xl bg-luxury-900/70 border border-luxury-800 hover:border-gold-500/40 transition-all space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+          <div className="p-6 rounded-3xl bg-[#081B33]/80 border border-[#004B87]/50 hover:border-[#0072BC] transition-all space-y-4 shadow-lg">
+            <div className="w-12 h-12 rounded-2xl bg-[#009FE3]/15 border border-[#009FE3]/40 flex items-center justify-center text-[#38BDF8]">
               <ChefHat className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold font-serif text-luxury-100">شاشة مطبخ حية (KDS)</h3>
-            <p className="text-xs text-luxury-400 leading-relaxed">
+            <h3 className="text-lg font-bold font-serif text-white">شاشة مطبخ حية (KDS)</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
               تصل الطلبات للشيف فوراً مع تنبيهات صوتية، وقفل تعديل الطلب بمجرد بدء الطهي لمنع إهدار الطعام أو الخلافات مع الزبائن.
             </p>
           </div>
 
-          <div className="p-6 rounded-3xl bg-luxury-900/70 border border-luxury-800 hover:border-gold-500/40 transition-all space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+          <div className="p-6 rounded-3xl bg-[#081B33]/80 border border-[#004B87]/50 hover:border-[#0072BC] transition-all space-y-4 shadow-lg">
+            <div className="w-12 h-12 rounded-2xl bg-[#38BDF8]/15 border border-[#38BDF8]/40 flex items-center justify-center text-[#38BDF8]">
               <Users className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-bold font-serif text-luxury-100">تعدد المستخدمين والعمال</h3>
-            <p className="text-xs text-luxury-400 leading-relaxed">
+            <h3 className="text-lg font-bold font-serif text-white">تعدد المستخدمين والعمال</h3>
+            <p className="text-xs text-slate-300 leading-relaxed">
               حسابات خاصة للنادل، الشيف، والكاشير برمز PIN سريع للدخول وإدارة الصالات ونداءات الضيوف.
             </p>
           </div>
@@ -336,16 +352,16 @@ export const SaaSLandingPage: React.FC = () => {
       </section>
 
       {/* ROI Profit Calculator */}
-      <section className="py-12 px-4 sm:px-6 bg-luxury-950 border-y border-luxury-850">
-        <div className="max-w-4xl mx-auto rounded-3xl bg-gradient-to-br from-luxury-900 to-luxury-950 border border-gold-500/30 p-6 sm:p-10 shadow-2xl space-y-6">
+      <section className="py-12 px-4 sm:px-6 bg-[#031326] border-y border-[#004B87]/40">
+        <div className="max-w-4xl mx-auto rounded-3xl bg-gradient-to-br from-[#081B33] to-[#040D1A] border border-[#0072BC]/40 p-6 sm:p-10 shadow-2xl space-y-6">
           <div className="text-center space-y-2">
-            <span className="text-xs font-bold text-gold-400">حاسبة العائد على الاستثمار (ROI Calculator)</span>
-            <h3 className="text-2xl font-bold font-serif text-luxury-50">كم يوفر لك النظام شهرياً؟</h3>
+            <span className="text-xs font-bold text-[#38BDF8]">حاسبة العائد على الاستثمار (ROI Calculator)</span>
+            <h3 className="text-2xl font-bold font-serif text-white">كم يوفر لك نظام مريح شهرياً؟</h3>
           </div>
 
           <div className="space-y-3 max-w-md mx-auto text-center">
-            <label className="text-xs text-luxury-300 font-bold block">
-              حدد عدد الطاولات في مطعمك: <strong className="text-gold-400 text-base">{tablesInput} طاولة</strong>
+            <label className="text-xs text-slate-300 font-bold block">
+              حدد عدد الطاولات في مطعمك: <strong className="text-[#38BDF8] text-base">{tablesInput} طاولة</strong>
             </label>
             <input
               type="range"
@@ -354,21 +370,21 @@ export const SaaSLandingPage: React.FC = () => {
               step={5}
               value={tablesInput}
               onChange={(e) => setTablesInput(Number(e.target.value))}
-              className="w-full accent-gold-500 cursor-pointer"
+              className="w-full accent-[#0072BC] cursor-pointer"
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-luxury-800">
-            <div className="p-5 rounded-2xl bg-luxury-950 border border-luxury-800 text-center">
-              <span className="text-xs text-luxury-400 block">توفير تكاليف الطباعة والعمالة</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-[#004B87]/40">
+            <div className="p-5 rounded-2xl bg-[#040D1A] border border-[#004B87]/50 text-center">
+              <span className="text-xs text-slate-400 block">توفير تكاليف الطباعة والعمالة</span>
               <span className="text-2xl sm:text-3xl font-extrabold text-emerald-400 mt-1 block font-mono">
                 {formatPrice(estimatedStaffCostSaved)} / شهرياً
               </span>
             </div>
 
-            <div className="p-5 rounded-2xl bg-luxury-950 border border-luxury-800 text-center">
-              <span className="text-xs text-luxury-400 block">زيادة متوقعة في المبيعات وتدوير الطاولات</span>
-              <span className="text-2xl sm:text-3xl font-extrabold text-gold-400 mt-1 block font-mono">
+            <div className="p-5 rounded-2xl bg-[#040D1A] border border-[#004B87]/50 text-center">
+              <span className="text-xs text-slate-400 block">زيادة متوقعة في المبيعات وتدوير الطاولات</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-[#38BDF8] mt-1 block font-mono">
                 +{formatPrice(estimatedRevenueBoost)} / شهرياً
               </span>
             </div>
@@ -377,30 +393,30 @@ export const SaaSLandingPage: React.FC = () => {
       </section>
 
       {/* ============ Subscription Pricing Plans (باقات الاشتراك) ============ */}
-      <section id="pricing" className="relative overflow-hidden py-16 sm:py-20 px-4 sm:px-6 border-t border-luxury-850/70">
-        {/* ambient brand glow */}
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#7E14FF]/60 to-transparent" />
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[560px] h-[320px] rounded-full bg-[#7E14FF]/10 blur-3xl pointer-events-none" />
+      <section id="pricing" className="relative overflow-hidden py-16 sm:py-20 px-4 sm:px-6 border-t border-[#004B87]/40">
+        {/* Ambient brand glow */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-[#0072BC]/60 to-transparent" />
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[560px] h-[320px] rounded-full bg-[#0072BC]/10 blur-3xl pointer-events-none" />
 
         <div className="max-w-6xl mx-auto relative z-10">
           {/* Brand lockup header */}
           <div className="text-center space-y-4 mb-12">
-            <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-luxury-900/90 border border-[#7E14FF]/30 shadow-lg shadow-[#7E14FF]/20 backdrop-blur">
+            <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-[#081B33] border border-[#0072BC]/40 shadow-lg shadow-[#0072BC]/20 backdrop-blur">
               <BrandMark size={24} />
               <BrandWordmark size={15} subtitle="Pricing" />
-              <span className="text-[9px] font-bold tracking-[0.2em] text-luxury-400 uppercase border-r border-luxury-700 pr-2.5">MUREEH · SaaS</span>
+              <span className="text-[9px] font-bold tracking-[0.2em] text-[#38BDF8] uppercase border-r border-[#004B87] pr-2.5">MUREEH · SaaS</span>
             </div>
 
             <div className="space-y-2">
-              <span className="text-xs font-bold text-gold-400 uppercase tracking-widest block">باقات الاشتراك</span>
-              <h2 className="text-2xl sm:text-4xl font-bold font-serif text-luxury-50">باقات واضحة تنمو مع مطعمك</h2>
-              <p className="text-xs sm:text-sm text-luxury-400 max-w-xl mx-auto leading-relaxed">
+              <span className="text-xs font-bold text-[#38BDF8] uppercase tracking-widest block">باقات الاشتراك</span>
+              <h2 className="text-2xl sm:text-4xl font-bold font-serif text-white">باقات واضحة تنمو مع مطعمك</h2>
+              <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto leading-relaxed">
                 ابدأ بإطلاق منيو رقمي احترافي خلال دقائق، وطوّر باقاتك كلما كبر مطعمك — بدون رسوم خفية وبدون عقود إجبارية.
               </p>
             </div>
 
             {/* Billing toggle */}
-            <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-luxury-900 border border-luxury-750 relative">
+            <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-[#081B33] border border-[#004B87]/60 relative">
               {(['monthly', 'yearly'] as const).map((period) => {
                 const isActive = billingPeriod === period;
                 return (
@@ -408,11 +424,11 @@ export const SaaSLandingPage: React.FC = () => {
                     key={period}
                     onClick={() => setBillingPeriod(period)}
                     className={`relative px-5 sm:px-7 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      isActive ? 'text-luxury-950' : 'text-luxury-300 hover:text-luxury-100'
+                      isActive ? 'text-white' : 'text-slate-300 hover:text-white'
                     }`}
                   >
                     {isActive && (
-                      <span className="absolute inset-0 bg-gradient-to-l from-gold-400 to-gold-600 rounded-xl shadow-gold-glow" />
+                      <span className="absolute inset-0 bg-gradient-to-l from-[#003865] to-[#0072BC] rounded-xl shadow-md" />
                     )}
                     <span className="relative z-10 flex items-center gap-1.5">
                       {period === 'monthly' ? <CalendarRange className="w-3.5 h-3.5" /> : <BadgeCheck className="w-3.5 h-3.5" />}
@@ -443,18 +459,18 @@ export const SaaSLandingPage: React.FC = () => {
                   key={plan.id}
                   className={`relative flex flex-col rounded-3xl overflow-hidden transition-all duration-300 ${
                     isPro
-                      ? 'border border-[#7E14FF]/60 shadow-[0_0_46px_rgba(126,20,255,0.28)] md:-my-2 md:py-0 bg-gradient-to-b from-luxury-850 via-luxury-900 to-luxury-950'
-                      : 'border border-luxury-800 bg-luxury-900/80 hover:border-luxury-700'
+                      ? 'border border-[#0072BC] shadow-[0_0_46px_rgba(0,114,188,0.3)] md:-my-2 md:py-0 bg-gradient-to-b from-[#0B2545] via-[#081B33] to-[#040D1A]'
+                      : 'border border-[#004B87]/50 bg-[#081B33]/80 hover:border-[#0072BC]/60'
                   }`}
                 >
                   {/* top accent line */}
                   <div
-                    className={`h-1.5 w-full ${isPro ? 'bg-gradient-to-l from-[#D6C7FF] via-[#7E14FF] to-[#47BFFF]' : 'bg-gradient-to-l from-luxury-700 to-luxury-800'}`}
+                    className={`h-1.5 w-full ${isPro ? 'bg-gradient-to-l from-[#38BDF8] via-[#0072BC] to-[#003865]' : 'bg-gradient-to-l from-[#003865] to-[#004B87]'}`}
                   />
 
                   {isPro && (
-                    <span className="absolute -top-px left-1/2 -translate-x-1/2 z-20 mt-3 px-4 py-1.5 rounded-full bg-gradient-to-l from-[#7E14FF] to-[#47BFFF] text-white text-[10px] font-black flex items-center gap-1.5 shadow-[0_0_24px_rgba(71,191,255,0.4)] whitespace-nowrap">
-                      <Crown className="w-3 h-3" />
+                    <span className="absolute -top-px left-1/2 -translate-x-1/2 z-20 mt-3 px-4 py-1.5 rounded-full bg-gradient-to-l from-[#004B87] via-[#0072BC] to-[#009FE3] text-white text-[10px] font-black flex items-center gap-1.5 shadow-[0_0_24px_rgba(0,114,188,0.5)] whitespace-nowrap">
+                      <Crown className="w-3 h-3 text-amber-300" />
                       الأكثر طلباً للمطاعم الفاخرة
                     </span>
                   )}
@@ -464,25 +480,25 @@ export const SaaSLandingPage: React.FC = () => {
                       <div
                         className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
                           isPro
-                            ? 'bg-[#7E14FF]/15 border border-[#7E14FF]/40 text-[#B79CFF]'
-                            : 'bg-[#A78BFA]/10 border border-[#A78BFA]/30 text-[#A78BFA]'
+                            ? 'bg-[#0072BC]/20 border border-[#0072BC]/50 text-[#38BDF8]'
+                            : 'bg-[#003865]/30 border border-[#004B87]/40 text-[#38BDF8]'
                         }`}
                       >
                         <Icon className="w-6 h-6" />
                       </div>
                       {isPro && (
-                        <span className="text-[10px] font-bold text-luxury-400 bg-luxury-950 border border-luxury-800 px-2.5 py-1 rounded-full">
-                          لأصحاب المطاعم الجادين
+                        <span className="text-[10px] font-bold text-[#38BDF8] bg-[#040D1A] border border-[#004B87] px-2.5 py-1 rounded-full">
+                          منصة مريح للخدمات
                         </span>
                       )}
                     </div>
 
-                    <h3 className={`text-xl font-bold font-serif ${isPro ? 'text-[#C4B5FD]' : 'text-luxury-50'}`}>{plan.name}</h3>
-                    <p className="text-xs text-luxury-400 mt-1 mb-5 leading-relaxed">{plan.tagline}</p>
+                    <h3 className={`text-xl font-bold font-serif ${isPro ? 'text-white' : 'text-slate-100'}`}>{plan.name}</h3>
+                    <p className="text-xs text-slate-300 mt-1 mb-5 leading-relaxed">{plan.tagline}</p>
 
                     <div className="flex items-end gap-1.5 mb-1">
-                      <span className={`text-4xl font-extrabold font-mono ${isPro ? 'text-[#B79CFF]' : 'text-luxury-50'}`}>{price}</span>
-                      <span className="text-xs text-luxury-400 mb-1.5">₪ / شهرياً</span>
+                      <span className={`text-4xl font-extrabold font-mono ${isPro ? 'text-[#38BDF8]' : 'text-white'}`}>{price}</span>
+                      <span className="text-xs text-slate-400 mb-1.5">₪ / شهرياً</span>
                     </div>
                     <div className="h-4 mb-5">
                       {showYearlyHint ? (
@@ -490,21 +506,21 @@ export const SaaSLandingPage: React.FC = () => {
                           تُدفع سنوياً: {(plan.priceYearly)} ₪ — وفّرت {plan.priceMonthly * 12 - plan.priceYearly} ₪
                         </span>
                       ) : (
-                        <span className="text-[10px] text-luxury-500">يمكن الترقية أو الإلغاء في أي وقت</span>
+                        <span className="text-[10px] text-slate-400">يمكن الترقية أو الإلغاء في أي وقت</span>
                       )}
                     </div>
 
                     <ul className="space-y-2.5 text-xs mb-5">
                       {plan.features.map((feature) => (
-                        <li key={feature} className="flex items-start gap-2 text-luxury-200 leading-relaxed">
+                        <li key={feature} className="flex items-start gap-2 text-slate-200 leading-relaxed">
                           <span
                             className={`mt-0.5 w-4 h-4 rounded-full flex items-center justify-center shrink-0 ${
-                              isPro ? 'bg-[#7E14FF]/20 text-[#B79CFF]' : 'bg-emerald-500/15 text-emerald-400'
+                              isPro ? 'bg-[#0072BC]/25 text-[#38BDF8]' : 'bg-emerald-500/15 text-emerald-400'
                             }`}
                           >
                             <Check className="w-2.5 h-2.5" />
                           </span>
-                          <span className="text-luxury-300">{feature}</span>
+                          <span className="text-slate-300">{feature}</span>
                         </li>
                       ))}
                     </ul>
@@ -512,26 +528,26 @@ export const SaaSLandingPage: React.FC = () => {
                     {/* Detailed plan features */}
                     <details
                       className={`group mb-5 rounded-xl border overflow-hidden transition-colors ${
-                        isPro ? 'border-[#7E14FF]/35 bg-[#7E14FF]/5' : 'border-luxury-800 bg-luxury-950/70'
+                        isPro ? 'border-[#0072BC]/40 bg-[#0072BC]/10' : 'border-[#004B87]/40 bg-[#040D1A]/70'
                       }`}
                     >
                       <summary className="flex items-center justify-between gap-2 px-3.5 py-2.5 cursor-pointer list-none select-none">
-                        <span className="text-[11px] font-bold text-luxury-100 flex items-center gap-1.5">
-                          <Crown className={`w-3.5 h-3.5 ${isPro ? 'text-gold-400' : 'text-[#A78BFA]'}`} />
+                        <span className="text-[11px] font-bold text-slate-100 flex items-center gap-1.5">
+                          <Crown className={`w-3.5 h-3.5 ${isPro ? 'text-[#38BDF8]' : 'text-[#0072BC]'}`} />
                           مزايا الباقة كاملة بالتفصيل
                         </span>
-                        <span className={`text-[10px] text-luxury-500 group-open:rotate-180 transition-transform`}>▾</span>
+                        <span className={`text-[10px] text-slate-400 group-open:rotate-180 transition-transform`}>▾</span>
                       </summary>
                       <div className="px-3.5 pb-3.5 pt-1 space-y-3.5">
                         {plan.details.map((group) => (
                           <div key={group.title}>
-                            <div className={`text-[10px] font-black mb-1.5 flex items-center gap-1.5 ${isPro ? 'text-gold-300' : 'text-[#A78BFA]'}`}>
+                            <div className={`text-[10px] font-black mb-1.5 flex items-center gap-1.5 ${isPro ? 'text-[#38BDF8]' : 'text-slate-300'}`}>
                               <span className="w-1 h-1 rounded-full bg-current" />
                               {group.title}
                             </div>
                             <ul className="space-y-1.5">
                               {group.items.map((item) => (
-                                <li key={item} className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-luxury-300">
+                                <li key={item} className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-slate-300">
                                   <Check className="w-3 h-3 mt-0.5 shrink-0 text-emerald-400" />
                                   {item}
                                 </li>
@@ -547,8 +563,8 @@ export const SaaSLandingPage: React.FC = () => {
                         onClick={() => handleContactWhatsApp(plan.name)}
                         className={`w-full py-3.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 ${
                           isPro
-                            ? 'bg-gradient-to-l from-[#7E14FF] to-[#47BFFF] text-white shadow-[0_0_26px_rgba(126,20,255,0.45)] hover:brightness-110'
-                            : 'bg-luxury-800 hover:bg-luxury-750 text-luxury-100 border border-luxury-700'
+                            ? 'bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white shadow-[0_0_26px_rgba(0,114,188,0.45)] hover:brightness-110'
+                            : 'bg-[#003865]/60 hover:bg-[#003865] text-white border border-[#0072BC]/40'
                         }`}
                       >
                         {plan.cta}
@@ -565,16 +581,16 @@ export const SaaSLandingPage: React.FC = () => {
           <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-4xl mx-auto">
             {[
               { icon: Lock, title: 'عزل تام لبيانات مطعمك', desc: 'كل مستأجر يعمل في قاعدة بيانات معزولة؛ لا يرى عملاؤك سوى منيو مطعمك.' },
-              { icon: ShieldCheck, title: 'أمان مصرفي حقيقي', desc: 'تشفير Bcrypt لكلمات المرور و JWT لكل جلسة، و سجل تدقيق كامل.' },
+              { icon: ShieldCheck, title: 'أمان مصرفي من مريح', desc: 'تشفير Bcrypt لكلمات المرور و JWT لكل جلسة، مع سجل تدقيق كامل.' },
               { icon: Clock, title: 'تفعيل خلال دقائق', desc: 'منصة جاهزة تعمل فوراً — بدون تعقيد تقني أو عقود طويلة.' },
             ].map((item) => (
-              <div key={item.title} className="flex items-start gap-3 p-4 rounded-2xl bg-luxury-900/60 border border-luxury-800/80">
-                <span className="w-9 h-9 rounded-xl bg-[#7E14FF]/10 border border-[#7E14FF]/30 text-[#A78BFA] flex items-center justify-center shrink-0">
+              <div key={item.title} className="flex items-start gap-3 p-4 rounded-2xl bg-[#081B33]/60 border border-[#004B87]/50">
+                <span className="w-9 h-9 rounded-xl bg-[#0072BC]/15 border border-[#0072BC]/30 text-[#38BDF8] flex items-center justify-center shrink-0">
                   <item.icon className="w-5 h-5" />
                 </span>
                 <div>
-                  <div className="text-xs font-bold text-luxury-100">{item.title}</div>
-                  <div className="text-[10px] text-luxury-400 mt-0.5 leading-relaxed">{item.desc}</div>
+                  <div className="text-xs font-bold text-white">{item.title}</div>
+                  <div className="text-[10px] text-slate-300 mt-0.5 leading-relaxed">{item.desc}</div>
                 </div>
               </div>
             ))}
@@ -582,7 +598,7 @@ export const SaaSLandingPage: React.FC = () => {
 
           {/* Mini FAQ */}
           <div className="mt-12 max-w-2xl mx-auto space-y-2.5">
-            <h3 className="text-center text-sm font-bold font-serif text-luxury-100 mb-4">أسئلة شائعة عن الباقات</h3>
+            <h3 className="text-center text-sm font-bold font-serif text-white mb-4">أسئلة شائعة عن باقات مريح</h3>
             {[
               { q: 'هل يمكنني تغيير باقتي لاحقاً؟', a: 'نعم — من لوحة تحكم مطعمك (الباقة والاشتراك) يمكنك الترقية أو التخفيض فورياً ويُطبق الفرق تلقائياً على اشتراكك.' },
               { q: 'هل تتغير الأسعار مع عدد الطاولات؟', a: 'لا. سعر الباقة ثابت ويشمل كل ما هو مذكور — الطاولات داخل حد باقتك بدون أي رسوم إضافية.' },
@@ -590,30 +606,33 @@ export const SaaSLandingPage: React.FC = () => {
             ].map((faq) => (
               <details
                 key={faq.q}
-                className="group rounded-xl bg-luxury-900/70 border border-luxury-800 open:border-gold-500/40 transition-colors"
+                className="group rounded-xl bg-[#081B33]/70 border border-[#004B87]/50 open:border-[#0072BC] transition-colors"
               >
-                <summary className="flex items-center justify-between gap-3 px-4 py-3 text-xs font-bold text-luxury-100 cursor-pointer list-none select-none">
+                <summary className="flex items-center justify-between gap-3 px-4 py-3 text-xs font-bold text-white cursor-pointer list-none select-none">
                   <span className="flex items-center gap-2">
-                    <HelpCircle className="w-4 h-4 text-gold-400 shrink-0" />
+                    <HelpCircle className="w-4 h-4 text-[#38BDF8] shrink-0" />
                     {faq.q}
                   </span>
-                  <span className="text-luxury-500 group-open:rotate-180 transition-transform">▾</span>
+                  <span className="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
                 </summary>
-                <p className="px-4 pb-4 text-[11px] text-luxury-400 leading-relaxed border-t border-luxury-800/70 pt-3">{faq.a}</p>
+                <p className="px-4 pb-4 text-[11px] text-slate-300 leading-relaxed border-t border-[#004B87]/40 pt-3">{faq.a}</p>
               </details>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-8 px-4 border-t border-luxury-850 text-center text-xs text-luxury-500 space-y-2">
-        <p className="font-serif font-extrabold">
-          <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(90deg,#D6C7FF,#A78BFA 45%,#47BFFF)', WebkitBackgroundClip: 'text' }}>
-            مُريح للخدمات الإلكترونية
+      {/* Footer with Mureeh Official Contact Details */}
+      <footer className="py-8 px-4 border-t border-[#004B87]/40 text-center text-xs text-slate-400 space-y-2 bg-[#020A14]">
+        <p className="font-serif font-extrabold text-sm">
+          <span className="bg-clip-text text-transparent" style={{ backgroundImage: 'linear-gradient(90deg, #FFFFFF 0%, #38BDF8 50%, #009FE3 100%)', WebkitBackgroundClip: 'text' }}>
+            منصة مريح للخدمات الإلكترونية (MUREEH)
           </span>
         </p>
-        <p>© 2026 جميع الحقوق محفوظة · منظومة سحابية آمنة متعددة المستأجرين</p>
+        <p className="text-[11px] text-slate-300">
+          للتواصل والدعم الفني المباشر عبر واتساب: <strong className="text-[#38BDF8] font-mono" dir="ltr">00970593498909</strong>
+        </p>
+        <p className="text-[10px] text-slate-400">© 2026 جميع الحقوق محفوظة · منصة سحابية آمنة متعددة المستأجرين إحدى خدمات منصة مريح الإلكترونية</p>
       </footer>
     </div>
   );
