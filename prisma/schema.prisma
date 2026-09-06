@@ -92,6 +92,8 @@ model Restaurant {
   waiterRequests  WaiterRequest[]
   offers          Offer[]
   auditLogs       AuditLog[]
+  branches        Branch[]
+  payments        Payment[]
 
   @@index([slug])
   @@index([status])
@@ -104,6 +106,7 @@ model RestaurantUser {
   name            String
   email           String            @unique
   passwordHash    String
+  pinHash         String?
   role            TenantRole        @default(RESTAURANT_MANAGER)
   status          String            @default("ACTIVE")
   avatar          String?
@@ -165,6 +168,8 @@ model Table {
   qrToken         String            @unique @default(uuid())
   hasWaiterCall   Boolean           @default(false)
   lastActivityAt  DateTime?
+  branchId        String?
+  branch          Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -287,6 +292,10 @@ model Order {
   session               TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   status                OrderStatus       @default(PENDING)
   paymentMethod         String            @default("PAY AT CASHIER")
+  paymentStatus         String            @default("UNPAID") // UNPAID | PAID
+  settledAt             DateTime?
+  cashierId             String?
+  branchId              String?
   subtotal              Float
   tax                   Float             @default(0)
   total                 Float
@@ -307,8 +316,8 @@ model OrderItem {
   id                    String      @id @default(uuid())
   orderId               String
   order                 Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId             String
-  product               Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId             String?
+  product               Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
   productNameSnapshot   String
   productNameEnSnapshot String?
   priceSnapshot         Float
@@ -384,4 +393,55 @@ model AuditLog {
   @@index([restaurantId])
   @@index([action])
   @@index([createdAt])
+}
+
+
+// ============================================
+// Multi-Branch Management (Tenant Isolated)
+// ============================================
+model Branch {
+  id           String      @id
+  restaurantId String
+  restaurant   Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  address      String?
+  phone        String?
+  color        String?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  tables       Table[]
+
+  @@index([restaurantId])
+}
+
+// ============================================
+// Cashier / POS Payment Ledger (Tenant Isolated)
+// ============================================
+model Payment {
+  id            String     @id
+  receiptNumber String     @unique
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  branchId      String?
+  tableId       String     // physical table id or '__WALKIN__' for counter sales
+  tableLabel    String
+  orderIds      String[]
+  itemsSummary  String?
+  method        String     @default("CASH") // CASH | CARD | MOBILE | SPLIT
+  subtotal      Float
+  tax           Float      @default(0)
+  total         Float
+  cashReceived  Float?
+  changeDue     Float?
+  tip           Float?
+  cashierId     String?
+  cashierName   String
+  note          String?
+  createdAt     DateTime   @default(now())
+
+  @@index([restaurantId])
+  @@index([createdAt])
+  @@index([method])
 }

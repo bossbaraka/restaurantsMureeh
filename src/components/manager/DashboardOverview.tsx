@@ -40,7 +40,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     ...orders.slice(0, 8).map((ord) => ({
       id: `act-ord-${ord.id}-${ord.updatedAt}`,
       type: 'ORDER' as const,
-      title: `${ord.tableId.replace('TABLE-', 'طاولة ')}: ${getOrderStatusConfig(ord.status).label}`,
+      title: `${ord.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}: ${getOrderStatusConfig(ord.status).label}`,
       subtitle: `${ord.items.map((i) => `${i.quantity}× ${i.productName}`).join('، ')} (${formatPrice(ord.total)})`,
       time: ord.updatedAt || ord.createdAt,
       status: ord.status,
@@ -50,7 +50,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     ...waiterRequests.slice(0, 5).map((w) => ({
       id: `act-wait-${w.id}`,
       type: 'WAITER' as const,
-      title: `${w.tableId.replace('TABLE-', 'طاولة ')}: طلب نادل (${w.reasonText})`,
+      title: `${w.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}: طلب نادل (${w.reasonText})`,
       subtitle: w.status === 'PENDING' ? 'قيد الانتظار لم تتم تلبيته' : 'تمت الخدمة بنجاح',
       time: w.createdAt,
       status: w.status,
@@ -69,10 +69,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
             <span className="text-xs font-bold text-emerald-400">النظام متصل ويعمل بكفاءة عالية</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-luxury-50 font-serif">
-            مركز عمليات مطعم مِيرار الفاخر
+            مركز عمليات المطعم
           </h2>
           <p className="text-xs text-luxury-400 mt-1">
-            إدارة مباشرة لـ 50 طاولة وطلبات المطبخ اللحظية وخدمة الضيوف
+            إدارة مباشرة للطاولات وطلبات المطبخ اللحظية وخدمة الضيوف
           </p>
         </div>
 
@@ -217,7 +217,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-gold-400">
-                      {ord.tableId.replace('TABLE-', 'طاولة ')} ({ord.id})
+                      {ord.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')} ({ord.id})
                     </span>
                     <span className="text-luxury-400">{formatRelativeMinutes(ord.createdAt)}</span>
                   </div>
@@ -262,7 +262,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-blue-300">
-                      {ord.tableId.replace('TABLE-', 'طاولة ')} ({ord.id})
+                      {ord.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')} ({ord.id})
                     </span>
                     <span className="text-luxury-400">{formatRelativeMinutes(ord.createdAt)}</span>
                   </div>
@@ -307,7 +307,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-emerald-300">
-                      {ord.tableId.replace('TABLE-', 'طاولة ')} ({ord.id})
+                      {ord.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')} ({ord.id})
                     </span>
                     <span className="text-luxury-400">{formatRelativeMinutes(ord.createdAt)}</span>
                   </div>

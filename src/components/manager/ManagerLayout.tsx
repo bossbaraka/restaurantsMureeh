@@ -12,6 +12,8 @@ import { AnalyticsView } from './AnalyticsView';
 import { BrandingSettingsView } from './BrandingSettingsView';
 import { SubscriptionView } from './SubscriptionView';
 import { StaffManagement } from './StaffManagement';
+import { CashierPOSView } from './CashierPOSView';
+import { BranchManagementView } from './BranchManagementView';
 import {
   LayoutDashboard,
   ChefHat,
@@ -27,6 +29,7 @@ import {
   Palette,
   CreditCard,
   Building2,
+  Calculator,
   ChevronDown,
   Plus,
   Users,
@@ -34,6 +37,8 @@ import {
 
 export type ManagerTab =
   | 'OVERVIEW'
+  | 'POS'
+  | 'BRANCHES'
   | 'ORDERS'
   | 'TABLES'
   | 'QR'
@@ -47,7 +52,10 @@ export type ManagerTab =
 
 export const ManagerLayout: React.FC = () => {
   const { orders, waiterRequests, setViewMode, currentRestaurant, tenantsList, setCurrentTenantBySlug, setIsOnboardingOpen } = useRestaurant();
-  const { currentUser, isSuperAdmin, isDemoAccount, canAccessManagerTab, setIsLoginModalOpen, switchManagerRestaurant } = useAuth();
+  const { isSuperAdmin, canAccessManagerTab, switchManagerRestaurant } = useAuth();
+  // Multi-tenant (shared restaurants) switching is reserved for the platform
+  // manager; a tenant manager only ever operates inside his own restaurant.
+  const isPlatformManager = isSuperAdmin;
   const [activeTab, setActiveTab] = useState<ManagerTab>('OVERVIEW');
   const [isTenantDropdownOpen, setIsTenantDropdownOpen] = useState(false);
 
@@ -56,6 +64,7 @@ export const ManagerLayout: React.FC = () => {
 
   const navConfig: Array<{ id: ManagerTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string; section?: string }> = [
     { id: 'OVERVIEW', label: 'لوحة العمليات', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'POS', label: 'الكاشير (POS)', icon: <Calculator className="w-4 h-4" /> },
     {
       id: 'ORDERS',
       label: 'شاشة الطلبات والمطبخ',
@@ -78,6 +87,7 @@ export const ManagerLayout: React.FC = () => {
     { id: 'ANALYTICS', label: 'التحليلات والمبيعات', icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'BRANDING', label: 'الهوية والمظهر', icon: <Palette className="w-4 h-4" /> },
     { id: 'SUBSCRIPTION', label: 'الباقة والاشتراك', icon: <CreditCard className="w-4 h-4" /> },
+  { id: 'BRANCHES', label: 'الفروع المتعددة', icon: <Building2 className="w-4 h-4" /> },
   ];
 
   const navItems = navConfig.filter((item) => canAccessManagerTab(item.id));
@@ -99,35 +109,46 @@ export const ManagerLayout: React.FC = () => {
       {/* Sidebar Navigation */}
       <aside className="w-full md:w-64 bg-luxury-950 border-b md:border-b-0 md:border-l border-luxury-800 p-4 shrink-0 flex flex-col justify-between">
         <div className="space-y-5">
-          {/* Tenant Selector Dropdown */}
+          {/* Tenant Selector Dropdown (platform manager only) */}
           <div className="relative">
             <button
-              onClick={() => setIsTenantDropdownOpen(!isTenantDropdownOpen)}
+              onClick={() => (isPlatformManager ? setIsTenantDropdownOpen(!isTenantDropdownOpen) : undefined)}
               className="w-full p-2.5 rounded-xl bg-luxury-900 hover:bg-luxury-850 border border-luxury-750 flex items-center justify-between transition-colors text-right"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center text-luxury-950 font-serif font-bold text-sm shrink-0 shadow-gold-glow"
+                  className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-sm shrink-0 shadow-gold-glow"
                   style={{
                     background: `linear-gradient(135deg, ${currentRestaurant?.primaryColor || '#D4AF37'}, ${currentRestaurant?.accentColor || '#C5A880'})`,
                   }}
                 >
-                  {currentRestaurant?.nameEn.charAt(0) || 'M'}
+                  {currentRestaurant?.logo ? (
+                    <img src={currentRestaurant.logo} alt={currentRestaurant?.name || ''} className="w-full h-full object-cover" />
+                  ) : (
+                    currentRestaurant?.nameEn.charAt(0) || 'M'
+                  )}
                 </div>
                 <div className="min-w-0">
                   <h1 className="text-xs font-bold text-luxury-50 truncate font-serif">
-                    {currentRestaurant?.name || 'اختر مطعماً'}
+                    {currentRestaurant?.name || (isPlatformManager ? 'اختر مطعماً' : 'مطعمي')}
                   </h1>
-                  <span className="text-[10px] text-gold-400 font-mono block truncate">
-                    /r/{currentRestaurant?.slug}
+                  <span className="text-[10px] text-gold-400 font-mono block truncate" dir="ltr">
+                    {isPlatformManager ? `/r/${currentRestaurant?.slug || ''}` : currentRestaurant?.slug || ''}
                   </span>
                 </div>
               </div>
-              <ChevronDown className="w-4 h-4 text-luxury-400 shrink-0" />
+              {isPlatformManager && <ChevronDown className="w-4 h-4 text-luxury-400 shrink-0" />}
             </button>
 
+            {!isPlatformManager && (
+              <div className="mt-1.5 rounded-lg bg-luxury-950/60 border border-luxury-800 px-2.5 py-1.5 text-[10px] text-luxury-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                أنت داخل حساب مطعمك فقط — بقية المطاعم لا تظهر هنا
+              </div>
+            )}
+
             {/* Dropdown Menu */}
-            {isTenantDropdownOpen && (
+            {isTenantDropdownOpen && isPlatformManager && (
               <div className="absolute top-full right-0 left-0 mt-1 bg-luxury-900 border border-luxury-750 rounded-xl shadow-2xl p-1.5 z-50 space-y-1">
                 <span className="text-[10px] text-luxury-400 px-2 py-1 block font-bold">
                   المطاعم المشتركة ({tenantsList.length})
@@ -233,13 +254,9 @@ export const ManagerLayout: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-y-auto">
-        {isDemoAccount && (
-          <div className="mb-5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-right text-sm text-amber-200" dir="rtl">
-            <strong className="block font-bold">أنت مسجل الآن في حساب تجريبي للعرض فقط</strong>
-            <span className="text-xs text-amber-300/80">لا توجد لهذا الحساب صلاحية إجراء تغييرات حقيقية على المطعم أو قاعدة البيانات.</span>
-          </div>
-        )}
         {activeTab === 'OVERVIEW' && <DashboardOverview onNavigateTab={setActiveTab} />}
+        {activeTab === 'POS' && <CashierPOSView />}
+        {activeTab === 'BRANCHES' && <BranchManagementView />}
         {activeTab === 'ORDERS' && <OrderManagement />}
         {activeTab === 'TABLES' && <TableManagement />}
         {activeTab === 'QR' && <QRManagement />}

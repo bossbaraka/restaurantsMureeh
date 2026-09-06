@@ -195,7 +195,7 @@ router.post('/onboard-restaurant', async (req: Request, res: Response) => {
       const num = i + 1;
       const numStr = num < 10 ? `0${num}` : `${num}`;
       return {
-        id: `TABLE-${numStr}`,
+        id: `${newRest.id}-T${numStr}`,
         restaurantId: newRest.id,
         number: num,
         name: `طاولة ${numStr}`,

@@ -149,6 +149,7 @@ export interface RestaurantTable {
   zone: TableZone;
   status: TableStatus;
   qrToken?: string;
+  branchId?: string; // Multi-Branch: optional branch assignment
   activeOrderIds: string[];
   hasWaiterCall: boolean;
   lastActivityAt?: string;
@@ -209,12 +210,57 @@ export interface Order {
   tax?: number;
   total: number;
   status: OrderStatus;
-  paymentMethod: 'PAY AT CASHIER';
+  paymentMethod: string; // e.g. 'PAY AT CASHIER' | PaymentMethod
+  paymentStatus?: 'UNPAID' | 'PAID'; // POS payment lifecycle flag
+  settledAt?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
   estimatedPrepMinutes?: number;
 }
+
+// ============================================
+// 6.1. Cashier / POS Payment System
+// ============================================
+export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE' | 'SPLIT' | 'PAY AT CASHIER';
+
+// A settled cashier transaction (source of truth for collected revenue)
+export interface PaymentRecord {
+  id: string;
+  receiptNumber: string; // human friendly e.g. RC-000123
+  restaurantId: string;
+  branchId?: string;
+  tableId: string; // real table id or '__WALKIN__' for counter sales
+  tableLabel: string; // display label snapshot
+  orderIds: string[];
+  itemsSummary?: string;
+  method: PaymentMethod;
+  subtotal: number;
+  tax?: number;
+  total: number;
+  cashReceived?: number;
+  changeDue?: number;
+  tip?: number;
+  cashierId?: string;
+  cashierName: string;
+  note?: string;
+  createdAt: string;
+}
+
+// ============================================
+// 6.2. Multi-Branch Management
+// ============================================
+export interface Branch {
+  id: string;
+  restaurantId: string;
+  name: string;
+  address?: string;
+  phone?: string;
+  color?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
 
 // Waiter Service Request (Tenant Isolated)
 export interface WaiterRequest {

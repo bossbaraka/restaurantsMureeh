@@ -84,7 +84,7 @@ export const WaiterCallModal: React.FC = () => {
             <div>
               <h3 className="text-base font-bold text-luxury-50 font-serif">طلب النادل إلى الطاولة</h3>
               <p className="text-xs text-luxury-400 font-mono">
-                {activeTableId ? `طاولة رقم ${activeTableId.replace('TABLE-', '')}` : 'طاولة عامة'}
+                {activeTableId ? `طاولة رقم ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : 'طاولة عامة'}
               </p>
             </div>
           </div>

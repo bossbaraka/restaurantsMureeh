@@ -68,7 +68,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
                 كيف كانت تجربتك معنا اليوم؟
               </h2>
               <p className="text-xs text-luxury-400">
-                {activeTableId ? `طاولة ${activeTableId.replace('TABLE-', '')}` : ''} · رأيك يصنع الفرق
+                {activeTableId ? `طاولة ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : ''} · رأيك يصنع الفرق
               </p>
             </div>
 

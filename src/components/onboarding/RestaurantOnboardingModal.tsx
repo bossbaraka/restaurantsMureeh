@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
-import { Restaurant, RestaurantTable, Plan } from '../../types/restaurant';
-import { db } from '../../services/db';
+import { Restaurant } from '../../types/restaurant';
 import { api } from '../../services/api';
 import {
   X,
@@ -17,6 +16,8 @@ import {
   ArrowLeft,
   Store,
   Layers,
+  KeyRound,
+  Loader2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -29,8 +30,8 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
   isOpen,
   onClose,
 }) => {
-  const { showToast, refreshTenantData, setCurrentTenantBySlug } = useRestaurant();
-  const { switchManagerRestaurant } = useAuth();
+  const { showToast, setCurrentRestaurant, setViewMode } = useRestaurant();
+  const { login } = useAuth();
 
   const [step, setStep] = useState<number>(1);
 
@@ -47,6 +48,9 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
   const [logo, setLogo] = useState('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=200&q=80');
   const [planId, setPlanId] = useState('plan-pro');
   const [tableCount, setTableCount] = useState<number>(20);
+  const [managerEmail, setManagerEmail] = useState('');
+  const [managerPassword, setManagerPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
@@ -56,18 +60,15 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
     setSlug(clean);
   };
 
-  const handleFinishOnboarding = async () => {
+    const handleFinishOnboarding = async () => {
     if (!name.trim() || !slug.trim()) {
       showToast('error', 'يرجى استكمال البيانات المطلوبة');
       return;
     }
+    if (isSubmitting) return;
+    setIsSubmitting(true);
 
     const normalizedSlug = slug.trim().toLowerCase();
-    if (db.getRestaurantBySlug(normalizedSlug)) {
-      showToast('error', 'رابط المطعم مستخدم بالفعل', 'اختر رابطًا مختلفًا للمطعم الجديد.');
-      return;
-    }
-
     const restId = `rest-${normalizedSlug}`;
     const newRestaurant: Restaurant = {
       id: restId,
@@ -90,6 +91,13 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
       updatedAt: new Date().toISOString(),
     };
 
+    const managerEmailValue = managerEmail.trim().toLowerCase() || `manager@${normalizedSlug}.com`;
+    if (managerPassword.length < 6) {
+      showToast('error', 'كلمة مرور المدير مطلوبة', 'يجب أن لا تقل عن 6 أحرف (ستُستخدم لتسجيل دخول مدير المطعم).');
+      setIsSubmitting(false);
+      return;
+    }
+
     const apiResult = await api.onboardRestaurant({
       name: newRestaurant.name,
       nameEn: newRestaurant.nameEn,
@@ -104,104 +112,33 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
       coverImageUrl: newRestaurant.coverImage,
       planId: newRestaurant.planId,
       managerName: `مدير ${name}`,
-      managerEmail: `manager@${normalizedSlug}.com`,
-      managerPassword: `Temp-${normalizedSlug}-${Date.now()}!`,
+      managerEmail: managerEmailValue,
+      managerPassword,
       tablesCount: tableCount,
       categories: [
-        { id: `cat-${restId}-mains`, name: 'الأطباق الرئيسية الفاخرة', nameEn: 'Prime Mains' },
-        { id: `cat-${restId}-drinks`, name: 'المشروبات المنعشة والموكتيل', nameEn: 'Signature Drinks' },
+        { name: 'الأطباق الرئيسية الفاخرة', nameEn: 'Prime Mains' },
+        { name: 'المشروبات المنعشة والموكتيل', nameEn: 'Signature Drinks' },
       ],
+      products: [],
     });
-    if (apiResult.statusCode === 400 || apiResult.statusCode === 401 || apiResult.statusCode === 403) {
-      showToast('error', 'تعذر حفظ المطعم في قاعدة البيانات', apiResult.error);
+    if (!apiResult.success || !apiResult.data?.restaurant) {
+      showToast('error', 'تعذر إنشاء المطعم في قاعدة البيانات', apiResult.error || 'يرجى المحاولة لاحقاً');
+      setIsSubmitting(false);
       return;
     }
 
-    // Save Restaurant locally as the offline/demo mirror.
-    db.saveRestaurant(newRestaurant);
+    const onboarded = apiResult.data.restaurant;
+    setCurrentRestaurant(onboarded);
 
-    // Create Subscription
-    db.saveSubscription({
-      id: `sub-${restId}`,
-      restaurantId: restId,
-      planId,
-      status: 'ACTIVE',
-      currentPeriodStart: new Date().toISOString(),
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-      cancelAtPeriodEnd: false,
-    });
-
-    // Create initial Tables
-    const newTables: RestaurantTable[] = Array.from({ length: tableCount }, (_, i) => {
-      const num = i + 1;
-      const numStr = num < 10 ? `0${num}` : `${num}`;
-      const qrToken = typeof globalThis.crypto?.randomUUID === 'function'
-        ? globalThis.crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2, 14)}`;
-      return {
-        id: `TABLE-${numStr}`,
-        restaurantId: restId,
-        qrToken: `${restId}-qr-${numStr}-${qrToken}`,
-        tableNumber: num,
-        capacity: num % 2 === 0 ? 4 : 2,
-        zone: num <= Math.ceil(tableCount * 0.6) ? 'MAIN_HALL' : 'TERRACE',
-        status: 'AVAILABLE',
-        activeOrderIds: [],
-        hasWaiterCall: false,
-      };
-    });
-    db.saveTablesBatch(newTables);
-
-    // Create default Starter Categories
-    const catMains = {
-      id: `cat-${restId}-mains`,
-      restaurantId: restId,
-      name: 'الأطباق الرئيسية الفاخرة',
-      nameEn: 'Prime Mains',
-      sortOrder: 1,
-    };
-    const catDrinks = {
-      id: `cat-${restId}-drinks`,
-      restaurantId: restId,
-      name: 'المشروبات المنعشة والموكتيل',
-      nameEn: 'Signature Drinks',
-      sortOrder: 2,
-    };
-    db.saveCategory(catMains);
-    db.saveCategory(catDrinks);
-
-    // Create sample product
-    db.saveProduct({
-      id: `prod-${restId}-1`,
-      restaurantId: restId,
-      categoryId: catMains.id,
-      name: `طبق توقيع الشيف — ${name}`,
-      nameEn: `Chef Signature Selection`,
-      description: 'طبق استثنائي محضر بأجود المكونات الطازجة مع صلصة المطعم الخاصة.',
-      price: 85,
-      image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
-      isAvailable: true,
-      isFeatured: true,
-      badge: 'توقيع المطعم',
-      preparationTimeMinutes: 18,
-      calories: 620,
-    });
-
-    // Create Manager User
-    db.saveUser({
-      id: `user-${restId}-mgr`,
-      restaurantId: restId,
-      name: `مدير ${name}`,
-      email: `manager@${slug}.com`,
-      role: 'RESTAURANT_MANAGER',
-      token: `token-${restId}-mgr`,
-      createdAt: new Date().toISOString(),
-    });
-
-    refreshTenantData();
-    switchManagerRestaurant(restId);
-    setCurrentTenantBySlug(newRestaurant.slug);
-
+    // Sign the manager straight into their own isolated tenant workspace.
+    const loginRes = await login(managerEmailValue, managerPassword);
+    setIsSubmitting(false);
+    if (!loginRes.success) {
+      showToast('success', 'تم تدشين المطعم بنجاح!', `تم إنشاء ${name} — سجّل دخول المدير عبر: ${managerEmailValue}`);
+      onClose();
+      return;
+    }
+    setViewMode('MANAGER');
     try {
       confetti({
         particleCount: 90,
@@ -213,7 +150,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
       // ignore
     }
 
-    showToast('success', 'تم تدشين المطعم بنجاح!', `تم إنشاء ${name} وتجهيز ${tableCount} طاولة ورموز QR.`);
+    showToast('success', 'تم تدشين المطعم بنجاح!', `تم إنشاء ${name} وتجهيز ${tableCount} طاولة ورموز QR — أهلًا بك في لوحة المطعم.`);
     onClose();
   };
 
@@ -471,6 +408,37 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                 </div>
               </div>
 
+              <div className="p-4 rounded-xl bg-luxury-950 border border-luxury-800 space-y-3">
+                <h4 className="text-sm font-bold text-gold-300 flex items-center gap-1.5">
+                  <KeyRound className="w-4 h-4" />
+                  <span>حساب مدير المطعم (تُنشأ صلاحياته في قاعدة البيانات فوراً)</span>
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-luxury-400 mb-1 font-semibold">بريد المدير الإلكتروني</label>
+                    <input
+                      type="email"
+                      dir="ltr"
+                      value={managerEmail}
+                      onChange={(e) => setManagerEmail(e.target.value)}
+                      placeholder={`manager@${slug || 'restaurant'}.com`}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3 py-2 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-luxury-400 mb-1 font-semibold">كلمة المرور الأولية *</label>
+                    <input
+                      type="text"
+                      dir="ltr"
+                      value={managerPassword}
+                      onChange={(e) => setManagerPassword(e.target.value)}
+                      placeholder="6 أحرف على الأقل"
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3 py-2 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs">
                 جاهز للإطلاق! بمجرد النقر على "تدشين المطعم الآن"، سيتم إعداد قاعدة البيانات وعزل المستأجر وتجهيز رموز QR.
               </div>
@@ -509,10 +477,11 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
           ) : (
             <button
               onClick={handleFinishOnboarding}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
+              disabled={isSubmitting}
+              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-lg disabled:opacity-60"
             >
-              <CheckCircle className="w-4 h-4" />
-              <span>تدشين المطعم الآن 🚀</span>
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              <span>{isSubmitting ? 'جاري التدشين والعزل في قاعدة البيانات...' : 'تدشين المطعم الآن 🚀'}</span>
             </button>
           )}
         </div>
