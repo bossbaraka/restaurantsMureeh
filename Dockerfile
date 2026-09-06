@@ -1,10 +1,9 @@
 # Build Stage for Frontend
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app
+COPY prisma ./prisma/
 COPY package*.json ./
 RUN npm ci
-COPY prisma ./prisma/
-RUN npx prisma generate
 COPY . .
 RUN npm run build
 
