@@ -8,8 +8,8 @@ import { logAuditEvent } from '../services/audit';
 const router = Router();
 
 const loginSchema = z.object({
-  email: z.string().email('صيغة البريد الإلكتروني غير صحيحة'),
-  password: z.string().min(6, 'كلمة المرور يجب أن لا تقل عن 6 أحرف'),
+  email: z.string().trim().email('صيغة البريد الإلكتروني غير صحيحة'),
+  password: z.string().min(1, 'كلمة المرور مطلوبة'),
 });
 
 // POST /api/auth/login
@@ -46,6 +46,14 @@ router.post('/login', async (req: Request, res: Response) => {
         success: false,
         error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
         statusCode: 401,
+      });
+    }
+
+    if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
+      return res.status(403).json({
+        success: false,
+        error: 'حساب المستخدم موقوف حالياً. يرجى التواصل مع إدارة المنظومة.',
+        statusCode: 403,
       });
     }
 
@@ -95,6 +103,13 @@ router.post('/login', async (req: Request, res: Response) => {
     });
   } catch (err: any) {
     console.error('Login error:', err);
+    if (err?.code === 'P2022') {
+      return res.status(500).json({
+        success: false,
+        error: 'جاري مزامنة هيكل قاعدة البيانات على الخادم. يرجى إعادة المحاولة خلال لحظات.',
+        statusCode: 500,
+      });
+    }
     return res.status(500).json({
       success: false,
       error: 'حدث خطأ في الخادم أثناء تسجيل الدخول',
@@ -163,16 +178,19 @@ router.post('/pin', async (req: Request, res: Response) => {
       });
     }
 
-    const where = restaurantId
-      ? { restaurantId: String(restaurantId) }
-      : { restaurantId: { not: null } };
-
     const candidates = await prisma.restaurantUser.findMany({
       where: {
-        ...where,
         status: 'ACTIVE',
         pinHash: { not: null },
-        restaurant: { status: 'ACTIVE' },
+        ...(restaurantId
+          ? {
+              OR: [
+                { restaurantId: String(restaurantId), restaurant: { status: 'ACTIVE' } },
+                { role: 'PLATFORM_ADMIN' },
+                { role: 'SUPER_ADMIN' },
+              ],
+            }
+          : {}),
       },
       include: { restaurant: true },
     });

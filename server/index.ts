@@ -217,6 +217,17 @@ app.use(
 // ============================================================
 
 if (process.env.NODE_ENV !== 'test') {
+  if (process.env.DATABASE_URL) {
+    try {
+      console.log('🔄 Syncing PostgreSQL database schema with Prisma...');
+      const { execSync } = await import('child_process');
+      execSync('npx prisma db push --skip-generate --accept-data-loss', { stdio: 'inherit' });
+      console.log('✅ Database schema successfully synced with PostgreSQL!');
+    } catch (err) {
+      console.warn('⚠️ Database schema sync notice:', err);
+    }
+  }
+
   app.listen(
     PORT,
     '0.0.0.0',

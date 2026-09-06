@@ -204,8 +204,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!currentRestaurant) return;
     const tenantId = currentRestaurant.id;
 
-    // Authenticated (manager / cashier / kitchen / platform): pull the tenant
-    // workspace through the authenticated manager endpoints.
     if (currentUser) {
       Promise.all([
         api.getManagerMenu(tenantId),
@@ -383,8 +381,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     let eventSource: EventSource | null = null;
     try {
+      const authToken = typeof window !== 'undefined' ? localStorage.getItem('merar_auth_token') || '' : '';
       eventSource = new EventSource(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`
+        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}&token=${encodeURIComponent(authToken)}`
       );
       eventSource.addEventListener('ORDER_STATUS_UPDATED', (e: any) => {
         refreshTenantData();
