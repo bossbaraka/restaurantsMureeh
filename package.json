@@ -65,5 +65,8 @@
   "optionalDependencies": {
     "@oxlint/binding-win32-x64-msvc": "^1.81.0",
     "@rolldown/binding-win32-x64-msvc": "^1.2.7"
+  },
+  "allowScripts": {
+    "fsevents": true
   }
 }
