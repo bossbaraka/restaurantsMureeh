@@ -84,7 +84,13 @@ export const OrderTrackingDrawer: React.FC = () => {
               <ChefHat className="w-5 h-5" />
             </div>
             <div className="text-right">
-              <h3 className="text-base font-bold text-luxury-50 font-serif">متابعة طلبات الطاولة</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-luxury-50 font-serif">المطبخ الحي ومتابعة الطلب</h3>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  مباشر
+                </span>
+              </div>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-xs text-gold-400 font-semibold">طاولة {tableNumStr}</span>
                 <span className="text-xs text-luxury-400">
@@ -122,93 +128,124 @@ export const OrderTrackingDrawer: React.FC = () => {
               </button>
             </div>
           ) : (
-            activeTableOrders.map((order) => {
-              const statusCfg = getOrderStatusConfig(order.status);
-              const isExpanded = expandedOrderId === order.id || activeTableOrders.length === 1;
-              const isPending = order.status === 'PENDING';
-              const isPreparing = order.status === 'PREPARING';
-              const isReady = order.status === 'READY';
-              const isServed = order.status === 'SERVED';
-
-              return (
-                <div
-                  key={order.id}
-                  className="rounded-2xl bg-luxury-850/90 border border-luxury-750 overflow-hidden shadow-lg transition-all"
-                >
-                  {/* Order Card Header */}
-                  <div className="p-4 bg-luxury-800/50 border-b border-luxury-750 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gold-400 font-mono">
-                        طلب {order.id}
-                      </span>
-                      <span className="text-[11px] text-luxury-400">
-                        {formatTime(order.createdAt)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${statusCfg.badgeBg} ${statusCfg.badgeText}`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotColor}`} />
-                        {statusCfg.label}
-                      </span>
-
-                      <button
-                        onClick={() =>
-                          setExpandedOrderId(isExpanded ? null : order.id)
-                        }
-                        className="p-1 text-luxury-400 hover:text-luxury-200 cursor-pointer"
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
+            <>
+              {/* Live Kitchen Radar Banner */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-luxury-900 via-luxury-850 to-luxury-900 border border-gold-500/40 shadow-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">👨‍🍳</span>
+                    <div>
+                      <h4 className="text-sm font-bold text-gold-300">المطبخ الحي (Live KDS)</h4>
+                      <p className="text-[11px] text-luxury-300">يتم إرسال حالة الأطباق مباشرة من شاشة المطبخ</p>
                     </div>
                   </div>
+                  <div className="text-left">
+                    <span className="text-[10px] text-luxury-400 block">وقت التحضير المتوقع</span>
+                    <span className="text-xs font-mono font-bold text-gold-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      12 - 18 دقيقة
+                    </span>
+                  </div>
+                </div>
+              </div>
 
-                  {/* Visual Status Progress Flow */}
-                  <div className="p-4 bg-luxury-950/40 border-b border-luxury-800">
-                    <div className="text-xs mb-3">
-                      <span className="font-bold text-luxury-100">{statusCfg.customerTitle}</span>
-                      <p className="text-luxury-400 text-[11px] mt-0.5">{statusCfg.customerDesc}</p>
+              {activeTableOrders.map((order) => {
+                const statusCfg = getOrderStatusConfig(order.status);
+                const isExpanded = expandedOrderId === order.id || activeTableOrders.length === 1;
+                const isPending = order.status === 'PENDING';
+                const isPreparing = order.status === 'PREPARING';
+                const isReady = order.status === 'READY';
+                const isServed = order.status === 'SERVED';
+
+                return (
+                  <div
+                    key={order.id}
+                    className="rounded-2xl bg-luxury-850/90 border border-luxury-750 overflow-hidden shadow-lg transition-all"
+                  >
+                    {/* Order Card Header */}
+                    <div className="p-4 bg-luxury-800/50 border-b border-luxury-750 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-gold-400 font-mono">
+                          طلب {order.id}
+                        </span>
+                        <span className="text-[11px] text-luxury-400">
+                          {formatTime(order.createdAt)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${statusCfg.badgeBg} ${statusCfg.badgeText}`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotColor}`} />
+                          {statusCfg.label}
+                        </span>
+
+                        <button
+                          onClick={() =>
+                            setExpandedOrderId(isExpanded ? null : order.id)
+                          }
+                          className="p-1 text-luxury-400 hover:text-luxury-200 cursor-pointer"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
 
-                    {/* Step bar */}
-                    <div className="grid grid-cols-4 gap-1.5 pt-1">
-                      {[
-                        { title: 'الاستلام', active: true, done: !isPending },
-                        {
-                          title: 'التحضير',
-                          active: isPreparing || isReady || isServed,
-                          done: isReady || isServed,
-                        },
-                        { title: 'جاهز', active: isReady || isServed, done: isServed },
-                        { title: 'تم التقديم', active: isServed, done: isServed },
-                      ].map((step, idx) => (
-                        <div key={idx} className="flex flex-col items-center gap-1">
-                          <div
-                            className={`h-1.5 w-full rounded-full transition-all duration-500 ${
-                              step.active
-                                ? step.done
-                                  ? 'bg-emerald-500'
-                                  : 'bg-gold-500 animate-pulse'
-                                : 'bg-luxury-800'
-                            }`}
-                          />
-                          <span
-                            className={`text-[10px] ${
-                              step.active ? 'text-luxury-200 font-bold' : 'text-luxury-500'
-                            }`}
-                          >
-                            {step.title}
-                          </span>
+                    {/* Completion Alert Banner if Ready/Served */}
+                    {(isReady || isServed) && (
+                      <div className="p-3 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300 font-bold">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>🎉 تم إنجاز طلبك! طاقم الخدمة يقدم الوجبة الآن.</span>
                         </div>
-                      ))}
+                      </div>
+                    )}
+
+                    {/* Visual Status Progress Flow */}
+                    <div className="p-4 bg-luxury-950/40 border-b border-luxury-800">
+                      <div className="text-xs mb-3">
+                        <span className="font-bold text-luxury-100">{statusCfg.customerTitle}</span>
+                        <p className="text-luxury-400 text-[11px] mt-0.5">{statusCfg.customerDesc}</p>
+                      </div>
+
+                      {/* Step bar */}
+                      <div className="grid grid-cols-4 gap-1.5 pt-1">
+                        {[
+                          { title: 'الاستلام', active: true, done: !isPending },
+                          {
+                            title: 'التحضير',
+                            active: isPreparing || isReady || isServed,
+                            done: isReady || isServed,
+                          },
+                          { title: 'تم الإنجاز', active: isReady || isServed, done: isServed },
+                          { title: 'تم التقديم', active: isServed, done: isServed },
+                        ].map((step, idx) => (
+                          <div key={idx} className="flex flex-col items-center gap-1">
+                            <div
+                              className={`h-1.5 w-full rounded-full transition-all duration-500 ${
+                                step.active
+                                  ? step.done
+                                    ? 'bg-emerald-500'
+                                    : 'bg-gold-500 animate-pulse'
+                                  : 'bg-luxury-800'
+                              }`}
+                            />
+                            <span
+                              className={`text-[10px] ${
+                                step.active ? 'text-luxury-200 font-bold' : 'text-luxury-500'
+                              }`}
+                            >
+                              {step.title}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </div>
 
                   {/* Collapsible Order Items & Details */}
                   {isExpanded && (
@@ -344,9 +381,10 @@ export const OrderTrackingDrawer: React.FC = () => {
                   )}
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </>
+        )}
+      </div>
 
         {/* Sticky Footer: Order More, Call Waiter & WhatsApp Support */}
         <div className="p-4 bg-luxury-950 border-t border-luxury-800 space-y-2 shrink-0">

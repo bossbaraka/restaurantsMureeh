@@ -83,15 +83,15 @@ export const CustomerHeader: React.FC = () => {
               <span>استدعاء النادل</span>
             </button>
 
-            {/* Active Orders Tracker Pill */}
+            {/* Live Kitchen & Active Orders Tracker Pill */}
             {hasActiveOrders && (
               <button
                 onClick={() => setIsOrderTrackingOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gold-500/15 hover:bg-gold-500/25 text-gold-300 border border-gold-500/40 transition-all active:scale-95 text-xs font-bold shadow-gold-glow animate-pulse cursor-pointer"
-                title="متابعة حالة الطلب المباشرة"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-gold-500/20 via-emerald-500/20 to-gold-500/20 hover:from-gold-500/30 hover:to-emerald-500/30 text-gold-300 border border-gold-500/40 transition-all active:scale-95 text-xs font-bold shadow-gold-glow animate-pulse cursor-pointer"
+                title="متابعة حالة الطلب والمطبخ الحي"
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>متابعة الطلب ({activeTableOrders.length})</span>
+                <ChefHat className="w-4 h-4 text-emerald-400" />
+                <span>👨‍🍳 المطبخ الحي ({activeTableOrders.length})</span>
               </button>
             )}
 

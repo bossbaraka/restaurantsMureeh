@@ -45,7 +45,7 @@ export const ActiveOrdersFloatingBar: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-1 text-xs font-bold text-gold-400 group-hover:translate-x-[-2px] transition-transform">
-          <span>متابعة</span>
+          <span>👨‍🍳 المطبخ الحي</span>
           <ArrowLeft className="w-4 h-4" />
         </div>
       </button>
