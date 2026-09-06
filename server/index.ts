@@ -17,7 +17,8 @@ import uploadRoutes from './routes/uploads';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+
+const PORT = Number(process.env.PORT || 3001);
 
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
@@ -25,7 +26,7 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
   .filter(Boolean);
 
 // ============================================================
-// Security & Performance Middlewares
+// SECURITY
 // ============================================================
 
 app.use(
@@ -35,6 +36,213 @@ app.use(
     },
     contentSecurityPolicy: false,
   })
+);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (
+        !origin ||
+        allowedOrigins.length === 0 ||
+        allowedOrigins.includes(origin)
+      ) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+  })
+);
+
+// ============================================================
+// PERFORMANCE & BODY PARSING
+// ============================================================
+
+app.use(compression());
+
+app.use(
+  express.json({
+    limit: '10mb',
+  })
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: '10mb',
+  })
+);
+
+app.use(
+  morgan(
+    process.env.NODE_ENV === 'production'
+      ? 'combined'
+      : 'dev'
+  )
+);
+
+// ============================================================
+// STATIC UPLOADS
+// ============================================================
+
+const uploadsPath = path.resolve(
+  process.cwd(),
+  'uploads'
+);
+
+app.use(
+  '/uploads',
+  express.static(uploadsPath)
+);
+
+// ============================================================
+// PUBLIC API
+// ============================================================
+
+// Authentication
+app.use('/api/auth', authRoutes);
+
+// Public restaurant/menu/events/table endpoints
+app.use('/api/public', publicRoutes);
+
+// ============================================================
+// PROTECTED API
+// ============================================================
+
+// Manager
+app.use(
+  '/api/manager',
+  authenticateToken,
+  managerRoutes
+);
+
+// Admin
+app.use(
+  '/api/admin',
+  authenticateToken,
+  adminRoutes
+);
+
+// Uploads
+app.use(
+  '/api/uploads',
+  authenticateToken,
+  uploadRoutes
+);
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
+
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    version: '2.0.0',
+    database: 'PostgreSQL 17',
+  });
+});
+
+// ============================================================
+// REACT FRONTEND
+// ============================================================
+
+const frontendDistPath = path.resolve(
+  process.cwd(),
+  'dist'
+);
+
+if (fs.existsSync(frontendDistPath)) {
+  console.log(
+    `📦 React frontend found: ${frontendDistPath}`
+  );
+
+  // Serve Vite static assets
+  app.use(
+    express.static(frontendDistPath, {
+      index: false,
+    })
+  );
+
+  // React Router fallback
+  //
+  // Express 5:
+  // /{*splat} matches "/" and all nested routes.
+  app.get('/{*splat}', (_req, res) => {
+    res.sendFile(
+      path.join(frontendDistPath, 'index.html')
+    );
+  });
+} else {
+  console.warn(
+    `⚠️ React build not found: ${frontendDistPath}`
+  );
+}
+
+// ============================================================
+// 404 HANDLER
+// ============================================================
+
+app.use((_req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Endpoint Not Found',
+    statusCode: 404,
+  });
+});
+
+// ============================================================
+// CENTRAL ERROR HANDLER
+// ============================================================
+
+app.use(
+  (
+    err: any,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    console.error('Server error:', err);
+
+    const statusCode =
+      Number(err?.status) || 500;
+
+    res.status(statusCode).json({
+      success: false,
+      error:
+        err?.message ||
+        'Internal Server Error',
+      statusCode,
+    });
+  }
+);
+
+// ============================================================
+// START SERVER
+// ============================================================
+
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(
+    PORT,
+    '0.0.0.0',
+    () => {
+      console.log(
+        `🚀 MÉRAR SaaS Server listening on port ${PORT}`
+      );
+
+      console.log(
+        `❤️ Health endpoint: /api/health`
+      );
+
+      console.log(
+        `🌐 Frontend: /`
+      );
+    }
+  );
+}
+
+export default app;  })
 );
 
 app.use(
