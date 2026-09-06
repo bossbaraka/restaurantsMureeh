@@ -348,23 +348,37 @@ export const OrderTrackingDrawer: React.FC = () => {
           )}
         </div>
 
-        {/* Sticky Footer: Order More & Call Waiter */}
-        <div className="p-4 bg-luxury-950 border-t border-luxury-800 flex items-center gap-3 shrink-0">
-          <button
-            onClick={() => setIsWaiterModalOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-gold-300 border border-luxury-750 text-xs font-bold transition-all cursor-pointer"
-          >
-            <Bell className="w-4 h-4" />
-            <span>طلب النادل</span>
-          </button>
+        {/* Sticky Footer: Order More, Call Waiter & WhatsApp Support */}
+        <div className="p-4 bg-luxury-950 border-t border-luxury-800 space-y-2 shrink-0">
+          <div className="flex items-center gap-2 text-xs justify-between">
+            <a
+              href={`https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، استفسار بشأن الطلب في ${currentRestaurant?.name || 'المطعم'}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 py-2 px-3 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span>واتساب الخدمة (مريح):</span>
+              <span className="font-mono direction-ltr">00970593498909</span>
+            </a>
+          </div>
 
-          <button
-            onClick={() => setIsOrderTrackingOpen(false)}
-            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 text-luxury-950 font-bold hover:from-gold-400 hover:to-gold-500 transition-all shadow-gold-glow flex items-center justify-center gap-2 text-xs active:scale-98 cursor-pointer"
-          >
-            <PlusCircle className="w-4 h-4" />
-            <span>طلب أصناف إضافية من المنيو</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsWaiterModalOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-gold-300 border border-luxury-750 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Bell className="w-4 h-4" />
+              <span>طلب النادل</span>
+            </button>
+
+            <button
+              onClick={() => setIsOrderTrackingOpen(false)}
+              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 text-luxury-950 font-bold hover:from-gold-400 hover:to-gold-500 transition-all shadow-gold-glow flex items-center justify-center gap-2 text-xs active:scale-98 cursor-pointer"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>طلب أصناف إضافية من المنيو</span>
+            </button>
+          </div>
         </div>
       </div>
 

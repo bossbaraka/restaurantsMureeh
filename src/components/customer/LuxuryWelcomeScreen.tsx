@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { Sparkles, ArrowLeft, UtensilsCrossed, MapPin, QrCode } from 'lucide-react';
+import { Sparkles, ArrowLeft, UtensilsCrossed, MessageCircle, QrCode, ShieldCheck, PhoneCall, Award } from 'lucide-react';
 
 interface LuxuryWelcomeScreenProps {
   onDismiss: () => void;
 }
 
 export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDismiss }) => {
-  const { currentRestaurant, activeTableId, tables } = useRestaurant();
+  const { currentRestaurant, activeTableId } = useRestaurant();
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
-  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '12';
-  const restName = currentRestaurant?.name || '';
-  const restNameEn = currentRestaurant?.nameEn || '';
+  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
+  const restName = currentRestaurant?.name || 'مطعم مريح الأخرق';
+  const restNameEn = currentRestaurant?.nameEn || 'MUREEH DINING';
   const coverImg = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
   const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
 
@@ -23,109 +23,137 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
     }, 400);
   };
 
+  const whatsappNumber = '00970593498909';
+  const whatsappUrl = `https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، أتواصل معكم عبر منصة مريح لتجربة الطعام في ${restName}`)}`;
+
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-between p-6 sm:p-10 bg-[#07080A] text-luxury-50 transition-all duration-500 overflow-hidden select-none ${
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-between p-5 sm:p-8 bg-[#050608] text-luxury-50 transition-all duration-500 overflow-y-auto select-none ${
         isAnimatingOut ? 'opacity-0 scale-95 pointer-events-none' : 'opacity-100 scale-100'
       }`}
       dir="rtl"
     >
-      {/* Background Cinematic Food Photography with Luxury Ambient Gradients */}
-      <div className="absolute inset-0 z-0">
+      {/* Background Cinematic Food Photography with Ambient Light Rays */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
         <img
           src={coverImg}
           alt={restName}
-          className="w-full h-full object-cover object-center opacity-25 filter blur-[2px] scale-105 transform animate-pulse duration-10000"
+          className="w-full h-full object-cover object-center opacity-30 filter blur-[3px] scale-110 transform animate-pulse duration-10000"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07080A] via-[#07080A]/85 to-[#07080A]/70" />
-        <div className="absolute inset-0 bg-radial-gradient from-transparent via-[#07080A]/70 to-[#07080A]" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/90 to-[#050608]/75" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold-500/15 via-transparent to-transparent" />
       </div>
 
-      {/* Top Header Badge */}
-      <div className="relative z-10 w-full flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-4 duration-700">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-luxury-900/80 border border-gold-500/30 text-gold-300 backdrop-blur-md">
-          <Sparkles className="w-3.5 h-3.5 text-gold-400" />
-          <span>تجربة الضيافة الرقمية الفاخرة</span>
+      {/* Top Header Bar with Platform Badge */}
+      <div className="relative z-10 w-full max-w-lg flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-4 duration-700">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-luxury-900/90 border border-gold-500/40 text-gold-300 backdrop-blur-md shadow-gold-glow">
+          <Sparkles className="w-3.5 h-3.5 text-gold-400 animate-spin" />
+          <span className="font-bold">منصة مريح MUREEH</span>
         </div>
 
-        {activeTableId && (
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-luxury-900/80 border border-luxury-750 text-luxury-300 font-mono text-xs backdrop-blur-md">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>طاولة {tableNumStr}</span>
+        {activeTableId ? (
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-xs backdrop-blur-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="font-bold">طاولة {tableNumStr}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-luxury-900/80 border border-luxury-750 text-luxury-300 text-xs backdrop-blur-md">
+            <QrCode className="w-3.5 h-3.5 text-gold-400" />
+            <span>جلسة منيو رقمي</span>
           </div>
         )}
       </div>
 
-      {/* Main Luxury Hero Typography Content */}
-      <div className="relative z-10 my-auto text-center max-w-lg space-y-6 animate-in fade-in zoom-in-95 duration-1000">
-        {/* Monogram / Logo Mark */}
-        <div
-          className="w-20 h-20 rounded-2xl mx-auto flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-3xl shadow-gold-glow border border-gold-400/40 transform transition-transform hover:scale-105 duration-300 bg-luxury-950"
-          style={
-            currentRestaurant?.logo
-              ? { background: 'transparent' }
-              : { background: `linear-gradient(135deg, #FFF6DD 0%, ${primaryCol} 50%, #9C7A4A 100%)` }
-          }
-        >
-          {currentRestaurant?.logo ? (
-            <img src={currentRestaurant.logo} alt={restName} className="w-full h-full object-cover" />
-          ) : (
-            (restNameEn.charAt(0) || 'M')
-          )}
+      {/* Main Creative Welcome Hero Box */}
+      <div className="relative z-10 my-auto text-center max-w-md w-full space-y-6 animate-in fade-in zoom-in-95 duration-1000 py-6">
+        {/* Glowing Monogram Logo */}
+        <div className="relative inline-block group">
+          <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-gold-500 via-amber-300 to-gold-600 opacity-60 blur-md group-hover:opacity-100 transition duration-500 animate-pulse" />
+          <div
+            className="relative w-24 h-24 rounded-3xl mx-auto flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-extrabold text-4xl shadow-2xl border-2 border-gold-300/60 bg-luxury-950"
+            style={
+              currentRestaurant?.logo
+                ? { background: '#0A0B0D' }
+                : { background: `linear-gradient(135deg, #FFF7E6 0%, ${primaryCol} 60%, #8A6D3B 100%)` }
+            }
+          >
+            {currentRestaurant?.logo ? (
+              <img src={currentRestaurant.logo} alt={restName} className="w-full h-full object-cover" />
+            ) : (
+              (restNameEn.charAt(0) || 'M')
+            )}
+          </div>
         </div>
 
-        {/* Brand Name */}
-        <div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-luxury-50 font-serif tracking-wide leading-tight">
+        {/* Restaurant Title & Subtitle */}
+        <div className="space-y-1">
+          <h1 className="text-3xl sm:text-4xl font-black text-luxury-50 font-serif tracking-tight leading-tight drop-shadow-md">
             {restName}
           </h1>
-          <p className="text-xs sm:text-sm text-gold-400 font-serif tracking-widest uppercase mt-1">
+          <p className="text-xs sm:text-sm text-gold-400 font-serif tracking-widest uppercase font-bold">
             {restNameEn}
           </p>
         </div>
 
-        {/* Divider Ornament */}
-        <div className="flex items-center justify-center gap-3 opacity-60">
-          <div className="w-12 h-[1px] bg-gradient-to-r from-transparent to-gold-400" />
-          <div className="w-1.5 h-1.5 rotate-45 bg-gold-400" />
-          <div className="w-12 h-[1px] bg-gradient-to-l from-transparent to-gold-400" />
+        {/* Ornament Divider */}
+        <div className="flex items-center justify-center gap-3 opacity-70">
+          <div className="w-16 h-[1px] bg-gradient-to-r from-transparent via-gold-400 to-transparent" />
+          <Award className="w-4 h-4 text-gold-400 shrink-0" />
+          <div className="w-16 h-[1px] bg-gradient-to-l from-transparent via-gold-400 to-transparent" />
         </div>
 
-        {/* Poetic Welcome Copy */}
-        <div className="space-y-2">
-          <p className="text-base sm:text-lg text-luxury-100 font-serif leading-relaxed italic">
-            «أهلاً بكم.. حيث تتحول التفاصيل الصغيرة إلى تجربة لا تُنسى.»
+        {/* Creative Poetic Welcome Card */}
+        <div className="p-5 rounded-3xl bg-luxury-900/80 border border-luxury-750/80 backdrop-blur-xl shadow-2xl space-y-3">
+          <p className="text-base sm:text-lg text-luxury-100 font-serif leading-relaxed italic font-medium">
+            «أهلاً بكم في رحاب الضيافة الاستثنائية.. طلبك يصل لطاولتك مباشرة بلمسة واحدة.»
           </p>
-          <p className="text-xs text-luxury-400 max-w-sm mx-auto leading-relaxed">
-            تصفح قائمتنا المختارة بعناية، خصص أطباقك حسب ذوقك، واطلب مباشرة إلى طاولتك.
+          <p className="text-xs text-luxury-300 leading-relaxed max-w-xs mx-auto">
+            تصفح أشهى الأطباق المجهزة طازجة بكل عناية، واطلب مباشرة مع متابعة حالة التحضير لحظة بلحظة.
           </p>
+
+          {activeTableId && (
+            <div className="pt-2 border-t border-luxury-800 flex items-center justify-center gap-2 text-xs text-gold-300">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>الجلسة مفعلة ومربوطة بـ <strong className="text-gold-400 font-serif font-bold">طاولة {tableNumStr}</strong></span>
+            </div>
+          )}
         </div>
 
-        {/* Table Detected Card */}
-        {activeTableId && (
-          <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-luxury-900/90 border border-gold-500/30 backdrop-blur-md text-xs shadow-luxury">
-            <QrCode className="w-4 h-4 text-gold-400" />
-            <span className="text-luxury-200">
-              تم التعرف على جلستك في: <strong className="text-gold-400 font-serif text-sm">طاولة {tableNumStr}</strong>
-            </span>
-          </div>
-        )}
+        {/* WhatsApp Contact Badge */}
+        <div className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-semibold backdrop-blur-md">
+          <MessageCircle className="w-4 h-4 text-emerald-400 animate-bounce" />
+          <span>للتواصل والدعم عبر واتساب:</span>
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono font-bold text-emerald-300 hover:text-white underline direction-ltr"
+          >
+            00970593498909
+          </a>
+        </div>
       </div>
 
-      {/* Bottom CTA Button */}
-      <div className="relative z-10 w-full max-w-sm animate-in fade-in slide-in-from-bottom-4 duration-1000 space-y-3">
+      {/* Bottom CTA Button & Platform Credits */}
+      <div className="relative z-10 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-1000 space-y-3">
         <button
           onClick={handleStart}
-          className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-gold-500 via-gold-400 to-gold-600 text-luxury-950 font-bold hover:from-gold-400 hover:to-gold-500 transition-all shadow-gold-glow flex items-center justify-center gap-3 text-sm active:scale-98 group"
+          className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-gold-500 via-gold-400 to-gold-600 text-luxury-950 font-black hover:from-gold-400 hover:to-gold-500 transition-all shadow-gold-glow flex items-center justify-center gap-3 text-sm active:scale-98 group cursor-pointer"
         >
-          <span>ابدأ تجربتك واستعرض القائمة</span>
+          <span>استعرض القائمة واطلب الآن</span>
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
         </button>
 
-        <p className="text-[10px] text-center text-luxury-500">
-          لا يتطلب تسجيل حساب · الدفع عند الكاشير
-        </p>
+        <div className="text-[11px] text-center text-luxury-400 space-y-1 pt-1">
+          <p className="font-semibold text-luxury-300">
+            خدمة منيو رقمي وحجوزات من <strong className="text-gold-400">منصة مريح MUREEH</strong>
+          </p>
+          <p className="text-[10px] text-luxury-500">
+            للتواصل المباشر مع المنصة واتساب: <span className="font-mono text-gold-400">00970593498909</span>
+          </p>
+        </div>
       </div>
     </div>
   );
 };
+

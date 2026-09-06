@@ -150,15 +150,34 @@ export const CustomerLayout: React.FC = () => {
 
       {/* Customer Footer */}
       <footer className="mt-16 border-t border-luxury-850 py-8 px-4 text-center text-xs text-luxury-500 bg-luxury-950">
-        <div className="max-w-md mx-auto space-y-2">
+        <div className="max-w-md mx-auto space-y-3">
           <div className="font-serif text-sm font-bold text-gold-400/90 tracking-widest uppercase">
             {currentRestaurant?.name} · {currentRestaurant?.nameEn}
           </div>
           <p className="text-[11px] text-luxury-400">
             جميع الأسعار تشمل ضريبة القيمة المضافة · المحاسبة عند الكاشير
           </p>
+
+          {/* Platform Branding & WhatsApp Support */}
+          <div className="pt-3 border-t border-luxury-850/80 space-y-2">
+            <p className="text-xs font-semibold text-luxury-300">
+              الخدمة تعمل بوساطة <strong className="text-gold-400">منصة مريح MUREEH</strong>
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <a
+                href={`https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، أتواصل معكم عبر منصة مريح`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold hover:bg-emerald-900 transition-colors"
+              >
+                <span>واتساب التواصل والخدمة:</span>
+                <span className="font-mono text-emerald-300 font-bold direction-ltr">00970593498909</span>
+              </a>
+            </div>
+          </div>
+
           <p className="text-[10px] text-luxury-600">
-            Hospitality Digital Ordering Experience
+            MUREEH Digital Dining & Smart Hospitality Platform © 2026
           </p>
         </div>
       </footer>
