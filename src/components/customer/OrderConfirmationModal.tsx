@@ -19,9 +19,10 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleConfirmOrder = () => {
+  const handleConfirmOrder = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
-    const result = createOrder(orderNotes);
+    const result = await createOrder(orderNotes);
     setIsSubmitting(false);
 
     if (result.success) {
@@ -53,7 +54,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 تأكيد إرسال الطلب إلى المطبخ
               </h3>
               <p className="text-xs text-luxury-400">
-                {currentRestaurant?.name} · طاولة رقم {activeTableId?.replace('TABLE-', '')}
+                {currentRestaurant?.name} · طاولة رقم {activeTableId?.replace(/^(?:TABLE-|.*-T)/, '')}
               </p>
             </div>
           </div>

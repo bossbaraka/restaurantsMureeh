@@ -1,21 +1,20 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { RestaurantUser, Restaurant, TenantRole } from '../types/restaurant';
-import { api } from '../services/api';
-import { db } from '../services/db';
+import { api, AUTH_TOKEN_KEY } from '../services/api';
 
 interface AuthContextType {
   currentUser: RestaurantUser | null;
+  setCurrentUser: (user: RestaurantUser | null) => void;
   currentManagerRestaurant: Restaurant | null;
   isAuthenticated: boolean;
   isSuperAdmin: boolean;
-  isDemoAccount: boolean;
   isRestaurantManager: boolean;
   isStaff: boolean;
   failedAttempts: number;
   lockoutRemainingSeconds: number;
   canAccessView: (view: string) => boolean;
   canAccessManagerTab: (tab: string) => boolean;
-  login: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginWithPin: (pin: string, role?: TenantRole) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   switchManagerRestaurant: (restaurantId: string) => void;
@@ -24,10 +23,10 @@ interface AuthContextType {
 }
 
 const ROLE_VIEW_ACCESS: Record<string, string[]> = {
-  PLATFORM_ADMIN: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'PLATFORM_ADMIN', 'SAAS_LANDING', 'SPLIT_PREVIEW'],
-  SUPER_ADMIN: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'PLATFORM_ADMIN', 'SAAS_LANDING', 'SPLIT_PREVIEW'],
-  RESTAURANT_MANAGER: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'SAAS_LANDING', 'SPLIT_PREVIEW'],
-  CASHIER: ['CUSTOMER', 'MANAGER'],
+  PLATFORM_ADMIN: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'PLATFORM_ADMIN', 'SAAS_LANDING', 'SPLIT_PREVIEW', 'LIVE_SCREEN'],
+  SUPER_ADMIN: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'PLATFORM_ADMIN', 'SAAS_LANDING', 'SPLIT_PREVIEW', 'LIVE_SCREEN'],
+  RESTAURANT_MANAGER: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'SAAS_LANDING', 'SPLIT_PREVIEW', 'LIVE_SCREEN'],
+  CASHIER: ['CUSTOMER', 'MANAGER', 'LIVE_SCREEN'],
   WAITER: ['CUSTOMER', 'KITCHEN_KDS'],
   KITCHEN: ['CUSTOMER', 'KITCHEN_KDS'],
   STAFF: ['CUSTOMER'],
@@ -35,10 +34,10 @@ const ROLE_VIEW_ACCESS: Record<string, string[]> = {
 };
 
 const ROLE_MANAGER_TAB_ACCESS: Record<string, string[]> = {
-  PLATFORM_ADMIN: ['OVERVIEW', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION'],
-  SUPER_ADMIN: ['OVERVIEW', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION'],
-  RESTAURANT_MANAGER: ['OVERVIEW', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION'],
-  CASHIER: ['OVERVIEW', 'TABLES', 'ORDERS'],
+  PLATFORM_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
+  SUPER_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
+  RESTAURANT_MANAGER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
+  CASHIER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES'],
   WAITER: [],
   KITCHEN: ['OVERVIEW', 'ORDERS'],
   STAFF: [],
@@ -47,45 +46,23 @@ const ROLE_MANAGER_TAB_ACCESS: Record<string, string[]> = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = 'saas_auth_user_v3';
-const TOKEN_STORAGE_KEY = 'merar_auth_token';
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_SEC = 60;
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<RestaurantUser | null>(() => {
-    if (typeof window !== 'undefined') {
-      const savedUser = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (savedUser) {
-        try {
-          return JSON.parse(savedUser);
-        } catch {
-          return null;
-        }
-      }
-    }
-    return null;
-  });
-
-  const [currentManagerRestaurant, setCurrentManagerRestaurant] = useState<Restaurant | null>(() => {
-    if (currentUser?.restaurantId) {
-      return db.getRestaurantById(currentUser.restaurantId);
-    }
-    return db.getRestaurantById('rest-merar');
-  });
-
+  const [currentUser, setCurrentUser] = useState<RestaurantUser | null>(null);
+  const [currentManagerRestaurant, setCurrentManagerRestaurant] = useState<Restaurant | null>(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutRemainingSeconds, setLockoutRemainingSeconds] = useState(0);
 
-  // Lockout countdown timer & session restoration
+  // Boot: restore the JWT session exclusively from the real backend (/auth/me).
   useEffect(() => {
     let isMounted = true;
 
     const restoreSession = async () => {
       if (typeof window === 'undefined') return;
-      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (!token) return;
+      if (!localStorage.getItem(AUTH_TOKEN_KEY)) return;
 
       const res = await api.getCurrentUser();
       if (isMounted && res.success && res.data) {
@@ -94,8 +71,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setCurrentManagerRestaurant(res.data.restaurant);
         }
       } else if (isMounted && res.statusCode === 401) {
-        localStorage.removeItem(AUTH_STORAGE_KEY);
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(AUTH_TOKEN_KEY);
         setCurrentUser(null);
         setCurrentManagerRestaurant(null);
       }
@@ -122,21 +98,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [lockoutRemainingSeconds]);
 
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(currentUser));
-      if (currentUser.restaurantId) {
-        const rest = db.getRestaurantById(currentUser.restaurantId);
-        if (rest) setCurrentManagerRestaurant(rest);
-      } else {
-        setCurrentManagerRestaurant(db.getRestaurantById('rest-merar'));
-      }
-    }
-  }, [currentUser]);
-
-  // Robust Password Login with Rate-Limiting Protection
   const login = useCallback(
-    async (email: string, password = 'password') => {
+    async (email: string, password: string) => {
       if (lockoutRemainingSeconds > 0) {
         return {
           success: false,
@@ -149,36 +112,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.success && res.data) {
         setFailedAttempts(0);
         setCurrentUser(res.data.user);
-        if (res.data.token) localStorage.setItem(TOKEN_STORAGE_KEY, res.data.token);
         if (res.data.restaurant) {
           setCurrentManagerRestaurant(res.data.restaurant);
         }
         setIsLoginModalOpen(false);
         return { success: true };
-      } else {
-        const nextAttempts = failedAttempts + 1;
-        setFailedAttempts(nextAttempts);
+      }
 
-        if (nextAttempts >= MAX_FAILED_ATTEMPTS) {
-          setLockoutRemainingSeconds(LOCKOUT_DURATION_SEC);
-          return {
-            success: false,
-            error: `تم تجاوز الحد الأقصى للمحاولات الخاطئة (${MAX_FAILED_ATTEMPTS}). تم قفل الحساب لمدة ${LOCKOUT_DURATION_SEC} ثانية لحماية النظام.`,
-          };
-        }
-
+      const nextAttempts = failedAttempts + 1;
+      setFailedAttempts(nextAttempts);
+      if (nextAttempts >= MAX_FAILED_ATTEMPTS) {
+        setLockoutRemainingSeconds(LOCKOUT_DURATION_SEC);
         return {
           success: false,
-          error: `${res.error || 'البريد أو كلمة المرور غير صحيحة'} (تبقى لك ${MAX_FAILED_ATTEMPTS - nextAttempts} محاولات)`,
+          error: `تم تجاوز الحد الأقصى للمحاولات الخاطئة (${MAX_FAILED_ATTEMPTS}). تم قفل الحساب لمدة ${LOCKOUT_DURATION_SEC} ثانية لحماية النظام.`,
         };
       }
+      return {
+        success: false,
+        error: `${res.error || 'البريد أو كلمة المرور غير صحيحة'} (تبقى لك ${MAX_FAILED_ATTEMPTS - nextAttempts} محاولات)`,
+      };
     },
     [failedAttempts, lockoutRemainingSeconds]
   );
 
-  // Fast & Secure Staff PIN Login (Waiters, Kitchen Chefs, Cashiers)
+  // Staff PIN login — validated against the real DB (hashed PIN per account).
   const loginWithPin = useCallback(
-    async (pin: string, role: TenantRole = 'WAITER') => {
+    async (pin: string, role?: TenantRole) => {
       if (lockoutRemainingSeconds > 0) {
         return {
           success: false,
@@ -186,28 +146,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      // Pre-configured staff PINs or manager
-      const pinMap: Record<string, { email: string; name: string; role: TenantRole }> = {
-        '1234': { email: 'manager@merar-dining.com', name: 'عمر القاسم', role: 'RESTAURANT_MANAGER' },
-        '4455': { email: 'waiter1@merar-dining.com', name: 'كريم المنصور', role: 'WAITER' },
-        '7788': { email: 'waiter2@merar-dining.com', name: 'طارق الدوسري', role: 'WAITER' },
-        '9900': { email: 'chef@merar-dining.com', name: 'الشيف أنطوان', role: 'KITCHEN' },
-        '1122': { email: 'cashier@merar-dining.com', name: 'سارة عبد الله', role: 'CASHIER' },
-      };
+      const res = await api.pinLogin(pin, currentManagerRestaurant?.id || undefined);
 
-      const matchedStaff = pinMap[pin];
-      if (matchedStaff) {
+      if (res.success && res.data) {
         setFailedAttempts(0);
-        const staffUser: RestaurantUser = {
-          id: `user-staff-${pin}`,
-          restaurantId: 'rest-merar',
-          name: matchedStaff.name,
-          email: matchedStaff.email,
-          role: matchedStaff.role,
-          createdAt: new Date().toISOString(),
-        };
-        setCurrentUser(staffUser);
-        setCurrentManagerRestaurant(db.getRestaurantById('rest-merar'));
+        setCurrentUser(res.data.user);
+        if (res.data.restaurant) {
+          setCurrentManagerRestaurant(res.data.restaurant);
+        }
         setIsLoginModalOpen(false);
         return { success: true };
       }
@@ -217,38 +163,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (nextAttempts >= MAX_FAILED_ATTEMPTS) {
         setLockoutRemainingSeconds(LOCKOUT_DURATION_SEC);
       }
-
       return {
         success: false,
-        error: `رمز PIN غير صحيح. يرجى مراجعة مدير المطعم. (تبقى ${Math.max(0, MAX_FAILED_ATTEMPTS - nextAttempts)} محاولات)`,
+        error: `${res.error || 'رمز PIN غير صحيح. يرجى مراجعة مدير المطعم.'} (تبقى ${Math.max(0, MAX_FAILED_ATTEMPTS - nextAttempts)} محاولات)`,
       };
     },
-    [failedAttempts, lockoutRemainingSeconds]
+    [failedAttempts, lockoutRemainingSeconds, currentManagerRestaurant?.id]
   );
 
   const logout = useCallback(() => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem(AUTH_TOKEN_KEY);
     }
+    void api.logout();
     setCurrentUser(null);
     setCurrentManagerRestaurant(null);
   }, []);
 
-  const switchManagerRestaurant = useCallback((restaurantId: string) => {
-    const target = db.getRestaurantById(restaurantId);
-    if (target && currentUser) {
-      const updatedUser: RestaurantUser = {
-        ...currentUser,
-        restaurantId: currentUser.role === 'SUPER_ADMIN' ? null : restaurantId,
-      };
-      setCurrentUser(updatedUser);
-      setCurrentManagerRestaurant(target);
-    }
-  }, [currentUser]);
+  // Switch the currently managed tenant (platform admins may inspect any tenant).
+  const switchManagerRestaurant = useCallback(
+    async (restaurantId: string) => {
+      if (!currentUser) return;
+      if (currentUser.restaurantId && currentUser.restaurantId !== restaurantId) return;
+
+      if (currentUser.restaurantId === restaurantId && currentManagerRestaurant?.id === restaurantId) {
+        setCurrentManagerRestaurant(currentManagerRestaurant);
+        return;
+      }
+
+      // Platform admins: resolve the requested tenant from the real platform overview.
+      if (!currentUser.restaurantId) {
+        const res = await api.getPlatformOverview(currentUser);
+        const target = res.success
+          ? res.data?.restaurants.find((r) => r.id === restaurantId)
+          : null;
+        if (target) setCurrentManagerRestaurant(target);
+      }
+    },
+    [currentUser, currentManagerRestaurant]
+  );
 
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'PLATFORM_ADMIN';
-  const isDemoAccount = currentUser?.email.toLowerCase() === 'demo.manager@merar-promo.com';
+  // No demo accounts exist on the platform anymore — every account is real.
   const isRestaurantManager = currentUser?.role === 'RESTAURANT_MANAGER' || isSuperAdmin;
   const isStaff = currentUser?.role === 'WAITER' || currentUser?.role === 'KITCHEN' || currentUser?.role === 'CASHIER';
   const isAuthenticated = !!currentUser;
@@ -269,10 +225,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <AuthContext.Provider
       value={{
         currentUser,
+        setCurrentUser,
         currentManagerRestaurant,
         isAuthenticated,
         isSuperAdmin,
-        isDemoAccount,
         isRestaurantManager,
         isStaff,
         failedAttempts,

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { BrandLogo } from '../brand/BrandLogo';
 import {
   X,
+  Sparkles,
   Lock,
   Eye,
   EyeOff,
@@ -41,18 +43,17 @@ export const LoginModal: React.FC = () => {
     e.preventDefault();
     if (!emailInput.trim()) return;
 
+    if (!passwordInput) {
+      setErrorMsg('يرجى إدخال كلمة المرور للمتابعة');
+      return;
+    }
     setIsLoading(true);
     setErrorMsg('');
-    const res = await login(emailInput.trim(), passwordInput || 'Merar@123456');
+    const res = await login(emailInput.trim(), passwordInput);
     setIsLoading(false);
 
     if (res.success) {
-      const isDemoAccount = emailInput.trim().toLowerCase() === 'demo.manager@merar-promo.com';
-      showToast(
-        isDemoAccount ? 'warning' : 'success',
-        isDemoAccount ? 'تم تسجيل الدخول إلى الحساب التجريبي' : 'تم تسجيل الدخول بنجاح',
-        isDemoAccount ? 'هذا الحساب للعرض فقط ولا يملك صلاحية إجراء تغييرات حقيقية.' : 'مرحباً بك في لوحة تحكم المنظومة.'
-      );
+      showToast('success', 'تم تسجيل الدخول بنجاح', 'مرحباً بك في لوحة تحكم المنظومة.');
       setIsLoginModalOpen(false);
       setViewMode('MANAGER');
     } else {
@@ -112,12 +113,9 @@ export const LoginModal: React.FC = () => {
         {/* Header */}
         <div className="p-5 bg-gradient-to-r from-luxury-950 to-luxury-900 border-b border-luxury-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-gold-500 to-gold-600 text-luxury-950 flex items-center justify-center font-bold shadow-gold-glow">
-              <Key className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">بوابة دخول الإدارة والعمال</h3>
-              <p className="text-xs text-luxury-400">حسابات مشفرة ومحمية بنظام Bcrypt & JWT</p>
+            <BrandLogo size={40} subtitle="Manager Portal" />
+            <div className="flex-1">
+              <p className="text-xs text-luxury-400 mt-0.5">بوابة دخول الإدارة والعمال — Bcrypt & JWT</p>
             </div>
           </div>
 
@@ -208,7 +206,7 @@ export const LoginModal: React.FC = () => {
                 <input
                   type="email"
                   required
-                  placeholder="manager@merar-dining.com"
+                  placeholder="manager@your-restaurant.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"

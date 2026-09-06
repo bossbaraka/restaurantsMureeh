@@ -24,8 +24,8 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
 
   const targetTables = selectedTable ? [selectedTable] : tables.slice(0, 12);
   const slug = currentRestaurant?.slug || 'merar';
-  const restName = currentRestaurant?.name || 'مطعم مِيرار';
-  const restNameEn = currentRestaurant?.nameEn || 'MÉRAR LUXURY DINING';
+  const restName = currentRestaurant?.name || '';
+  const restNameEn = currentRestaurant?.nameEn || '';
 
   useEffect(() => {
     if (!isOpen) return;

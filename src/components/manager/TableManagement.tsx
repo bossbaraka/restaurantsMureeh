@@ -3,7 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { TableZone, RestaurantTable } from '../../types/restaurant';
 import { getTableZoneLabel, formatPrice } from '../../utils/formatting';
 import { TableAggregationModal } from './TableAggregationModal';
-import { db } from '../../services/db';
+import { api } from '../../services/api';
 import {
   MapPin,
   Users,
@@ -74,25 +74,28 @@ export const TableManagement: React.FC = () => {
     setIsTableModalOpen(true);
   };
 
-  const handleSaveTable = (e: React.FormEvent) => {
+  const handleSaveTable = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentRestaurant) return;
 
-    const numStr = tableNumInput < 10 ? `0${tableNumInput}` : `${tableNumInput}`;
-    const tableId = `TABLE-${numStr}`;
+    const num = Number(tableNumInput);
+    const res = editingTable
+      ? await api.updateTable(currentRestaurant.id, {
+          ...editingTable,
+          tableNumber: num,
+          capacity: Number(capacityInput) || 4,
+          zone: zoneInput,
+        })
+      : await api.createTable(currentRestaurant.id, {
+          tableNumber: num,
+          capacity: Number(capacityInput) || 4,
+          zone: zoneInput,
+        });
 
-    const newOrUpdated: RestaurantTable = {
-      id: tableId,
-      restaurantId: currentRestaurant.id,
-      tableNumber: Number(tableNumInput),
-      capacity: Number(capacityInput) || 4,
-      zone: zoneInput,
-      status: editingTable?.status || 'AVAILABLE',
-      activeOrderIds: editingTable?.activeOrderIds || [],
-      hasWaiterCall: editingTable?.hasWaiterCall || false,
-    };
-
-    db.saveTable(newOrUpdated);
+    if (!res.success) {
+      showToast('error', editingTable ? 'تعذر تعديل الطاولة' : 'تعذر إضافة الطاولة', res.error);
+      return;
+    }
     refreshTenantData();
     setIsTableModalOpen(false);
     showToast('success', editingTable ? 'تم تعديل بيانات الطاولة' : 'تمت إضافة الطاولة بنجاح', `طاولة ${tableNumInput}`);
@@ -211,7 +214,7 @@ export const TableManagement: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-sm font-bold text-luxury-100 font-mono flex items-center gap-1.5">
-                    <span>{table.id.replace('TABLE-', 'طاولة ')}</span>
+                    <span>{table.id.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}</span>
                   </span>
                   <span className="text-[10px] text-luxury-400 block mt-0.5">
                     {getTableZoneLabel(table.zone)} · {table.capacity} مقاعد

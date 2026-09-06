@@ -7,6 +7,7 @@ import { ManagerLayout } from './components/manager/ManagerLayout';
 import { SplitPreviewLayout } from './components/common/SplitPreviewLayout';
 import { PlatformAdminPortal } from './components/admin/PlatformAdminPortal';
 import { KitchenDisplaySystem } from './components/manager/KitchenDisplaySystem';
+import { LiveRestaurantScreen } from './components/manager/LiveRestaurantScreen';
 import { SaaSLandingPage } from './components/common/SaaSLandingPage';
 import { RestaurantOnboardingModal } from './components/onboarding/RestaurantOnboardingModal';
 import { LoginModal } from './components/auth/LoginModal';
@@ -36,6 +37,7 @@ const AppContent: React.FC = () => {
         {safeViewMode === 'CUSTOMER' && <CustomerLayout />}
         {safeViewMode === 'MANAGER' && <ManagerLayout />}
         {safeViewMode === 'KITCHEN_KDS' && <KitchenDisplaySystem />}
+        {safeViewMode === 'LIVE_SCREEN' && <LiveRestaurantScreen />}
         {safeViewMode === 'SAAS_LANDING' && <SaaSLandingPage />}
         {safeViewMode === 'PLATFORM_ADMIN' && <PlatformAdminPortal />}
         {safeViewMode === 'SPLIT_PREVIEW' && <SplitPreviewLayout />}

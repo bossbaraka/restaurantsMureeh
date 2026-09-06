@@ -32,7 +32,7 @@ export const OrderManagement: React.FC = () => {
       .map((item) => `<tr><td>${item.quantity} × ${item.productName}</td><td>${formatPrice(item.totalPrice)}</td></tr>`)
       .join('');
     const restaurantName = 'مُريح | MUREEH';
-    printWindow.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة ${order.id}</title><style>body{font-family:Tahoma,Arial,sans-serif;color:#111;max-width:620px;margin:32px auto;padding:0 20px}header{border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:20px;display:flex;justify-content:space-between}h1{font-size:22px;margin:0 0 6px}p{margin:4px 0;color:#555;font-size:13px}table{width:100%;border-collapse:collapse;margin:20px 0}td{padding:10px 4px;border-bottom:1px solid #ddd;font-size:14px}td:last-child{text-align:left;font-weight:bold}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:bold;border-top:2px solid #111;padding-top:14px}@media print{body{margin:0}}</style></head><body><header><div><h1>${restaurantName}</h1><p>فاتورة طلب ${order.id}</p></div><div><p>التاريخ: ${formatTime(order.createdAt)}</p><p>الطاولة: ${order.tableId.replace('TABLE-', '')}</p></div></header><table>${itemsHtml}</table><div class="total"><span>الإجمالي</span><span>${formatPrice(order.total)}</span></div><p style="text-align:center;margin-top:32px">شكرًا لزيارتكم</p><script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}</script></body></html>`);
+    printWindow.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة ${order.id}</title><style>body{font-family:Tahoma,Arial,sans-serif;color:#111;max-width:620px;margin:32px auto;padding:0 20px}header{border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:20px;display:flex;justify-content:space-between}h1{font-size:22px;margin:0 0 6px}p{margin:4px 0;color:#555;font-size:13px}table{width:100%;border-collapse:collapse;margin:20px 0}td{padding:10px 4px;border-bottom:1px solid #ddd;font-size:14px}td:last-child{text-align:left;font-weight:bold}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:bold;border-top:2px solid #111;padding-top:14px}@media print{body{margin:0}}</style></head><body><header><div><h1>${restaurantName}</h1><p>فاتورة طلب ${order.id}</p></div><div><p>التاريخ: ${formatTime(order.createdAt)}</p><p>الطاولة: ${order.tableId.replace(/^(?:TABLE-|.*-T)/, '')}</p></div></header><table>${itemsHtml}</table><div class="total"><span>الإجمالي</span><span>${formatPrice(order.total)}</span></div><p style="text-align:center;margin-top:32px">شكرًا لزيارتكم</p><script>window.onload=function(){window.print();window.onafterprint=function(){window.close()}}</script></body></html>`);
     printWindow.document.close();
   };
 
@@ -47,7 +47,7 @@ export const OrderManagement: React.FC = () => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesId = order.id.toLowerCase().includes(q);
-        const matchesTable = order.tableId.toLowerCase().includes(q) || order.tableId.replace('TABLE-', 'طاولة ').includes(q);
+        const matchesTable = order.tableId.toLowerCase().includes(q) || order.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ').includes(q);
         const matchesItems = order.items.some((i) => i.productName.toLowerCase().includes(q));
         return matchesId || matchesTable || matchesItems;
       }
@@ -152,7 +152,7 @@ export const OrderManagement: React.FC = () => {
                       className="text-xs font-bold text-gold-400 hover:underline flex items-center gap-1"
                       title="عرض كافة طلبات هذه الطاولة مجمعة"
                     >
-                      <span>{order.tableId.replace('TABLE-', 'طاولة ')}</span>
+                      <span>{order.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}</span>
                       <Layers className="w-3.5 h-3.5" />
                     </button>
                     <span className="text-[11px] text-luxury-400 font-mono">({order.id})</span>

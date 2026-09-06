@@ -42,7 +42,7 @@ export const OrderTrackingDrawer: React.FC = () => {
 
   if (!isOrderTrackingOpen) return null;
 
-  const tableNumStr = activeTableId ? activeTableId.replace('TABLE-', '') : '—';
+  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
 
   const handleStartEditNotes = (order: Order) => {
     setEditingNotesOrderId(order.id);
@@ -55,7 +55,7 @@ export const OrderTrackingDrawer: React.FC = () => {
   };
 
   const handleShareWhatsApp = (order: Order) => {
-    const restName = currentRestaurant?.name || 'مطعم مِيرار الفاخر';
+    const restName = currentRestaurant?.name || '';
     const itemsList = order.items.map((i) => `• ${i.quantity}x ${i.productName || i.name} (${formatPrice(i.totalPrice)})`).join('\n');
     const msg = `🧾 *فاتورة إلكترونية - ${restName}*\n📍 *طاولة رقم:* ${tableNumStr}\n🔢 *رقم الطلب:* ${order.id}\n\n*الأصناف:*\n${itemsList}\n\n💰 *الإجمالي:* ${formatPrice(order.total)}\n💳 *طريقة الدفع:* الدفع عند الكاشير\n\n✨ شكراً لزيارتكم!`;
 

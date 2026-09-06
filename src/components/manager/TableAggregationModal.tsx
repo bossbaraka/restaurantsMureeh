@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useAuth } from '../../context/AuthContext';
+import { api } from '../../services/api';
 import { formatPrice, formatTime, getOrderStatusConfig } from '../../utils/formatting';
-import { X, Receipt, CheckCircle, ChefHat, Bell, CreditCard, Layers } from 'lucide-react';
+import { X, CheckCircle, Layers } from 'lucide-react';
 
 interface TableAggregationModalProps {
   tableId: string | null;
@@ -14,19 +16,42 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { orders, tables, settleTableAndFree, updateOrderStatus } = useRestaurant();
+  const { orders, currentRestaurant, refreshTenantData, showToast, updateOrderStatus } = useRestaurant();
+  const { currentUser } = useAuth();
+  const [settling, setSettling] = useState(false);
 
   if (!isOpen || !tableId) return null;
 
-  const tableObj = tables.find((t) => t.id === tableId);
   const tableOrders = orders.filter((o) => o.tableId === tableId && o.status !== 'CANCELLED');
-
-  const activeOrders = tableOrders.filter((o) => o.status !== 'SERVED');
   const tableTotalRevenue = tableOrders.reduce((sum, o) => sum + o.total, 0);
 
-  const handleSettleBill = () => {
-    settleTableAndFree(tableId);
-    onClose();
+  // Full cashier settle: closes every unpaid order on the table, records a POS
+  // receipt in the ledger and frees the table for the next guests.
+  const handleSettleBill = async () => {
+    if (!currentRestaurant || !currentUser) {
+      showToast('error', 'سجّل دخولك أولاً', 'يلزم حساب موظف معتمد لتسوية الحسابات عند الكاشير.');
+      return;
+    }
+    setSettling(true);
+    const unpaidOrders = tableOrders.filter((o) => o.paymentStatus !== 'PAID');
+    if (unpaidOrders.length === 0) {
+      setSettling(false);
+      onClose();
+      return;
+    }
+    const res = await api.processPayment(currentUser, currentRestaurant.id, {
+      tableId,
+      orderIds: unpaidOrders.map((o) => o.id),
+      method: 'CASH',
+    });
+    setSettling(false);
+    if (res.success) {
+      refreshTenantData();
+      showToast('success', 'تمت تسوية الحساب وتحصيله', `إيصال ${res.data?.payment.receiptNumber} بمبلغ ${formatPrice(res.data?.payment.total || 0)}`);
+      onClose();
+    } else {
+      showToast('error', 'تعذرت تسوية الحساب', res.error);
+    }
   };
 
   return (
@@ -50,7 +75,7 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-luxury-50 font-serif">
-                تجميع طلبات {tableId.replace('TABLE-', 'طاولة ')}
+                تجميع طلبات {tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
               </h3>
               <p className="text-xs text-luxury-400">
                 إجمالي الطلبات النشطة: <span className="text-gold-400 font-bold">{tableOrders.length}</span>
@@ -175,10 +200,11 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
             {tableOrders.length > 0 && (
               <button
                 onClick={handleSettleBill}
-                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
+                disabled={settling}
+                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
               >
                 <CheckCircle className="w-4 h-4" />
-                <span>تسوية الحساب عند الكاشير وإفراغ الطاولة</span>
+                <span>{settling ? 'جارٍ تحصيل الحساب...' : 'تحصيل الحساب (POS) وإفراغ الطاولة'}</span>
               </button>
             )}
           </div>

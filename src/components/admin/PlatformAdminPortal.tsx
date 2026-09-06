@@ -3,7 +3,6 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { Restaurant, Subscription, Plan, AuditLog } from '../../types/restaurant';
 import { api } from '../../services/api';
-import { db } from '../../services/db';
 import { formatPrice, formatTime, formatRelativeMinutes } from '../../utils/formatting';
 import {
   ShieldCheck,

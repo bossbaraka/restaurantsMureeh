@@ -81,7 +81,7 @@ export const CartDrawer: React.FC = () => {
             {activeTableId ? (
               <span className="font-bold text-gold-400 font-mono flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                طاولة رقم {activeTableId.replace('TABLE-', '')}
+                طاولة رقم {activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}
               </span>
             ) : (
               <button

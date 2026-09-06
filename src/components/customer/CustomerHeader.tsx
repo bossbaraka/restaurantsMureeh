@@ -16,11 +16,11 @@ export const CustomerHeader: React.FC = () => {
     setIsOrderTrackingOpen,
   } = useRestaurant();
 
-  const tableNumberStr = activeTableId ? activeTableId.replace('TABLE-', '') : '—';
+  const tableNumberStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
   const hasActiveOrders = activeTableOrders.length > 0;
 
-  const restName = currentRestaurant?.name || 'مطعم مِيرار';
-  const restNameEn = currentRestaurant?.nameEn || 'MÉRAR';
+  const restName = currentRestaurant?.name || '';
+  const restNameEn = currentRestaurant?.nameEn || '';
   const initialLetter = restNameEn.charAt(0) || 'M';
 
   return (
@@ -29,12 +29,18 @@ export const CustomerHeader: React.FC = () => {
         {/* Restaurant Identity & Table Badge */}
         <div className="flex items-center gap-3">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-luxury-950 font-serif font-bold text-xl shadow-gold-glow"
+            className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-xl shadow-gold-glow shrink-0 border border-luxury-700/60"
             style={{
-              background: `linear-gradient(135deg, ${currentRestaurant?.primaryColor || '#D4AF37'}, ${currentRestaurant?.accentColor || '#C5A880'})`,
+              background: currentRestaurant?.logo
+                ? 'transparent'
+                : `linear-gradient(135deg, ${currentRestaurant?.primaryColor || '#D4AF37'}, ${currentRestaurant?.accentColor || '#C5A880'})`,
             }}
           >
-            {initialLetter}
+            {currentRestaurant?.logo ? (
+              <img src={currentRestaurant.logo} alt={restName} className="w-full h-full object-cover" />
+            ) : (
+              initialLetter
+            )}
           </div>
           <div className="text-right">
             <h1 className="text-base font-bold text-luxury-50 font-serif tracking-wide flex items-center gap-1.5">

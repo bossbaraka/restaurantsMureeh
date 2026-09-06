@@ -20,7 +20,7 @@ export const CustomerLayout: React.FC = () => {
   const [showWelcome, setShowWelcome] = useState<boolean>(() => {
     // Show welcome screen initially once per session
     if (typeof window !== 'undefined') {
-      const seen = sessionStorage.getItem(`merar_welcome_seen_${currentRestaurant?.slug || 'demo'}`);
+      const seen = sessionStorage.getItem(`merar_welcome_seen_${currentRestaurant?.slug || 'restaurant'}`);
       return !seen;
     }
     return true;
