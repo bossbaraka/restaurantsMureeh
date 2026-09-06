@@ -1,10 +1,13 @@
 # Build Stage for Frontend
 FROM node:22-alpine AS frontend-builder
 WORKDIR /app
+
+# Copy the Prisma schema BEFORE npm ci: the "postinstall" script runs
+# "prisma generate", which fails if prisma/schema.prisma is not present yet.
+COPY prisma ./prisma/
 COPY package*.json ./
 RUN npm ci
-COPY prisma ./prisma/
-RUN npx prisma generate
+
 COPY . .
 RUN npm run build
 
@@ -15,9 +18,10 @@ WORKDIR /app
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
 
-COPY package*.json ./
+# Same order here: schema first, then install (postinstall -> prisma generate)
 COPY prisma ./prisma/
-RUN npm ci --omit=dev && npx prisma generate
+COPY package*.json ./
+RUN npm ci --omit=dev
 
 COPY --from=frontend-builder /app/dist ./dist
 COPY --from=frontend-builder /app/server ./server
@@ -27,6 +31,5 @@ EXPOSE 3001
 
 ENV NODE_ENV=production
 ENV PORT=3001
-
 
 CMD ["npx", "tsx", "server/index.ts"]
