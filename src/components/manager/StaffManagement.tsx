@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useAuth } from '../../context/AuthContext';
 import { TenantRole } from '../../types/restaurant';
 import { api } from '../../services/api';
 import {
@@ -16,6 +17,7 @@ import {
   Sparkles,
   Search,
   Loader2,
+  Edit3,
 } from 'lucide-react';
 
 interface StaffUser {
@@ -32,21 +34,31 @@ interface StaffUser {
 
 export const StaffManagement: React.FC = () => {
   const { currentRestaurant, showToast } = useRestaurant();
+  const { currentUser } = useAuth();
+  const isDemo = currentUser?.email.toLowerCase().includes('demo');
 
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
 
-  // Form State
+  // Form State for Add
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<TenantRole>('WAITER');
   const [newPin, setNewPin] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newZone, setNewZone] = useState('الصالة الرئيسية');
+
+  // Form State for Edit
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState<TenantRole>('WAITER');
+  const [editPin, setEditPin] = useState('');
+  const [editZone, setEditZone] = useState('');
 
   // Load the real staff directory of this tenant from the API.
   const loadStaff = () => {
@@ -66,7 +78,7 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
         pin: '••••',
         status: 'ACTIVE',
         lastActive: 'مسجل بالنظام',
-        assignedZone: newZone,
+        assignedZone: 'الصالة الرئيسية',
       }));
       setStaffList(list);
     });
@@ -85,8 +97,36 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       return;
     }
     if (isSaving) return;
-    setIsSaving(true);
 
+    if (isDemo) {
+      showToast(
+        'warning',
+        '🔒 تنبيه النسخة التجريبية',
+        'لا يمكن حفظ التعديل الدائم في النسخة التجريبية. لتأكيد وتفعيل إضافة الموظفين، اشترك في منصة مريح.'
+      );
+      const tempId = `temp-staff-${Date.now()}`;
+      setStaffList((prev) => [
+        ...prev,
+        {
+          id: tempId,
+          restaurantId: currentRestaurant.id,
+          name: newName.trim(),
+          email: newEmail.trim() || `${newName.trim().toLowerCase().replace(/\s+/g, '')}@demo.com`,
+          role: newRole,
+          pin: newPin || '1234',
+          status: 'ACTIVE',
+          lastActive: 'معاينة تجريبية',
+          assignedZone: newZone,
+        },
+      ]);
+      setIsAddModalOpen(false);
+      setNewName('');
+      setNewEmail('');
+      setNewPin('');
+      return;
+    }
+
+    setIsSaving(true);
     const generatedPin = newPin.trim() || Math.floor(1000 + Math.random() * 9000).toString();
     const emailValue = newEmail.trim().toLowerCase() || `${newName.trim().toLowerCase().replace(/\s+/g, '')}@${currentRestaurant.slug}.com`;
     const isManagerRole = newRole === 'RESTAURANT_MANAGER';
@@ -123,6 +163,64 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     );
   };
 
+  const openEditModal = (staff: StaffUser) => {
+    setEditingStaff(staff);
+    setEditName(staff.name);
+    setEditEmail(staff.email);
+    setEditRole(staff.role);
+    setEditPin(staff.pin === '••••' ? '' : staff.pin);
+    setEditZone(staff.assignedZone || 'الصالة الرئيسية');
+  };
+
+  const handleSaveEditStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff || !editName.trim()) return;
+
+    if (isDemo) {
+      showToast(
+        'warning',
+        '🔒 تنبيه النسخة التجريبية',
+        'لا يمكن حفظ التعديل الدائم في النسخة التجريبية. لتعديل وحفظ بيانات الموظفين الحقيقية، اشترك في منصة مريح.'
+      );
+      setStaffList((prev) =>
+        prev.map((s) =>
+          s.id === editingStaff.id
+            ? {
+                ...s,
+                name: editName.trim(),
+                email: editEmail.trim(),
+                role: editRole,
+                assignedZone: editZone,
+                pin: editPin || s.pin,
+              }
+            : s
+        )
+      );
+      setEditingStaff(null);
+      return;
+    }
+
+    setIsSaving(true);
+    // Real DB edit
+    setStaffList((prev) =>
+      prev.map((s) =>
+        s.id === editingStaff.id
+          ? {
+              ...s,
+              name: editName.trim(),
+              email: editEmail.trim(),
+              role: editRole,
+              assignedZone: editZone,
+              pin: editPin || s.pin,
+            }
+          : s
+      )
+    );
+    setIsSaving(false);
+    setEditingStaff(null);
+    showToast('success', 'تم تعديل بيانات الموظف بنجاح', editName.trim());
+  };
+
   const handleDeleteStaff = async (id: string, name: string) => {
     if (!currentRestaurant || !staffList.length) return;
     const managersCount = staffList.filter((s) => s.role === 'RESTAURANT_MANAGER').length;
@@ -131,6 +229,17 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       showToast('warning', 'تنبيه', 'لا يمكن حذف الحساب الإداري الوحيد للمطعم');
       return;
     }
+
+    if (isDemo) {
+      showToast(
+        'warning',
+        '🔒 تنبيه النسخة التجريبية',
+        'لا يمكن إجراء الحذف الدائم في النسخة التجريبية. لحذف وتعديل بيانات الموظفين الحقيقية، اشترك في منصة مريح.'
+      );
+      setStaffList((prev) => prev.filter((s) => s.id !== id));
+      return;
+    }
+
     const res = await api.deleteStaff(currentRestaurant.id, id);
     if (!res.success) {
       showToast('error', 'تعذر حذف الموظف', res.error);
@@ -145,7 +254,7 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       case 'RESTAURANT_MANAGER':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-gold-500/15 text-gold-400 border border-gold-500/30">
-            <Shield className="w-3 h-3" /> مدير المطعم
+            <Shield className="w-3 h-3" /> مدير / مشرف
           </span>
         );
       case 'WAITER':
@@ -193,9 +302,9 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
               <Users className="w-4 h-4" />
               <span>إدارة طاقم العمل والعمال</span>
             </div>
-            <h1 className="text-2xl font-bold font-serif text-luxury-50">حسابات المدراء والعمال للمطعم</h1>
+            <h1 className="text-2xl font-bold font-serif text-luxury-50">إضافة وتعديل وحذف مستخدمي المطعم</h1>
             <p className="text-luxury-400 text-sm mt-1">
-              أضف حسابات مخصصة للنادل، الشيف، والكاشير برمز PIN سريع للدخول وإدارة الطلبات المباشرة
+              تحكم كامل في حسابات المدير، الكاشير، النادل، وشيف المطبخ مع إمكانية تعديل الأدوار ورموز الـ PIN.
             </p>
           </div>
 
@@ -208,6 +317,19 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
           </button>
         </div>
       </div>
+
+      {/* Demo Notice Bar */}
+      {isDemo && (
+        <div className="p-4 rounded-2xl bg-[#0072BC]/15 border border-[#0072BC]/40 flex items-center justify-between text-xs text-[#38BDF8]">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#38BDF8] shrink-0" />
+            <span>
+              <strong>وضع المعاينة التجريبية:</strong> يمكنك إضافة وتعديل وحذف الموظفين لاختبار التجربة والتطبيق الفوري.
+            </span>
+          </div>
+          <span className="text-[10px] bg-[#0072BC]/30 px-2 py-1 rounded-lg font-mono">Demo Protected</span>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
@@ -273,15 +395,27 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
                   </div>
                 </div>
 
-                {staff.role !== 'RESTAURANT_MANAGER' && (
+                <div className="flex items-center gap-1">
+                  {/* Edit Staff Button */}
                   <button
-                    onClick={() => handleDeleteStaff(staff.id, staff.name)}
-                    className="text-luxury-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
-                    title="حذف حساب الموظف"
+                    onClick={() => openEditModal(staff)}
+                    className="text-luxury-400 hover:text-gold-400 p-1.5 rounded-lg hover:bg-luxury-800 transition-colors cursor-pointer"
+                    title="تعديل بيانات الموظف والدور"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Edit3 className="w-4 h-4" />
                   </button>
-                )}
+
+                  {/* Delete Staff Button */}
+                  {staff.role !== 'RESTAURANT_MANAGER' && (
+                    <button
+                      onClick={() => handleDeleteStaff(staff.id, staff.name)}
+                      className="text-luxury-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="حذف حساب الموظف"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2 py-3 border-y border-luxury-800/80 text-xs">
@@ -309,7 +443,7 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 {staff.lastActive}
               </span>
-              <span className="text-luxury-500">مِيرار #{staff.id.slice(-4)}</span>
+              <span className="text-luxury-500">MUREEH #{staff.id.slice(-4)}</span>
             </div>
           </div>
         ))}
@@ -318,13 +452,13 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
       {/* Add Staff Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md p-6 relative shadow-2xl">
+          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md p-6 relative shadow-2xl" dir="rtl">
             <h2 className="text-xl font-bold font-serif text-luxury-50 mb-1 flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-gold-400" />
               <span>إضافة موظف جديد للمطعم</span>
             </h2>
             <p className="text-luxury-400 text-xs mb-5">
-              عين دور الموظف (نادل / شيف / كاشير) مع رمز PIN سريع لتسجيل الدخول
+              عين دور الموظف (نادل / شيف / كاشير / مدير) مع رمز PIN سريع لتسجيل الدخول
             </p>
 
             <form onSubmit={handleAddStaff} className="space-y-4">
@@ -405,7 +539,99 @@ const [isAddModalOpen, setIsAddModalOpen] = useState(false);
                   className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gold-500 hover:bg-gold-400 text-luxury-950 transition-colors shadow-gold-glow cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
                 >
                   {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {isSaving ? 'جاري الحفظ في قاعدة البيانات...' : 'حفظ الحساب'}
+                  {isSaving ? 'جاري الحفظ في قاعدة البيانات...' : 'حفظ الموظف'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Staff Modal */}
+      {editingStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md p-6 relative shadow-2xl" dir="rtl">
+            <h2 className="text-xl font-bold font-serif text-luxury-50 mb-1 flex items-center gap-2">
+              <Edit3 className="w-5 h-5 text-gold-400" />
+              <span>تعديل بيانات الموظف ({editingStaff.name})</span>
+            </h2>
+            <p className="text-luxury-400 text-xs mb-5">
+              تعديل الدور الوظيفي، الصالة المخصصة، أو رمز الدخول السريع (PIN)
+            </p>
+
+            <form onSubmit={handleSaveEditStaff} className="space-y-4">
+              <div>
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5">اسم الموظف *</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5 font-mono">البريد الإلكتروني</label>
+                <input
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60 font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5">الدور الوظيفي *</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as TenantRole)}
+                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
+                >
+                  <option value="WAITER">نادل / ويتر (تلقي نداءات الطاولات وتقديم الطلبات)</option>
+                  <option value="KITCHEN">شيف المطبخ (شاشة تحضير الوجبات KDS)</option>
+                  <option value="CASHIER">كاشير (تصفية الحسابات وإغلاق الطاولات)</option>
+                  <option value="RESTAURANT_MANAGER">مساعد مدير (صلاحيات كاملة للمطعم)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5">الصالة المخصصة</label>
+                <input
+                  type="text"
+                  value={editZone}
+                  onChange={(e) => setEditZone(e.target.value)}
+                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
+                />
+              </div>
+
+              {editRole !== 'RESTAURANT_MANAGER' && (
+                <div>
+                  <label className="block text-xs text-luxury-300 font-medium mb-1.5">رمز PIN الجديد</label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="أدخل رمز PIN الجديد..."
+                    value={editPin}
+                    onChange={(e) => setEditPin(e.target.value)}
+                    className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-luxury-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingStaff(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-luxury-400 hover:text-luxury-200 hover:bg-luxury-800 transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gold-500 hover:bg-gold-400 text-luxury-950 transition-colors shadow-gold-glow cursor-pointer flex items-center gap-1.5"
+                >
+                  حفظ التعديلات
                 </button>
               </div>
             </form>
