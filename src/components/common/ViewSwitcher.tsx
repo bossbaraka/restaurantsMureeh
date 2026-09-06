@@ -29,7 +29,7 @@ export const ViewSwitcher: React.FC = () => {
     setCurrentTenantBySlug,
     soundEnabled,
     toggleSound,
-    resetAllDemoData,
+    refreshTenantData,
     waiterRequests,
     orders,
     setIsTableSelectorOpen,
@@ -38,6 +38,10 @@ export const ViewSwitcher: React.FC = () => {
 
   const { currentUser, isSuperAdmin, canAccessView, setIsLoginModalOpen, switchManagerRestaurant } = useAuth();
 
+  // Other restaurants may be browsed ONLY by platform managers. A restaurant's
+  // customers/staff never see the shared-restaurants switcher.
+  const isPlatformManager = !!currentUser && isSuperAdmin;
+  const isConsoleUser = !!currentUser;
   const pendingWaiterCount = waiterRequests.filter((w) => w.status === 'PENDING').length;
   const activeOrdersCount = orders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING').length;
 
@@ -67,39 +71,54 @@ export const ViewSwitcher: React.FC = () => {
             {currentRestaurant?.nameEn.charAt(0) || 'M'}
           </div>
 
-          <div className="relative">
-            <select
-              value={currentRestaurant?.slug || 'merar'}
-              onChange={(e) => {
-                const slug = e.target.value;
-                if (slug === '__NEW__' && isSuperAdmin) {
-                  setIsOnboardingOpen(true);
-                } else {
-                  setCurrentTenantBySlug(slug);
-                  const target = tenantsList.find((t) => t.slug === slug);
-                  if (target) switchManagerRestaurant(target.id);
-                }
-              }}
-              className="bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-gold-500/60 font-serif cursor-pointer max-w-[120px] sm:max-w-[180px] truncate"
-            >
-              <optgroup label="المطاعم المشتركة">
-                {tenantsList.map((t) => (
-                  <option key={t.id} value={t.slug}>
-                    {t.name}
-                  </option>
-                ))}
-              </optgroup>
-              {isSuperAdmin && (
+          {isPlatformManager ? (
+            <div className="relative">
+              <select
+                value={currentRestaurant?.slug || ''}
+                onChange={(e) => {
+                  const slug = e.target.value;
+                  if (slug === '__NEW__' && isSuperAdmin) {
+                    setIsOnboardingOpen(true);
+                  } else {
+                    setCurrentTenantBySlug(slug);
+                    const target = tenantsList.find((t) => t.slug === slug);
+                    if (target) switchManagerRestaurant(target.id);
+                  }
+                }}
+                className="bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-lg px-2.5 py-1 text-xs font-bold focus:outline-none focus:border-gold-500/60 font-serif cursor-pointer max-w-[120px] sm:max-w-[180px] truncate"
+                title="مدير المنصة: التنقل بين المطاعم المشتركة"
+              >
+                <optgroup label="المطاعم المشتركة (إدارة المنصة فقط)">
+                  {tenantsList.map((t) => (
+                    <option key={t.id} value={t.slug}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
                 <option value="__NEW__" className="text-gold-400 font-bold">
                   + إضافة مطعم جديد
                 </option>
-              )}
-            </select>
-          </div>
+              </select>
+            </div>
+          ) : isConsoleUser ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="hidden md:block text-[10px] text-luxury-500 font-bold">
+                {currentUser?.restaurantId ? 'مطعمي' : 'المعاينة'}
+              </span>
+              <span className="text-xs font-serif font-bold text-luxury-100 truncate max-w-[130px] sm:max-w-[200px]">
+                {currentRestaurant?.name || '—'}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {/* Center View Mode Selector Tabs */}
         <div className="flex items-center bg-luxury-900 p-1 rounded-xl border border-luxury-800 overflow-x-auto no-scrollbar">
+          {allowedViewModes.filter((mode) => mode.show).length === 0 && (
+            <span className="px-2 py-1.5 text-[10px] text-luxury-500 font-medium whitespace-nowrap">
+              تجربة العميل الآمنة — يظهر لك منيو مطعمك فقط
+            </span>
+          )}
           {allowedViewModes.filter((mode) => mode.show).map((mode) => {
             const Icon = mode.icon;
             const isActive = viewMode === mode.id;
@@ -138,14 +157,16 @@ export const ViewSwitcher: React.FC = () => {
 
         {/* Right Tools: Table Selector + Auth */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          <button
-            onClick={() => setIsTableSelectorOpen(true)}
-            className="flex items-center gap-1.5 bg-luxury-850 hover:bg-luxury-800 text-luxury-200 border border-luxury-750 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
-            title="تغيير طاولة العميل الحالية"
-          >
-            <QrCode className="w-3.5 h-3.5 text-gold-400" />
-            <span>{activeTableId ? `طاولة ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : 'اختر طاولة'}</span>
-          </button>
+          {isConsoleUser && (
+            <button
+              onClick={() => setIsTableSelectorOpen(true)}
+              className="flex items-center gap-1.5 bg-luxury-850 hover:bg-luxury-800 text-luxury-200 border border-luxury-750 px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
+              title="تغيير طاولة العميل الحالية"
+            >
+              <QrCode className="w-3.5 h-3.5 text-gold-400" />
+              <span>{activeTableId ? `طاولة ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : 'اختر طاولة'}</span>
+            </button>
+          )}
 
           <button
             onClick={() => setIsLoginModalOpen(true)}
@@ -166,13 +187,15 @@ export const ViewSwitcher: React.FC = () => {
             {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-gold-400" /> : <VolumeX className="w-3.5 h-3.5 text-luxury-500" />}
           </button>
 
-          <button
-            onClick={resetAllDemoData}
-            className="p-2 rounded-lg bg-luxury-850 hover:bg-luxury-800 text-luxury-400 hover:text-luxury-100 border border-luxury-750 transition-colors cursor-pointer hidden sm:block"
-            title="إعادة تعيين البيانات التجريبية"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-          </button>
+          {isConsoleUser && (
+            <button
+              onClick={refreshTenantData}
+              className="p-2 rounded-lg bg-luxury-850 hover:bg-luxury-800 text-luxury-400 hover:text-luxury-100 border border-luxury-750 transition-colors cursor-pointer hidden sm:block"
+              title="تحديث البيانات من الخادم"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </header>

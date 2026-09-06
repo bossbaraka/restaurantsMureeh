@@ -106,6 +106,7 @@ model RestaurantUser {
   name            String
   email           String            @unique
   passwordHash    String
+  pinHash         String?
   role            TenantRole        @default(RESTAURANT_MANAGER)
   status          String            @default("ACTIVE")
   avatar          String?
@@ -315,8 +316,8 @@ model OrderItem {
   id                    String      @id @default(uuid())
   orderId               String
   order                 Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId             String
-  product               Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId             String?
+  product               Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
   productNameSnapshot   String
   productNameEnSnapshot String?
   priceSnapshot         Float

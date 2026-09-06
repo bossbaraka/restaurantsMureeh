@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { db } from '../../services/db';
 import { formatPrice } from '../../utils/formatting';
 import {
   PaymentRecord,
@@ -199,24 +198,27 @@ export const CashierPOSView: React.FC = () => {
     setProcessing(true);
     try {
       const tableId = selectedTableId;
-      // 1) Create a fresh order for the POS cart items (if any)
+      // 1) Create a fresh order for the POS cart items (if any) — persisted
+      //    straight to the tenant's real database by the manager endpoint.
       const cartItems = buildOrderItems();
+      let createdOrderId: string | null = null;
       if (cartItems.length > 0) {
-        const orderRes = await api.createOrder(tenantId, tableId, cartItems, note || undefined);
+        const orderRes = await api.createManagerOrder(currentUser, tenantId, tableId, cartItems, note || undefined);
         if (!orderRes.success || !orderRes.data) {
           showToast('error', 'تعذر إنشاء فاتورة الكاشير', orderRes.error);
           setProcessing(false);
           return;
         }
+        createdOrderId = orderRes.data.order.id;
       }
 
       // 2) Collect every open order for the bill (existing + newly created)
-      const afterCreate = db.getOrders(tenantId);
-      const openOrders = afterCreate.filter(
+      const openOrders = orders.filter(
         (o) =>
           o.tableId === tableId && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID'
       );
       const orderIds = openOrders.map((o) => o.id);
+      if (createdOrderId && !orderIds.includes(createdOrderId)) orderIds.push(createdOrderId);
 
       const payRes = await api.processPayment(currentUser, tenantId, {
         tableId,

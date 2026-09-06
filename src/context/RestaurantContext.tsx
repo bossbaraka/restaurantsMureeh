@@ -17,9 +17,11 @@ import {
   EntitlementKey,
   PaymentRecord,
   Branch,
+  Plan,
+  Subscription,
 } from '../types/restaurant';
-import { db } from '../services/db';
 import { api } from '../services/api';
+import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
 
 export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
@@ -47,12 +49,10 @@ interface RestaurantContextType {
   isOnboardingOpen: boolean;
   setIsOnboardingOpen: (open: boolean) => void;
 
-  // Sound & Auto-Kitchen
+  // Sound
   soundEnabled: boolean;
   toggleSound: () => void;
-  isAutoKitchenEnabled: boolean;
-  toggleAutoKitchen: () => void;
-  resetAllDemoData: () => void;
+  refreshTenantData: () => void;
 
   // Active Customer Table Session
   activeTableId: string | null;
@@ -91,9 +91,9 @@ interface RestaurantContextType {
   setIsTableSelectorOpen: (open: boolean) => void;
 
   // Customer Ordering Lifecycle
-  createOrder: (notes?: string) => { success: boolean; order?: Order; error?: string };
-  cancelCustomerOrder: (orderId: string) => { success: boolean; message: string };
-  editCustomerOrderNotes: (orderId: string, notes: string) => { success: boolean; message: string };
+  createOrder: (notes?: string) => Promise<{ success: boolean; order?: Order; error?: string }>;
+  cancelCustomerOrder: (orderId: string) => Promise<{ success: boolean; message: string }>;
+  editCustomerOrderNotes: (orderId: string, notes: string) => Promise<{ success: boolean; message: string }>;
   callWaiter: (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => void;
   activeTableOrders: Order[];
 
@@ -117,9 +117,7 @@ interface RestaurantContextType {
   // Platform Admin Super Controls
   switchTenantBySlug: (slug: string) => void;
   setCurrentTenantBySlug: (slug: string) => void;
-  loginAsUser: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
-  refreshTenantData: () => void;
 
   // Toast System
   toasts: ToastMessage[];
@@ -130,68 +128,37 @@ interface RestaurantContextType {
 
 const RestaurantContext = createContext<RestaurantContextType | undefined>(undefined);
 
+const OPEN_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'PREPARING', 'READY', 'SERVED'];
+
 export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Initialize Current Restaurant dynamically from URL
-  const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(() => {
-    if (typeof window !== 'undefined') {
-      const pathname = window.location.pathname;
-      const search = window.location.search;
-      const params = new URLSearchParams(search);
-      const pathMatch = pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
-      const slug = pathMatch ? pathMatch[1] : (params.get('r') || params.get('restaurant') || params.get('slug'));
-      if (slug) {
-        const found = db.getRestaurantBySlug(slug.toLowerCase());
-        if (found) return found;
-      }
-    }
-    return db.getRestaurantById('rest-merar') || db.getRestaurants()[0] || null;
-  });
+  const auth = useAuth();
+  const { currentUser, currentManagerRestaurant, setCurrentUser: authSetCurrentUser, logout: authLogout } = auth;
 
-  const [currentUser, setCurrentUser] = useState<RestaurantUser | null>(() => {
-    return db.getUserByEmail('manager@merar-dining.com') || null;
-  });
-
+  const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
   const [viewMode, setViewMode] = useState<AppViewMode>(() => {
     if (typeof window !== 'undefined') {
-      const isPublicRestaurantLink = window.location.pathname.startsWith('/r/') || new URLSearchParams(window.location.search).has('qr');
+      const isPublicRestaurantLink =
+        window.location.pathname.startsWith('/r/') ||
+        new URLSearchParams(window.location.search).has('qr');
       return isPublicRestaurantLink ? 'CUSTOMER' : 'SAAS_LANDING';
     }
     return 'SAAS_LANDING';
   });
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('cat-signatures');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 2. Initialize Active Table ID from the QR token only.
-  const [activeTableId, setActiveTableId] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      const search = window.location.search;
-      const params = new URLSearchParams(search);
-      const qrToken = params.get('qr');
-      if (qrToken) {
-        const pathMatch = window.location.pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
-        const restaurant = db.getRestaurantBySlug(pathMatch?.[1] || '');
-        const table = restaurant && db.getTables(restaurant.id).find((item) => item.qrToken === qrToken);
-        if (table) return table.id;
-      }
-    }
-    return null; // No hardcoded 12! Starts as null if not specified in URL
-  });
-
+  const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [currentTableSession, setCurrentTableSession] = useState<TableSession | null>(null);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
-  // Sound & Auto Kitchen
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [isAutoKitchenEnabled, setIsAutoKitchenEnabled] = useState(false);
-
-  // Cart & Drawers
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isOrderTrackingOpen, setIsOrderTrackingOpen] = useState(false);
   const [isWaiterModalOpen, setIsWaiterModalOpen] = useState(false);
   const [isTableSelectorOpen, setIsTableSelectorOpen] = useState(false);
 
-  // Dynamic Tenant Data Collections
+  // Real tenant catalog data (fetched from the API only)
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -201,9 +168,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
 
-  // Toast state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [urlHandledRef] = useState<{ done: boolean }>({ done: false });
 
   const showToast = useCallback((type: ToastMessage['type'], title: string, message?: string) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
@@ -227,156 +196,176 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   }, []);
 
-  const toggleAutoKitchen = useCallback(() => {
-    setIsAutoKitchenEnabled((prev) => !prev);
-    showToast('info', 'المطبخ الآلي التفاعلي', 'تم تغيير إعداد المحاكاة التلقائية للطلبات');
-  }, [showToast]);
-
-  const resetAllDemoData = useCallback(() => {
-    db.resetToSeed();
-    const defaultRest = db.getRestaurantById('rest-merar') || db.getRestaurants()[0];
-    setCurrentRestaurant(defaultRest);
-    setCartItems([]);
-    refreshTenantData();
-    showToast('info', 'تمت استعادة البيانات التجريبية للمنصة بالكامل');
-  }, [showToast]);
-
-  // Fetch / Sync Tenant Isolated Data
+  // -------------------------------------------------------------------------
+  // Real tenant data loading — every array below is hydrated ONLY from API
+  // responses backed by Prisma/PostgreSQL.
+  // -------------------------------------------------------------------------
   const refreshTenantData = useCallback(() => {
-    setAvailableRestaurants(db.getRestaurants());
     if (!currentRestaurant) return;
-
     const tenantId = currentRestaurant.id;
-    const currentCats = db.getCategories(tenantId);
-    const currentProds = db.getProducts(tenantId);
-    const currentOffs = db.getOffers(tenantId);
-    const currentTabs = db.getTables(tenantId);
-    const currentOrds = db.getOrders(tenantId);
-    const currentWaits = db.getWaiterRequests(tenantId);
-    const currentPays = db.getPayments(tenantId);
-    const currentBranches = db.getBranches(tenantId);
 
-    setCategories(currentCats);
-    setProducts(currentProds);
-    setOffers(currentOffs);
-    setTables(currentTabs);
-    setOrders(currentOrds);
-    setWaiterRequests(currentWaits);
-    setPayments(currentPays);
-    setBranches(currentBranches);
-
-    if (typeof window !== 'undefined' && localStorage.getItem('merar_auth_token')) {
-      api.getManagerMenu(tenantId).then((menuRes) => {
-        if (!menuRes.success || !menuRes.data) return;
-        setCategories(menuRes.data.categories);
-        setProducts(menuRes.data.products);
-      });
-      api.getManagerTables(tenantId).then((tablesRes) => {
-        if (tablesRes.success && tablesRes.data) setTables(tablesRes.data);
-      });
-    }
-
-    if (currentCats.length > 0 && !currentCats.some((c) => c.id === selectedCategoryId)) {
-      setSelectedCategoryId(currentCats[0].id);
-    }
-  }, [currentRestaurant, selectedCategoryId]);
-
-  // Advanced Multi-Tenant & Table QR URL Detection
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const parseUrlAndSetContext = () => {
-      const pathname = window.location.pathname;
-      const search = window.location.search;
-      const hash = window.location.hash;
-      const params = new URLSearchParams(search);
-      const hashParams = new URLSearchParams(hash.includes('?') ? hash.split('?')[1] : '');
-
-      // 1. Detect Tenant Slug from Path (/r/:slug) or Query (?r=slug or ?restaurant=slug)
-      let detectedSlug: string | null = null;
-      const pathMatch = pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
-      if (pathMatch && pathMatch[1]) {
-        detectedSlug = pathMatch[1].toLowerCase();
-      } else {
-        detectedSlug = params.get('r') || params.get('restaurant') || params.get('slug') || hashParams.get('r');
-      }
-
-      if (detectedSlug) {
-        const matched = db.getRestaurantBySlug(detectedSlug);
-        if (matched) {
-          setCurrentRestaurant(matched);
+    // Authenticated (manager / cashier / kitchen / platform): pull the tenant
+    // workspace through the authenticated manager endpoints.
+    if (currentUser) {
+      Promise.all([
+        api.getManagerMenu(tenantId),
+        api.getManagerOrders(tenantId),
+        api.getManagerTables(tenantId),
+        api.getManagerWaiterRequests(tenantId),
+        api.getManagerOffers(tenantId),
+        api.getPayments(currentUser, tenantId),
+        api.getManagerBranches(currentUser, tenantId),
+        api.getManagerSubscription(tenantId),
+      ]).then(([menuRes, ordersRes, tablesRes, waitersRes, offersRes, paymentsRes, branchesRes, subRes]) => {
+        if (menuRes.success && menuRes.data) {
+          setCategories(menuRes.data.categories);
+          setProducts(menuRes.data.products);
         }
+        let nextOrders: Order[] = [];
+        if (ordersRes.success && ordersRes.data) {
+          nextOrders = ordersRes.data;
+          setOrders(nextOrders);
+        }
+        if (tablesRes.success && tablesRes.data) {
+          const openOrderIdsByTable = new Map<string, string[]>();
+          nextOrders.forEach((o) => {
+            if (
+              o.tableId &&
+              o.status !== 'CANCELLED' &&
+              o.paymentStatus !== 'PAID' &&
+              OPEN_ORDER_STATUSES.includes(o.status)
+            ) {
+              const list = openOrderIdsByTable.get(o.tableId) || [];
+              list.push(o.id);
+              openOrderIdsByTable.set(o.tableId, list);
+            }
+          });
+          setTables(
+            tablesRes.data.map((t) => ({
+              ...t,
+              activeOrderIds: openOrderIdsByTable.get(t.id) || [],
+            }))
+          );
+        }
+        if (waitersRes.success && waitersRes.data) setWaiterRequests(waitersRes.data);
+        if (offersRes.success && offersRes.data) setOffers(offersRes.data);
+        if (paymentsRes.success && paymentsRes.data) setPayments(paymentsRes.data);
+        if (branchesRes.success && branchesRes.data) setBranches(branchesRes.data);
+        if (subRes.success && subRes.data) {
+          setSubscription(subRes.data.subscription);
+          setPlans(subRes.data.plans);
+        }
+      });
+    }
+  }, [currentRestaurant, currentUser]);
+
+  // Load the platform tenant directory for platform admins (used by the
+  // tenant switcher, admin portal and manager header).
+  const loadTenantsList = useCallback(async () => {
+    if (!currentUser) {
+      setAvailableRestaurants([]);
+      return;
+    }
+    if (!currentUser.restaurantId) {
+      // Platform admin: real list of every tenant on the platform.
+      const res = await api.getPlatformOverview(currentUser);
+      if (res.success && res.data) {
+        setAvailableRestaurants(res.data.restaurants);
       }
-
-      // Public restaurant and QR links always open in the customer experience.
-      if (detectedSlug || params.has('qr') || hashParams.has('qr')) {
-        setViewMode('CUSTOMER');
+    } else {
+      // Restaurant staff/manager: only their own tenant.
+      if (currentManagerRestaurant) {
+        setAvailableRestaurants([currentManagerRestaurant]);
       }
+    }
+  }, [currentUser, currentManagerRestaurant]);
 
-      const qrToken = params.get('qr') || hashParams.get('qr');
-      if (qrToken) {
-        api.createTableSession(qrToken).then((res) => {
-          if (res.success && res.data) {
-            setCurrentRestaurant(res.data.restaurant);
-            setActiveTableId(res.data.table.id);
-            setCurrentTableSession(res.data.session);
+  useEffect(() => {
+    void loadTenantsList();
+  }, [loadTenantsList]);
 
-            api.getPublicRestaurantBySlug(res.data.restaurant.slug, qrToken).then((catalogRes) => {
-              if (!catalogRes.success || !catalogRes.data) return;
-              setCategories(catalogRes.data.categories);
-              setProducts(catalogRes.data.products);
-              setOffers(catalogRes.data.offers);
-              setCurrentRestaurant(catalogRes.data.restaurant);
-              setSelectedCategoryId((currentId) =>
-                catalogRes.data!.categories.some((category) => category.id === currentId)
-                  ? currentId
-                  : catalogRes.data!.categories[0]?.id || ''
-              );
-            });
-          }
-        });
-      }
-    };
+  // Keep the manager workspace synced after login/tenant-switch.
+  useEffect(() => {
+    if (!currentUser) return;
+    if (viewMode === 'CUSTOMER' && currentTableSession) return; // keep QR session
+    if (currentManagerRestaurant) {
+      setCurrentRestaurant((prev) =>
+        prev?.id === currentManagerRestaurant.id ? prev : currentManagerRestaurant
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentManagerRestaurant?.id]);
 
-    parseUrlAndSetContext();
-    window.addEventListener('popstate', parseUrlAndSetContext);
-    return () => window.removeEventListener('popstate', parseUrlAndSetContext);
-  }, []);
-
-  // Automatically refresh tenant isolated catalog data on tenant switch
+  // Automatically refresh catalog data whenever the active tenant changes.
   useEffect(() => {
     if (currentRestaurant?.id) {
       refreshTenantData();
     }
-  }, [currentRestaurant?.id, refreshTenantData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRestaurant?.id]);
 
-  // Live data sync: when another tab / window writes to the local database
-  // (customer order, cashier payment, kitchen status…), refresh this view so
-  // the Live Restaurant Screen and manager dashboards stay current.
+  // Gentle background polling keeps screens in sync across devices
+  // (SSE is used for instant events where available).
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onStorage = (e: StorageEvent) => {
-      if (e.key && e.key.startsWith('saas_db_')) {
+    const interval = window.setInterval(() => {
+      if (currentRestaurant?.id && currentUser) {
         refreshTenantData();
       }
-    };
-    window.addEventListener('storage', onStorage);
-    const interval = window.setInterval(() => {
-      // Gentle 20s poll keeps screens in sync even when changes happen on
-      // another device (server deployments broadcast through SSE instead).
-      refreshTenantData();
-    }, 20000);
-    return () => {
-      window.removeEventListener('storage', onStorage);
-      window.clearInterval(interval);
-    };
-  }, [refreshTenantData]);
+    }, 15000);
+    return () => window.clearInterval(interval);
+  }, [currentRestaurant?.id, currentUser, refreshTenantData]);
+
+  // -------------------------------------------------------------------------
+  // URL / QR handling: customer opens /r/:slug?qr=<real-table-qr> which
+  // creates an anonymous, expiring, table-scoped session on the server.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    if (typeof window === 'undefined' || urlHandledRef.done) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const pathMatch = window.location.pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
+    const slug = (pathMatch?.[1] || params.get('r') || params.get('restaurant') || params.get('slug') || '').toLowerCase();
+    const qrToken = params.get('qr') || '';
+
+    if (slug && qrToken) {
+      // Real flow: physical QR scan -> server-issued table session -> menu.
+      api.createTableSession(qrToken).then((sessionRes) => {
+        urlHandledRef.done = true;
+        if (!sessionRes.success || !sessionRes.data) {
+          showToast('error', 'رمز QR غير صالح', sessionRes.error || 'لا يمكن بدء جلسة الطاولة');
+          setViewMode('SAAS_LANDING');
+          return;
+        }
+        setCurrentRestaurant(sessionRes.data.restaurant);
+        setActiveTableId(sessionRes.data.table.id);
+        setCurrentTableSession(sessionRes.data.session);
+        setViewMode('CUSTOMER');
+
+        api.getPublicRestaurantBySlug(slug, qrToken).then((catalogRes) => {
+          if (catalogRes.success && catalogRes.data) {
+            setCategories(catalogRes.data.categories);
+            setProducts(catalogRes.data.products);
+            setOffers(catalogRes.data.offers);
+            setCurrentRestaurant(catalogRes.data.restaurant);
+            setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
+          } else {
+            showToast('error', 'تعذر تحميل المنيو', catalogRes.error);
+          }
+        });
+      });
+    } else if (slug && viewMode === 'CUSTOMER') {
+      urlHandledRef.done = true;
+      showToast('warning', 'قائمة المطعم محمية', 'افتح قائمة المطعم عبر رمز QR الموجود على طاولتك');
+      setViewMode('SAAS_LANDING');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Keep the active QR token in the public URL without exposing table numbers.
   useEffect(() => {
-    if (typeof window === 'undefined' || !currentRestaurant) return;
-    if (viewMode === 'CUSTOMER' && activeTableId && currentTableSession?.sessionToken) {
-      const table = db.getTableById(currentRestaurant.id, activeTableId);
+    if (typeof window === 'undefined' || !currentRestaurant || viewMode !== 'CUSTOMER') return;
+    if (activeTableId && currentTableSession) {
+      const table = tables.find((t) => t.id === activeTableId);
       const qrToken = table?.qrToken;
       if (!qrToken) return;
       const newUrl = `/r/${currentRestaurant.slug}?qr=${encodeURIComponent(qrToken)}`;
@@ -384,384 +373,337 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         window.history.replaceState({ tableId: activeTableId, slug: currentRestaurant.slug }, '', newUrl);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurant?.slug, activeTableId, viewMode]);
 
-  // SSE Real-time Updates Listener for Live Order Status & Waiter Calls
+  // SSE real-time listener for customers with an active table session.
   useEffect(() => {
     if (!currentRestaurant || typeof window === 'undefined') return;
+    if (viewMode !== 'CUSTOMER' || !activeTableId || !currentTableSession?.sessionToken) return;
 
     let eventSource: EventSource | null = null;
     try {
-      eventSource = new EventSource(`/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId || ''}&sessionToken=${encodeURIComponent(currentTableSession?.sessionToken || '')}`);
-
-      eventSource.addEventListener('ORDER_CREATED', () => {
-        refreshTenantData();
-      });
-
+      eventSource = new EventSource(
+        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`
+      );
       eventSource.addEventListener('ORDER_STATUS_UPDATED', (e: any) => {
         refreshTenantData();
         try {
           const data = JSON.parse(e.data);
           if (data.status === 'READY') soundFX.playBell();
           else soundFX.playTap();
-        } catch {}
+        } catch {
+          /* noop */
+        }
       });
-
-      eventSource.addEventListener('WAITER_CALL', () => {
-        refreshTenantData();
-        soundFX.playBell();
-      });
-
-      eventSource.addEventListener('TABLE_SETTLED', () => {
-        refreshTenantData();
-      });
-    } catch (e) {
-      // SSE fallback
+      eventSource.addEventListener('ORDER_CREATED', () => refreshTenantData());
+      eventSource.addEventListener('ORDER_CANCELLED', () => refreshTenantData());
+      eventSource.addEventListener('TABLE_SETTLED', () => refreshTenantData());
+    } catch {
+      /* polling fallback */
     }
-
     return () => {
       if (eventSource) eventSource.close();
     };
-  }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, refreshTenantData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, viewMode]);
 
-  // Entitlement Checker
+  // Entitlement checker (plan data cached from the real subscription API).
   const checkEntitlement = useCallback(
     (key: EntitlementKey): boolean => {
       if (!currentRestaurant) return false;
-      const sub = db.getSubscriptionByRestaurantId(currentRestaurant.id);
-      if (!sub || sub.status === 'SUSPENDED' || sub.status === 'CANCELLED') return false;
-      const plan = db.getPlanById(sub.planId);
+      if (!subscription || subscription.status === 'SUSPENDED' || subscription.status === 'CANCELLED') return false;
+      const plan = plans.find((p) => p.id === subscription.planId);
       if (!plan) return false;
       return plan.entitlements.includes(key);
     },
-    [currentRestaurant]
+    [currentRestaurant, subscription, plans]
   );
 
   const hasEntitlement = checkEntitlement;
 
-  // Switch Active Tenant by Slug
-  const switchTenantBySlug = useCallback((slug: string) => {
-    const target = db.getRestaurantBySlug(slug);
-    if (target) {
+  // Switch the active tenant by slug (from the real platform directory).
+  const switchTenantBySlug = useCallback(
+    (slug: string) => {
+      const target = availableRestaurants.find((r) => r.slug.toLowerCase() === slug.toLowerCase());
+      if (!target) return;
       setCurrentRestaurant(target);
       setCartItems([]);
       setSelectedCategoryId('');
+      setCurrentTableSession(null);
+      setActiveTableId(null);
       showToast('info', 'تم التبديل إلى مطعم', target.name);
-    }
-  }, [showToast]);
+    },
+    [availableRestaurants, showToast]
+  );
 
   const setCurrentTenantBySlug = switchTenantBySlug;
 
-  // Login as User
-  const loginAsUser = useCallback(async (email: string) => {
-    const res = await api.login(email);
-    if (res.success && res.data) {
-      setCurrentUser(res.data.user);
-      if (res.data.restaurant) {
-        setCurrentRestaurant(res.data.restaurant);
-      }
-      showToast('success', 'تم تسجيل الدخول بنجاح', `مرحباً بك ${res.data.user.name}`);
-      return { success: true };
-    }
-    showToast('error', 'فشل تسجيل الدخول', res.error || 'البيانات غير صحيحة');
-    return { success: false, error: res.error };
-  }, [showToast]);
-
   const logout = useCallback(() => {
-    setCurrentUser(null);
-    setViewMode('CUSTOMER');
+    authLogout();
+    setCartItems([]);
+    setActiveTableId(null);
+    setCurrentTableSession(null);
+    setViewMode('SAAS_LANDING');
     showToast('info', 'تم تسجيل الخروج');
-  }, [showToast]);
+  }, [authLogout, showToast]);
 
-  // Set Table By Number with boundary protection
-  const setTableByNumber = useCallback((num: number) => {
-    if (isNaN(num) || num < 1 || num > 50) {
-      return { success: false, error: 'رقم الطاولة يجب أن يكون بين 1 و 50' };
-    }
-
-    const table = currentRestaurant && db.getTables(currentRestaurant.id).find((item) => item.tableNumber === num);
-    if (!table?.qrToken) {
-      return { success: false, error: 'لا يمكن تفعيل الطاولة إلا عبر رمز QR صالح' };
-    }
-    const tableId = table.id;
-    setActiveTableId(tableId);
-
-    // Even internal table selection must resolve through the table QR token.
-    if (currentRestaurant) {
+  // Set table by number — only possible through a real QR token (from the
+  // tenant's own table registry; used by managers previewing their venue).
+  const setTableByNumber = useCallback(
+    (num: number): { success: boolean; tableId?: string; error?: string } => {
+      if (isNaN(num) || num < 1) {
+        return { success: false, error: 'رقم الطاولة غير صالح' };
+      }
+      const table = tables.find((item) => item.tableNumber === num);
+      if (!table?.qrToken) {
+        return {
+          success: false,
+          error: 'لا يمكن تفعيل الطاولة إلا عبر رمز QR المطبوع عليها',
+        };
+      }
+      setActiveTableId(table.id);
       api.createTableSession(table.qrToken).then((res) => {
         if (res.success && res.data) {
           setCurrentTableSession(res.data.session);
+        } else {
+          showToast('error', 'تعذر تفعيل الجلسة', res.error);
         }
       });
-    }
-
-    showToast('success', `تم تفعيل الطاولة ${num}`, `مرحباً بك في ${currentRestaurant?.name || 'المطعم'}. يمكنك الآن الطلب مباشرة.`);
-    soundFX.playChime();
-    return { success: true, tableId };
-  }, [currentRestaurant, showToast]);
+      showToast('success', `تم تفعيل الطاولة ${num}`, `مرحباً بك في ${currentRestaurant?.name || 'المطعم'}. يمكنك الآن الطلب مباشرة.`);
+      soundFX.playChime();
+      return { success: true, tableId: table.id };
+    },
+    [tables, currentRestaurant, showToast]
+  );
 
   const validateAndSetTable = setTableByNumber;
 
   // Cart Calculations
-  const cartSubtotal = useMemo(() => cartItems.reduce((sum, item) => sum + (item.totalPrice || item.itemTotal || 0), 0), [cartItems]);
+  const cartSubtotal = useMemo(
+    () => cartItems.reduce((sum, item) => sum + (item.totalPrice || item.itemTotal || 0), 0),
+    [cartItems]
+  );
   const cartTotalCount = useMemo(() => cartItems.reduce((sum, item) => sum + item.quantity, 0), [cartItems]);
 
-  const addToCart = useCallback((product: Product, quantity: number, options: CartItemOption) => {
-    if (!product.isAvailable) {
-      showToast('error', 'الصنف غير متوفر', 'هذا الطبق غير متاح حالياً للطلب.');
-      return;
-    }
+  const addToCart = useCallback(
+    (product: Product, quantity: number, options: CartItemOption) => {
+      if (!product.isAvailable) {
+        showToast('error', 'الصنف غير متوفر', 'هذا الطبق غير متاح حالياً للطلب.');
+        return;
+      }
+      const sizeMod =
+        (typeof options.size === 'object' ? options.size.priceModifier || options.size.price : 0) || 0;
+      const addOnsTotal = (options.selectedAddOns || []).reduce(
+        (sum: number, a: any) => sum + (typeof a === 'object' ? a.price : 0),
+        0
+      );
+      const unitPrice = product.price + sizeMod + addOnsTotal;
+      const totalPrice = unitPrice * quantity;
 
-    const sizeMod = (typeof options.size === 'object' ? (options.size.priceModifier || options.size.price) : 0) || 0;
-    const addOnsTotal = (options.selectedAddOns || []).reduce((sum: number, a: any) => sum + (typeof a === 'object' ? a.price : 0), 0);
-    const unitPrice = product.price + sizeMod + addOnsTotal;
-    const totalPrice = unitPrice * quantity;
+      const cartItemId = `cart-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+      const newItem: CartItem = {
+        id: cartItemId,
+        productId: product.id,
+        productName: product.name,
+        productNameEn: product.nameEn,
+        productImage: product.image,
+        product,
+        quantity,
+        options,
+        unitPrice,
+        totalPrice,
+        itemTotal: totalPrice,
+      };
+      setCartItems((prev) => [...prev, newItem]);
+      soundFX.playTap();
+      showToast('success', `تمت الإضافة للسلة`, `${product.name} (${quantity}×)`);
+    },
+    [showToast]
+  );
 
-    const cartItemId = `cart-item-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+  const updateCartItemQuantity = useCallback(
+    (cartItemId: string, quantity: number) => {
+      if (quantity <= 0) {
+        setCartItems((prev) => prev.filter((item) => item.id !== cartItemId));
+        showToast('info', 'تم حذف الصنف من السلة');
+        return;
+      }
+      setCartItems((prev) =>
+        prev.map((item) => {
+          if (item.id === cartItemId) {
+            const uPrice = item.unitPrice || item.product?.price || 0;
+            return { ...item, quantity, totalPrice: uPrice * quantity, itemTotal: uPrice * quantity };
+          }
+          return item;
+        })
+      );
+    },
+    [showToast]
+  );
 
-    const newItem: CartItem = {
-      id: cartItemId,
-      productId: product.id,
-      productName: product.name,
-      productNameEn: product.nameEn,
-      productImage: product.image,
-      product,
-      quantity,
-      options,
-      unitPrice,
-      totalPrice,
-      itemTotal: totalPrice,
-    };
-
-    setCartItems((prev) => [...prev, newItem]);
-    soundFX.playTap();
-    showToast('success', `تمت الإضافة للسلة`, `${product.name} (${quantity}×)`);
-  }, [showToast]);
-
-  const updateCartItemQuantity = useCallback((cartItemId: string, quantity: number) => {
-    if (quantity <= 0) {
+  const removeFromCart = useCallback(
+    (cartItemId: string) => {
       setCartItems((prev) => prev.filter((item) => item.id !== cartItemId));
-      showToast('info', 'تم حذف الصنف من السلة');
-      return;
-    }
-
-    setCartItems((prev) =>
-      prev.map((item) => {
-        if (item.id === cartItemId) {
-          const uPrice = item.unitPrice || item.product?.price || 0;
-          return { ...item, quantity, totalPrice: uPrice * quantity, itemTotal: uPrice * quantity };
-        }
-        return item;
-      })
-    );
-  }, [showToast]);
-
-  const removeFromCart = useCallback((cartItemId: string) => {
-    setCartItems((prev) => prev.filter((item) => item.id !== cartItemId));
-    soundFX.playTap();
-    showToast('info', 'تمت إزالة الصنف من السلة');
-  }, [showToast]);
+      soundFX.playTap();
+      showToast('info', 'تمت إزالة الصنف من السلة');
+    },
+    [showToast]
+  );
 
   const clearCart = useCallback(() => setCartItems([]), []);
 
+  // The customer only ever sees orders that belong to their own session —
+  // never orders from another table or another customer at the same table.
   const activeTableOrders = useMemo(() => {
-    if (!activeTableId) return [];
-    return orders.filter((o) => o.tableId === activeTableId && o.status !== 'CANCELLED');
-  }, [orders, activeTableId]);
+    if (!activeTableId || !currentTableSession?.id) return [];
+    return orders.filter(
+      (o) =>
+        o.tableId === activeTableId &&
+        o.sessionId === currentTableSession.id &&
+        o.status !== 'CANCELLED'
+    );
+  }, [orders, activeTableId, currentTableSession]);
 
-  // Create Order from Cart
-  const createOrder = useCallback((notes?: string): { success: boolean; order?: Order; error?: string } => {
-    if (!currentRestaurant) return { success: false, error: 'المطعم غير محدد' };
-    if (!activeTableId) {
-      showToast('error', 'يرجى تحديد الطاولة أولاً');
-      setIsTableSelectorOpen(true);
-      return { success: false, error: 'لم يتم تحديد رقم الطاولة' };
-    }
-    if (cartItems.length === 0) {
-      showToast('warning', 'السلة فارغة');
-      return { success: false, error: 'السلة فارغة' };
-    }
-
-    // Check if table is occupied/locked by another session
-    const currentTableObj = db.getTableById(currentRestaurant.id, activeTableId);
-    if (currentTableObj && (currentTableObj.status === 'OCCUPIED' || currentTableObj.status === 'RESERVED' || currentTableObj.status === 'BILL_REQUESTED')) {
-      const activeSession = db.getActiveSessionByTable(currentRestaurant.id, activeTableId);
-      if (activeSession && currentTableSession && activeSession.sessionToken !== currentTableSession.sessionToken) {
-        const msg = 'عفواً، هذه الطاولة محجوزة ومشغولة حالياً لعميل آخر. لا يمكن إجراء طلب جديد حتى تسوية الطاولة لدى الكاشير.';
-        showToast('error', 'الطاولة محجوزة ومشغولة', msg);
-        return { success: false, error: msg };
+  // Create order: POST to the public API bound to the QR session; the server
+  // re-prices every item from the tenant's DB menu.
+  const createOrder = useCallback(
+    async (notes?: string): Promise<{ success: boolean; order?: Order; error?: string }> => {
+      if (!currentRestaurant) return { success: false, error: 'المطعم غير محدد' };
+      if (!activeTableId || !currentTableSession?.sessionToken) {
+        setIsTableSelectorOpen(true);
+        return { success: false, error: 'لإتمام الطلب يجب مسح رمز QR الموجود على طاولتك' };
       }
-    }
-
-    const orderItems: OrderItem[] = cartItems.map((c) => ({
-      id: `ord-item-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      productId: c.productId || c.product?.id || '',
-      productName: c.product?.name || c.productName || '',
-      productNameEn: c.product?.nameEn || c.productNameEn || '',
-      productImage: c.product?.image || c.productImage || '',
-      quantity: c.quantity,
-      unitPrice: c.unitPrice || c.product?.price || 0,
-      totalPrice: c.totalPrice || c.itemTotal || 0,
-      selectedSize: typeof c.options.size === 'object' ? c.options.size.name : c.options.size,
-      selectedAddOns: (c.options.selectedAddOns || []).map((a: any) => (typeof a === 'object' ? `${a.name} (+₪${a.price})` : String(a))),
-      removedIngredients: c.options.removedIngredients,
-      specialInstructions: c.options.specialInstructions || c.options.notes,
-    }));
-
-    const tId = currentRestaurant.id;
-    const allOrders = db.getOrders(tId);
-    const nextNum = allOrders.length > 0 ? Math.max(...allOrders.map((o) => o.numericId || 1000)) + 1 : 1001;
-    const orderId = `#${nextNum}`;
-
-    const newOrder: Order = {
-      id: orderId,
-      numericId: nextNum,
-      restaurantId: tId,
-      tableId: activeTableId,
-      sessionId: currentTableSession?.id,
-      items: orderItems,
-      subtotal: cartSubtotal,
-      total: cartSubtotal,
-      status: 'PENDING',
-      paymentMethod: 'PAY AT CASHIER',
-      notes: notes || undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      estimatedPrepMinutes: 18,
-    };
-
-    db.saveOrder(newOrder);
-
-    // Update table status
-    const table = db.getTables(tId).find((t) => t.id === activeTableId);
-    if (table) {
-      table.status = 'OCCUPIED';
-      table.activeOrderIds = [...table.activeOrderIds, orderId];
-      table.lastActivityAt = new Date().toISOString();
-      db.saveTable(table);
-    }
-
-    refreshTenantData();
-    clearCart();
-    soundFX.playChime();
-    showToast('success', `تم إرسال طلبك للمطبخ بنجاح (${orderId})`, 'طلبك ظهر الآن في شاشة المطبخ (KDS) وسيبدأ التحضير.');
-
-    setIsCartOpen(false);
-    setIsOrderTrackingOpen(true);
-
-    return { success: true, order: newOrder };
-  }, [currentRestaurant, activeTableId, cartItems, cartSubtotal, currentTableSession, clearCart, refreshTenantData, showToast]);
-
-  const updateOrderStatus = useCallback((orderId: string, nextStatus: OrderStatus): boolean => {
-    if (!currentRestaurant) return false;
-    const orders = db.getOrders(currentRestaurant.id);
-    const ord = orders.find((o) => o.id === orderId);
-    if (!ord) return false;
-
-    if (ord.status === 'SERVED' && nextStatus !== 'SERVED') return false;
-
-    ord.status = nextStatus;
-    ord.updatedAt = new Date().toISOString();
-    db.saveOrder(ord);
-
-    refreshTenantData();
-    soundFX.playTap();
-    if (nextStatus === 'READY') soundFX.playBell();
-    return true;
-  }, [currentRestaurant, refreshTenantData]);
-
-  const cancelCustomerOrder = useCallback((orderId: string): { success: boolean; message: string } => {
-    if (!currentRestaurant) return { success: false, message: 'المطعم غير محدد' };
-    const orders = db.getOrders(currentRestaurant.id);
-    const ord = orders.find((o) => o.id === orderId);
-    if (!ord) return { success: false, message: 'الطلب غير موجود' };
-
-    if (ord.status !== 'PENDING') {
-      const msg = 'بدأ المطبخ بتحضير طلبك بالفعل، لذلك لم يعد بالإمكان تعديله أو إلغاؤه.';
-      showToast('error', 'تعذر إلغاء الطلب', msg);
-      return { success: false, message: msg };
-    }
-
-    ord.status = 'CANCELLED';
-    ord.updatedAt = new Date().toISOString();
-    db.saveOrder(ord);
-
-    const table = db.getTables(currentRestaurant.id).find((t) => t.id === ord.tableId);
-    if (table) {
-      table.activeOrderIds = table.activeOrderIds.filter((id) => id !== orderId);
-      if (table.activeOrderIds.length === 0) table.status = 'AVAILABLE';
-      db.saveTable(table);
-    }
-
-    refreshTenantData();
-    showToast('info', 'تم إلغاء الطلب', `تم إلغاء الطلب ${orderId} بنجاح.`);
-    return { success: true, message: 'تم إلغاء الطلب بنجاح.' };
-  }, [currentRestaurant, refreshTenantData, showToast]);
-
-  const editCustomerOrderNotes = useCallback((orderId: string, notes: string): { success: boolean; message: string } => {
-    if (!currentRestaurant) return { success: false, message: 'المطعم غير محدد' };
-    const orders = db.getOrders(currentRestaurant.id);
-    const ord = orders.find((o) => o.id === orderId);
-    if (!ord) return { success: false, message: 'الطلب غير موجود' };
-
-    if (ord.status !== 'PENDING') {
-      const msg = 'بدأ المطبخ بتحضير طلبك، لذلك لم يعد بالإمكان تعديل الملاحظات.';
-      showToast('error', 'تعذر تعديل الطلب', msg);
-      return { success: false, message: msg };
-    }
-
-    ord.notes = notes;
-    ord.updatedAt = new Date().toISOString();
-    db.saveOrder(ord);
-
-    refreshTenantData();
-    showToast('success', 'تم حفظ التعديلات');
-    return { success: true, message: 'تم تحديث الملاحظات بنجاح.' };
-  }, [currentRestaurant, refreshTenantData, showToast]);
-
-  const updateTableStatus = useCallback((tableId: string, status: RestaurantTable['status']) => {
-    if (!currentRestaurant) return;
-    const table = db.getTables(currentRestaurant.id).find((t) => t.id === tableId);
-    if (table) {
-      table.status = status;
-      db.saveTable(table);
-      refreshTenantData();
-    }
-  }, [currentRestaurant, refreshTenantData]);
-
-  const settleTableAndFree = useCallback((tableId: string) => {
-    if (!currentRestaurant) return;
-    const orders = db.getOrders(currentRestaurant.id);
-    orders.forEach((o) => {
-      if (o.tableId === tableId && o.status !== 'CANCELLED' && o.status !== 'SERVED') {
-        o.status = 'SERVED';
-        o.updatedAt = new Date().toISOString();
-        db.saveOrder(o);
+      if (cartItems.length === 0) {
+        showToast('warning', 'السلة فارغة');
+        return { success: false, error: 'السلة فارغة' };
       }
-    });
 
-    const table = db.getTables(currentRestaurant.id).find((t) => t.id === tableId);
-    if (table) {
-      table.status = 'AVAILABLE';
-      table.activeOrderIds = [];
-      table.hasWaiterCall = false;
-      db.saveTable(table);
-    }
+      const orderItems: OrderItem[] = cartItems.map((c) => ({
+        id: '',
+        productId: c.productId || c.product?.id || '',
+        productName: c.product?.name || c.productName || '',
+        productNameEn: c.product?.nameEn || c.productNameEn || undefined,
+        productImage: c.product?.image || c.productImage || undefined,
+        quantity: c.quantity,
+        unitPrice: c.unitPrice || c.product?.price || 0,
+        totalPrice: c.totalPrice || c.itemTotal || 0,
+        selectedSize: typeof c.options.size === 'object' ? c.options.size.name : c.options.size,
+        selectedAddOns: (c.options.selectedAddOns || []).map((a: any) =>
+          typeof a === 'object' ? `${a.name} (+${currentRestaurant.currency}${a.price})` : String(a)
+        ),
+        removedIngredients: c.options.removedIngredients,
+        specialInstructions: c.options.specialInstructions || c.options.notes,
+      }));
 
-    db.closeActiveSessionsByTable(currentRestaurant.id, tableId);
+      const res = await api.submitOrder({
+        restaurantId: currentRestaurant.id,
+        tableId: activeTableId,
+        sessionToken: currentTableSession.sessionToken,
+        items: orderItems,
+        notes,
+      });
 
-    const waiters = db.getWaiterRequests(currentRestaurant.id);
-    waiters.forEach((w) => {
-      if (w.tableId === tableId && w.status === 'PENDING') {
-        w.status = 'RESOLVED';
-        db.saveWaiterRequest(w);
+      if (res.success && res.data) {
+        clearCart();
+        refreshTenantData();
+        soundFX.playChime();
+        setIsCartOpen(false);
+        setIsOrderTrackingOpen(true);
+        return { success: true, order: res.data.order };
       }
-    });
 
-    refreshTenantData();
-    soundFX.playChime();
-    showToast('success', `تمت تصفية ${tableId}`, 'تم دفع الحساب وإعادة الطاولة إلى حالة المتاحة وتفريغ الجلسات.');
-  }, [currentRestaurant, refreshTenantData, showToast]);
+      showToast('error', 'تعذر إرسال الطلب', res.error || 'حدث خطأ في الخادم');
+      return { success: false, error: res.error || 'تعذر إرسال الطلب' };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, activeTableId, currentTableSession, cartItems, cartSubtotal, clearCart, refreshTenantData, showToast]
+  );
+
+  const updateOrderStatus = useCallback(
+    (orderId: string, nextStatus: OrderStatus): boolean => {
+      if (!currentRestaurant || !currentUser) return false;
+      const order = orders.find((o) => o.id === orderId);
+      if (!order) return false;
+      if (order.status === 'SERVED' && nextStatus !== 'SERVED') return false;
+
+      void api.updateOrderStatus(currentUser, currentRestaurant.id, orderId, nextStatus).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+        } else {
+          showToast('error', 'تعذر تحديث الحالة', res.error);
+        }
+      });
+      soundFX.playTap();
+      if (nextStatus === 'READY') soundFX.playBell();
+      return true;
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, orders, refreshTenantData, showToast]
+  );
+
+  const cancelCustomerOrder = useCallback(
+    async (orderId: string): Promise<{ success: boolean; message: string }> => {
+      if (!currentRestaurant) return { success: false, message: 'المطعم غير محدد' };
+      const res = await api.cancelOrder(currentRestaurant.id, orderId, currentTableSession?.sessionToken);
+      if (res.success) {
+        refreshTenantData();
+        showToast('info', 'تم إلغاء الطلب', `تم إلغاء الطلب ${orderId} بنجاح.`);
+        return { success: true, message: 'تم إلغاء الطلب بنجاح.' };
+      }
+      showToast('error', 'تعذر إلغاء الطلب', res.error);
+      return { success: false, message: res.error || 'تعذر إلغاء الطلب' };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentTableSession, refreshTenantData, showToast]
+  );
+
+  const editCustomerOrderNotes = useCallback(
+    async (orderId: string, notes: string): Promise<{ success: boolean; message: string }> => {
+      if (!currentRestaurant) return { success: false, message: 'المطعم غير محدد' };
+      const res = await api.updateOrderNotes(currentRestaurant.id, orderId, notes, currentTableSession?.sessionToken);
+      if (res.success) {
+        refreshTenantData();
+        showToast('success', 'تم حفظ التعديلات');
+        return { success: true, message: 'تم تحديث الملاحظات بنجاح.' };
+      }
+      showToast('error', 'تعذر تعديل الطلب', res.error);
+      return { success: false, message: res.error || 'تعذر تعديل الطلب' };
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentTableSession, refreshTenantData, showToast]
+  );
+
+  const updateTableStatus = useCallback(
+    (tableId: string, status: RestaurantTable['status']) => {
+      if (!currentRestaurant || !currentUser) return;
+      const table = tables.find((t) => t.id === tableId);
+      if (!table) return;
+      void api.updateTable(currentRestaurant.id, { ...table, status }).then((res) => {
+        if (res.success) refreshTenantData();
+        else showToast('error', 'تعذر تحديث الطاولة', res.error);
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, tables, refreshTenantData, showToast]
+  );
+
+  const settleTableAndFree = useCallback(
+    (tableId: string) => {
+      if (!currentRestaurant || !currentUser) return;
+      void api.settleTableBill(currentUser, currentRestaurant.id, tableId).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          soundFX.playChime();
+          showToast('success', `تمت تصفية ${tableId}`, 'تم دفع الحساب وإعادة الطاولة إلى حالة المتاحة.');
+        } else {
+          showToast('error', 'تعذر تصفية الطاولة', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, refreshTenantData, showToast]
+  );
 
   const callWaiter = useCallback(
     (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => {
@@ -780,141 +722,230 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       if (!targetTableId) return;
 
-      api.callWaiter(currentRestaurant.id, targetTableId, targetReason, targetText, currentTableSession?.sessionToken).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          soundFX.playBell();
-          showToast('success', 'تم استدعاء طاقم الضيافة', `طاقم ${currentRestaurant.name} في طريقه إلى ${targetTableId} لخدمتك.`);
-        }
-      });
+      api
+        .callWaiter(
+          currentRestaurant.id,
+          targetTableId,
+          targetReason,
+          targetText,
+          currentTableSession?.sessionToken
+        )
+        .then((res) => {
+          if (res.success) {
+            refreshTenantData();
+            soundFX.playBell();
+            showToast('success', 'تم استدعاء طاقم الضيافة', `طاقم ${currentRestaurant.name} في طريقه إلى الطاولة لخدمتك.`);
+          } else {
+            showToast('error', 'تعذر إرسال النداء', res.error);
+          }
+        });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentRestaurant, activeTableId, currentTableSession, refreshTenantData, showToast]
   );
 
-  const resolveWaiterRequest = useCallback((requestId: string) => {
-    if (!currentRestaurant) return;
-    const waiters = db.getWaiterRequests(currentRestaurant.id);
-    const req = waiters.find((w) => w.id === requestId);
-    if (req) {
-      req.status = 'RESOLVED';
-      db.saveWaiterRequest(req);
-      const otherPending = waiters.filter((w) => w.tableId === req.tableId && w.id !== req.id && w.status === 'PENDING');
-      if (otherPending.length === 0) {
-        const table = db.getTableById(currentRestaurant.id, req.tableId);
-        if (table) {
-          table.hasWaiterCall = false;
-          db.saveTable(table);
+  const resolveWaiterRequest = useCallback(
+    (requestId: string) => {
+      if (!currentRestaurant || !currentUser) return;
+      void api
+        .updateWaiterRequestStatus(currentUser, currentRestaurant.id, requestId, 'RESOLVED')
+        .then((res) => {
+          if (res.success) {
+            refreshTenantData();
+            showToast('info', 'تم إنجاز طلب النادل');
+          } else {
+            showToast('error', 'تعذر تحديث النداء', res.error);
+          }
+        });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, refreshTenantData, showToast]
+  );
+
+  const acknowledgeWaiterRequest = useCallback(
+    (requestId: string) => {
+      if (!currentRestaurant || !currentUser) return;
+      void api
+        .updateWaiterRequestStatus(currentUser, currentRestaurant.id, requestId, 'ACKNOWLEDGED')
+        .then((res) => {
+          if (res.success) {
+            refreshTenantData();
+            showToast('info', 'تم استلام النداء وجاري التوجه للطاولة');
+          } else {
+            showToast('error', 'تعذر تحديث النداء', res.error);
+          }
+        });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, refreshTenantData, showToast]
+  );
+
+  const toggleProductStock = useCallback(
+    (productId: string) => {
+      if (!currentRestaurant) return;
+      void api.toggleProductStock(currentRestaurant.id, productId).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          const p = products.find((item) => item.id === productId);
+          const nowAvailable = res.data?.product.isAvailable;
+          showToast(
+            nowAvailable === false ? 'warning' : 'success',
+            nowAvailable === false ? 'تم تحويل الطبق إلى غير متوفر (نفد المخزون)' : 'الطبق متوفر الآن',
+            p?.name
+          );
+        } else {
+          showToast('error', 'تعذر تحديث حالة المخزون', res.error);
         }
-      }
-      refreshTenantData();
-      showToast('info', 'تم إنجاز طلب النادل');
-    }
-  }, [currentRestaurant, refreshTenantData, showToast]);
-
-  const acknowledgeWaiterRequest = useCallback((requestId: string) => {
-    if (!currentRestaurant) return;
-    const req = db.getWaiterRequests(currentRestaurant.id).find((w) => w.id === requestId);
-    if (req) {
-      req.status = 'ACKNOWLEDGED';
-      db.saveWaiterRequest(req);
-      refreshTenantData();
-      showToast('info', 'تم استلام النداء وجاري التوجه للطاولة');
-    }
-  }, [currentRestaurant, refreshTenantData, showToast]);
-
-  const toggleProductStock = useCallback((productId: string) => {
-    if (!currentRestaurant) return;
-    const prods = db.getProducts(currentRestaurant.id);
-    const p = prods.find((item) => item.id === productId);
-    if (p) {
-      p.isAvailable = !p.isAvailable;
-      db.saveProduct(p);
-      refreshTenantData();
-      showToast(p.isAvailable ? 'success' : 'warning', p.isAvailable ? 'الطبق متوفر الآن' : 'تم تحويل الطبق إلى غير متوفر (نفد المخزون)');
-    }
-  }, [currentRestaurant, refreshTenantData, showToast]);
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, products, refreshTenantData, showToast]
+  );
 
   const toggleProductAvailability = toggleProductStock;
 
-  const addProduct = useCallback((product: Omit<Product, 'id' | 'restaurantId'>) => {
-    if (!currentRestaurant) return;
-    const newProduct: Product = {
-      ...product,
-      id: `prod-${currentRestaurant.id}-${Date.now()}`,
-      restaurantId: currentRestaurant.id,
-    };
-    db.saveProduct(newProduct);
-    refreshTenantData();
-    showToast('success', 'تمت إضافة طبق جديد للقائمة', newProduct.name);
-    void api.saveProduct(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, newProduct);
-  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
+  const addProduct = useCallback(
+    (product: Omit<Product, 'id' | 'restaurantId'>) => {
+      if (!currentRestaurant || !currentUser) return;
+      const tempId = `prod-${Date.now()}`;
+      const newProduct: Product = {
+        ...product,
+        id: tempId,
+        restaurantId: currentRestaurant.id,
+      };
+      void api.saveProduct(currentUser, currentRestaurant.id, newProduct).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('success', 'تمت إضافة طبق جديد للقائمة', newProduct.name);
+        } else {
+          showToast('error', 'تعذر إضافة الطبق', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, refreshTenantData, showToast]
+  );
 
-  const updateProduct = useCallback((product: Product) => {
-    if (!currentRestaurant) return;
-    const updatedProd: Product = { ...product, restaurantId: currentRestaurant.id };
-    db.saveProduct(updatedProd);
-    refreshTenantData();
-    showToast('success', 'تم تعديل بيانات الطبق', product.name);
-    void api.saveProduct(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, updatedProd);
-  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
+  const updateProduct = useCallback(
+    (product: Product) => {
+      if (!currentRestaurant || !currentUser) return;
+      const updatedProd: Product = { ...product, restaurantId: currentRestaurant.id };
+      void api.saveProduct(currentUser, currentRestaurant.id, updatedProd).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('success', 'تم تعديل بيانات الطبق', product.name);
+        } else {
+          showToast('error', 'تعذر تعديل الطبق', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, refreshTenantData, showToast]
+  );
 
-  const deleteProduct = useCallback((productId: string) => {
-    if (!currentRestaurant) return;
-    db.deleteProduct(currentRestaurant.id, productId);
-    refreshTenantData();
-    showToast('info', 'تم حذف الطبق من القائمة');
-    void api.deleteManagerProduct(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, productId);
-  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
+  const deleteProduct = useCallback(
+    (productId: string) => {
+      if (!currentRestaurant || !currentUser) return;
+      void api.deleteManagerProduct(currentUser, currentRestaurant.id, productId).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('info', 'تم حذف الطبق من القائمة');
+        } else {
+          showToast('error', 'تعذر حذف الطبق', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, refreshTenantData, showToast]
+  );
 
-  const addCategory = useCallback((name: string, nameEn?: string) => {
-    if (!currentRestaurant) return;
-    const currentCats = db.getCategories(currentRestaurant.id);
-    const newCat: Category = {
-      id: `cat-${currentRestaurant.id}-${Date.now()}`,
-      restaurantId: currentRestaurant.id,
-      name,
-      nameEn,
-      sortOrder: currentCats.length + 1,
-    };
-    db.saveCategory(newCat);
-    refreshTenantData();
-    showToast('success', 'تمت إضافة تصنيف جديد', name);
-    void api.saveCategory(currentUser || { id: '', restaurantId: currentRestaurant.id, name: '', email: '', role: 'RESTAURANT_MANAGER', createdAt: '' }, currentRestaurant.id, newCat);
-  }, [currentRestaurant, currentUser, refreshTenantData, showToast]);
+  const addCategory = useCallback(
+    (name: string, nameEn?: string) => {
+      if (!currentRestaurant || !currentUser) return;
+      const newCat: Category = {
+        id: `cat-${Date.now()}`,
+        restaurantId: currentRestaurant.id,
+        name,
+        nameEn,
+        sortOrder: categories.length + 1,
+      };
+      void api.saveCategory(currentUser, currentRestaurant.id, newCat).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('success', 'تمت إضافة تصنيف جديد', name);
+        } else {
+          showToast('error', 'تعذر إضافة التصنيف', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, currentUser, categories, refreshTenantData, showToast]
+  );
 
-  const updateCategory = useCallback((category: Category) => {
-    if (!currentRestaurant) return;
-    const updatedCat = { ...category, restaurantId: currentRestaurant.id };
-    db.saveCategory(updatedCat);
-    refreshTenantData();
-    showToast('success', 'تم تعديل التصنيف', category.name);
-  }, [currentRestaurant, refreshTenantData, showToast]);
+  const updateCategory = useCallback(
+    (category: Category) => {
+      if (!currentRestaurant) return;
+      const updatedCat = { ...category, restaurantId: currentRestaurant.id };
+      void api.updateCategory(currentRestaurant.id, updatedCat).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('success', 'تم تعديل التصنيف', category.name);
+        } else {
+          showToast('error', 'تعذر تعديل التصنيف', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, refreshTenantData, showToast]
+  );
 
-  const deleteCategory = useCallback((categoryId: string) => {
-    if (!currentRestaurant) return;
-    db.deleteCategory(currentRestaurant.id, categoryId);
-    refreshTenantData();
-    showToast('info', 'تم حذف التصنيف');
-  }, [currentRestaurant, refreshTenantData, showToast]);
+  const deleteCategory = useCallback(
+    (categoryId: string) => {
+      if (!currentRestaurant) return;
+      void api.deleteCategory(currentRestaurant.id, categoryId).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('info', 'تم حذف التصنيف');
+        } else {
+          showToast('error', 'تعذر حذف التصنيف', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, refreshTenantData, showToast]
+  );
 
-  const addOffer = useCallback((offer: Omit<Offer, 'id' | 'restaurantId'>) => {
-    if (!currentRestaurant) return;
-    const newOffer: Offer = {
-      ...offer,
-      id: `offer-${Date.now()}`,
-      restaurantId: currentRestaurant.id,
-    };
-    db.saveOffer(newOffer);
-    refreshTenantData();
-    showToast('success', 'تم نشر العرض الترويجي', newOffer.title);
-  }, [currentRestaurant, refreshTenantData, showToast]);
+  const addOffer = useCallback(
+    (offer: Omit<Offer, 'id' | 'restaurantId'>) => {
+      if (!currentRestaurant) return;
+      void api.saveOffer(currentRestaurant.id, offer).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('success', 'تم نشر العرض الترويجي', offer.title);
+        } else {
+          showToast('error', 'تعذر نشر العرض', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, refreshTenantData, showToast]
+  );
 
-  const deleteOffer = useCallback((offerId: string) => {
-    if (!currentRestaurant) return;
-    db.deleteOffer(currentRestaurant.id, offerId);
-    refreshTenantData();
-    showToast('info', 'تم حذف العرض الترويجي');
-  }, [currentRestaurant, refreshTenantData, showToast]);
+  const deleteOffer = useCallback(
+    (offerId: string) => {
+      if (!currentRestaurant) return;
+      void api.deleteOffer(currentRestaurant.id, offerId).then((res) => {
+        if (res.success) {
+          refreshTenantData();
+          showToast('info', 'تم حذف العرض الترويجي');
+        } else {
+          showToast('error', 'تعذر حذف العرض', res.error);
+        }
+      });
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentRestaurant, refreshTenantData, showToast]
+  );
 
   return (
     <RestaurantContext.Provider
@@ -924,7 +955,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         availableRestaurants,
         tenantsList: availableRestaurants,
         currentUser,
-        setCurrentUser,
+        setCurrentUser: authSetCurrentUser,
         checkEntitlement,
         hasEntitlement,
         viewMode,
@@ -937,9 +968,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setIsOnboardingOpen,
         soundEnabled,
         toggleSound,
-        isAutoKitchenEnabled,
-        toggleAutoKitchen,
-        resetAllDemoData,
+        refreshTenantData,
         activeTableId,
         setActiveTableId,
         currentTableSession,
@@ -990,9 +1019,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         deleteOffer,
         switchTenantBySlug,
         setCurrentTenantBySlug,
-        loginAsUser,
         logout,
-        refreshTenantData,
         toasts,
         showToast,
         dismissToast,

@@ -19,9 +19,10 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleConfirmOrder = () => {
+  const handleConfirmOrder = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
-    const result = createOrder(orderNotes);
+    const result = await createOrder(orderNotes);
     setIsSubmitting(false);
 
     if (result.success) {

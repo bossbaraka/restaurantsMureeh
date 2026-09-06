@@ -69,10 +69,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
             <span className="text-xs font-bold text-emerald-400">النظام متصل ويعمل بكفاءة عالية</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-luxury-50 font-serif">
-            مركز عمليات مطعم مِيرار الفاخر
+            مركز عمليات المطعم
           </h2>
           <p className="text-xs text-luxury-400 mt-1">
-            إدارة مباشرة لـ 50 طاولة وطلبات المطبخ اللحظية وخدمة الضيوف
+            إدارة مباشرة للطاولات وطلبات المطبخ اللحظية وخدمة الضيوف
           </p>
         </div>
 

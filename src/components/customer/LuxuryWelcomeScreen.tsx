@@ -11,8 +11,8 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
   const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '12';
-  const restName = currentRestaurant?.name || 'مطعم مِيرار الفاخر';
-  const restNameEn = currentRestaurant?.nameEn || 'MÉRAR LUXURY DINING';
+  const restName = currentRestaurant?.name || '';
+  const restNameEn = currentRestaurant?.nameEn || '';
   const coverImg = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
   const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
 
@@ -60,12 +60,18 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
       <div className="relative z-10 my-auto text-center max-w-lg space-y-6 animate-in fade-in zoom-in-95 duration-1000">
         {/* Monogram / Logo Mark */}
         <div
-          className="w-20 h-20 rounded-2xl mx-auto flex items-center justify-center text-luxury-950 font-serif font-bold text-3xl shadow-gold-glow border border-gold-400/40 transform transition-transform hover:scale-105 duration-300"
-          style={{
-            background: `linear-gradient(135deg, #FFF6DD 0%, ${primaryCol} 50%, #9C7A4A 100%)`,
-          }}
+          className="w-20 h-20 rounded-2xl mx-auto flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-3xl shadow-gold-glow border border-gold-400/40 transform transition-transform hover:scale-105 duration-300 bg-luxury-950"
+          style={
+            currentRestaurant?.logo
+              ? { background: 'transparent' }
+              : { background: `linear-gradient(135deg, #FFF6DD 0%, ${primaryCol} 50%, #9C7A4A 100%)` }
+          }
         >
-          {restNameEn.charAt(0) || 'M'}
+          {currentRestaurant?.logo ? (
+            <img src={currentRestaurant.logo} alt={restName} className="w-full h-full object-cover" />
+          ) : (
+            (restNameEn.charAt(0) || 'M')
+          )}
         </div>
 
         {/* Brand Name */}

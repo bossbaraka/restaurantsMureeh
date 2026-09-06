@@ -1,421 +1,320 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { api, resolvePublicRestaurantCatalog } from '../services/api';
-import { db } from '../services/db';
-import { SEED_USERS, SEED_RESTAURANTS, SEED_PLANS } from '../data/seedData';
-import { OrderItem, Restaurant } from '../types/restaurant';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { api, AUTH_TOKEN_KEY } from '../services/api';
 
-describe('Multi-Tenant SaaS Restaurant Platform Comprehensive Test Suite', () => {
-  beforeEach(() => {
-    db.resetToSeed();
-  });
+/**
+ * Multi-Tenant SaaS — Live API Client Contract Suite
+ * ---------------------------------------------------
+ * These tests exercise the REAL `api` client (the only data layer of the app)
+ * against a stubbed HTTP transport. They prove that:
+ *   1. every call goes to the real REST API (never a local/mock database),
+ *   2. tenant context travels in the request body + bearer JWT for the server
+ *      to enforce isolation (client has no bypass path),
+ *   3. server-side rejection (403 cross-tenant / 404 / 400) is surfaced as
+ *      `success:false` with the original statusCode — never silently replaced
+ *      by demo/local data,
+ *   4. the anonymous QR (customer) endpoints never send the manager token.
+ */
 
-  describe('1. Tenant Isolation & Security Layer', () => {
-    it('Manager of Restaurant A (MÉRAR) MUST NOT be able to view or modify Restaurant B (Lumière) stats', async () => {
-      const merarManager = SEED_USERS.find((u) => u.email === 'manager@merar-dining.com')!;
-      
-      const result = await api.getManagerDashboardStats(merarManager, 'rest-lumiere');
-      
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(403);
-      expect(result.error).toContain('غير مصرح لك بالوصول');
-    });
+// Minimal browser shims so the client code path used in the browser is tested
+// verbatim (the client only talks to the server — no localStorage DB exists).
+let store = new Map<string, string>();
+const localStorageShim = {
+  getItem: (k: string) => store.get(k) ?? null,
+  setItem: (k: string, v: string) => void store.set(k, v),
+  removeItem: (k: string) => void store.delete(k),
+  clear: () => store.clear(),
+  key: (i: number) => [...store.keys()][i] ?? null,
+  get length() {
+    return store.size;
+  },
+} as unknown as Storage;
 
-    it('Manager of Restaurant A (MÉRAR) MUST NOT be able to change order status of Restaurant B (Lumière)', async () => {
-      const merarManager = SEED_USERS.find((u) => u.email === 'manager@merar-dining.com')!;
-      
-      // Order #2001 belongs to Lumière
-      const result = await api.updateOrderStatus(merarManager, 'rest-lumiere', '#2001', 'SERVED');
-      
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(403);
-    });
+function installWindowShim() {
+  (globalThis as any).window = { localStorage: localStorageShim } as Window;
+  (globalThis as any).localStorage = localStorageShim; // browsers expose both
+}
 
-    it('Manager cannot update waiter requests of another restaurant', async () => {
-      const merarManager = SEED_USERS.find((u) => u.email === 'manager@merar-dining.com')!;
-      const result = await api.updateWaiterRequestStatus(merarManager, 'rest-lumiere', 'req-lum-99', 'RESOLVED');
-      expect(result.success).toBe(false);
-      expect(result.statusCode).toBe(403);
-    });
+type FetchCall = { url: string; init: RequestInit };
+let calls: FetchCall[] = [];
 
-    it('Platform Super Admin CAN access and manage any restaurant', async () => {
-      const superAdmin = SEED_USERS.find((u) => u.role === 'SUPER_ADMIN')!;
-      
-      const resMerar = await api.getManagerDashboardStats(superAdmin, 'rest-merar');
-      expect(resMerar.success).toBe(true);
-      expect(resMerar.data?.restaurant.id).toBe('rest-merar');
+const json = (status: number, body: unknown): Response =>
+  ({ ok: status >= 200 && status < 300, status, json: async () => body } as Response);
 
-      const resLumiere = await api.getManagerDashboardStats(superAdmin, 'rest-lumiere');
-      expect(resLumiere.success).toBe(true);
-      expect(resLumiere.data?.restaurant.id).toBe('rest-lumiere');
-    });
-  });
+beforeEach(() => {
+  store.clear();
+  installWindowShim();
+  calls = [];
+});
 
-  describe('2. Customer Order State Machine & Immutability Rules', () => {
-    it('Customer CAN cancel order while status === PENDING', async () => {
-      const cancelRes = await api.cancelOrder('rest-merar', '#1025');
-      
-      expect(cancelRes.success).toBe(true);
-      expect(cancelRes.data?.order.status).toBe('CANCELLED');
-    });
+afterEach(() => {
+  vi.unstubAllGlobals();
+  delete (globalThis as any).window;
+});
 
-    it('Customer CANNOT cancel order once status === PREPARING', async () => {
-      const cancelRes = await api.cancelOrder('rest-merar', '#1024');
-      
-      expect(cancelRes.success).toBe(false);
-      expect(cancelRes.statusCode).toBe(403);
-      expect(cancelRes.error).toContain('بدأ المطبخ بتحضير طلبك بالفعل');
-    });
+/** Records every request the client issues and answers from `handler`. */
+function mockServer(
+  handler: (call: FetchCall) => Response | Promise<Response>
+) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init: RequestInit) => {
+      const call = { url: String(url), init: init || {} };
+      calls.push(call);
+      return handler(call);
+    })
+  );
+}
 
-    it('Customer CANNOT cancel order once status === READY or SERVED', async () => {
-      const cancelRes = await api.cancelOrder('rest-merar', '#1022');
-      expect(cancelRes.success).toBe(false);
-      expect(cancelRes.statusCode).toBe(403);
-    });
+const lastCall = () => calls[calls.length - 1];
+const header = (c: FetchCall, name: string) =>
+  ((c.init.headers as Record<string, string>) || {})[name];
+const parsedBody = (c: FetchCall) => JSON.parse(String(c.init.body));
 
-    it('Customer CAN edit notes only while status === PENDING', async () => {
-      const editPending = await api.updateOrderNotes('rest-merar', '#1025', 'ملاحظة جديدة إضافية');
-      expect(editPending.success).toBe(true);
+// Realistic server row envelopes (shapes returned by Express + Prisma).
+const restaurantRow = { id: 'rest-merar', name: 'مطعم مِيرار الفاخر', nameEn: 'MÉRAR', slug: 'merar', status: 'ACTIVE', currency: '₪', planId: 'plan-pro', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' };
+const userRow = { id: 'user-manager-1', restaurantId: 'rest-merar', name: 'عمر القاسم', email: 'manager@merar-dining.com', role: 'RESTAURANT_MANAGER' };
 
-      const editPreparing = await api.updateOrderNotes('rest-merar', '#1024', 'ملاحظة متأخرة');
-      expect(editPreparing.success).toBe(false);
-      expect(editPreparing.statusCode).toBe(403);
-    });
-  });
-
-  describe('3. Public Tenant Scoping & Menu Isolation', () => {
-    it('Customer opening a MÉRAR QR link gets ONLY MÉRAR dishes', async () => {
-      const qrToken = db.getTables('rest-merar')[0].qrToken!;
-      const res = await api.getPublicRestaurantBySlug('merar', qrToken);
-      
-      expect(res.success).toBe(true);
-      expect(res.data?.restaurant.name).toBe('مطعم مِيرار الفاخر');
-      
-      const products = res.data?.products || [];
-      expect(products.length).toBeGreaterThan(0);
-      products.forEach((p) => {
-        expect(p.restaurantId).toBe('rest-merar');
+describe('Multi-Tenant SaaS — Live API Client Contract Suite', () => {
+  describe('1. Real-API-only data path (no local DB / no demo fallback)', () => {
+    it('login posts credentials to /api/auth/login and persists the returned JWT', async () => {
+      mockServer((c) => {
+        if (c.url.endsWith('/api/auth/login')) {
+          return json(200, { success: true, data: { token: 'jwt-abc', user: userRow, restaurant: restaurantRow }, statusCode: 200 });
+        }
+        return json(500, { success: false, error: 'unexpected', statusCode: 500 });
       });
-    });
 
-    it('Customer opening a LUMIÈRE QR link gets ONLY French dishes', async () => {
-      const qrToken = db.getTables('rest-lumiere')[0].qrToken!;
-      const res = await api.getPublicRestaurantBySlug('lumiere', qrToken);
-      
+      const res = await api.login('manager@merar-dining.com', 'Secret123!');
       expect(res.success).toBe(true);
-      expect(res.data?.restaurant.name).toBe('بيسترو لوميير الفرنسي');
-      
-      const products = res.data?.products || [];
-      expect(products.some((p) => p.name.includes('حلزون بورغوني') || p.name.includes('ستيك فريت'))).toBe(true);
-      products.forEach((p) => {
-        expect(p.restaurantId).toBe('rest-lumiere');
-      });
+
+      const call = lastCall();
+      expect(call.url).toBe('http://localhost:3001/api/auth/login');
+      expect(call.init.method).toBe('POST');
+      expect(header(call, 'Authorization')).toBeUndefined(); // login is pre-auth
+      expect(parsedBody(call)).toEqual({ email: 'manager@merar-dining.com', password: 'Secret123!' });
+      expect(store.get(AUTH_TOKEN_KEY)).toBe('jwt-abc');
     });
 
-    it('Rejects a public catalog request without a QR token', async () => {
+    it('manager dashboard stats request carries the bearer JWT and the tenant id in the body', async () => {
+      store.set(AUTH_TOKEN_KEY, 'jwt-abc');
+      mockServer(() =>
+        json(200, { success: true, data: { restaurant: restaurantRow, orders: [], payments: [], tables: [], kpis: {} }, statusCode: 200 })
+      );
+
+      const user = { ...userRow, role: 'RESTAURANT_MANAGER' } as any;
+      const res = await api.getManagerDashboardStats(user, 'rest-merar');
+      expect(res.success).toBe(true);
+
+      const call = lastCall();
+      expect(call.url).toBe('http://localhost:3001/api/manager/dashboard/stats?restaurantId=rest-merar');
+      expect(call.init.method).toBe('GET');
+      expect(header(call, 'Authorization')).toBe('Bearer jwt-abc');
+    });
+
+    it('a cross-tenant 403 from the server is surfaced — the client never falls back to local data', async () => {
+      store.set(AUTH_TOKEN_KEY, 'jwt-abc');
+      mockServer(() =>
+        json(403, { success: false, error: 'غير مصرح لك بالوصول إلى بيانات هذا المطعم', statusCode: 403 })
+      );
+
+      const user = { ...userRow, role: 'RESTAURANT_MANAGER' } as any;
+      const res = await api.getManagerDashboardStats(user, 'rest-lumiere');
+
+      expect(res.success).toBe(false);
+      expect(res.statusCode).toBe(403);
+      expect(res.error).toContain('غير مصرح');
+      expect(res.data).toBeUndefined();
+      expect(lastCall().url).toContain('restaurantId=rest-lumiere');
+    });
+
+    it('onboarding sends the full tenant payload (manager credentials + empty products) to the platform endpoint', async () => {
+      store.set(AUTH_TOKEN_KEY, 'jwt-platform');
+      mockServer(() =>
+        json(201, { success: true, data: { restaurant: restaurantRow }, statusCode: 201 })
+      );
+
+      const payload = {
+        name: 'مطعم مِيرار الفاخر',
+        slug: 'merar',
+        managerEmail: 'manager@merar.com',
+        managerPassword: 'SecurePass1',
+        tablesCount: 20,
+        categories: [],
+        products: [],
+      };
+      const res = await api.onboardRestaurant(payload);
+      expect(res.success).toBe(true);
+
+      const call = lastCall();
+      expect(call.url).toBe('http://localhost:3001/api/admin/onboard-restaurant');
+      const body = parsedBody(call);
+      expect(body.slug).toBe('merar');
+      expect(body.managerEmail).toBe('manager@merar.com');
+      expect(body.managerPassword).toBe('SecurePass1');
+      expect(Array.isArray(body.products)).toBe(true);
+      expect(body.products).toHaveLength(0);
+    });
+
+    it('no demo/localStorage database key is ever touched during a full manager flow', async () => {
+      store.set(AUTH_TOKEN_KEY, 'jwt-abc');
+      const writes: string[] = [];
+      const origSet = localStorageShim.setItem.bind(localStorageShim);
+      vi.spyOn(localStorageShim, 'setItem').mockImplementation((k: string, v: string) => {
+        writes.push(String(k));
+        return origSet(String(k), String(v));
+      });
+
+      mockServer(() => json(200, { success: true, data: [], statusCode: 200 }));
+      await api.getManagerOrders('rest-merar');
+      await api.getManagerTables('rest-merar');
+
+      expect(writes.filter((k) => /demo|seed|db/i.test(k))).toEqual([]);
+      expect(store.size).toBe(1); // only the auth token
+    });
+  });
+
+  describe('2. Anonymous QR customer endpoints — tenant scoping & no-token calls', () => {
+    it('public catalog request includes qrToken, sends NO manager token, and maps rows back typed', async () => {
+      store.set(AUTH_TOKEN_KEY, 'jwt-abc'); // must NOT be sent on public routes
+      mockServer(() =>
+        json(200, {
+          success: true,
+          data: {
+            restaurant: restaurantRow,
+            categories: [{ id: 'cat-1', restaurantId: 'rest-merar', name: 'الأطباق الرئيسية', sortOrder: 1 }],
+            products: [{ id: 'prod-1', restaurantId: 'rest-merar', categoryId: 'cat-1', name: 'تندرلوين', price: 135, isAvailable: true }],
+            offers: [],
+          },
+          statusCode: 200,
+        })
+      );
+
+      const res = await api.getPublicRestaurantBySlug('merar', 'qr-secure-1');
+      expect(res.success).toBe(true);
+      expect(res.data?.restaurant.id).toBe('rest-merar');
+      expect(res.data?.products.every((p) => p.restaurantId === 'rest-merar')).toBe(true);
+      expect(res.data?.products[0].price).toBe(135);
+
+      const call = lastCall();
+      expect(call.url).toContain('/api/public/restaurants/merar?qrToken=qr-secure-1');
+      expect(header(call, 'Authorization')).toBeUndefined();
+    });
+
+    it('missing/empty QR token is still sent to the server — a 403 comes back, with no local menu substituted', async () => {
+      mockServer(() =>
+        json(403, { success: false, error: 'رمز QR غير صالح أو منتهي الصلاحية', statusCode: 403 })
+      );
+
       const res = await api.getPublicRestaurantBySlug('merar');
       expect(res.success).toBe(false);
       expect(res.statusCode).toBe(403);
+      expect(res.data).toBeUndefined();
     });
 
-    it('Prefers live API catalog data over the demo fallback when the backend responds successfully', async () => {
-      const livePayload = {
-        success: true,
-        data: {
-          restaurant: {
-            id: 'rest-live',
-            name: 'مطعم حي',
-            nameEn: 'Live Restaurant',
-            slug: 'live',
-            logo: '',
-            description: 'live',
-            phone: '',
-            address: '',
-            currency: '₪',
-            language: 'ar',
-            timezone: 'Asia/Jerusalem',
-            status: 'ACTIVE',
-            primaryColor: '#D4AF37',
-            accentColor: '#C5A880',
-            planId: 'plan-pro',
-            createdAt: '2024-01-01T00:00:00.000Z',
-            updatedAt: '2024-01-01T00:00:00.000Z',
-          },
-          categories: [{ id: 'cat-live', restaurantId: 'rest-live', name: 'المشروبات', nameEn: 'Drinks', sortOrder: 1 }],
-          products: [{
-            id: 'prod-live',
-            restaurantId: 'rest-live',
-            categoryId: 'cat-live',
-            name: 'قهوة عربية',
-            nameEn: 'Arabic Coffee',
-            description: 'قهوة عربية',
-            price: 18,
-            image: '',
-            isAvailable: true,
-          }],
-          offers: [],
-        },
-        statusCode: 200,
-      };
+    it('unknown tenant slug returns 404 from the API layer', async () => {
+      mockServer(() => json(404, { success: false, error: 'المطعم غير موجود', statusCode: 404 }));
 
-      const fallback = vi.fn(async (): Promise<any> => ({
-        success: true,
-        data: {
-          restaurant: {
-            id: 'rest-demo',
-            name: 'مطعم تجريبي',
-            nameEn: 'Demo Restaurant',
-            slug: 'demo',
-            logo: '',
-            description: 'demo',
-            phone: '',
-            address: '',
-            currency: '₪',
-            language: 'ar' as const,
-            timezone: 'Asia/Jerusalem',
-            status: 'ACTIVE' as const,
-            primaryColor: '#D4AF37',
-            accentColor: '#C5A880',
-            planId: 'plan-pro',
-            createdAt: '2024-01-01T00:00:00.000Z',
-            updatedAt: '2024-01-01T00:00:00.000Z',
-          },
-          categories: [],
-          products: [],
-          offers: [],
-        },
-        statusCode: 200,
-      }));
-
-      const result = await resolvePublicRestaurantCatalog('live', async () => ({
-        ok: true,
-        status: 200,
-        json: async () => livePayload,
-      } as Response), fallback, true);
-
-      expect(result).toEqual(livePayload);
-      expect(fallback).not.toHaveBeenCalled();
-    });
-
-    it('Requesting non-existent slug returns 404', async () => {
-      const res = await api.getPublicRestaurantBySlug('unknown-ghost-slug-999');
+      const res = await api.getPublicRestaurantBySlug('ghost-slug-42', 'qr-x');
       expect(res.success).toBe(false);
       expect(res.statusCode).toBe(404);
     });
-  });
 
-  describe('4. Subscriptions & Feature Entitlements Engine', () => {
-    it('Pro plan has CAN_USE_ANALYTICS and CAN_CUSTOM_BRANDING', async () => {
-      const hasAnalytics = await api.checkEntitlement('rest-merar', 'CAN_USE_ANALYTICS');
-      const hasBranding = await api.checkEntitlement('rest-merar', 'CAN_CUSTOM_BRANDING');
-      expect(hasAnalytics).toBe(true);
-      expect(hasBranding).toBe(true);
-    });
+    it('submitOrder posts session-bound items to /public/orders and returns the server-repriced order', async () => {
+      mockServer(() =>
+        json(201, {
+          success: true,
+          data: {
+            order: {
+              id: '#1050', numericId: 1050, restaurantId: 'rest-merar', tableId: 'rest-merar-T01',
+              status: 'PENDING', subtotal: 135, total: 135, paymentStatus: 'UNPAID',
+              createdAt: '2026-09-06T10:00:00.000Z', updatedAt: '2026-09-06T10:00:00.000Z',
+              items: [{ productId: 'prod-1', productNameSnapshot: 'تندرلوين', priceSnapshot: 135, quantity: 1, totalPrice: 135 }],
+            },
+          },
+          statusCode: 201,
+        })
+      );
 
-    it('Starter plan does NOT have CAN_USE_ANALYTICS or CAN_CREATE_BRANCH', async () => {
-      const hasAnalytics = await api.checkEntitlement('rest-alnakheel', 'CAN_USE_ANALYTICS');
-      const hasBranch = await api.checkEntitlement('rest-alnakheel', 'CAN_CREATE_BRANCH');
-      expect(hasAnalytics).toBe(false);
-      expect(hasBranch).toBe(false);
-    });
-
-    it('Enterprise plan has all entitlements including CAN_USE_CUSTOM_DOMAIN and CAN_UNLIMITED_TABLES', async () => {
-      const hasCustomDomain = await api.checkEntitlement('rest-lumiere', 'CAN_USE_CUSTOM_DOMAIN');
-      const hasUnlimited = await api.checkEntitlement('rest-lumiere', 'CAN_UNLIMITED_TABLES');
-      expect(hasCustomDomain).toBe(true);
-      expect(hasUnlimited).toBe(true);
-    });
-  });
-
-  describe('5. Table Ordering & Multi-Order Aggregation Flow', () => {
-    it('Customer can submit multiple order rounds on Table 01 and they aggregate under same table session', async () => {
-      // 1. Get or create session for Table 01
-      const sessionRes = await api.getOrCreateTableSession('rest-merar', 'TABLE-01');
-      expect(sessionRes.success).toBe(true);
-      const sessionToken = sessionRes.data?.sessionToken!;
-      expect(sessionToken).toBeDefined();
-
-      // 2. Submit Round 1
-      const sampleItem1: OrderItem = {
-        id: 'item-1',
-        productId: 'prod-sig-1',
-        name: 'تندرلوين بلاك أنغوس المعتق بالترفل',
-        nameEn: 'Aged Black Angus Tenderloin',
-        unitPrice: 135,
-        quantity: 1,
-        totalPrice: 135,
-        selectedAddOns: [],
-        removedIngredients: [],
-      };
-
-      const order1Res = await api.submitOrder({
+      const res = await api.submitOrder({
         restaurantId: 'rest-merar',
-        tableId: 'TABLE-01',
-        sessionToken: sessionToken,
-        items: [sampleItem1],
-        notes: 'الاستواء وسط',
+        tableId: 'rest-merar-T01',
+        sessionToken: 'sess-token-1',
+        items: [{ id: '', productId: 'prod-1', quantity: 1, unitPrice: 50, totalPrice: 50 } as any],
       });
 
-      expect(order1Res.success).toBe(true);
-      expect(order1Res.data?.order.total).toBe(135);
+      expect(res.success).toBe(true);
+      expect(res.data?.order.total).toBe(135); // server price wins, not the client-sent 50
 
-      // 3. Submit Round 2 on the same table
-      const sampleItem2: OrderItem = {
-        id: 'item-2',
-        productId: 'prod-des-1',
-        name: 'فوندو الشوكولاتة البلجيكية الداكنة',
-        nameEn: 'Dark Chocolate Fondant',
-        unitPrice: 42,
-        quantity: 2,
-        totalPrice: 84,
-        selectedAddOns: [],
-        removedIngredients: [],
-      };
+      const call = lastCall();
+      expect(call.url).toBe('http://localhost:3001/api/public/orders');
+      const body = parsedBody(call);
+      expect(body.restaurantId).toBe('rest-merar');
+      expect(body.tableId).toBe('rest-merar-T01');
+      expect(body.sessionToken).toBe('sess-token-1');
+      expect(header(call, 'Authorization')).toBeUndefined();
+    });
 
-      const order2Res = await api.submitOrder({
-        restaurantId: 'rest-merar',
-        tableId: 'TABLE-01',
-        sessionToken: sessionToken,
-        items: [sampleItem2],
-        notes: 'تقديم بعد العشاء',
+    it('customer cancel of a PREPARING order is refused by the API and surfaced (state machine is server-side)', async () => {
+      mockServer(() =>
+        json(403, { success: false, error: 'بدأ المطبخ بتحضير طلبك بالفعل، لا يمكن إلغاؤه الآن', statusCode: 403 })
+      );
+
+      const res = await api.cancelOrder('rest-merar', '#1024', 'sess-token-1');
+      expect(res.success).toBe(false);
+      expect(res.statusCode).toBe(403);
+      expect(res.error).toContain('بدأ المطبخ');
+    });
+  });
+
+  describe('3. Resilient failure handling — no fabricated data', () => {
+    it('server being unreachable yields a 503 failure (never demo rows)', async () => {
+      mockServer(() => {
+        throw new Error('ECONNREFUSED');
       });
 
-      expect(order2Res.success).toBe(true);
-      expect(order2Res.data?.order.total).toBe(84);
-
-      // 4. Verify Table status updated to OCCUPIED and contains active orders
-      const updatedTable = db.getTableById('rest-merar', 'TABLE-01');
-      expect(updatedTable?.status).toBe('OCCUPIED');
-      expect(updatedTable?.activeOrderIds.length).toBeGreaterThanOrEqual(1);
+      const res = await api.getManagerOrders('rest-merar');
+      expect(res.success).toBe(false);
+      expect(res.statusCode).toBe(503);
+      expect(res.data).toBeUndefined();
     });
 
-    it('Cashier bill request changes table status to BILL_REQUESTED', async () => {
-      const reqRes = await api.requestBill('rest-merar', 'TABLE-01');
-      expect(reqRes.success).toBe(true);
-      
-      const table = db.getTableById('rest-merar', 'TABLE-01');
-      expect(table?.status).toBe('BILL_REQUESTED');
-    });
-
-    it('Manager can settle table bill and reset table status to AVAILABLE', async () => {
-      const merarManager = SEED_USERS.find((u) => u.email === 'manager@merar-dining.com')!;
-      
-      const settleRes = await api.settleTableBill(merarManager, 'rest-merar', 'TABLE-01');
-      expect(settleRes.success).toBe(true);
-
-      const table = db.getTableById('rest-merar', 'TABLE-01');
-      expect(table?.status).toBe('AVAILABLE');
-      expect(table?.activeOrderIds.length).toBe(0);
+    it('non-JSON server error is mapped to a clean failure envelope', async () => {
+      mockServer(() => ({ ok: false, status: 500, json: async () => null } as Response));
+      const res = await api.getManagerOrders('rest-merar');
+      expect(res.success).toBe(false);
+      expect(res.data).toBeUndefined();
     });
   });
 
-  describe('6. Waiter Calling Service & Resolution', () => {
-    it('Customer can call waiter to Table 25 and Manager can resolve it', async () => {
-      const merarManager = SEED_USERS.find((u) => u.email === 'manager@merar-dining.com')!;
-      
-      const callRes = await api.callWaiter({
-        restaurantId: 'rest-merar',
-        tableId: 'TABLE-25',
-        reason: 'WATER_REFILL',
-        note: 'ماء غازي بارد',
-      });
+  describe('4. Manager operational calls carry tenant context', () => {
+    it('orders list endpoint receives the tenant id and maps server rows', async () => {
+      store.set(AUTH_TOKEN_KEY, 'jwt-abc');
+      mockServer(() =>
+        json(200, {
+          success: true,
+          data: [{ id: '#2001', numericId: 2001, restaurantId: 'rest-merar', tableId: 'rest-merar-T05', status: 'PENDING', subtotal: 85, total: 85, paymentStatus: 'UNPAID', createdAt: '2026-09-06T08:00:00.000Z', updatedAt: '2026-09-06T08:00:00.000Z', items: [] }],
+          statusCode: 200,
+        })
+      );
 
-      expect(callRes.success).toBe(true);
-      expect(callRes.data?.waiterRequest.reason).toBe('WATER_REFILL');
-      const reqId = callRes.data?.waiterRequest.id!;
-
-      // Manager acknowledges request
-      const ackRes = await api.updateWaiterRequestStatus(merarManager, 'rest-merar', reqId, 'ACKNOWLEDGED');
-      expect(ackRes.success).toBe(true);
-      expect(ackRes.data?.request.status).toBe('ACKNOWLEDGED');
-
-      // Manager resolves request
-      const resolveRes = await api.updateWaiterRequestStatus(merarManager, 'rest-merar', reqId, 'RESOLVED');
-      expect(resolveRes.success).toBe(true);
-      expect(resolveRes.data?.request.status).toBe('RESOLVED');
-    });
-  });
-
-  describe('7. Platform Admin Restaurant Management & Suspension', () => {
-    it('Platform Admin can suspend a restaurant preventing customer access', async () => {
-      const superAdmin = SEED_USERS.find((u) => u.role === 'SUPER_ADMIN')!;
-
-      // Suspend Al Nakheel
-      const suspendRes = await api.toggleRestaurantStatus(superAdmin, 'rest-alnakheel', 'SUSPENDED');
-      expect(suspendRes.success).toBe(true);
-      expect(suspendRes.data?.restaurant.status).toBe('SUSPENDED');
-
-      // Check public access is rejected with 403
-      const pubRes = await api.getPublicRestaurantBySlug('alnakheel');
-      expect(pubRes.success).toBe(false);
-      expect(pubRes.statusCode).toBe(403);
-      expect(pubRes.error).toContain('هذا المطعم غير متاح');
-
-      // Re-activate
-      const activateRes = await api.toggleRestaurantStatus(superAdmin, 'rest-alnakheel', 'ACTIVE');
-      expect(activateRes.success).toBe(true);
-      expect(activateRes.data?.restaurant.status).toBe('ACTIVE');
-
-      const qrToken = db.getTables('rest-alnakheel')[0].qrToken!;
-      const pubResActive = await api.getPublicRestaurantBySlug('alnakheel', qrToken);
-      expect(pubResActive.success).toBe(true);
-      expect(pubResActive.data?.restaurant.status).toBe('ACTIVE');
+      const res = await api.getManagerOrders('rest-merar');
+      expect(res.success).toBe(true);
+      expect(res.data?.[0].id).toBe('#2001');
+      expect(res.data?.[0].restaurantId).toBe('rest-merar');
+      expect(lastCall().url).toBe('http://localhost:3001/api/manager/orders?restaurantId=rest-merar');
+      expect(lastCall().init.method).toBe('GET');
+      expect(header(lastCall(), 'Authorization')).toBe('Bearer jwt-abc');
     });
 
-    it('Platform Super Admin can view global overview of all tenants', async () => {
-      const superAdmin = SEED_USERS.find((u) => u.role === 'SUPER_ADMIN')!;
-      const overviewRes = await api.getPlatformOverview(superAdmin);
-      expect(overviewRes.success).toBe(true);
-      expect(overviewRes.data?.totalRestaurants).toBeGreaterThanOrEqual(3);
-      expect(overviewRes.data?.plans.length).toBe(3);
-    });
-  });
+    it('table settle targets the manager endpoint of the owning tenant', async () => {
+      store.set(AUTH_TOKEN_KEY, 'jwt-abc');
+      mockServer(() => json(200, { success: true, data: { message: 'settled' }, statusCode: 200 }));
 
-  describe('8. Menu Product Management & Stock Control', () => {
-    it('Manager can toggle out-of-stock and update product pricing', async () => {
-      const merarManager = SEED_USERS.find((u) => u.email === 'manager@merar-dining.com')!;
-      
-      const product = db.getProductById('rest-merar', 'prod-sig-1')!;
-      expect(product).toBeDefined();
-      expect(product.isAvailable).toBe(true);
-
-      // Toggle unavailable
-      const updatedProduct = { ...product, isAvailable: false };
-      const saveRes = await api.saveProduct(merarManager, 'rest-merar', updatedProduct);
-      expect(saveRes.success).toBe(true);
-      expect(saveRes.data?.product.isAvailable).toBe(false);
-
-      // Verify db persistence
-      const recheck = db.getProductById('rest-merar', 'prod-sig-1');
-      expect(recheck?.isAvailable).toBe(false);
-    });
-  });
-
-  describe('9. Tenant Onboarding & Entity Registration', () => {
-    it('Allows creating a new restaurant tenant and provisioning tables', () => {
-      const newRest: Restaurant = {
-        id: 'rest-casablanca',
-        name: 'دار كازابلانكا المغربي',
-        nameEn: 'Dar Casablanca Moroccan Lounge',
-        slug: 'casablanca',
-        logo: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=200&q=80',
-        description: 'طواجن مغربية أصلية وشاي بالنعناع',
-        phone: '+970 599 777 888',
-        address: 'حي الدبلوماسيين',
-        currency: '₪',
-        language: 'ar',
-        timezone: 'Asia/Jerusalem',
-        status: 'ACTIVE',
-        primaryColor: '#D4AF37',
-        accentColor: '#C5A880',
-        planId: 'plan-starter',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-
-      db.saveRestaurant(newRest);
-      const saved = db.getRestaurantById('rest-casablanca');
-      expect(saved?.name).toBe('دار كازابلانكا المغربي');
-      expect(saved?.slug).toBe('casablanca');
+      const user = { ...userRow, role: 'RESTAURANT_MANAGER' } as any;
+      const res = await api.settleTableBill(user, 'rest-merar', 'rest-merar-T01');
+      expect(res.success).toBe(true);
+      expect(lastCall().url).toContain('/api/manager/tables/rest-merar-T01/settle');
+      expect(parsedBody(lastCall()).restaurantId).toBe('rest-merar');
     });
   });
 });

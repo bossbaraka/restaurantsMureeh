@@ -9,7 +9,7 @@ export const CustomerHero: React.FC = () => {
   const activeOffers = offers.filter((o) => o.isActive);
 
   const heroImage = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
-  const restName = currentRestaurant?.name || 'مطعم مِيرار الفاخر';
+  const restName = currentRestaurant?.name || '';
   const restDesc = currentRestaurant?.description || 'مأكولات استثنائية محضرة بأيدي نخبة الطهاة بأرقى المكونات المعتقة.';
 
   return (

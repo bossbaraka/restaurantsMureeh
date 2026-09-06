@@ -86,6 +86,7 @@ router.post('/login', async (req: Request, res: Response) => {
           email: user.email,
           role: user.role,
           avatar: user.avatar,
+          createdAt: user.createdAt,
         },
         restaurant: user.restaurant,
         token,
@@ -147,6 +148,87 @@ router.post('/logout', requireAuth, async (req: Request, res: Response) => {
     });
   }
   return res.json({ success: true, message: 'تم تسجيل الخروج بنجاح', statusCode: 200 });
+});
+
+
+// POST /api/auth/pin — Staff PIN login (real, DB-backed)
+router.post('/pin', async (req: Request, res: Response) => {
+  try {
+    const { pin, restaurantId } = req.body || {};
+    if (!pin || typeof pin !== 'string' || pin.length < 4 || pin.length > 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'يرجى إدخال رمز PIN صحيح (4-10 أرقام)',
+        statusCode: 400,
+      });
+    }
+
+    const where = restaurantId
+      ? { restaurantId: String(restaurantId) }
+      : { restaurantId: { not: null } };
+
+    const candidates = await prisma.restaurantUser.findMany({
+      where: {
+        ...where,
+        status: 'ACTIVE',
+        pinHash: { not: null },
+        restaurant: { status: 'ACTIVE' },
+      },
+      include: { restaurant: true },
+    });
+
+    const user = candidates.find((u) => u.pinHash && bcrypt.compareSync(pin, u.pinHash));
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'رمز PIN غير صحيح. يرجى مراجعة مدير المطعم.',
+        statusCode: 401,
+      });
+    }
+
+    const token = signToken({
+      id: user.id,
+      restaurantId: user.restaurantId,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+    });
+
+    await logAuditEvent({
+      restaurantId: user.restaurantId,
+      userId: user.id,
+      actor: user.name,
+      actorRole: user.role,
+      action: 'STAFF_PIN_LOGIN',
+      details: `تسجيل دخول ناجح برمز PIN للمستخدم ${user.name} (${user.email})`,
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        user: {
+          id: user.id,
+          restaurantId: user.restaurantId,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          avatar: user.avatar,
+          createdAt: user.createdAt,
+        },
+        restaurant: user.restaurant,
+        token,
+      },
+      statusCode: 200,
+    });
+  } catch (err) {
+    console.error('PIN login error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'حدث خطأ في الخادم أثناء تسجيل الدخول برمز PIN',
+      statusCode: 500,
+    });
+  }
 });
 
 // POST /api/auth/password-reset-request
