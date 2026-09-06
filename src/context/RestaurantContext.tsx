@@ -355,14 +355,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       urlHandledRef.done = true;
       const targetToken = qrToken || 'default';
 
-      api.createTableSession(targetToken).then((sessionRes) => {
+      api.createTableSession(targetToken, slug).then((sessionRes) => {
         if (sessionRes.success && sessionRes.data) {
           setCurrentRestaurant(sessionRes.data.restaurant);
           setActiveTableId(sessionRes.data.table.id);
           setCurrentTableSession(sessionRes.data.session);
           setViewMode('CUSTOMER');
 
-          api.getPublicRestaurantBySlug(slug, sessionRes.data.table.qrToken || targetToken).then((catalogRes) => {
+          const cleanQr = sessionRes.data.table.qrToken || (targetToken !== 'default' ? targetToken : undefined);
+          api.getPublicRestaurantBySlug(slug, cleanQr).then((catalogRes) => {
             if (catalogRes.success && catalogRes.data) {
               setCategories(catalogRes.data.categories);
               setProducts(catalogRes.data.products);

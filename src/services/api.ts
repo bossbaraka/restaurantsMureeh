@@ -470,9 +470,11 @@ class RestaurantApiService {
     products: Product[];
     offers: Offer[];
   }>> {
+    const cleanQr = (qrToken && qrToken.toLowerCase() !== 'default') ? qrToken : '';
+    const query = cleanQr ? `?qrToken=${encodeURIComponent(cleanQr)}` : '';
     const res = await this.request<any>(
       'GET',
-      `/public/restaurants/${encodeURIComponent(slug)}?qrToken=${encodeURIComponent(qrToken || '')}`,
+      `/public/restaurants/${encodeURIComponent(slug)}${query}`,
       { auth: false }
     );
     if (res.success && res.data) {
@@ -507,8 +509,15 @@ class RestaurantApiService {
   }
 
   // Create anonymous table session from a valid physical QR code.
-  public async createTableSession(qrToken: string): Promise<ApiResponse<{ session: TableSession; table: RestaurantTable; restaurant: Restaurant }>> {
-    const res = await this.request<any>('POST', `/public/tables/qr/${encodeURIComponent(qrToken)}/session`, { auth: false });
+  public async createTableSession(
+    qrToken: string,
+    slug?: string,
+    restaurantId?: string
+  ): Promise<ApiResponse<{ session: TableSession; table: RestaurantTable; restaurant: Restaurant }>> {
+    const res = await this.request<any>('POST', `/public/tables/qr/${encodeURIComponent(qrToken)}/session`, {
+      auth: false,
+      body: { slug, restaurantId },
+    });
     if (res.success && res.data) {
       const restaurant = mapRestaurantRow({ ...res.data.restaurant, logoUrl: res.data.restaurant.logo, nameEn: res.data.restaurant.nameEn });
       const table = mapTableRow({ id: res.data.tableId, restaurantId: restaurant.id, number: res.data.tableNumber });
