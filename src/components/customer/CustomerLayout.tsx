@@ -18,6 +18,15 @@ import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 export const CustomerLayout: React.FC = () => {
   const { products, categories, selectedCategoryId, searchQuery, addToCart, currentRestaurant, activeTableId, setViewMode } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined' || !currentRestaurant) return;
+    const primary = currentRestaurant.primaryColor || '#D4AF37';
+    const accent = currentRestaurant.accentColor || '#C5A880';
+    document.documentElement.style.setProperty('--brand-primary', primary);
+    document.documentElement.style.setProperty('--brand-accent', accent);
+  }, [currentRestaurant?.primaryColor, currentRestaurant?.accentColor]);
+
   const [showWelcome, setShowWelcome] = useState<boolean>(() => {
     // Show welcome screen initially once per session
     if (typeof window !== 'undefined') {
