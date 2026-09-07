@@ -102,7 +102,8 @@ export const BrandingSettingsView: React.FC = () => {
       setPrimaryColor(currentRestaurant.primaryColor || '#D4AF37');
       setAccentColor(currentRestaurant.accentColor || '#C5A880');
     }
-  }, [currentRestaurant]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRestaurant?.id]);
 
   if (!currentRestaurant) return null;
 
