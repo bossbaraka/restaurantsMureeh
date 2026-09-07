@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { Sparkles, ArrowLeft, UtensilsCrossed, MessageCircle, QrCode, ShieldCheck, PhoneCall, Award } from 'lucide-react';
+import { Sparkles, ArrowLeft, UtensilsCrossed, MessageCircle, QrCode, ShieldCheck, PhoneCall, Award, ChefHat, Clock, Zap, CheckCircle2 } from 'lucide-react';
 
 interface LuxuryWelcomeScreenProps {
   onDismiss: () => void;
@@ -33,34 +33,34 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
       }`}
       dir="rtl"
     >
-      {/* Background Cinematic Food Photography with Ambient Light Rays */}
+      {/* Background Cinematic Food Photography with Ambient SaaS Light Rays */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <img
           src={coverImg}
           alt={restName}
-          className="w-full h-full object-cover object-center opacity-30 filter blur-[3px] scale-110 transform animate-pulse duration-10000"
+          className="w-full h-full object-cover object-center opacity-25 filter blur-[2px] scale-110 transform animate-pulse duration-10000"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/90 to-[#050608]/75" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/90 to-[#050608]/80" />
         <div
-          className="absolute inset-0 opacity-20"
+          className="absolute inset-0 opacity-25"
           style={{
-            background: `radial-gradient(ellipse at top, ${primaryCol} 0%, transparent 70%)`,
+            background: `radial-gradient(circle at 50% 20%, ${primaryCol} 0%, transparent 65%)`,
           }}
         />
       </div>
 
-      {/* Top Header Bar with Platform Badge */}
-      <div className="relative z-10 w-full max-w-lg flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-4 duration-700">
+      {/* Top SaaS Header Bar */}
+      <div className="relative z-10 w-full max-w-xl flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-4 duration-700">
         <div
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-luxury-900/90 border backdrop-blur-md shadow-lg"
-          style={{ borderColor: `${primaryCol}40`, color: primaryCol }}
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-luxury-900/90 border backdrop-blur-xl shadow-2xl"
+          style={{ borderColor: `${primaryCol}50`, color: primaryCol }}
         >
-          <Sparkles className="w-3.5 h-3.5 animate-spin" />
-          <span className="font-bold">منصة مريح MUREEH · الخدمة الذكية</span>
+          <Sparkles className="w-4 h-4 animate-spin text-gold-400" />
+          <span className="font-bold tracking-wide">منصة مريح MUREEH · SaaS Showcase</span>
         </div>
 
         {activeTableId ? (
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-xs backdrop-blur-md">
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-950/90 border border-emerald-500/50 text-emerald-300 font-mono text-xs backdrop-blur-xl shadow-lg">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             <span className="font-bold">طاولة {tableNumStr}</span>
           </div>
@@ -72,18 +72,18 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
         )}
       </div>
 
-      {/* Main Creative Welcome Hero Box */}
-      <div className="relative z-10 my-auto text-center max-w-md w-full space-y-6 animate-in fade-in zoom-in-95 duration-1000 py-6">
+      {/* Main SaaS Welcome Showcase Hero */}
+      <div className="relative z-10 my-auto text-center max-w-xl w-full space-y-6 animate-in fade-in zoom-in-95 duration-700 py-4">
         {/* Glowing Monogram Logo */}
         <div className="relative inline-block group">
           <div
-            className="absolute -inset-1 rounded-3xl opacity-70 blur-lg group-hover:opacity-100 transition duration-500 animate-pulse"
+            className="absolute -inset-1.5 rounded-3xl opacity-75 blur-xl group-hover:opacity-100 transition duration-500 animate-pulse"
             style={{ background: `linear-gradient(135deg, ${primaryCol}, ${accentCol})` }}
           />
           <div
-            className="relative w-24 h-24 rounded-3xl mx-auto flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-extrabold text-4xl shadow-2xl border-2 bg-luxury-950"
+            className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-3xl mx-auto flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-extrabold text-4xl shadow-2xl border-2 bg-luxury-950"
             style={{
-              borderColor: `${primaryCol}80`,
+              borderColor: `${primaryCol}90`,
               background: currentRestaurant?.logo
                 ? '#0A0B0D'
                 : `linear-gradient(135deg, ${primaryCol}, ${accentCol})`,
@@ -97,9 +97,9 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           </div>
         </div>
 
-        {/* Restaurant Title & Subtitle */}
+        {/* Restaurant Branding Header */}
         <div className="space-y-1">
-          <h1 className="text-3xl sm:text-4xl font-black text-luxury-50 font-serif tracking-tight leading-tight drop-shadow-md">
+          <h1 className="text-3xl sm:text-5xl font-black text-luxury-50 font-serif tracking-tight leading-tight drop-shadow-md">
             {restName}
           </h1>
           <p
@@ -113,40 +113,79 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
         {/* Ornament Divider */}
         <div className="flex items-center justify-center gap-3 opacity-70">
           <div
-            className="w-16 h-[1px]"
+            className="w-20 h-[1px]"
             style={{ background: `linear-gradient(to right, transparent, ${primaryCol}, transparent)` }}
           />
           <Award className="w-4 h-4 shrink-0" style={{ color: primaryCol }} />
           <div
-            className="w-16 h-[1px]"
+            className="w-20 h-[1px]"
             style={{ background: `linear-gradient(to left, transparent, ${primaryCol}, transparent)` }}
           />
         </div>
 
-        {/* Creative Poetic Welcome Card */}
+        {/* SaaS Feature Highlights Grid Card */}
         <div
-          className="p-5 rounded-3xl bg-luxury-900/85 border backdrop-blur-xl shadow-2xl space-y-3"
-          style={{ borderColor: `${primaryCol}30` }}
+          className="p-6 rounded-3xl bg-luxury-900/90 border backdrop-blur-2xl shadow-2xl space-y-4 text-right"
+          style={{ borderColor: `${primaryCol}40` }}
         >
-          <p className="text-base sm:text-lg text-luxury-100 font-serif leading-relaxed italic font-medium">
-            «أهلاً بكم في رحاب الضيافة الاستثنائية.. طلبك يصل لطاولتك مباشرة بلمسة واحدة.»
-          </p>
-          <p className="text-xs text-luxury-300 leading-relaxed max-w-xs mx-auto">
-            تصفح أشهى الأطباق المجهزة طازجة بكل عناية، واطلب مباشرة مع متابعة حالة التحضير لحظة بلحظة.
-          </p>
+          <div className="flex items-center justify-between border-b border-luxury-800 pb-3">
+            <h3 className="text-sm font-bold text-luxury-100 font-serif flex items-center gap-2">
+              <Zap className="w-4 h-4" style={{ color: primaryCol }} />
+              <span>تجربة الخدمة الذكية المباشرة عبر المنيو</span>
+            </h3>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Live SaaS Platform
+            </span>
+          </div>
+
+          {/* 3 SaaS Feature Pillars */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3 rounded-2xl bg-luxury-950/80 border border-luxury-800 flex flex-col justify-between space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+                <ChefHat className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-luxury-100">مطبخ حي وتتبع لحظي</h4>
+                <p className="text-[10px] text-luxury-400 mt-0.5">شاهد حالة أطباقك خطوة بخطوة من التحضير للتقديم</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-luxury-950/80 border border-luxury-800 flex flex-col justify-between space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <Zap className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-luxury-100">طلب مباشر بدون تطبيق</h4>
+                <p className="text-[10px] text-luxury-400 mt-0.5">امسح الكود واطلب فوراً بلمسة واحدة</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-luxury-950/80 border border-luxury-800 flex flex-col justify-between space-y-2">
+              <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <PhoneCall className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-luxury-100">زر نادل ذكي واستدعاء</h4>
+                <p className="text-[10px] text-luxury-400 mt-0.5">استدعاء الويتر فوراً مع تحديد نوع الخدمة</p>
+              </div>
+            </div>
+          </div>
 
           {activeTableId && (
-            <div className="pt-2 border-t border-luxury-800 flex items-center justify-center gap-2 text-xs text-luxury-200">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>الجلسة مفعلة ومربوطة بـ <strong className="font-serif font-bold" style={{ color: primaryCol }}>طاولة {tableNumStr}</strong></span>
+            <div className="pt-3 border-t border-luxury-800 flex items-center justify-between text-xs text-luxury-200">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>جلسة الطاولة مفعلة: <strong className="font-serif font-bold text-emerald-300">طاولة {tableNumStr}</strong></span>
+              </div>
+              <span className="text-[11px] text-emerald-400 font-mono">● متصل بالخادم</span>
             </div>
           )}
         </div>
 
         {/* WhatsApp Contact Badge */}
-        <div className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-xs font-semibold backdrop-blur-md">
+        <div className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs font-semibold backdrop-blur-md shadow-lg">
           <MessageCircle className="w-4 h-4 text-emerald-400 animate-bounce" />
-          <span>للتواصل والدعم عبر واتساب:</span>
+          <span>للتواصل والدعم الفني عبر واتساب:</span>
           <a
             href={whatsappUrl}
             target="_blank"
@@ -159,22 +198,22 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
       </div>
 
       {/* Bottom CTA Button & Platform Credits */}
-      <div className="relative z-10 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-1000 space-y-3">
+      <div className="relative z-10 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-700 space-y-3">
         <button
           onClick={handleStart}
           className="w-full py-4 px-6 rounded-2xl text-luxury-950 font-black transition-all shadow-2xl flex items-center justify-center gap-3 text-sm active:scale-98 group cursor-pointer"
           style={{
             background: `linear-gradient(135deg, ${primaryCol}, ${accentCol})`,
-            boxShadow: `0 0 25px -5px ${primaryCol}60`,
+            boxShadow: `0 0 30px -5px ${primaryCol}80`,
           }}
         >
-          <span>استعرض القائمة واطلب الآن</span>
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          <span>تصفح المنيو والتجارب الفاخرة</span>
+          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1.5 transition-transform" />
         </button>
 
         <div className="text-[11px] text-center text-luxury-400 space-y-1 pt-1">
           <p className="font-semibold text-luxury-300">
-            خدمة منيو رقمي وحجوزات من <strong style={{ color: primaryCol }}>منصة مريح MUREEH</strong>
+            منصة مريح MUREEH · نظام إدارة المطاعم الذكي
           </p>
           <p className="text-[10px] text-luxury-500">
             للتواصل المباشر مع المنصة واتساب: <span className="font-mono" style={{ color: primaryCol }}>00970593498909</span>
@@ -184,4 +223,3 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
     </div>
   );
 };
-
