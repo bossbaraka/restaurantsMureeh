@@ -42,9 +42,11 @@ const httpsUrl = (label: string) =>
   z
     .string()
     .trim()
-    .max(2048, `${label} طويل جداً`)
+    .max(4096, `${label} طويل جداً`)
     .refine(
       (value) => {
+        if (!value) return true;
+        if (value.startsWith('/') || value.startsWith('data:image/')) return true;
         try {
           const url = new URL(value);
           return url.protocol === 'https:' || url.protocol === 'http:';
@@ -52,7 +54,7 @@ const httpsUrl = (label: string) =>
           return false;
         }
       },
-      { message: `${label} يجب أن يكون رابطاً صالحاً` }
+      { message: `${label} يجب أن يكون رابطاً أو مساراً صالحاً للصورة` }
     )
     .optional();
 

@@ -15,6 +15,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
   const restNameEn = currentRestaurant?.nameEn || 'MUREEH DINING';
   const coverImg = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
   const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
+  const accentCol = currentRestaurant?.accentColor || '#C5A880';
 
   const handleStart = () => {
     setIsAnimatingOut(true);
@@ -23,7 +24,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
     }, 400);
   };
 
-  const whatsappNumber = '00970593498909';
   const whatsappUrl = `https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، أتواصل معكم عبر منصة مريح لتجربة الطعام في ${restName}`)}`;
 
   return (
@@ -41,14 +41,22 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           className="w-full h-full object-cover object-center opacity-30 filter blur-[3px] scale-110 transform animate-pulse duration-10000"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/90 to-[#050608]/75" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold-500/15 via-transparent to-transparent" />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            background: `radial-gradient(ellipse at top, ${primaryCol} 0%, transparent 70%)`,
+          }}
+        />
       </div>
 
       {/* Top Header Bar with Platform Badge */}
       <div className="relative z-10 w-full max-w-lg flex items-center justify-between text-xs animate-in fade-in slide-in-from-top-4 duration-700">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-luxury-900/90 border border-gold-500/40 text-gold-300 backdrop-blur-md shadow-gold-glow">
-          <Sparkles className="w-3.5 h-3.5 text-gold-400 animate-spin" />
-          <span className="font-bold">منصة مريح MUREEH</span>
+        <div
+          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-luxury-900/90 border backdrop-blur-md shadow-lg"
+          style={{ borderColor: `${primaryCol}40`, color: primaryCol }}
+        >
+          <Sparkles className="w-3.5 h-3.5 animate-spin" />
+          <span className="font-bold">منصة مريح MUREEH · الخدمة الذكية</span>
         </div>
 
         {activeTableId ? (
@@ -58,7 +66,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           </div>
         ) : (
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-luxury-900/80 border border-luxury-750 text-luxury-300 text-xs backdrop-blur-md">
-            <QrCode className="w-3.5 h-3.5 text-gold-400" />
+            <QrCode className="w-3.5 h-3.5" style={{ color: primaryCol }} />
             <span>جلسة منيو رقمي</span>
           </div>
         )}
@@ -68,19 +76,23 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
       <div className="relative z-10 my-auto text-center max-w-md w-full space-y-6 animate-in fade-in zoom-in-95 duration-1000 py-6">
         {/* Glowing Monogram Logo */}
         <div className="relative inline-block group">
-          <div className="absolute -inset-1 rounded-3xl bg-gradient-to-r from-gold-500 via-amber-300 to-gold-600 opacity-60 blur-md group-hover:opacity-100 transition duration-500 animate-pulse" />
           <div
-            className="relative w-24 h-24 rounded-3xl mx-auto flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-extrabold text-4xl shadow-2xl border-2 border-gold-300/60 bg-luxury-950"
-            style={
-              currentRestaurant?.logo
-                ? { background: '#0A0B0D' }
-                : { background: `linear-gradient(135deg, #FFF7E6 0%, ${primaryCol} 60%, #8A6D3B 100%)` }
-            }
+            className="absolute -inset-1 rounded-3xl opacity-70 blur-lg group-hover:opacity-100 transition duration-500 animate-pulse"
+            style={{ background: `linear-gradient(135deg, ${primaryCol}, ${accentCol})` }}
+          />
+          <div
+            className="relative w-24 h-24 rounded-3xl mx-auto flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-extrabold text-4xl shadow-2xl border-2 bg-luxury-950"
+            style={{
+              borderColor: `${primaryCol}80`,
+              background: currentRestaurant?.logo
+                ? '#0A0B0D'
+                : `linear-gradient(135deg, ${primaryCol}, ${accentCol})`,
+            }}
           >
             {currentRestaurant?.logo ? (
               <img src={currentRestaurant.logo} alt={restName} className="w-full h-full object-cover" />
             ) : (
-              (restNameEn.charAt(0) || 'M')
+              restNameEn.charAt(0) || 'M'
             )}
           </div>
         </div>
@@ -90,20 +102,32 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           <h1 className="text-3xl sm:text-4xl font-black text-luxury-50 font-serif tracking-tight leading-tight drop-shadow-md">
             {restName}
           </h1>
-          <p className="text-xs sm:text-sm text-gold-400 font-serif tracking-widest uppercase font-bold">
+          <p
+            className="text-xs sm:text-sm font-serif tracking-widest uppercase font-bold"
+            style={{ color: primaryCol }}
+          >
             {restNameEn}
           </p>
         </div>
 
         {/* Ornament Divider */}
         <div className="flex items-center justify-center gap-3 opacity-70">
-          <div className="w-16 h-[1px] bg-gradient-to-r from-transparent via-gold-400 to-transparent" />
-          <Award className="w-4 h-4 text-gold-400 shrink-0" />
-          <div className="w-16 h-[1px] bg-gradient-to-l from-transparent via-gold-400 to-transparent" />
+          <div
+            className="w-16 h-[1px]"
+            style={{ background: `linear-gradient(to right, transparent, ${primaryCol}, transparent)` }}
+          />
+          <Award className="w-4 h-4 shrink-0" style={{ color: primaryCol }} />
+          <div
+            className="w-16 h-[1px]"
+            style={{ background: `linear-gradient(to left, transparent, ${primaryCol}, transparent)` }}
+          />
         </div>
 
         {/* Creative Poetic Welcome Card */}
-        <div className="p-5 rounded-3xl bg-luxury-900/80 border border-luxury-750/80 backdrop-blur-xl shadow-2xl space-y-3">
+        <div
+          className="p-5 rounded-3xl bg-luxury-900/85 border backdrop-blur-xl shadow-2xl space-y-3"
+          style={{ borderColor: `${primaryCol}30` }}
+        >
           <p className="text-base sm:text-lg text-luxury-100 font-serif leading-relaxed italic font-medium">
             «أهلاً بكم في رحاب الضيافة الاستثنائية.. طلبك يصل لطاولتك مباشرة بلمسة واحدة.»
           </p>
@@ -112,9 +136,9 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           </p>
 
           {activeTableId && (
-            <div className="pt-2 border-t border-luxury-800 flex items-center justify-center gap-2 text-xs text-gold-300">
+            <div className="pt-2 border-t border-luxury-800 flex items-center justify-center gap-2 text-xs text-luxury-200">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>الجلسة مفعلة ومربوطة بـ <strong className="text-gold-400 font-serif font-bold">طاولة {tableNumStr}</strong></span>
+              <span>الجلسة مفعلة ومربوطة بـ <strong className="font-serif font-bold" style={{ color: primaryCol }}>طاولة {tableNumStr}</strong></span>
             </div>
           )}
         </div>
@@ -138,7 +162,11 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
       <div className="relative z-10 w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-1000 space-y-3">
         <button
           onClick={handleStart}
-          className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-gold-500 via-gold-400 to-gold-600 text-luxury-950 font-black hover:from-gold-400 hover:to-gold-500 transition-all shadow-gold-glow flex items-center justify-center gap-3 text-sm active:scale-98 group cursor-pointer"
+          className="w-full py-4 px-6 rounded-2xl text-luxury-950 font-black transition-all shadow-2xl flex items-center justify-center gap-3 text-sm active:scale-98 group cursor-pointer"
+          style={{
+            background: `linear-gradient(135deg, ${primaryCol}, ${accentCol})`,
+            boxShadow: `0 0 25px -5px ${primaryCol}60`,
+          }}
         >
           <span>استعرض القائمة واطلب الآن</span>
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -146,10 +174,10 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
 
         <div className="text-[11px] text-center text-luxury-400 space-y-1 pt-1">
           <p className="font-semibold text-luxury-300">
-            خدمة منيو رقمي وحجوزات من <strong className="text-gold-400">منصة مريح MUREEH</strong>
+            خدمة منيو رقمي وحجوزات من <strong style={{ color: primaryCol }}>منصة مريح MUREEH</strong>
           </p>
           <p className="text-[10px] text-luxury-500">
-            للتواصل المباشر مع المنصة واتساب: <span className="font-mono text-gold-400">00970593498909</span>
+            للتواصل المباشر مع المنصة واتساب: <span className="font-mono" style={{ color: primaryCol }}>00970593498909</span>
           </p>
         </div>
       </div>
