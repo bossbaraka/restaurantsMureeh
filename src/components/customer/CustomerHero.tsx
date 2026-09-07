@@ -1,10 +1,11 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { formatPrice } from '../../utils/formatting';
-import { Search, Sparkles, Flame } from 'lucide-react';
+import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
+import { Search, Sparkles, Flame, ChefHat, Clock, CheckCircle2, ArrowLeft, UtensilsCrossed } from 'lucide-react';
+import { OrderStatus } from '../../types/restaurant';
 
 export const CustomerHero: React.FC = () => {
-  const { searchQuery, setSearchQuery, offers, currentRestaurant } = useRestaurant();
+  const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen, setIsWaiterModalOpen } = useRestaurant();
 
   const activeOffers = offers.filter((o) => o.isActive);
 
@@ -12,10 +13,30 @@ export const CustomerHero: React.FC = () => {
   const restName = currentRestaurant?.name || '';
   const restDesc = currentRestaurant?.description || 'مأكولات استثنائية محضرة بأيدي نخبة الطهاة بأرقى المكونات المعتقة.';
 
+  const latestOrder = activeTableOrders.length > 0 ? activeTableOrders[0] : null;
+  const statusCfg = latestOrder ? getOrderStatusConfig(latestOrder.status) : null;
+
+  const getStepIndex = (status: OrderStatus) => {
+    switch (status) {
+      case 'PENDING':
+        return 1;
+      case 'PREPARING':
+        return 2;
+      case 'READY':
+        return 3;
+      case 'SERVED':
+        return 4;
+      default:
+        return 0;
+    }
+  };
+
+  const currentStep = latestOrder ? getStepIndex(latestOrder.status) : 0;
+
   return (
     <div className="relative overflow-hidden mb-6">
       {/* Background Editorial Hero Image */}
-      <div className="relative h-64 sm:h-72 w-full overflow-hidden rounded-2xl border border-luxury-800 shadow-2xl mx-auto">
+      <div className="relative h-60 sm:h-72 w-full overflow-hidden rounded-2xl border border-luxury-800 shadow-2xl mx-auto">
         <img
           src={heroImage}
           alt={restName}
@@ -41,6 +62,89 @@ export const CustomerHero: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {/* PROMINENT LIVE ORDER STATUS BANNER ON MENU PAGE */}
+      {latestOrder && statusCfg && (
+        <div className="mt-4 p-4 rounded-2xl bg-luxury-900/95 border border-gold-500/50 shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in zoom-in-95 duration-300">
+          <div className="flex items-center justify-between border-b border-luxury-800 pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-gold-500/15 border border-gold-500/30 flex items-center justify-center text-gold-400">
+                <ChefHat className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-luxury-50">حالة طلبك الفعّال #{latestOrder.id.slice(-6)}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/40 font-mono">
+                    {formatPrice(latestOrder.total)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-luxury-400 mt-0.5">
+                  المطبخ الحي يعمل على تجهيز طلبك الآن بكل عناية
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setIsOrderTrackingOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1 shadow-gold-glow transition-all"
+            >
+              <span>تفاصيل الطلب</span>
+              <ArrowLeft className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Stepper Progress Bar */}
+          <div className="grid grid-cols-4 gap-1 sm:gap-2 pt-1 text-center">
+            {/* Step 1: Received */}
+            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
+              currentStep >= 1
+                ? 'bg-gold-500/15 border-gold-500/50 text-gold-300'
+                : 'bg-luxury-950 border-luxury-850 text-luxury-500'
+            }`}>
+              <div className="flex items-center justify-center mb-1">
+                <Clock className={`w-3.5 h-3.5 ${currentStep >= 1 ? 'text-gold-400' : 'text-luxury-600'}`} />
+              </div>
+              <span className="block text-[10px]">استقبال</span>
+            </div>
+
+            {/* Step 2: Kitchen Preparing */}
+            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
+              currentStep >= 2
+                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 animate-pulse'
+                : 'bg-luxury-950 border-luxury-850 text-luxury-500'
+            }`}>
+              <div className="flex items-center justify-center mb-1">
+                <ChefHat className={`w-3.5 h-3.5 ${currentStep >= 2 ? 'text-amber-400' : 'text-luxury-600'}`} />
+              </div>
+              <span className="block text-[10px]">تحضير</span>
+            </div>
+
+            {/* Step 3: Ready */}
+            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
+              currentStep >= 3
+                ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                : 'bg-luxury-950 border-luxury-850 text-luxury-500'
+            }`}>
+              <div className="flex items-center justify-center mb-1">
+                <Sparkles className={`w-3.5 h-3.5 ${currentStep >= 3 ? 'text-emerald-400' : 'text-luxury-600'}`} />
+              </div>
+              <span className="block text-[10px]">جاهز</span>
+            </div>
+
+            {/* Step 4: Served */}
+            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
+              currentStep >= 4
+                ? 'bg-blue-500/15 border-blue-500/50 text-blue-300'
+                : 'bg-luxury-950 border-luxury-850 text-luxury-500'
+            }`}>
+              <div className="flex items-center justify-center mb-1">
+                <UtensilsCrossed className={`w-3.5 h-3.5 ${currentStep >= 4 ? 'text-blue-400' : 'text-luxury-600'}`} />
+              </div>
+              <span className="block text-[10px]">تم التقديم</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search Input Bar */}
       <div className="mt-4 relative max-w-4xl mx-auto">

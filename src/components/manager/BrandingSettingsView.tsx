@@ -145,29 +145,6 @@ export const BrandingSettingsView: React.FC = () => {
     e?.preventDefault();
     if (!currentRestaurant || isSaving) return;
 
-    if (isDemo) {
-      showToast(
-        'warning',
-        '🔒 تنبيه النسخة التجريبية',
-        'لا يمكن حفظ التعديل الدائم في النسخة التجريبية. لتأكيد وتطبيق الهوية البصرية الحقيقية على موقعك، اشترك في منصة مريح.'
-      );
-      if (currentRestaurant) {
-        setCurrentRestaurant({
-          ...currentRestaurant,
-          name: name.trim(),
-          nameEn: nameEn.trim(),
-          description: description.trim(),
-          phone: phone.trim(),
-          address: address.trim(),
-          logo: logo.trim(),
-          coverImage: coverImage.trim(),
-          primaryColor,
-          accentColor,
-        });
-      }
-      return;
-    }
-
     setIsSaving(true);
     const res = await api.saveBranding(currentRestaurant.id, {
       name: name.trim(),
