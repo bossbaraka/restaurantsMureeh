@@ -15,7 +15,7 @@ interface AuthContextType {
   canAccessView: (view: string) => boolean;
   canAccessManagerTab: (tab: string) => boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  loginWithPin: (pin: string, role?: TenantRole) => Promise<{ success: boolean; error?: string }>;
+  loginWithPin: (pin: string, restaurantId?: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
   logout: () => void;
   switchManagerRestaurant: (restaurantId: string) => void;
   isLoginModalOpen: boolean;
@@ -189,8 +189,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   // Staff PIN login — validated against the real DB (hashed PIN per account).
+  // The PIN is always verified within ONE tenant: the caller passes the
+  // active venue, falling back to the manager's selected restaurant.
   const loginWithPin = useCallback(
-    async (pin: string, role?: TenantRole) => {
+    async (pin: string, restaurantId?: string) => {
       if (lockoutRemainingSeconds > 0) {
         return {
           success: false,
@@ -198,7 +200,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      const res = await api.pinLogin(pin, currentManagerRestaurant?.id || undefined);
+      const tenantId = restaurantId || currentManagerRestaurant?.id;
+      if (!tenantId) {
+        return {
+          success: false,
+          error: 'اختر المطعم أولاً قبل الدخول برمز PIN.',
+        };
+      }
+
+      const res = await api.pinLogin(pin, tenantId);
 
       if (res.success && res.data) {
         setFailedAttempts(0);
@@ -209,7 +219,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem(RESTAURANT_SESSION_KEY, JSON.stringify(res.data.restaurant));
         }
         setIsLoginModalOpen(false);
-        return { success: true };
+        return { success: true, role: res.data.user.role as TenantRole };
       }
 
       const nextAttempts = failedAttempts + 1;

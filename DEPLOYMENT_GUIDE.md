@@ -26,6 +26,7 @@ npm run db:provision-admins
 4. [الطريقة الثالثة: النشر السحابي المنفصل (Render + Vercel + Supabase)](#4-الطريقة-الثالثة-النشر-السحابي-المنفصل)
 5. [إعداد شهادة الأمان SSL (HTTPS) مجاناً](#5-إعداد-شهادة-الأمان-ssl-https-مجاناً)
 6. [نصائح الأمان والنسخ الاحتياطي](#6-نصائح-الأمان-والنسخ-الاحتياطي)
+7. [ملاحظات الترقية الأمنية](#7-ملاحظات-الترقية-الأمنية-إصدار-التحصين-2026-09-07)
 
 ---
 
@@ -239,11 +240,41 @@ sudo certbot --nginx -d menu.yourdomain.com
 1. **تغيير كلمات المرور الافتراضية**:
    - قم بتغيير كلمات مرور المدراء والمشرف العام فوراً عبر لوحة التحكم.
 2. **النسخ الاحتياطي الدوري**:
-   - السكريبت المدمج جاهز لتوليد نسخ SQL لقاعدة البيانات عبر الأمر:
+   - السكريبت المدمج جاهز لتوليد نسخ SQL لقاعدة البيانات. يتطلب `DB_PASSWORD` في البيئة (لا توجد كلمة افتراضية)، ويحفظ الملف بصلاحيات `0600`:
    ```bash
-   npx tsx -e "import { createDatabaseBackup } from './server/services/backup.js'; createDatabaseBackup();"
+   DB_PASSWORD='...' npx tsx -e "import { createDatabaseBackup } from './server/services/backup.js'; createDatabaseBackup();"
    ```
    - يمكنك جدولته يومياً في `crontab`:
    ```bash
-   0 3 * * * cd /var/www/restaurant-system && npx tsx -e "import { createDatabaseBackup } from './server/services/backup.js'; createDatabaseBackup();"
+   0 3 * * * cd /var/www/restaurant-system && DB_PASSWORD='...' npx tsx -e "import { createDatabaseBackup } from './server/services/backup.js'; createDatabaseBackup();"
+   ```
+   - انقل النسخ خارج الخادم (S3 مشفّر) ولا تعتمد على القرص المحلي وحده.
+
+---
+
+## 7. ملاحظات الترقية الأمنية (إصدار التحصين 2026-09-07)
+
+> هذه التغييرات **كاسِرة للتوافق** مع الجلسات القديمة — وهي مقصودة: كل توكن صدر قبل الترقية يُرفض ويجب على المستخدمين تسجيل الدخول مجدداً.
+
+1. **دوّر `JWT_SECRET`**: ولّد سراً جديداً (48 بايت على الأقل) ولا تُعد استخدام القديم أبداً:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+   ```
+   الخادم يرفض الإقلاع إذا كان السر أقصر من 32 حرفاً، ولا يوجد أي سر احتياطي مضمّن.
+2. **حدّث قاعدة البيانات**: شغّل `npx prisma db push` (بدون `--accept-data-loss` — أُزيل من سكربتات النشر نهائياً). التغيير إضافي فقط: عمود `tokenVersion` في `RestaurantUser` + قيمة `KITCHEN` في `TenantRole`.
+3. **اضبط `CORS_ORIGIN` بدقة**: أصول الإنتاج فقط مفصولة بفواصل. في الإنتاج يفشل الخادم إقلاعياً إذا تُرك فارغاً (fail-closed).
+4. **اضبط `TRUST_PROXY`**: خلف Render/Nginx ضعه `1`، وعلى سيرفر مكشوف مباشرة اتركه `0` (القيمة الافتراضية).
+5. **أغلق منفذ قاعدة البيانات**: في `docker-compose.yml` أصبحت PostgreSQL مربوطة على `127.0.0.1` فقط — لا تعرض `5432` للشبكة.
+6. **سلوك جديد يجب إبلاغ المدراء به**:
+   - الدخول بـ PIN يتطلب وجود المطعم النشط (النادل يختار مطعمه أولاً)، وشاشة الهبوط حسب الدور لا قيمة الـ PIN.
+   - تسجيل الخروج يُبطل التوكن فوراً من الخادم.
+   - الدفع النقدي يتطلب تسجيل مبلغ مقبوض يغطي الفاتورة كاملة.
+   - رفع الصور للمدير فقط، ويُقبل PNG/JPG/WEBP/GIF الحقيقية فقط.
+   - إنشاء الفروع وتصدير CSV يتطلبان الباقة المؤهلة (تُفرض من الخادم).
+7. **حدود المعدل (Rate Limits)**: الدخول 20/15د، الـ PIN عشرة/15د، الطلبات العامة 120/15د، النداءات 40/15د، الرفع 60/ساعة — لكل نسخة (in-memory). عند التوسع لأكثر من نسخة استخدم مخزن Redis مشترك.
+8. **تحقق بعد النشر**: شغّل مجموعة الـ regression ضد نسخة تجريبية ببيانات اصطناعية:
+   ```bash
+   SECURITY_TEST_BASE_URL=http://127.0.0.1:3001 \
+   SECURITY_TEST_TOKEN_A='...' SECURITY_TEST_TENANT_A_ID='...' \
+   SECURITY_TEST_TENANT_B_ID='...' node security-tests/api-security-smoke.mjs
    ```

@@ -13,6 +13,7 @@ enum TenantRole {
   RESTAURANT_MANAGER
   STAFF
   WAITER
+  KITCHEN
   CASHIER
 }
 
@@ -107,6 +108,9 @@ model RestaurantUser {
   email           String            @unique
   passwordHash    String
   pinHash         String?
+  // Incremented on logout / password / PIN / role changes to revoke
+  // previously issued JWTs (their `tv` claim no longer matches).
+  tokenVersion    Int               @default(0)
   role            TenantRole        @default(RESTAURANT_MANAGER)
   status          String            @default("ACTIVE")
   avatar          String?

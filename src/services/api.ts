@@ -426,11 +426,15 @@ class RestaurantApiService {
   }
 
   public async logout(): Promise<ApiResponse<null>> {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(AUTH_TOKEN_KEY);
+    // Revoke server-side FIRST (the request needs the token), then always
+    // drop the local copy — even if the network call fails.
+    try {
+      return await this.request<null>('POST', '/auth/logout');
+    } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+      }
     }
-    const res = await this.request<null>('POST', '/auth/logout');
-    return res;
   }
 
   // Uploads an image (logo / cover) to the real server storage and returns its
@@ -565,10 +569,12 @@ class RestaurantApiService {
     orderId: string,
     sessionToken?: string
   ): Promise<ApiResponse<{ message: string; order: Order }>> {
+    // The session capability travels in the POST body — never in the URL —
+    // so it is not written to logs, history or referrer headers.
     const res = await this.request<any>(
       'POST',
-      `/public/orders/${encodeURIComponent(orderId)}/cancel?restaurantId=${encodeURIComponent(restaurantId)}&sessionToken=${encodeURIComponent(sessionToken || '')}`,
-      { auth: false }
+      `/public/orders/${encodeURIComponent(orderId)}/cancel`,
+      { auth: false, body: { restaurantId, sessionToken } }
     );
     if (res.success && res.data) {
       return { success: true, data: { message: res.data.message || 'تم إلغاء الطلب بنجاح', order: mapOrderRow(res.data.order) }, statusCode: 200 };

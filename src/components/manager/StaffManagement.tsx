@@ -127,11 +127,14 @@ export const StaffManagement: React.FC = () => {
     }
 
     setIsSaving(true);
-    const generatedPin = newPin.trim() || Math.floor(1000 + Math.random() * 9000).toString();
+    // CSPRNG PIN: Math.random is predictable and must never mint credentials.
+    const generatedPin =
+      newPin.trim() ||
+      (1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000)).toString();
     const emailValue = newEmail.trim().toLowerCase() || `${newName.trim().toLowerCase().replace(/\s+/g, '')}@${currentRestaurant.slug}.com`;
     const isManagerRole = newRole === 'RESTAURANT_MANAGER';
-    if (isManagerRole && newPassword.length < 6) {
-      showToast('error', 'كلمة مرور المساعد مطلوبة', 'يجب أن لا تقل عن 6 أحرف.');
+    if (isManagerRole && newPassword.length < 8) {
+      showToast('error', 'كلمة مرور المساعد مطلوبة', 'يجب أن لا تقل عن 8 أحرف.');
       setIsSaving(false);
       return;
     }

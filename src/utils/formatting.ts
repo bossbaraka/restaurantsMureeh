@@ -1,5 +1,15 @@
 import { OrderStatus, TableStatus, TableZone } from '../types/restaurant';
 
+/** Escape untrusted strings before interpolating them into printed HTML. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function formatPrice(price: number): string {
   return `₪${price.toLocaleString('en-US')}`;
 }

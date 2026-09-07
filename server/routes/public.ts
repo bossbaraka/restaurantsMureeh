@@ -1,9 +1,29 @@
 import { Router, Request, Response } from 'express';
-import { z } from 'zod';
+import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/prisma';
 import { realtimeService } from '../services/realtime';
 import { logAuditEvent } from '../services/audit';
+import {
+  config,
+  JWT_ISSUER,
+  JWT_AUDIENCE,
+  JWT_ALGORITHM,
+} from '../config';
+import { generateSessionToken, roundMoney } from '../utils/security';
+import {
+  publicOrderLimiter,
+  waiterCallLimiter,
+  qrSessionLimiter,
+} from '../middleware/rateLimit';
+import {
+  validateBody,
+  publicOrderSchema,
+  orderCancelSchema,
+  orderNotesSchema,
+  waiterCallSchema,
+  qrSessionSchema,
+} from '../validation/schemas';
 
 const router = Router();
 
@@ -33,14 +53,41 @@ router.get('/events', async (req: Request, res: Response) => {
 
   let isAllowed = false;
   if (authToken) {
+    // Staff stream: the token is verified against the real secret with
+    // algorithm/issuer/audience pinning AND a fresh account check —
+    // suspended or logged-out staff cannot hold a stream open.
     try {
-      const jwtSecret = process.env.JWT_SECRET || 'merar_luxury_saas_jwt_secret_key_production_2026';
-      const jwt = (await import('jsonwebtoken')).default;
-      const decoded = jwt.verify(authToken, jwtSecret) as any;
-      if (decoded && (decoded.role === 'SUPER_ADMIN' || decoded.role === 'PLATFORM_ADMIN' || decoded.restaurantId === restaurantId)) {
-        isAllowed = true;
+      const decoded = jwt.verify(authToken, config.jwtSecret, {
+        algorithms: [JWT_ALGORITHM],
+        issuer: JWT_ISSUER,
+        audience: JWT_AUDIENCE,
+      }) as {
+        id: string;
+        restaurantId: string | null;
+        role: string;
+        tv: number;
+      };
+      if (decoded && decoded.id) {
+        const dbUser = await prisma.restaurantUser.findUnique({
+          where: { id: decoded.id },
+          select: { id: true, restaurantId: true, role: true, status: true, tokenVersion: true },
+        });
+        const fresh =
+          !!dbUser &&
+          dbUser.status === 'ACTIVE' &&
+          (decoded.tv ?? 0) === dbUser.tokenVersion;
+        if (
+          fresh &&
+          (dbUser!.role === 'SUPER_ADMIN' ||
+            dbUser!.role === 'PLATFORM_ADMIN' ||
+            dbUser!.restaurantId === restaurantId)
+        ) {
+          isAllowed = true;
+        }
       }
-    } catch {}
+    } catch {
+      /* invalid token → fall through to session check */
+    }
   }
 
   if (!isAllowed && tableId && sessionToken) {
@@ -58,22 +105,22 @@ router.get('/events', async (req: Request, res: Response) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const clientId = `sse-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-  realtimeService.addClient({ id: clientId, restaurantId, tableId, res });
+  const clientId = `sse-${randomUUID()}`;
+  const accepted = realtimeService.addClient({ id: clientId, restaurantId, tableId, res });
+  if (!accepted) {
+    return res.status(503).json({ success: false, error: 'خدمة البث المباشر مزدحمة حالياً', statusCode: 503 });
+  }
 
   // Send initial ping
   res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', clientId })}\n\n`);
 });
 
-// GET /api/public/restaurants/:slug
+// GET /api/public/restaurants/:slug — public menu catalog, exact slug only.
 router.get('/restaurants/:slug', async (req: Request, res: Response) => {
   try {
-    let slug = req.params.slug.toLowerCase();
-    if (slug === 'merar' || slug === 'marer') {
-      slug = 'mureeh';
-    }
+    const slug = req.params.slug.toLowerCase();
 
-    let restaurant = await prisma.restaurant.findUnique({
+    const restaurant = await prisma.restaurant.findUnique({
       where: { slug },
       include: {
         categories: {
@@ -95,30 +142,6 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
     });
 
     if (!restaurant) {
-      // Fallback lookup: find any active restaurant if exact slug doesn't match
-      restaurant = await prisma.restaurant.findFirst({
-        where: { status: 'ACTIVE' },
-        include: {
-          categories: {
-            where: { status: 'ACTIVE' },
-            orderBy: { sortOrder: 'asc' },
-          },
-          products: {
-            where: { available: true },
-            include: {
-              options: true,
-              addOns: { where: { isAvailable: true } },
-            },
-            orderBy: { sortOrder: 'asc' },
-          },
-          offers: {
-            where: { isActive: true },
-          },
-        },
-      });
-    }
-
-    if (!restaurant) {
       return res.status(404).json({
         success: false,
         error: 'المطعم غير موجود أو تم تغيير رابطه',
@@ -126,30 +149,7 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
       });
     }
 
-    const qrToken = req.query.qrToken;
-    let qrTable = null;
-    if (typeof qrToken === 'string' && qrToken.trim() !== '' && qrToken.toLowerCase() !== 'default') {
-      qrTable = await prisma.table.findFirst({
-        where: {
-          restaurantId: restaurant.id,
-          OR: [
-            { qrToken: qrToken },
-            { id: qrToken },
-            ...(isNaN(Number(qrToken)) ? [] : [{ number: Number(qrToken) }]),
-          ],
-        },
-      });
-    }
-
-    if (restaurant.status === 'SUSPENDED' && slug === 'mureeh') {
-      await prisma.restaurant.update({
-        where: { id: restaurant.id },
-        data: { status: 'ACTIVE' },
-      });
-      restaurant.status = 'ACTIVE';
-    }
-
-    if (restaurant.status === 'SUSPENDED') {
+    if (restaurant.status !== 'ACTIVE') {
       return res.status(403).json({
         success: false,
         error: 'هذا المطعم غير متاح للطلب حالياً',
@@ -242,7 +242,7 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
 });
 
 // GET /api/public/tables/qr/:qrToken (Resolve Table from QR Token)
-router.get('/tables/qr/:qrToken', async (req: Request, res: Response) => {
+router.get('/tables/qr/:qrToken', qrSessionLimiter, async (req: Request, res: Response) => {
   try {
     const { qrToken } = req.params;
     const table = await prisma.table.findUnique({
@@ -258,7 +258,7 @@ router.get('/tables/qr/:qrToken', async (req: Request, res: Response) => {
       });
     }
 
-    if (table.restaurant.status === 'SUSPENDED') {
+    if (table.restaurant.status !== 'ACTIVE') {
       return res.status(403).json({
         success: false,
         error: 'المطعم غير متاح حالياً',
@@ -292,427 +292,587 @@ router.get('/tables/qr/:qrToken', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/public/tables/qr/:qrToken/session
-router.post('/tables/qr/:qrToken/session', async (req: Request, res: Response) => {
-  try {
-    const { qrToken } = req.params;
-    const { slug, restaurantId } = req.body || {};
+// POST /api/public/tables/qr/:qrToken/session — anonymous table session.
+// The QR token is an opaque capability: it must match EXACTLY. Table IDs,
+// table numbers and the word "default" are never accepted, and no tenant
+// or table is ever silently substituted or created here.
+router.post(
+  '/tables/qr/:qrToken/session',
+  qrSessionLimiter,
+  validateBody(qrSessionSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { qrToken } = req.params;
+      const { slug, restaurantId } = req.body as {
+        slug?: string;
+        restaurantId?: string;
+      };
 
-    let targetSlug = (slug || '').toLowerCase();
-    if (targetSlug === 'merar' || targetSlug === 'marer') {
-      targetSlug = 'mureeh';
-    }
+      const table = await prisma.table.findUnique({
+        where: { qrToken },
+        include: { restaurant: true },
+      });
 
-    let restaurant = null;
-    if (restaurantId) {
-      restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
-    }
-    if (!restaurant && targetSlug) {
-      restaurant = await prisma.restaurant.findUnique({ where: { slug: targetSlug } });
-    }
+      if (!table || !table.restaurant) {
+        return res.status(404).json({
+          success: false,
+          error: 'رمز QR غير صالح أو منتهي الصلاحية. امسح الرمز الموجود على طاولتك.',
+          statusCode: 404,
+        });
+      }
 
-    let table = null;
-    if (qrToken && qrToken.toLowerCase() !== 'default') {
-      table = await prisma.table.findFirst({
+      const restaurant = table.restaurant;
+
+      // Optional caller hints must agree with the resolved table.
+      if (restaurantId && restaurantId !== restaurant.id) {
+        return res.status(400).json({ success: false, error: 'رمز QR لا ينتمي لهذا المطعم', statusCode: 400 });
+      }
+      if (slug && slug.toLowerCase() !== (restaurant.slug || '').toLowerCase()) {
+        return res.status(400).json({ success: false, error: 'رمز QR لا ينتمي لهذا المطعم', statusCode: 400 });
+      }
+
+      if (restaurant.status !== 'ACTIVE') {
+        return res.status(403).json({ success: false, error: 'المطعم غير متاح للطلب حالياً', statusCode: 403 });
+      }
+
+      // Check for existing active session
+      let session = await prisma.tableSession.findFirst({
         where: {
-          ...(restaurant ? { restaurantId: restaurant.id } : {}),
-          OR: [
-            { qrToken: qrToken },
-            { id: qrToken },
-            ...(isNaN(Number(qrToken)) ? [] : [{ number: Number(qrToken) }]),
-          ],
-        },
-        include: { restaurant: true },
-      });
-    }
-
-    if (table) {
-      restaurant = table.restaurant;
-    } else {
-      if (!restaurant) {
-        restaurant = await prisma.restaurant.findFirst({
-          where: { OR: [{ slug: 'mureeh' }, { status: 'ACTIVE' }] },
-          orderBy: { createdAt: 'asc' },
-        });
-      }
-
-      if (!restaurant) {
-        return res.status(404).json({ success: false, error: 'المطعم غير موجود', statusCode: 404 });
-      }
-
-      table = await prisma.table.findFirst({
-        where: { restaurantId: restaurant.id },
-        include: { restaurant: true },
-      });
-
-      if (!table) {
-        table = await prisma.table.create({
-          data: {
-            restaurantId: restaurant.id,
-            number: 1,
-            name: 'طاولة 1',
-            zone: 'MAIN_HALL',
-            capacity: 4,
-            status: 'AVAILABLE',
-            qrToken: `qr-${restaurant.id}-1`,
-          },
-          include: { restaurant: true },
-        });
-      }
-    }
-
-    if (restaurant.status === 'SUSPENDED' && (restaurant.slug === 'mureeh' || !restaurant.slug)) {
-      await prisma.restaurant.update({ where: { id: restaurant.id }, data: { status: 'ACTIVE' } });
-      restaurant.status = 'ACTIVE';
-    }
-
-    if (restaurant.status === 'SUSPENDED') {
-      return res.status(403).json({ success: false, error: 'المطعم غير متاح للطلب حالياً', statusCode: 403 });
-    }
-
-    // Check for existing active session
-    let session = await prisma.tableSession.findFirst({
-      where: {
-        restaurantId: restaurant.id,
-        tableId: table.id,
-        status: 'ACTIVE',
-        expiresAt: { gt: new Date() },
-      },
-    });
-
-    if (!session) {
-      session = await prisma.tableSession.create({
-        data: {
           restaurantId: restaurant.id,
           tableId: table.id,
-          sessionToken: `sess-${restaurant.id}-${table.id}-${Date.now()}-${randomUUID()}`,
           status: 'ACTIVE',
-          expiresAt: new Date(Date.now() + 6 * 3600 * 1000), // 6 hours
+          expiresAt: { gt: new Date() },
         },
       });
-    }
 
-    return res.json({
-      success: true,
-      data: {
-        sessionToken: session.sessionToken,
-        sessionId: session.id,
-        tableId: table.id,
-        tableNumber: table.number,
-        restaurant: {
-          id: restaurant.id,
-          name: restaurant.name,
-          slug: restaurant.slug,
+      if (!session) {
+        session = await prisma.tableSession.create({
+          data: {
+            restaurantId: restaurant.id,
+            tableId: table.id,
+            sessionToken: generateSessionToken(),
+            status: 'ACTIVE',
+            expiresAt: new Date(Date.now() + 6 * 3600 * 1000), // 6 hours
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          sessionToken: session.sessionToken,
+          sessionId: session.id,
+          tableId: table.id,
+          tableNumber: table.number,
+          restaurant: {
+            id: restaurant.id,
+            name: restaurant.name,
+            slug: restaurant.slug,
+          },
         },
-      },
-      statusCode: 200,
-    });
-  } catch (err) {
-    console.error('Create table session error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر إنشاء جلسة الطاولة', statusCode: 500 });
+        statusCode: 200,
+      });
+    } catch (err) {
+      console.error('Create table session error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر إنشاء جلسة الطاولة', statusCode: 500 });
+    }
   }
-});
+);
+
+type MenuProduct = {
+  id: string;
+  name: string;
+  nameEn: string | null;
+  price: number;
+  available: boolean;
+  ingredients: string[];
+  removableIngredients: string[];
+  options: Array<{ id: string; name: string; priceModifier: number | null; price: number | null }>;
+  addOns: Array<{ id: string; name: string; price: number; isAvailable: boolean }>;
+};
+
+function legacyAddOnName(entry: unknown): string | null {
+  // Older clients send formatted display strings like "جبنة (+₪5)" —
+  // strip the price suffix to recover the add-on name for DB matching.
+  if (typeof entry === 'string') {
+    return entry.replace(/\s*\(\+.*$/, '').trim() || null;
+  }
+  if (entry && typeof entry === 'object') {
+    const obj = entry as { id?: unknown; name?: unknown };
+    if (typeof obj.id === 'string' && obj.id) return `id:${obj.id}`;
+    if (typeof obj.name === 'string' && obj.name) return obj.name;
+  }
+  return null;
+}
 
 // POST /api/public/orders (Submit Order from Table)
-router.post('/orders', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId, tableId, sessionToken, items, notes } = req.body;
+// Every unit price, size modifier and add-on price comes from the DB
+// menu. Client-supplied prices/names are display hints at best and
+// are NEVER trusted for totals or snapshots.
+router.post(
+  '/orders',
+  publicOrderLimiter,
+  validateBody(publicOrderSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { restaurantId, tableId, sessionToken, items, notes } = req.body as {
+        restaurantId: string;
+        tableId: string;
+        sessionToken: string;
+        items: Array<{
+          productId: string;
+          quantity?: number;
+          selectedSizeId?: string;
+          selectedSize?: unknown;
+          selectedAddOnIds?: string[];
+          selectedAddOns?: unknown;
+          removedIngredients?: string[];
+          specialInstructions?: string;
+          notes?: string;
+        }>;
+        notes?: string;
+      };
 
-    if (!restaurantId || !tableId || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'بيانات الطلب غير مكتملة',
-        statusCode: 400,
-      });
-    }
+      const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
+      if (!restaurant || restaurant.status !== 'ACTIVE') {
+        return res.status(403).json({
+          success: false,
+          error: 'المطعم غير متاح لقبول الطلبات حالياً',
+          statusCode: 403,
+        });
+      }
 
-    const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
-    if (!restaurant || restaurant.status === 'SUSPENDED') {
-      return res.status(403).json({
-        success: false,
-        error: 'المطعم غير متاح لقبول الطلبات حالياً',
-        statusCode: 403,
-      });
-    }
+      const table = await prisma.table.findUnique({ where: { id: tableId } });
+      if (!table || table.restaurantId !== restaurantId) {
+        return res.status(404).json({
+          success: false,
+          error: 'الطاولة غير موجودة في هذا المطعم',
+          statusCode: 404,
+        });
+      }
 
-    const table = await prisma.table.findUnique({ where: { id: tableId } });
-    if (!table || table.restaurantId !== restaurantId) {
-      return res.status(404).json({
-        success: false,
-        error: 'الطاولة غير موجودة في هذا المطعم',
-        statusCode: 404,
-      });
-    }
+      const session = await getQrSession(sessionToken, restaurantId, tableId);
+      if (!session) {
+        return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
+      }
+      const sessionId = session.id;
 
-    const session = await getQrSession(sessionToken, restaurantId, tableId);
-    if (!session) {
-      return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
-    }
-    if (session.restaurantId !== table.restaurantId || session.tableId !== table.id) {
-      return res.status(403).json({ success: false, error: 'جلسة QR لا تطابق الطاولة المطلوبة', statusCode: 403 });
-    }
-    const sessionId = session.id;
+      const productIds = [...new Set(items.map((item) => item.productId))];
+      const products = (await prisma.product.findMany({
+        where: { restaurantId, id: { in: productIds } },
+        include: { options: true, addOns: true },
+      })) as MenuProduct[];
 
-    // Calculate subtotal
-    const productIds = items.map((item: any) => item.productId).filter(Boolean);
-    const products = await prisma.product.findMany({
-      where: { restaurantId, id: { in: productIds } },
-      include: { options: true, addOns: { where: { isAvailable: true } } },
-    });
+      if (products.length !== productIds.length) {
+        return res.status(400).json({
+          success: false,
+          error: 'يحتوي الطلب على طبق غير متوفر في هذا المطعم',
+          statusCode: 400,
+        });
+      }
+      const productMap = new Map(products.map((product) => [product.id, product]));
 
-    const productMap = new Map(products.map((product) => [product.id, product]));
-    const pricedItems = items.map((item: any) => {
-      const product = productMap.get(item.productId);
-      const quantity = Number(item.quantity);
-      const validQty = Number.isInteger(quantity) && quantity > 0 && quantity <= 50 ? quantity : 1;
-      const unitPrice = product?.price ?? Number(item.unitPrice ?? item.price ?? 0);
-      return { ...item, quantity: validQty, unitPrice, totalPrice: unitPrice * validQty };
-    });
-    const subtotal = pricedItems.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
+      const pricedItems: Array<{
+        productId: string;
+        productNameSnapshot: string;
+        productNameEnSnapshot?: string;
+        priceSnapshot: number;
+        quantity: number;
+        selectedSize?: string;
+        selectedAddOns: string[];
+        removedIngredients: string[];
+        specialInstructions?: string;
+        totalPrice: number;
+      }> = [];
 
-    // Get next order number for restaurant
-    const count = await prisma.order.count({ where: { restaurantId } });
-    const nextNum = 1001 + count;
-    const orderId = `#${nextNum}`;
+      for (const item of items) {
+        const product = productMap.get(item.productId)!;
+        if (!product.available) {
+          return res.status(400).json({
+            success: false,
+            error: `الطبق "${product.name}" غير متوفر حالياً`,
+            statusCode: 400,
+          });
+        }
+        const quantity =
+          Number.isInteger(item.quantity) && (item.quantity as number) > 0
+            ? Math.min(item.quantity as number, 50)
+            : 1;
 
-    const newOrder = await prisma.order.create({
-      data: {
-        id: orderId,
-        numericId: nextNum,
-        restaurantId,
-        tableId,
-        sessionId,
-        status: 'PENDING',
-        paymentMethod: 'PAY AT CASHIER',
-        subtotal,
-        total: subtotal,
-        notes: notes || undefined,
-        estimatedPrepMinutes: 18,
-        items: {
-          create: pricedItems.map((i: any) => ({
-            productId: i.productId,
-            productNameSnapshot: i.productName || i.name || 'طبق',
-            productNameEnSnapshot: i.productNameEn || i.nameEn || undefined,
-            priceSnapshot: i.unitPrice,
-            quantity: i.quantity,
-            selectedSize: typeof i.selectedSize === 'object' ? i.selectedSize.name : i.selectedSize || undefined,
-            selectedAddOns: i.selectedAddOns || [],
-            removedIngredients: i.removedIngredients || [],
-            specialInstructions: i.specialInstructions || i.notes || undefined,
-            totalPrice: Number(i.totalPrice) || 0,
-          })),
+        // --- Size: explicit ID wins, exact legacy name match tolerated.
+        let unitPrice = roundMoney(product.price);
+        let sizeSnapshot: string | undefined;
+        if (item.selectedSizeId) {
+          const option = product.options.find((o) => o.id === item.selectedSizeId);
+          if (!option) {
+            return res.status(400).json({
+              success: false,
+              error: `الحجم المحدد للطبق "${product.name}" غير صالح`,
+              statusCode: 400,
+            });
+          }
+          unitPrice = roundMoney(unitPrice + (option.priceModifier ?? option.price ?? 0));
+          sizeSnapshot = option.name;
+        } else if (item.selectedSize) {
+          const wanted =
+            typeof item.selectedSize === 'string'
+              ? item.selectedSize
+              : (item.selectedSize as { id?: unknown; name?: unknown }).name;
+          if (typeof wanted === 'string' && wanted) {
+            const option = product.options.find((o) => o.name === wanted);
+            if (option) {
+              unitPrice = roundMoney(unitPrice + (option.priceModifier ?? option.price ?? 0));
+              sizeSnapshot = option.name;
+            }
+          }
+        }
+
+        // --- Add-ons: explicit IDs validated strictly, legacy display
+        // entries matched by exact DB name, unknown entries ignored.
+        const addOnSnapshots: string[] = [];
+        if (item.selectedAddOnIds && item.selectedAddOnIds.length > 0) {
+          for (const addOnId of item.selectedAddOnIds) {
+            const addOn = product.addOns.find((a) => a.id === addOnId);
+            if (!addOn || !addOn.isAvailable) {
+              return res.status(400).json({
+                success: false,
+                error: `إضافة غير صالحة للطبق "${product.name}"`,
+                statusCode: 400,
+              });
+            }
+            unitPrice = roundMoney(unitPrice + addOn.price);
+            addOnSnapshots.push(addOn.name);
+          }
+        } else if (Array.isArray(item.selectedAddOns)) {
+          for (const entry of item.selectedAddOns as unknown[]) {
+            const parsed = legacyAddOnName(entry);
+            if (!parsed) continue;
+            const addOn = parsed.startsWith('id:')
+              ? product.addOns.find((a) => a.id === parsed.slice(3))
+              : product.addOns.find((a) => a.name === parsed);
+            if (addOn && addOn.isAvailable) {
+              unitPrice = roundMoney(unitPrice + addOn.price);
+              addOnSnapshots.push(addOn.name);
+            }
+          }
+        }
+
+        // Removed ingredients are advisory; keep only known ones.
+        const knownIngredients = new Set([
+          ...(product.ingredients || []),
+          ...(product.removableIngredients || []),
+        ]);
+        const removed = (item.removedIngredients || []).filter((name) =>
+          knownIngredients.has(name)
+        );
+
+        pricedItems.push({
+          productId: product.id,
+          productNameSnapshot: product.name,
+          productNameEnSnapshot: product.nameEn || undefined,
+          priceSnapshot: roundMoney(unitPrice),
+          quantity,
+          selectedSize: sizeSnapshot,
+          selectedAddOns: addOnSnapshots,
+          removedIngredients: removed,
+          specialInstructions: item.specialInstructions || item.notes || undefined,
+          totalPrice: roundMoney(unitPrice * quantity),
+        });
+      }
+
+      const subtotal = roundMoney(pricedItems.reduce((sum, item) => sum + item.totalPrice, 0));
+      if (subtotal <= 0) {
+        return res.status(400).json({ success: false, error: 'قيمة الطلب صفرية', statusCode: 400 });
+      }
+
+      // Order-number allocation retries on unique collisions.
+      let newOrder: Awaited<ReturnType<typeof prisma.order.create>> | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 5 && !newOrder; attempt += 1) {
+        const count = await prisma.order.count({ where: { restaurantId } });
+        const nextNum = 1001 + count + attempt;
+        const orderId = `#${nextNum}`;
+        try {
+          newOrder = await prisma.order.create({
+            data: {
+              id: orderId,
+              numericId: nextNum,
+              restaurantId,
+              tableId,
+              sessionId,
+              status: 'PENDING',
+              paymentMethod: 'PAY AT CASHIER',
+              subtotal,
+              total: subtotal,
+              notes: notes || undefined,
+              estimatedPrepMinutes: 18,
+              items: { create: pricedItems },
+            },
+            include: { items: true },
+          });
+        } catch (createErr: unknown) {
+          lastError = createErr;
+          if ((createErr as { code?: string })?.code !== 'P2002') throw createErr;
+        }
+      }
+      if (!newOrder) {
+        console.error('Public order id allocation failed:', lastError);
+        return res.status(500).json({ success: false, error: 'تعذر إرسال الطلب للمطبخ، حاول مجدداً', statusCode: 500 });
+      }
+
+      // Update table status
+      await prisma.table.update({
+        where: { id: tableId },
+        data: {
+          status: 'OCCUPIED',
+          lastActivityAt: new Date(),
         },
-      },
-      include: { items: true },
-    });
+      });
 
-    // Update table status
-    await prisma.table.update({
-      where: { id: tableId },
-      data: {
-        status: 'OCCUPIED',
-        lastActivityAt: new Date(),
-      },
-    });
+      logAuditEvent({
+        restaurantId,
+        actor: 'QR Guest',
+        actorRole: 'STAFF',
+        action: 'CUSTOMER_ORDER_CREATED',
+        entity: 'Order',
+        entityId: newOrder.id,
+        details: `طلب زبون ${newOrder.id} بقيمة ${subtotal} (طاولة ${tableId})`,
+      }).catch(() => undefined);
 
-    // Broadcast new order to Manager Dashboard via SSE
-    realtimeService.broadcastToRestaurant(restaurantId, 'ORDER_CREATED', {
-      orderId: newOrder.id,
-      tableId,
-      total: newOrder.total,
-      status: newOrder.status,
-      itemsCount: newOrder.items.length,
-    });
+      // Broadcast new order (table-scoped: only this table + staff see it)
+      realtimeService.broadcastToTable(restaurantId, tableId, 'ORDER_CREATED', {
+        orderId: newOrder.id,
+        tableId,
+        total: newOrder.total,
+        status: newOrder.status,
+        itemsCount: newOrder.items.length,
+      });
 
-    return res.status(201).json({
-      success: true,
-      data: { order: newOrder },
-      statusCode: 201,
-    });
-  } catch (err: any) {
-    console.error('Order creation error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر إرسال الطلب للمطبخ', statusCode: 500 });
+      return res.status(201).json({
+        success: true,
+        data: { order: newOrder },
+        statusCode: 201,
+      });
+    } catch (err: unknown) {
+      console.error('Order creation error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر إرسال الطلب للمطبخ', statusCode: 500 });
+    }
   }
-});
+);
 
 // POST /api/public/orders/:orderId/cancel (Customer Cancels Order)
-router.post('/orders/:orderId/cancel', async (req: Request, res: Response) => {
-  try {
-    const { orderId } = req.params;
-    const restaurantId = req.query.restaurantId as string || req.body.restaurantId;
-    const sessionToken = req.query.sessionToken as string || req.body.sessionToken;
+// The order must belong to the caller's own table session —
+// sessionToken travels in the POST body, never the URL.
+router.post(
+  '/orders/:orderId/cancel',
+  publicOrderLimiter,
+  validateBody(orderCancelSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { orderId } = req.params;
+      const { restaurantId, sessionToken } = req.body as {
+        restaurantId?: string;
+        sessionToken?: string;
+      };
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: { items: true },
-    });
-
-    if (!order || (restaurantId && order.restaurantId !== restaurantId)) {
-      return res.status(404).json({ success: false, error: 'الطلب غير موجود', statusCode: 404 });
-    }
-
-    if (!restaurantId || !await getQrSession(sessionToken, order.restaurantId, order.tableId)) {
-      return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
-    }
-
-    if (order.status !== 'PENDING') {
-      return res.status(403).json({
-        success: false,
-        error: 'بدأ المطبخ بتحضير طلبك بالفعل، لذلك لم يعد بالإمكان تعديله أو إلغاؤه.',
-        statusCode: 403,
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
       });
-    }
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
-      data: { status: 'CANCELLED' },
-    });
+      if (!order || (restaurantId && order.restaurantId !== restaurantId)) {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود', statusCode: 404 });
+      }
 
-    // Check if table has other active orders
-    const remainingActive = await prisma.order.count({
-      where: {
+      if (!sessionToken) {
+        return res.status(400).json({ success: false, error: 'جلسة الطاولة مطلوبة لإلغاء الطلب', statusCode: 400 });
+      }
+      const session = await getQrSession(sessionToken, order.restaurantId, order.tableId);
+      // Strict binding: session must own this exact order.
+      if (!session || !order.sessionId || order.sessionId !== session.id) {
+        return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
+      }
+
+      if (order.status !== 'PENDING') {
+        return res.status(403).json({
+          success: false,
+          error: 'بدأ المطبخ بتحضير طلبك بالفعل، لذلك لم يعد بالإمكان تعديله أو إلغاؤه.',
+          statusCode: 403,
+        });
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'CANCELLED' },
+      });
+
+      // Check if table has other active orders
+      const remainingActive = await prisma.order.count({
+        where: {
+          tableId: order.tableId,
+          restaurantId: order.restaurantId,
+          status: { in: ['PENDING', 'PREPARING', 'READY'] },
+        },
+      });
+
+      if (remainingActive === 0) {
+        await prisma.table.update({
+          where: { id: order.tableId },
+          data: { status: 'AVAILABLE' },
+        });
+      }
+
+      realtimeService.broadcastToTable(order.restaurantId, order.tableId, 'ORDER_CANCELLED', {
+        orderId,
         tableId: order.tableId,
-        restaurantId: order.restaurantId,
-        status: { in: ['PENDING', 'PREPARING', 'READY'] },
-      },
-    });
-
-    if (remainingActive === 0) {
-      await prisma.table.update({
-        where: { id: order.tableId },
-        data: { status: 'AVAILABLE' },
       });
+
+      return res.json({
+        success: true,
+        data: { order: updated, message: 'تم إلغاء الطلب بنجاح' },
+        statusCode: 200,
+      });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر إلغاء الطلب', statusCode: 500 });
     }
-
-    realtimeService.broadcastToRestaurant(order.restaurantId, 'ORDER_CANCELLED', {
-      orderId,
-      tableId: order.tableId,
-    });
-
-    return res.json({
-      success: true,
-      data: { order: updated, message: 'تم إلغاء الطلب بنجاح' },
-      statusCode: 200,
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر إلغاء الطلب', statusCode: 500 });
   }
-});
+);
 
 // PUT /api/public/orders/:orderId/notes (Customer Edits Notes while PENDING)
-router.put('/orders/:orderId/notes', async (req: Request, res: Response) => {
-  try {
-    const { orderId } = req.params;
-    const { notes, restaurantId } = req.body;
-    const { sessionToken } = req.body;
+router.put(
+  '/orders/:orderId/notes',
+  publicOrderLimiter,
+  validateBody(orderNotesSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { orderId } = req.params;
+      const { notes, restaurantId, sessionToken } = req.body as {
+        notes?: string;
+        restaurantId: string;
+        sessionToken: string;
+      };
 
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
-    if (!order || (restaurantId && order.restaurantId !== restaurantId)) {
-      return res.status(404).json({ success: false, error: 'الطلب غير موجود', statusCode: 404 });
-    }
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      if (!order || order.restaurantId !== restaurantId) {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود', statusCode: 404 });
+      }
 
-    if (!restaurantId || !await getQrSession(sessionToken, order.restaurantId, order.tableId)) {
-      return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
-    }
+      const session = await getQrSession(sessionToken, order.restaurantId, order.tableId);
+      if (!session || !order.sessionId || order.sessionId !== session.id) {
+        return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
+      }
 
-    if (order.status !== 'PENDING') {
-      return res.status(403).json({
-        success: false,
-        error: 'بدأ المطبخ بتحضير طلبك، لذلك لم يعد بالإمكان تعديل الملاحظات.',
-        statusCode: 403,
+      if (order.status !== 'PENDING') {
+        return res.status(403).json({
+          success: false,
+          error: 'بدأ المطبخ بتحضير طلبك، لذلك لم يعد بالإمكان تعديل الملاحظات.',
+          statusCode: 403,
+        });
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { notes: notes || null },
       });
+
+      realtimeService.broadcastToTable(order.restaurantId, order.tableId, 'ORDER_NOTES_UPDATED', {
+        orderId,
+        notes,
+      });
+
+      return res.json({ success: true, data: { order: updated }, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تعديل الملاحظات', statusCode: 500 });
     }
-
-    const updated = await prisma.order.update({
-      where: { id: orderId },
-      data: { notes: notes || null },
-    });
-
-    realtimeService.broadcastToRestaurant(order.restaurantId, 'ORDER_NOTES_UPDATED', {
-      orderId,
-      notes,
-    });
-
-    return res.json({ success: true, data: { order: updated }, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تعديل الملاحظات', statusCode: 500 });
   }
-});
+);
 
 // POST /api/public/waiter-requests (Customer Calls Waiter with Debounce Protection)
-router.post('/waiter-requests', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId, tableId, reason, note, sessionToken } = req.body;
+router.post(
+  '/waiter-requests',
+  waiterCallLimiter,
+  validateBody(waiterCallSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { restaurantId, tableId, reason, note, sessionToken } = req.body as {
+        restaurantId: string;
+        tableId: string;
+        reason: string;
+        note?: string;
+        sessionToken: string;
+      };
 
-    if (!restaurantId || !tableId) {
-      return res.status(400).json({ success: false, error: 'بيانات النداء غير مكتملة', statusCode: 400 });
-    }
+      const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
+      if (!restaurant || restaurant.status !== 'ACTIVE') {
+        return res.status(403).json({ success: false, error: 'المطعم غير متاح حالياً', statusCode: 403 });
+      }
 
-    const table = await prisma.table.findUnique({ where: { id: tableId } });
-    if (!table || table.restaurantId !== restaurantId) {
-      return res.status(404).json({ success: false, error: 'الطاولة غير موجودة في هذا المطعم', statusCode: 404 });
-    }
-    const session = await getQrSession(sessionToken, restaurantId, tableId);
-    if (!session) {
-      return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
-    }
+      const table = await prisma.table.findUnique({ where: { id: tableId } });
+      if (!table || table.restaurantId !== restaurantId) {
+        return res.status(404).json({ success: false, error: 'الطاولة غير موجودة في هذا المطعم', statusCode: 404 });
+      }
+      const session = await getQrSession(sessionToken, restaurantId, tableId);
+      if (!session) {
+        return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
+      }
 
-    // Debounce: Check for pending request for the same table within 45 seconds
-    const recentPending = await prisma.waiterRequest.findFirst({
-      where: {
-        restaurantId,
-        tableId,
-        status: { in: ['PENDING', 'ACKNOWLEDGED'] },
-        createdAt: { gte: new Date(Date.now() - 45 * 1000) },
-      },
-    });
-
-    if (recentPending) {
-      return res.status(429).json({
-        success: false,
-        error: 'تم إرسال نداء مؤخراً لطاقم الضيافة. يرجى الانتظار قليلاً وسيكونون بخدمتك.',
-        statusCode: 429,
+      // Debounce: Check for pending request for the same table within 45 seconds
+      const recentPending = await prisma.waiterRequest.findFirst({
+        where: {
+          restaurantId,
+          tableId,
+          status: { in: ['PENDING', 'ACKNOWLEDGED'] },
+          createdAt: { gte: new Date(Date.now() - 45 * 1000) },
+        },
       });
-    }
 
-    const sessionId = session.id;
+      if (recentPending) {
+        return res.status(429).json({
+          success: false,
+          error: 'تم إرسال نداء مؤخراً لطاقم الضيافة. يرجى الانتظار قليلاً وسيكونون بخدمتك.',
+          statusCode: 429,
+        });
+      }
 
-    const waiterReq = await prisma.waiterRequest.create({
-      data: {
-        restaurantId,
+      const sessionId = session.id;
+
+      const waiterReq = await prisma.waiterRequest.create({
+        data: {
+          restaurantId,
+          tableId,
+          sessionId,
+          reason,
+          reasonText: note || undefined,
+          status: 'PENDING',
+        },
+      });
+
+      // Update table flag
+      await prisma.table.update({
+        where: { id: tableId },
+        data: {
+          hasWaiterCall: true,
+          status: reason === 'BILL' ? 'BILL_REQUESTED' : undefined,
+        },
+      });
+
+      realtimeService.broadcastToTable(restaurantId, tableId, 'WAITER_CALL', {
+        requestId: waiterReq.id,
         tableId,
-        sessionId,
-        reason: reason || 'ASSISTANCE',
-        reasonText: note || undefined,
-        status: 'PENDING',
-      },
-    });
+        reason: waiterReq.reason,
+        reasonText: waiterReq.reasonText,
+      });
 
-    // Update table flag
-    await prisma.table.update({
-      where: { id: tableId },
-      data: {
-        hasWaiterCall: true,
-        status: reason === 'BILL' ? 'BILL_REQUESTED' : undefined,
-      },
-    });
-
-    realtimeService.broadcastToRestaurant(restaurantId, 'WAITER_CALL', {
-      requestId: waiterReq.id,
-      tableId,
-      reason: waiterReq.reason,
-      reasonText: waiterReq.reasonText,
-    });
-
-    return res.status(201).json({
-      success: true,
-      data: { waiterRequest: waiterReq },
-      statusCode: 201,
-    });
-  } catch (err) {
-    console.error('Waiter call error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر استدعاء طاقم الضيافة', statusCode: 500 });
+      return res.status(201).json({
+        success: true,
+        data: { waiterRequest: waiterReq },
+        statusCode: 201,
+      });
+    } catch (err) {
+      console.error('Waiter call error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر استدعاء طاقم الضيافة', statusCode: 500 });
+    }
   }
-});
+);
 
 export default router;
