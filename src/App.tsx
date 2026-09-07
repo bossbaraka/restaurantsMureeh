@@ -29,8 +29,8 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#040D1A] text-slate-100 flex flex-col font-sans selection:bg-[#0072BC]/30 selection:text-[#38BDF8]">
-      {/* Top Prototype & Multi-Tenant Navigation Bar */}
-      <ViewSwitcher />
+      {/* Top Prototype & Multi-Tenant Navigation Bar — hidden on the public SaaS landing page, which renders its own navbar */}
+      {safeViewMode !== 'SAAS_LANDING' && <ViewSwitcher />}
 
       {/* Dynamic View Mode Router */}
       <div className="flex-1">
