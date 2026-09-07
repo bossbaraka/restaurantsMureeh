@@ -19,6 +19,11 @@ import bcrypt from 'bcryptjs';
  *
  * Mutating lifecycle tests (create session/order/settle) only run when
  * `SAAS_E2E_MUTATE=1` is set — protecting real production tenant data.
+ *
+ * The seed itself (plan catalog + platform admin upserts) NEVER runs unless
+ * `SAAS_E2E_SEED=1` is set: pointing a test run at the wrong DATABASE_URL
+ * must not rewrite platform data. Without the flag the suite performs a
+ * read-only connectivity check and runs all non-mutating tests.
  */
 
 type DbHandle = {
@@ -38,6 +43,7 @@ let isDbConnected = false;
 let prismaUnavailableReason = '';
 
 const ENABLE_MUTATIONS = process.env.SAAS_E2E_MUTATE === '1';
+const ENABLE_SEED = process.env.SAAS_E2E_SEED === '1';
 
 describe('Production Commercial Restaurant SaaS Integration Test Suite', () => {
   beforeAll(async () => {
@@ -65,10 +71,18 @@ describe('Production Commercial Restaurant SaaS Integration Test Suite', () => {
       dbHandle.createDatabaseBackup =
         backupMod.status === 'fulfilled' ? backupMod.value.createDatabaseBackup : null;
 
-      await Promise.race([
-        dbHandle.seedDatabase(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('DB Timeout')), 8000)),
-      ]);
+      if (ENABLE_SEED && dbHandle.seedDatabase) {
+        await Promise.race([
+          dbHandle.seedDatabase(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('DB Timeout')), 8000)),
+        ]);
+      } else {
+        // Read-only connectivity probe — no writes without SAAS_E2E_SEED=1.
+        await Promise.race([
+          dbHandle.prisma.$queryRaw`SELECT 1`,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('DB Timeout')), 8000)),
+        ]);
+      }
       isDbConnected = true;
     } catch (e) {
       console.warn('PostgreSQL DB offline or connection slow, DB-backed tests run in skip mode.');

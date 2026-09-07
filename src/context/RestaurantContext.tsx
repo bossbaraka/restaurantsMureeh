@@ -11,6 +11,7 @@ import {
   Offer,
   CartItem,
   CartItemOption,
+  ProductAddOn,
   ToastMessage,
   RestaurantUser,
   TableSession,
@@ -415,9 +416,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     let eventSource: EventSource | null = null;
     try {
-      const authToken = typeof window !== 'undefined' ? localStorage.getItem('merar_auth_token') || '' : '';
+      // Customer streams authenticate with the QR session capability only —
+      // the staff JWT must never travel in a URL (logs/history/referrer).
       eventSource = new EventSource(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}&token=${encodeURIComponent(authToken)}`
+        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`
       );
       eventSource.addEventListener('ORDER_STATUS_UPDATED', (e: any) => {
         refreshTenantData();
@@ -441,13 +443,18 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, viewMode]);
 
-  // Entitlement checker — 100% full feature access enabled for manager presentation & marketing
+  // Entitlement checker — resolved from the tenant's live subscription.
+  // This is a UI hint only: the server re-verifies every gated action.
   const checkEntitlement = useCallback(
     (key: EntitlementKey): boolean => {
       if (!currentRestaurant) return false;
-      return true; // All features unlocked for stakeholder demonstration
+      if (!subscription) return true; // not loaded yet — server enforces
+      if (subscription.status === 'SUSPENDED' || subscription.status === 'CANCELLED') return false;
+      const plan = plans.find((p) => p.id === subscription.planId);
+      if (!plan) return false;
+      return plan.entitlements.includes(key);
     },
-    [currentRestaurant]
+    [currentRestaurant, subscription, plans]
   );
 
   const hasEntitlement = checkEntitlement;
@@ -609,22 +616,36 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         return { success: false, error: 'السلة فارغة' };
       }
 
-      const orderItems: OrderItem[] = cartItems.map((c) => ({
-        id: '',
-        productId: c.productId || c.product?.id || '',
-        productName: c.product?.name || c.productName || '',
-        productNameEn: c.product?.nameEn || c.productNameEn || undefined,
-        productImage: c.product?.image || c.productImage || undefined,
-        quantity: c.quantity,
-        unitPrice: c.unitPrice || c.product?.price || 0,
-        totalPrice: c.totalPrice || c.itemTotal || 0,
-        selectedSize: typeof c.options.size === 'object' ? c.options.size.name : c.options.size,
-        selectedAddOns: (c.options.selectedAddOns || []).map((a: any) =>
-          typeof a === 'object' ? `${a.name} (+${currentRestaurant.currency}${a.price})` : String(a)
-        ),
-        removedIngredients: c.options.removedIngredients,
-        specialInstructions: c.options.specialInstructions || c.options.notes,
-      }));
+      const orderItems: OrderItem[] = cartItems.map((c) => {
+        const sizeOption =
+          typeof c.options.size === 'object'
+            ? c.options.size
+            : typeof c.options.selectedSize === 'object'
+              ? c.options.selectedSize
+              : undefined;
+        const addOnOptions = (c.options.selectedAddOns || []).filter(
+          (a): a is ProductAddOn => typeof a === 'object' && !!a
+        );
+        return {
+          id: '',
+          productId: c.productId || c.product?.id || '',
+          productName: c.product?.name || c.productName || '',
+          productNameEn: c.product?.nameEn || c.productNameEn || undefined,
+          productImage: c.product?.image || c.productImage || undefined,
+          quantity: c.quantity,
+          unitPrice: c.unitPrice || c.product?.price || 0,
+          totalPrice: c.totalPrice || c.itemTotal || 0,
+          selectedSize: typeof c.options.size === 'object' ? c.options.size.name : c.options.size,
+          // Variant IDs for server-side pricing (names are display-only).
+          selectedSizeId: sizeOption?.id || undefined,
+          selectedAddOnIds: addOnOptions.map((a) => a.id).filter(Boolean),
+          selectedAddOns: (c.options.selectedAddOns || []).map((a: any) =>
+            typeof a === 'object' ? `${a.name} (+${currentRestaurant.currency}${a.price})` : String(a)
+          ),
+          removedIngredients: c.options.removedIngredients,
+          specialInstructions: c.options.specialInstructions || c.options.notes,
+        };
+      });
 
       const res = await api.submitOrder({
         restaurantId: currentRestaurant.id,

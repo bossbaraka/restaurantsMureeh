@@ -39,10 +39,14 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
       onClose();
       return;
     }
+    // Manager settle = cash collected in full: the recorded tendered amount
+    // must cover the bill (server-enforced, never silently marked PAID).
+    const unpaidTotal = Math.round(unpaidOrders.reduce((sum, o) => sum + o.total, 0) * 100) / 100;
     const res = await api.processPayment(currentUser, currentRestaurant.id, {
       tableId,
       orderIds: unpaidOrders.map((o) => o.id),
       method: 'CASH',
+      cashReceived: unpaidTotal,
     });
     setSettling(false);
     if (res.success) {
