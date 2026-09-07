@@ -115,3 +115,173 @@
     color: #111 !important;
   }
 }
+
+/* ============================================================
+   Mureeh SaaS landing — premium motion & decoration utilities
+   ============================================================ */
+html {
+  scroll-padding-top: 90px;
+}
+
+.saas-grid-bg {
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.06) 1px, transparent 1px);
+  background-size: 46px 46px;
+}
+
+.saas-fade-radial {
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 38%, #000 25%, transparent 78%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 38%, #000 25%, transparent 78%);
+}
+
+/* Scroll-reveal (paired with the Reveal component) */
+.saas-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.saas-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Ambient aurora blobs */
+@keyframes saas-drift-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(70px, -45px) scale(1.18); }
+}
+@keyframes saas-drift-b {
+  0%, 100% { transform: translate(0, 0) scale(1.1); }
+  50% { transform: translate(-80px, 40px) scale(0.92); }
+}
+.animate-saas-drift-a { animation: saas-drift-a 16s ease-in-out infinite; }
+.animate-saas-drift-b { animation: saas-drift-b 20s ease-in-out infinite; }
+
+/* Floating cards */
+@keyframes saas-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-14px); }
+}
+.animate-saas-float { animation: saas-float 6s ease-in-out infinite; }
+.animate-saas-float-delayed { animation: saas-float 7.5s ease-in-out 1.4s infinite; }
+.animate-saas-float-slow { animation: saas-float 9s ease-in-out 0.6s infinite; }
+
+/* Marquee strip (translate -50% over two identical halves) */
+@keyframes saas-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-saas-marquee { animation: saas-marquee 30s linear infinite; }
+.saas-marquee-hover:hover .animate-saas-marquee { animation-play-state: paused; }
+
+/* Slow decorative rotation */
+@keyframes saas-spin-slow {
+  to { transform: rotate(360deg); }
+}
+.animate-saas-spin-slow { animation: saas-spin-slow 26s linear infinite; }
+
+/* Animated gradient backgrounds */
+@keyframes saas-pan {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.animate-saas-pan {
+  background-size: 220% 220%;
+  animation: saas-pan 9s ease-in-out infinite;
+}
+
+/* Live-dot blinking */
+@keyframes saas-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+.animate-saas-blink { animation: saas-blink 1.8s ease-in-out infinite; }
+
+/* Pop-in for tab panels & live tickets */
+@keyframes saas-pop-in {
+  from { opacity: 0; transform: translateY(-10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-saas-pop { animation: saas-pop-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Shine sweep for primary buttons */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.btn-shine::after {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  z-index: 1;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.35) 50%, transparent 58%);
+  transform: translateX(-160%);
+  transition: transform 0.8s ease;
+  pointer-events: none;
+}
+.btn-shine:hover::after {
+  transform: translateX(160%);
+}
+
+/* Premium range slider */
+input[type='range'].saas-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 10px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  border: 1px solid rgba(0, 114, 188, 0.4);
+}
+input[type='range'].saas-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 6px solid #009fe3;
+  box-shadow: 0 0 0 6px rgba(0, 159, 227, 0.18), 0 4px 16px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+  transition: box-shadow 0.2s ease;
+}
+input[type='range'].saas-range::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  box-shadow: 0 0 0 9px rgba(0, 159, 227, 0.25), 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+input[type='range'].saas-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #fff;
+  border: 6px solid #009fe3;
+  box-shadow: 0 0 0 6px rgba(0, 159, 227, 0.18);
+  cursor: grab;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-saas-drift-a,
+  .animate-saas-drift-b,
+  .animate-saas-float,
+  .animate-saas-float-delayed,
+  .animate-saas-float-slow,
+  .animate-saas-marquee,
+  .animate-saas-spin-slow,
+  .animate-saas-pan,
+  .animate-saas-blink {
+    animation: none;
+  }
+  .saas-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .btn-shine::after {
+    display: none;
+  }
+}
