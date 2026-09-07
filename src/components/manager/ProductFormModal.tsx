@@ -47,6 +47,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [newAddOnPrice, setNewAddOnPrice] = useState<number | ''>(0);
 
   useEffect(() => {
+    if (!isOpen) return;
     if (product) {
       setCategoryId(product.categoryId);
       setName(product.name);
@@ -63,7 +64,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setSizes(product.sizes || []);
       setAddOns(product.addOns || []);
     } else {
-      setCategoryId(categories[0]?.id || '');
+      setCategoryId((prev) => prev || categories[0]?.id || '');
       setName('');
       setNameEn('');
       setDescription('');
@@ -78,7 +79,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setSizes([]);
       setAddOns([]);
     }
-  }, [product, categories, isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, isOpen]);
 
   if (!isOpen) return null;
 
