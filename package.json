@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "server": "tsx server/index.ts",
-    "start": "npx prisma db push --accept-data-loss && tsx server/index.ts",
+    "start": "npx prisma db push && tsx server/index.ts",
     "start:server": "prisma db push && tsx server/index.ts",
     "postinstall": "prisma generate",
     "build": "tsc -b && vite build",
@@ -37,6 +37,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.37.0",

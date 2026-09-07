@@ -9,12 +9,18 @@ interface Client {
 
 class RealtimeService {
   private clients: Client[] = [];
+  // Bound concurrent SSE streams per process (slow-loris style abuse cap).
+  private static readonly MAX_CLIENTS = 2000;
 
-  public addClient(client: Client) {
+  public addClient(client: Client): boolean {
+    if (this.clients.length >= RealtimeService.MAX_CLIENTS) {
+      return false;
+    }
     this.clients.push(client);
     client.res.on('close', () => {
       this.removeClient(client.id);
     });
+    return true;
   }
 
   public removeClient(id: string) {

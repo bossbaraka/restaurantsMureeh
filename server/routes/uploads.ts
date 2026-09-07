@@ -2,7 +2,9 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { requireAuth } from '../middleware/auth';
+import { randomUUID } from 'crypto';
+import { requireManager } from '../middleware/auth';
+import { uploadLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -11,20 +13,15 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const unique = `img-${Date.now()}-${Math.random().toString(36).substr(2, 6)}${ext}`;
-    cb(null, unique);
-  },
-});
-
+// Memory storage: the file is inspected BEFORE anything touches disk,
+// so rejected uploads never leave attacker-controlled bytes behind.
 const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5 MB
+    files: 1,
+    fields: 10,
+  },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
@@ -34,23 +31,80 @@ const upload = multer({
   },
 });
 
-// POST /api/uploads/image
-router.post('/image', requireAuth, upload.single('image'), (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, error: 'لم يتم استلام أي صورة', statusCode: 400 });
-  }
+type SniffedImage = { ext: '.png' | '.jpg' | '.webp' | '.gif' } | null;
 
-  // Production Object Storage integration architecture (S3 / Cloudinary / Local Fallback)
-  const imageUrl = `/uploads/${req.file.filename}`;
-  return res.json({
-    success: true,
-    data: {
-      url: imageUrl,
-      filename: req.file.filename,
-      size: req.file.size,
-    },
-    statusCode: 200,
-  });
-});
+/** Verify magic bytes — MIME headers and extensions are attacker input. */
+function sniffImage(buffer: Buffer): SniffedImage {
+  if (buffer.length < 12) return null;
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return { ext: '.png' };
+  }
+  // JPEG: FF D8 FF
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return { ext: '.jpg' };
+  }
+  // WEBP: RIFF....WEBP
+  if (
+    buffer.toString('ascii', 0, 4) === 'RIFF' &&
+    buffer.toString('ascii', 8, 12) === 'WEBP'
+  ) {
+    return { ext: '.webp' };
+  }
+  // GIF: GIF87a / GIF89a
+  const gifHeader = buffer.toString('ascii', 0, 6);
+  if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') {
+    return { ext: '.gif' };
+  }
+  return null;
+}
+
+// POST /api/uploads/image — tenant branding assets (managers only).
+router.post(
+  '/image',
+  requireManager(),
+  uploadLimiter,
+  upload.single('image'),
+  (req: Request, res: Response) => {
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ success: false, error: 'لم يتم استلام أي صورة', statusCode: 400 });
+    }
+
+    const sniffed = sniffImage(req.file.buffer);
+    if (!sniffed) {
+      return res.status(400).json({
+        success: false,
+        error: 'الملف ليس صورة حقيقية بصيغة JPG أو PNG أو WEBP أو GIF',
+        statusCode: 400,
+      });
+    }
+
+    // Server-generated filename + server-verified extension: the client
+    // controls neither the name nor the served content type.
+    const filename = `img-${Date.now()}-${randomUUID().slice(0, 8)}${sniffed.ext}`;
+    const filePath = path.join(uploadDir, filename);
+    fs.writeFileSync(filePath, req.file.buffer);
+
+    const imageUrl = `/uploads/${filename}`;
+    return res.json({
+      success: true,
+      data: {
+        url: imageUrl,
+        filename,
+        size: req.file.size,
+      },
+      statusCode: 200,
+    });
+  }
+);
 
 export default router;

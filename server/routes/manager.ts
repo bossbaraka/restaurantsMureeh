@@ -1,38 +1,140 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/prisma';
-import { requireAuth, requireTenantAccess } from '../middleware/auth';
+import {
+  requireAuth,
+  requireTenantAccess,
+  requireManager,
+  requireCashierOrManager,
+  requireServiceStaff,
+  isPlatformUser,
+} from '../middleware/auth';
 import { realtimeService } from '../services/realtime';
 import { logAuditEvent } from '../services/audit';
+import { generateQrToken, csvField, roundMoney } from '../utils/security';
+import {
+  validateBody,
+  posOrderSchema,
+  orderStatusSchema,
+  waiterStatusSchema,
+  tableCreateSchema,
+  tableUpdateSchema,
+  categoryCreateSchema,
+  categoryUpdateSchema,
+  productCreateSchema,
+  productUpdateSchema,
+  staffCreateSchema,
+  staffUpdateSchema,
+  offerCreateSchema,
+  offerUpdateSchema,
+  planChangeSchema,
+  brandingSchema,
+  branchCreateSchema,
+  branchUpdateSchema,
+  assignTablesSchema,
+  paymentCreateSchema,
+} from '../validation/schemas';
 import bcrypt from 'bcryptjs';
 import { OrderStatus, TableZone, TableStatus } from '@prisma/client';
 
 const router = Router();
 
-// Middleware: Extract tenant ID for manager access verification
+// ============================================================
+// Tenant resolution + ownership helpers
+// ------------------------------------------------------------
+// Non-platform actors ALWAYS resolve to their own JWT tenant —
+// query/body restaurantId values are untrusted hints that can only
+// narrow nothing and escalate nowhere. Platform admins resolve to
+// the explicitly requested tenant (query first, then body).
+// ============================================================
+
 function getTenantId(req: Request): string | undefined {
-  return (req.query.restaurantId as string) || req.body.restaurantId || req.user?.restaurantId || undefined;
+  if (isPlatformUser(req)) {
+    return (
+      (req.query.restaurantId as string) ||
+      req.body?.restaurantId ||
+      req.user?.restaurantId ||
+      undefined
+    );
+  }
+  return req.user?.restaurantId || undefined;
 }
+
+function ownTenant(
+  req: Request,
+  restaurantId: string | null | undefined
+): boolean {
+  return (
+    !!restaurantId && (isPlatformUser(req) || req.user!.restaurantId === restaurantId)
+  );
+}
+
+function deny(
+  req: Request,
+  res: Response,
+  msg = 'غير مصرح لك بالوصول لبيانات هذا المطعم (Tenant Isolation Violation)'
+) {
+  // Best-effort audit of denied cross-tenant attempts (never blocks).
+  if (req.user) {
+    logAuditEvent({
+      restaurantId: req.user.restaurantId,
+      userId: req.user.id,
+      actor: req.user.name,
+      actorRole: req.user.role,
+      action: 'TENANT_ACCESS_DENIED',
+      details: `محاولة وصول مرفوضة عبر ${req.method} ${req.path}: ${msg}`,
+    }).catch(() => undefined);
+  }
+  return res.status(403).json({ success: false, error: msg, statusCode: 403 });
+}
+
+// ---------- Plan limits + entitlements (server-enforced) ----------
+
+const FREE_LIMITS = { maxTables: 15, maxCategories: 6, maxProducts: 35 };
+
+async function getPlanLimits(restaurantId: string): Promise<typeof FREE_LIMITS> {
+  const subscription = await prisma.subscription.findUnique({
+    where: { restaurantId },
+    include: { plan: true },
+  });
+  if (
+    !subscription ||
+    subscription.status !== 'ACTIVE' ||
+    !subscription.plan ||
+    subscription.plan.status !== 'ACTIVE'
+  ) {
+    return { ...FREE_LIMITS };
+  }
+  return {
+    maxTables: subscription.plan.maxTables,
+    maxCategories: subscription.plan.maxCategories,
+    maxProducts: subscription.plan.maxProducts,
+  };
+}
+
+async function restaurantHasEntitlement(
+  restaurantId: string,
+  key: string
+): Promise<boolean> {
+  const subscription = await prisma.subscription.findUnique({
+    where: { restaurantId },
+    include: { plan: true },
+  });
+  return (
+    !!subscription &&
+    subscription.status === 'ACTIVE' &&
+    !!subscription.plan &&
+    subscription.plan.status === 'ACTIVE' &&
+    subscription.plan.entitlements.includes(key)
+  );
+}
+
+// ----------------------------------------------------------------------------
 
 router.use(requireAuth);
 
-// Menu operations must remain tenant-scoped, including read requests.
+// Menu reads stay tenant-scoped (defense in depth alongside per-row checks).
 router.use('/menu', requireTenantAccess((req) => getTenantId(req)));
-
-// Strict tenant ownership helpers -------------------------------------------
-function isPlatformUser(req: Request): boolean {
-  const role = req.user!.role;
-  return role === 'SUPER_ADMIN' || role === 'PLATFORM_ADMIN';
-}
-
-function ownTenant(req: Request, restaurantId: string | null | undefined): boolean {
-  return !!restaurantId && (isPlatformUser(req) || req.user!.restaurantId === restaurantId);
-}
-
-function deny(res: Response, msg = 'غير مصرح لك بالوصول لبيانات هذا المطعم (Tenant Isolation Violation)') {
-  return res.status(403).json({ success: false, error: msg, statusCode: 403 });
-}
-// ----------------------------------------------------------------------------
 
 // GET /api/manager/dashboard/stats
 router.get('/dashboard/stats', async (req: Request, res: Response) => {
@@ -43,13 +145,7 @@ router.get('/dashboard/stats', async (req: Request, res: Response) => {
     }
 
     // Verify tenant access
-    if (req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'PLATFORM_ADMIN' && req.user!.restaurantId !== restaurantId) {
-      return res.status(403).json({
-        success: false,
-        error: 'غير مصرح لك بالوصول لبيانات هذا المطعم (Tenant Isolation Violation)',
-        statusCode: 403,
-      });
-    }
+    if (!ownTenant(req, restaurantId)) return deny(req, res);
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -154,9 +250,7 @@ router.get('/orders', async (req: Request, res: Response) => {
     const restaurantId = getTenantId(req);
     if (!restaurantId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
 
-    if (req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'PLATFORM_ADMIN' && req.user!.restaurantId !== restaurantId) {
-      return res.status(403).json({ success: false, error: 'Cross-Tenant Access Denied', statusCode: 403 });
-    }
+    if (!ownTenant(req, restaurantId)) return deny(req, res);
 
     const orders = await prisma.order.findMany({
       where: { restaurantId },
@@ -202,163 +296,197 @@ router.get('/orders', async (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/manager/orders/:orderId/status
-
 // POST /api/manager/orders — POS / counter order placed by tenant staff
 // (manager/cashier). Server re-prices every item from the tenant's own menu.
-router.post('/orders', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
+router.post(
+  '/orders',
+  requireCashierOrManager(),
+  validateBody(posOrderSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
 
-    const { tableId, items, notes } = req.body;
-    if (!tableId || !items || !Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ success: false, error: 'بيانات الطلب غير مكتملة', statusCode: 400 });
-    }
+      const { tableId, items, notes } = req.body as {
+        tableId: string;
+        items: Array<{
+          productId: string;
+          quantity?: number;
+          removedIngredients?: string[];
+          specialInstructions?: string;
+          notes?: string;
+        }>;
+        notes?: string;
+      };
 
-    const isWalkIn = tableId === '__WALKIN__';
-    if (!isWalkIn) {
-      const table = await prisma.table.findUnique({ where: { id: tableId } });
-      if (!table || table.restaurantId !== restaurantId) {
-        return res.status(404).json({ success: false, error: 'الطاولة غير موجودة في هذا المطعم', statusCode: 404 });
+      const isWalkIn = tableId === '__WALKIN__';
+      if (!isWalkIn) {
+        const table = await prisma.table.findUnique({ where: { id: tableId } });
+        if (!table || table.restaurantId !== restaurantId) {
+          return res.status(404).json({ success: false, error: 'الطاولة غير موجودة في هذا المطعم', statusCode: 404 });
+        }
       }
-    }
 
-    const productIds = items.map((item: any) => item.productId).filter(Boolean);
-    const products = await prisma.product.findMany({
-      where: { restaurantId, id: { in: productIds } },
-    });
-    if (products.length !== new Set(productIds).size) {
-      return res.status(400).json({ success: false, error: 'يحتوي الطلب على طبق غير صالح لهذا المطعم', statusCode: 400 });
-    }
-    const productMap = new Map(products.map((product) => [product.id, product]));
-
-    const pricedItems = items.map((item: any) => {
-      const product = productMap.get(item.productId);
-      const quantity = Number(item.quantity);
-      const safeQty = Number.isInteger(quantity) && quantity > 0 && quantity <= 50 ? quantity : 1;
-      const unitPrice = product?.price || 0;
-      return { ...item, quantity: safeQty, unitPrice, totalPrice: unitPrice * safeQty };
-    });
-    const subtotal = pricedItems.reduce((sum: number, item: any) => sum + item.totalPrice, 0);
-
-    const count = await prisma.order.count({ where: { restaurantId } });
-    const nextNum = 1001 + count;
-    const orderId = `#${nextNum}`;
-
-    const newOrder = await prisma.order.create({
-      data: {
-        id: orderId,
-        numericId: nextNum,
-        restaurantId,
-        tableId,
-        sessionId: null,
-        status: 'PENDING',
-        paymentMethod: 'PAY AT CASHIER',
-        subtotal,
-        total: subtotal,
-        notes: notes || undefined,
-        estimatedPrepMinutes: 15,
-        items: {
-          create: pricedItems.map((i: any) => ({
-            productId: i.productId,
-            productNameSnapshot: i.productName || i.name || 'صنف',
-            productNameEnSnapshot: i.productNameEn || i.nameEn || undefined,
-            priceSnapshot: i.unitPrice,
-            quantity: i.quantity,
-            selectedAddOns: i.selectedAddOns || [],
-            removedIngredients: i.removedIngredients || [],
-            specialInstructions: i.specialInstructions || i.notes || undefined,
-            totalPrice: Number(i.totalPrice) || 0,
-          })),
-        },
-      },
-      include: { items: true },
-    });
-
-    if (!isWalkIn) {
-      await prisma.table.update({
-        where: { id: tableId },
-        data: { status: 'OCCUPIED', lastActivityAt: new Date() },
+      const productIds = [...new Set(items.map((item) => item.productId))];
+      const products = await prisma.product.findMany({
+        where: { restaurantId, id: { in: productIds } },
       });
+      if (products.length !== productIds.length) {
+        return res.status(400).json({ success: false, error: 'يحتوي الطلب على طبق غير صالح لهذا المطعم', statusCode: 400 });
+      }
+      const unavailable = products.find((p) => !p.available);
+      if (unavailable) {
+        return res.status(400).json({ success: false, error: `الطبق "${unavailable.name}" غير متوفر حالياً`, statusCode: 400 });
+      }
+      const productMap = new Map(products.map((product) => [product.id, product]));
+
+      const pricedItems = items.map((item) => {
+        const product = productMap.get(item.productId)!;
+        const quantity =
+          Number.isInteger(item.quantity) && (item.quantity as number) > 0
+            ? Math.min(item.quantity as number, 50)
+            : 1;
+        const unitPrice = roundMoney(product.price);
+        return {
+          productId: product.id,
+          productNameSnapshot: product.name,
+          productNameEnSnapshot: product.nameEn || undefined,
+          priceSnapshot: unitPrice,
+          quantity,
+          selectedAddOns: [] as string[],
+          removedIngredients: item.removedIngredients || [],
+          specialInstructions: item.specialInstructions || item.notes || undefined,
+          totalPrice: roundMoney(unitPrice * quantity),
+        };
+      });
+      const subtotal = roundMoney(pricedItems.reduce((sum, item) => sum + item.totalPrice, 0));
+
+      // Order-number allocation retries on unique collisions (concurrent POS).
+      let newOrder: Awaited<ReturnType<typeof prisma.order.create>> | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 5 && !newOrder; attempt += 1) {
+        const count = await prisma.order.count({ where: { restaurantId } });
+        const nextNum = 1001 + count + attempt;
+        const orderId = `#${nextNum}`;
+        try {
+          newOrder = await prisma.order.create({
+            data: {
+              id: orderId,
+              numericId: nextNum,
+              restaurantId,
+              tableId,
+              sessionId: null,
+              status: 'PENDING',
+              paymentMethod: 'PAY AT CASHIER',
+              subtotal,
+              total: subtotal,
+              notes: notes || undefined,
+              estimatedPrepMinutes: 15,
+              items: { create: pricedItems },
+            },
+            include: { items: true },
+          });
+        } catch (createErr: unknown) {
+          lastError = createErr;
+          if ((createErr as { code?: string })?.code !== 'P2002') throw createErr;
+        }
+      }
+      if (!newOrder) {
+        console.error('POS order id allocation failed:', lastError);
+        return res.status(500).json({ success: false, error: 'تعذر إنشاء فاتورة الكاشير، حاول مجدداً', statusCode: 500 });
+      }
+
+      if (!isWalkIn) {
+        await prisma.table.update({
+          where: { id: tableId },
+          data: { status: 'OCCUPIED', lastActivityAt: new Date() },
+        });
+      }
+
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'POS_ORDER_CREATED',
+        entity: 'Order',
+        entityId: newOrder.id,
+        details: `فاتورة كاشير ${newOrder.id} بقيمة ${subtotal} (${isWalkIn ? 'عميل مباشر' : 'طاولة ' + tableId})`,
+      });
+
+      realtimeService.broadcastToTable(restaurantId, tableId, 'ORDER_CREATED', {
+        orderId: newOrder.id,
+        tableId,
+        total: newOrder.total,
+        status: newOrder.status,
+        itemsCount: newOrder.items.length,
+      });
+
+      return res.status(201).json({ success: true, data: { order: newOrder }, statusCode: 201 });
+    } catch (err) {
+      console.error('POS order error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر إنشاء فاتورة الكاشير', statusCode: 500 });
     }
-
-    await logAuditEvent({
-      restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'POS_ORDER_CREATED',
-      entity: 'Order',
-      entityId: orderId,
-      details: `فاتورة كاشير ${orderId} بقيمة ${subtotal} (${isWalkIn ? 'عميل مباشر' : 'طاولة ' + tableId})`,
-    });
-
-    realtimeService.broadcastToRestaurant(restaurantId, 'ORDER_CREATED', {
-      orderId: newOrder.id,
-      tableId,
-      total: newOrder.total,
-      status: newOrder.status,
-      itemsCount: newOrder.items.length,
-    });
-
-    return res.status(201).json({ success: true, data: { order: newOrder }, statusCode: 201 });
-  } catch (err) {
-    console.error('POS order error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر إنشاء فاتورة الكاشير', statusCode: 500 });
   }
-});
+);
 
-router.put('/orders/:orderId/status', async (req: Request, res: Response) => {
-  try {
-    const { orderId } = req.params;
-    const { status, restaurantId } = req.body;
-    const targetRestId = restaurantId || req.user?.restaurantId;
+// PUT /api/manager/orders/:orderId/status — KDS / service status updates.
+router.put(
+  '/orders/:orderId/status',
+  requireServiceStaff(),
+  validateBody(orderStatusSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { orderId } = req.params;
+      const { status, restaurantId } = req.body as {
+        status: OrderStatus;
+        restaurantId?: string;
+      };
+      const targetRestId = restaurantId || req.user?.restaurantId;
 
-    if (!targetRestId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
+      if (!targetRestId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
 
-    if (req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'PLATFORM_ADMIN' && req.user!.restaurantId !== targetRestId) {
-      return res.status(403).json({ success: false, error: 'Cross-Tenant Access Denied', statusCode: 403 });
+      if (!ownTenant(req, targetRestId)) return deny(req, res);
+
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      if (!order || order.restaurantId !== targetRestId) {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود في هذا المطعم', statusCode: 404 });
+      }
+
+      // State machine rule: cannot revert SERVED
+      if (order.status === 'SERVED' && status !== 'SERVED') {
+        return res.status(400).json({ success: false, error: 'لا يمكن إرجاع طلب تم تقديمه بالفعل', statusCode: 400 });
+      }
+
+      const updated = await prisma.order.update({
+        where: { id: orderId },
+        data: { status },
+      });
+
+      await logAuditEvent({
+        restaurantId: targetRestId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'ORDER_STATUS_CHANGED',
+        entity: 'Order',
+        entityId: orderId,
+        details: `تم تغيير حالة الطلب ${orderId} من ${order.status} إلى ${status}`,
+      });
+
+      // Broadcast update via SSE (table-scoped: no cross-table leakage)
+      realtimeService.broadcastToTable(targetRestId, order.tableId, 'ORDER_STATUS_UPDATED', {
+        orderId,
+        status,
+        tableId: order.tableId,
+      });
+
+      return res.json({ success: true, data: { order: updated }, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تحديث حالة الطلب', statusCode: 500 });
     }
-
-    const order = await prisma.order.findUnique({ where: { id: orderId } });
-    if (!order || order.restaurantId !== targetRestId) {
-      return res.status(404).json({ success: false, error: 'الطلب غير موجود في هذا المطعم', statusCode: 404 });
-    }
-
-    // State machine rule: cannot revert SERVED
-    if (order.status === 'SERVED' && status !== 'SERVED') {
-      return res.status(400).json({ success: false, error: 'لا يمكن إرجاع طلب تم تقديمه بالفعل', statusCode: 400 });
-    }
-
-    const updated = await prisma.order.update({
-      where: { id: orderId },
-      data: { status: status as OrderStatus },
-    });
-
-    await logAuditEvent({
-      restaurantId: targetRestId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'ORDER_STATUS_CHANGED',
-      entity: 'Order',
-      entityId: orderId,
-      details: `تم تغيير حالة الطلب ${orderId} من ${order.status} إلى ${status}`,
-    });
-
-    // Broadcast update via SSE
-    realtimeService.broadcastToRestaurant(targetRestId, 'ORDER_STATUS_UPDATED', {
-      orderId,
-      status,
-      tableId: order.tableId,
-    });
-
-    return res.json({ success: true, data: { order: updated }, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تحديث حالة الطلب', statusCode: 500 });
   }
-});
+);
 
 // GET /api/manager/tables
 router.get('/tables', async (req: Request, res: Response) => {
@@ -366,9 +494,7 @@ router.get('/tables', async (req: Request, res: Response) => {
     const restaurantId = getTenantId(req);
     if (!restaurantId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
 
-    if (req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'PLATFORM_ADMIN' && req.user!.restaurantId !== restaurantId) {
-      return res.status(403).json({ success: false, error: 'Cross-Tenant Access Denied', statusCode: 403 });
-    }
+    if (!ownTenant(req, restaurantId)) return deny(req, res);
 
     const tables = await prisma.table.findMany({
       where: { restaurantId },
@@ -401,63 +527,83 @@ router.get('/tables', async (req: Request, res: Response) => {
 });
 
 // POST /api/manager/tables (Create Table)
-router.post('/tables', async (req: Request, res: Response) => {
-  try {
-    const { restaurantId, tableNumber, capacity, zone } = req.body;
-    const targetRestId = restaurantId || req.user?.restaurantId;
+router.post(
+  '/tables',
+  requireManager(),
+  validateBody(tableCreateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const targetRestId = getTenantId(req);
 
-    if (!targetRestId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
+      if (!targetRestId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
 
-    if (!ownTenant(req, targetRestId)) return deny(res);
+      if (!ownTenant(req, targetRestId)) return deny(req, res);
 
-    const num = Number(tableNumber);
-    const numStr = num < 10 ? `0${num}` : `${num}`;
-    const tableId = `${targetRestId}-T${numStr}`;
+      const { tableNumber, capacity, zone, name } = req.body as {
+        tableNumber: number;
+        capacity?: number;
+        zone?: TableZone;
+        name?: string;
+      };
 
-    const duplicate = await prisma.table.findFirst({ where: { restaurantId: targetRestId, number: num } });
-    if (duplicate) {
-      return res.status(409).json({ success: false, error: `يوجد طاولة بهذا الرقم بالفعل (طاولة ${numStr})`, statusCode: 409 });
-    }
+      const limits = await getPlanLimits(targetRestId);
+      const tablesCount = await prisma.table.count({ where: { restaurantId: targetRestId } });
+      if (tablesCount >= limits.maxTables) {
+        return res.status(403).json({
+          success: false,
+          error: `وصلت للحد الأقصى للطاولات في باقتك (${limits.maxTables}). قم بالترقية لإضافة المزيد.`,
+          statusCode: 403,
+        });
+      }
 
-    const newTable = await prisma.table.create({
-      data: {
-        id: tableId,
+      const num = tableNumber;
+      const numStr = num < 10 ? `0${num}` : `${num}`;
+      const tableId = `${targetRestId}-T${numStr}`;
+
+      const duplicate = await prisma.table.findFirst({ where: { restaurantId: targetRestId, number: num } });
+      if (duplicate) {
+        return res.status(409).json({ success: false, error: `يوجد طاولة بهذا الرقم بالفعل (طاولة ${numStr})`, statusCode: 409 });
+      }
+
+      const newTable = await prisma.table.create({
+        data: {
+          id: tableId,
+          restaurantId: targetRestId,
+          number: num,
+          name: name || `طاولة ${numStr}`,
+          capacity: capacity ?? 4,
+          zone: zone || 'MAIN_HALL',
+          status: 'AVAILABLE',
+          qrToken: generateQrToken(),
+        },
+      });
+
+      await logAuditEvent({
         restaurantId: targetRestId,
-        number: num,
-        name: `طاولة ${numStr}`,
-        capacity: Number(capacity) || 4,
-        zone: (zone as TableZone) || 'MAIN_HALL',
-        status: 'AVAILABLE',
-        qrToken: randomUUID(),
-      },
-    });
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'TABLE_CREATED',
+        entity: 'Table',
+        entityId: newTable.id,
+        details: `تمت إضافة طاولة جديدة رقم ${num}`,
+      });
 
-    await logAuditEvent({
-      restaurantId: targetRestId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'TABLE_CREATED',
-      entity: 'Table',
-      entityId: newTable.id,
-      details: `تمت إضافة طاولة جديدة رقم ${num}`,
-    });
-
-    return res.status(201).json({ success: true, data: { table: newTable }, statusCode: 201 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر إنشاء الطاولة', statusCode: 500 });
+      return res.status(201).json({ success: true, data: { table: newTable }, statusCode: 201 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر إنشاء الطاولة', statusCode: 500 });
+    }
   }
-});
+);
 
 // POST /api/manager/tables/:id/settle (Settle Table Bill)
-router.post('/tables/:id/settle', async (req: Request, res: Response) => {
+router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const table = await prisma.table.findUnique({ where: { id } });
     if (!table) return res.status(404).json({ success: false, error: 'الطاولة غير موجودة', statusCode: 404 });
     // Strict ownership: only the tenant that owns the table (or a platform admin) can settle it.
-    if (!ownTenant(req, table.restaurantId)) return deny(res);
-    const targetRestId = table.restaurantId;
+    if (!ownTenant(req, table.restaurantId)) return deny(req, res);
 
     // Mark active orders as SERVED
     await prisma.order.updateMany({
@@ -514,7 +660,7 @@ router.post('/tables/:id/settle', async (req: Request, res: Response) => {
       details: `تمت تسوية حساب الطاولة ${id} وإعادتها متاحة`,
     });
 
-    realtimeService.broadcastToRestaurant(table.restaurantId, 'TABLE_SETTLED', { tableId: id });
+    realtimeService.broadcastToTable(table.restaurantId, id, 'TABLE_SETTLED', { tableId: id });
 
     return res.json({ success: true, message: `تمت تسوية حساب ${id} بنجاح`, statusCode: 200 });
   } catch (err) {
@@ -523,17 +669,24 @@ router.post('/tables/:id/settle', async (req: Request, res: Response) => {
 });
 
 // POST /api/manager/tables/:id/regenerate-qr (Regenerate Secure QR Token)
-router.post('/tables/:id/regenerate-qr', async (req: Request, res: Response) => {
+router.post('/tables/:id/regenerate-qr', requireManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const table = await prisma.table.findUnique({ where: { id } });
     if (!table) return res.status(404).json({ success: false, error: 'الطاولة غير موجودة', statusCode: 404 });
-    if (!ownTenant(req, table.restaurantId)) return deny(res);
+    if (!ownTenant(req, table.restaurantId)) return deny(req, res);
 
-    const newToken = `qr-${table.restaurantId}-${table.number}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    // Opaque CSPRNG token — no restaurant/table IDs embedded, no Math.random.
+    const newToken = generateQrToken();
     const updated = await prisma.table.update({
       where: { id },
       data: { qrToken: newToken },
+    });
+
+    // Rotating the QR invalidates in-flight anonymous sessions on this table.
+    await prisma.tableSession.updateMany({
+      where: { tableId: id, restaurantId: table.restaurantId, status: 'ACTIVE' },
+      data: { status: 'CLOSED', endedAt: new Date() },
     });
 
     await logAuditEvent({
@@ -566,65 +719,110 @@ router.get('/menu/categories', async (req: Request, res: Response) => {
 });
 
 // POST /api/manager/menu/categories
-router.post('/menu/categories', async (req: Request, res: Response) => {
-  const { restaurantId, name, nameEn } = req.body;
-  const targetRestId = restaurantId || req.user?.restaurantId;
-  const count = await prisma.category.count({ where: { restaurantId: targetRestId } });
+router.post(
+  '/menu/categories',
+  requireManager(),
+  validateBody(categoryCreateSchema),
+  async (req: Request, res: Response) => {
+    const targetRestId = getTenantId(req);
+    if (!targetRestId || !ownTenant(req, targetRestId)) return deny(req, res);
 
-  const newCat = await prisma.category.create({
-    data: {
-      restaurantId: targetRestId,
-      name,
-      nameEn: nameEn || undefined,
-      sortOrder: count + 1,
-    },
-  });
+    const { name, nameEn } = req.body as { name: string; nameEn?: string };
 
-  await logAuditEvent({
-    restaurantId: targetRestId,
-    userId: req.user!.id,
-    actor: req.user!.name,
-    actorRole: req.user!.role,
-    action: 'CATEGORY_CREATED',
-    entity: 'Category',
-    entityId: newCat.id,
-    details: `تم إنشاء تصنيف جديد: ${name}`,
-  });
+    const limits = await getPlanLimits(targetRestId);
+    const count = await prisma.category.count({ where: { restaurantId: targetRestId } });
+    if (count >= limits.maxCategories) {
+      return res.status(403).json({
+        success: false,
+        error: `وصلت للحد الأقصى للتصنيفات في باقتك (${limits.maxCategories}). قم بالترقية لإضافة المزيد.`,
+        statusCode: 403,
+      });
+    }
 
-  return res.status(201).json({ success: true, data: newCat, statusCode: 201 });
-});
-
-// PUT /api/manager/menu/categories/:id
-router.put('/menu/categories/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const existing = await prisma.category.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ success: false, error: 'التصنيف غير موجود', statusCode: 404 });
-    if (!ownTenant(req, existing.restaurantId)) return deny(res);
-
-    const { name, nameEn, sortOrder } = req.body;
-    const updated = await prisma.category.update({
-      where: { id },
+    const newCat = await prisma.category.create({
       data: {
-        name: name !== undefined ? name : undefined,
-        nameEn: nameEn !== undefined ? nameEn : undefined,
-        sortOrder: sortOrder !== undefined ? Number(sortOrder) : undefined,
+        restaurantId: targetRestId,
+        name,
+        nameEn: nameEn || undefined,
+        sortOrder: count + 1,
       },
     });
-    return res.json({ success: true, data: { category: updated }, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تعديل التصنيف', statusCode: 500 });
+
+    await logAuditEvent({
+      restaurantId: targetRestId,
+      userId: req.user!.id,
+      actor: req.user!.name,
+      actorRole: req.user!.role,
+      action: 'CATEGORY_CREATED',
+      entity: 'Category',
+      entityId: newCat.id,
+      details: `تم إنشاء تصنيف جديد: ${name}`,
+    });
+
+    return res.status(201).json({ success: true, data: newCat, statusCode: 201 });
   }
-});
+);
+
+// PUT /api/manager/menu/categories/:id
+router.put(
+  '/menu/categories/:id',
+  requireManager(),
+  validateBody(categoryUpdateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const existing = await prisma.category.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: 'التصنيف غير موجود', statusCode: 404 });
+      if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
+
+      const { name, nameEn, sortOrder } = req.body as {
+        name?: string;
+        nameEn?: string;
+        sortOrder?: number;
+      };
+      const updated = await prisma.category.update({
+        where: { id },
+        data: {
+          name: name !== undefined ? name : undefined,
+          nameEn: nameEn !== undefined ? nameEn : undefined,
+          sortOrder: sortOrder !== undefined ? sortOrder : undefined,
+        },
+      });
+      return res.json({ success: true, data: { category: updated }, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تعديل التصنيف', statusCode: 500 });
+    }
+  }
+);
 
 // DELETE /api/manager/menu/categories/:id
-router.delete('/menu/categories/:id', async (req: Request, res: Response) => {
+router.delete('/menu/categories/:id', requireManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const category = await prisma.category.findUnique({ where: { id } });
     if (!category) return res.status(404).json({ success: false, error: 'التصنيف غير موجود', statusCode: 404 });
-    if (!ownTenant(req, category.restaurantId)) return deny(res);
+    if (!ownTenant(req, category.restaurantId)) return deny(req, res);
+
+    const productsCount = await prisma.product.count({ where: { categoryId: id } });
+    if (productsCount > 0) {
+      return res.status(409).json({
+        success: false,
+        error: `لا يمكن حذف التصنيف: يحتوي على ${productsCount} أطباق. انقل الأطباق أولاً.`,
+        statusCode: 409,
+      });
+    }
+
     await prisma.category.delete({ where: { id } });
+    await logAuditEvent({
+      restaurantId: category.restaurantId,
+      userId: req.user!.id,
+      actor: req.user!.name,
+      actorRole: req.user!.role,
+      action: 'CATEGORY_DELETED',
+      entity: 'Category',
+      entityId: id,
+      details: `تم حذف التصنيف ${category.name}`,
+    });
     return res.json({ success: true, message: 'تم حذف التصنيف', statusCode: 200 });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'تعذر حذف التصنيف', statusCode: 500 });
@@ -679,92 +877,130 @@ router.get('/menu/products', async (req: Request, res: Response) => {
 });
 
 // POST /api/manager/menu/products
-router.post('/menu/products', async (req: Request, res: Response) => {
-  try {
-    const {
-      restaurantId,
-      categoryId,
-      name,
-      nameEn,
-      description,
-      price,
-      image,
-      badge,
-      preparationTimeMinutes,
-      calories,
-      isAvailable,
-      isFeatured,
-      allergens,
-      ingredients,
-      removableIngredients,
-      sizes,
-      addOns,
-    } = req.body;
-
-    const targetRestId = restaurantId || req.user?.restaurantId;
-
-    const newProd = await prisma.product.create({
-      data: {
-        restaurantId: targetRestId,
+router.post(
+  '/menu/products',
+  requireManager(),
+  validateBody(productCreateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const {
         categoryId,
         name,
-        nameEn: nameEn || name,
+        nameEn,
         description,
-        price: Number(price),
-        imageUrl: image,
-        badge: badge || undefined,
-        preparationTimeMinutes: Number(preparationTimeMinutes) || 15,
-        calories: Number(calories) || 450,
-        available: isAvailable !== false,
-        isFeatured: isFeatured || false,
-        allergens: allergens || [],
-        ingredients: ingredients || [],
-        removableIngredients: removableIngredients || ingredients || [],
-        options: {
-          create: (sizes || []).map((s: any) => ({
-            name: s.name,
-            nameEn: s.nameEn || undefined,
-            priceModifier: Number(s.priceModifier || s.price || 0),
-            price: Number(s.price || s.priceModifier || 0),
-          })),
-        },
-        addOns: {
-          create: (addOns || []).map((a: any) => ({
-            name: a.name,
-            nameEn: a.nameEn || undefined,
-            price: Number(a.price || 0),
-            isAvailable: true,
-          })),
-        },
-      },
-      include: { options: true, addOns: true },
-    });
+        price,
+        image,
+        badge,
+        preparationTimeMinutes,
+        calories,
+        isAvailable,
+        isFeatured,
+        allergens,
+        ingredients,
+        removableIngredients,
+        sizes,
+        addOns,
+      } = req.body as {
+        categoryId: string;
+        name: string;
+        nameEn?: string;
+        description?: string;
+        price: number;
+        image?: string;
+        badge?: string;
+        preparationTimeMinutes?: number;
+        calories?: number;
+        isAvailable?: boolean;
+        isFeatured?: boolean;
+        allergens?: string[];
+        ingredients?: string[];
+        removableIngredients?: string[];
+        sizes?: Array<{ name: string; nameEn?: string; price?: number; priceModifier?: number }>;
+        addOns?: Array<{ name: string; nameEn?: string; price?: number }>;
+      };
 
-    await logAuditEvent({
-      restaurantId: targetRestId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'PRODUCT_CREATED',
-      entity: 'Product',
-      entityId: newProd.id,
-      details: `تم إنشاء طبق جديد: ${name} (₪${price})`,
-    });
+      const targetRestId = getTenantId(req);
+      if (!targetRestId || !ownTenant(req, targetRestId)) return deny(req, res);
 
-    return res.status(201).json({ success: true, data: newProd, statusCode: 201 });
-  } catch (err) {
-    console.error('Create product error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر إنشاء الطبق', statusCode: 500 });
+      // The category must belong to the same tenant (composite ownership).
+      const category = await prisma.category.findUnique({ where: { id: categoryId } });
+      if (!category || category.restaurantId !== targetRestId) {
+        return res.status(400).json({ success: false, error: 'التصنيف المحدد لا ينتمي لمطعمك', statusCode: 400 });
+      }
+
+      const limits = await getPlanLimits(targetRestId);
+      const productsCount = await prisma.product.count({ where: { restaurantId: targetRestId } });
+      if (productsCount >= limits.maxProducts) {
+        return res.status(403).json({
+          success: false,
+          error: `وصلت للحد الأقصى للأطباق في باقتك (${limits.maxProducts}). قم بالترقية لإضافة المزيد.`,
+          statusCode: 403,
+        });
+      }
+
+      const newProd = await prisma.product.create({
+        data: {
+          restaurantId: targetRestId,
+          categoryId,
+          name,
+          nameEn: nameEn || name,
+          description: description || '',
+          price,
+          imageUrl: image || '',
+          badge: badge || undefined,
+          preparationTimeMinutes: preparationTimeMinutes ?? 15,
+          calories: calories ?? 450,
+          available: isAvailable !== false,
+          isFeatured: isFeatured || false,
+          allergens: allergens || [],
+          ingredients: ingredients || [],
+          removableIngredients: removableIngredients || ingredients || [],
+          options: {
+            create: (sizes || []).map((s) => ({
+              name: s.name,
+              nameEn: s.nameEn || undefined,
+              priceModifier: s.priceModifier ?? s.price ?? 0,
+              price: s.price ?? s.priceModifier ?? 0,
+            })),
+          },
+          addOns: {
+            create: (addOns || []).map((a) => ({
+              name: a.name,
+              nameEn: a.nameEn || undefined,
+              price: a.price ?? 0,
+              isAvailable: true,
+            })),
+          },
+        },
+        include: { options: true, addOns: true },
+      });
+
+      await logAuditEvent({
+        restaurantId: targetRestId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'PRODUCT_CREATED',
+        entity: 'Product',
+        entityId: newProd.id,
+        details: `تم إنشاء طبق جديد: ${name} (₪${price})`,
+      });
+
+      return res.status(201).json({ success: true, data: newProd, statusCode: 201 });
+    } catch (err) {
+      console.error('Create product error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر إنشاء الطبق', statusCode: 500 });
+    }
   }
-});
+);
 
 // PUT /api/manager/menu/products/:id/stock (Instant Stock Toggle)
-router.put('/menu/products/:id/stock', async (req: Request, res: Response) => {
+router.put('/menu/products/:id/stock', requireManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ success: false, error: 'الطبق غير موجود', statusCode: 404 });
-    if (!ownTenant(req, product.restaurantId)) return deny(res);
+    if (!ownTenant(req, product.restaurantId)) return deny(req, res);
 
     const updated = await prisma.product.update({
       where: { id },
@@ -789,52 +1025,92 @@ router.put('/menu/products/:id/stock', async (req: Request, res: Response) => {
 });
 
 // PUT /api/manager/menu/products/:id (Update Product)
-router.put('/menu/products/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const data = req.body;
+router.put(
+  '/menu/products/:id',
+  requireManager(),
+  validateBody(productUpdateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const data = req.body as {
+        categoryId?: string;
+        name?: string;
+        nameEn?: string;
+        description?: string;
+        price?: number;
+        image?: string;
+        imageUrl?: string;
+        badge?: string | null;
+        preparationTimeMinutes?: number;
+        calories?: number;
+        isAvailable?: boolean;
+        isFeatured?: boolean;
+      };
 
-    const existingProduct = await prisma.product.findUnique({ where: { id } });
-    if (!existingProduct) return res.status(404).json({ success: false, error: 'الطبق غير موجود', statusCode: 404 });
-    if (!ownTenant(req, existingProduct.restaurantId)) return deny(res);
-    if (data.categoryId) {
-      const targetCategory = await prisma.category.findUnique({ where: { id: data.categoryId } });
-      if (!targetCategory || targetCategory.restaurantId !== existingProduct.restaurantId) {
-        return res.status(400).json({ success: false, error: 'التصنيف المحدد لا ينتمي لمطعمك', statusCode: 400 });
+      const existingProduct = await prisma.product.findUnique({ where: { id } });
+      if (!existingProduct) return res.status(404).json({ success: false, error: 'الطبق غير موجود', statusCode: 404 });
+      if (!ownTenant(req, existingProduct.restaurantId)) return deny(req, res);
+      if (data.categoryId) {
+        const targetCategory = await prisma.category.findUnique({ where: { id: data.categoryId } });
+        if (!targetCategory || targetCategory.restaurantId !== existingProduct.restaurantId) {
+          return res.status(400).json({ success: false, error: 'التصنيف المحدد لا ينتمي لمطعمك', statusCode: 400 });
+        }
       }
+
+      // Only explicitly provided fields are updated — omitted fields are
+      // left untouched instead of being reset to defaults.
+      const updated = await prisma.product.update({
+        where: { id },
+        data: {
+          name: data.name !== undefined ? data.name : undefined,
+          nameEn: data.nameEn !== undefined ? data.nameEn : undefined,
+          description: data.description !== undefined ? data.description : undefined,
+          price: data.price !== undefined ? data.price : undefined,
+          imageUrl: data.image !== undefined || data.imageUrl !== undefined ? (data.image ?? data.imageUrl) : undefined,
+          categoryId: data.categoryId !== undefined ? data.categoryId : undefined,
+          available: data.isAvailable !== undefined ? data.isAvailable : undefined,
+          isFeatured: data.isFeatured !== undefined ? data.isFeatured : undefined,
+          badge: data.badge !== undefined ? data.badge : undefined,
+          preparationTimeMinutes: data.preparationTimeMinutes !== undefined ? data.preparationTimeMinutes : undefined,
+          calories: data.calories !== undefined ? data.calories : undefined,
+        },
+      });
+
+      return res.json({ success: true, data: updated, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تعديل الطبق', statusCode: 500 });
     }
-
-    const updated = await prisma.product.update({
-      where: { id },
-      data: {
-        name: data.name,
-        nameEn: data.nameEn,
-        description: data.description,
-        price: Number(data.price),
-        imageUrl: data.image || data.imageUrl,
-        categoryId: data.categoryId,
-        available: data.isAvailable !== false,
-        isFeatured: data.isFeatured || false,
-        badge: data.badge || null,
-        preparationTimeMinutes: Number(data.preparationTimeMinutes) || 15,
-        calories: Number(data.calories) || 450,
-      },
-    });
-
-    return res.json({ success: true, data: updated, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تعديل الطبق', statusCode: 500 });
   }
-});
+);
 
 // DELETE /api/manager/menu/products/:id
-router.delete('/menu/products/:id', async (req: Request, res: Response) => {
+router.delete('/menu/products/:id', requireManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const product = await prisma.product.findUnique({ where: { id } });
     if (!product) return res.status(404).json({ success: false, error: 'الطبق غير موجود', statusCode: 404 });
-    if (!ownTenant(req, product.restaurantId)) return deny(res);
+    if (!ownTenant(req, product.restaurantId)) return deny(req, res);
+
+    const referenced = await prisma.orderItem.count({ where: { productId: id } });
+    if (referenced > 0) {
+      return res.status(409).json({
+        success: false,
+        error: 'لا يمكن حذف الطبق: مرتبط بفواتير سابقة. عطّل توفره بدلاً من الحذف.',
+        statusCode: 409,
+      });
+    }
+
     await prisma.product.delete({ where: { id } });
+    await logAuditEvent({
+      restaurantId: product.restaurantId,
+      userId: req.user!.id,
+      actor: req.user!.name,
+      actorRole: req.user!.role,
+      action: 'PRODUCT_DELETED',
+      entity: 'Product',
+      entityId: id,
+      details: `تم حذف الطبق ${product.name}`,
+    });
     return res.json({ success: true, message: 'تم حذف الطبق', statusCode: 200 });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'تعذر حذف الطبق', statusCode: 500 });
@@ -845,6 +1121,7 @@ router.delete('/menu/products/:id', async (req: Request, res: Response) => {
 router.get('/waiter-requests', async (req: Request, res: Response) => {
   const restaurantId = getTenantId(req);
   if (!restaurantId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
+  if (!ownTenant(req, restaurantId)) return deny(req, res);
 
   const reqs = await prisma.waiterRequest.findMany({
     where: { restaurantId },
@@ -854,50 +1131,78 @@ router.get('/waiter-requests', async (req: Request, res: Response) => {
 });
 
 // PUT /api/manager/waiter-requests/:id/status
-router.put('/waiter-requests/:id/status', async (req: Request, res: Response) => {
-  try {
-  const { id } = req.params;
-  const { status } = req.body;
+router.put(
+  '/waiter-requests/:id/status',
+  requireServiceStaff(),
+  validateBody(waiterStatusSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body as { status: 'PENDING' | 'ACKNOWLEDGED' | 'RESOLVED' | 'CANCELLED' };
 
-  const existing = await prisma.waiterRequest.findUnique({ where: { id } });
-  if (!existing) return res.status(404).json({ success: false, error: 'النداء غير موجود', statusCode: 404 });
-  if (!ownTenant(req, existing.restaurantId)) return deny(res);
+      const existing = await prisma.waiterRequest.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: 'النداء غير موجود', statusCode: 404 });
+      if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
 
-  const reqObj = await prisma.waiterRequest.update({
-    where: { id },
-    data: {
-      status,
-      resolvedAt: status === 'RESOLVED' ? new Date() : null,
-    },
-  });
-
-  if (status === 'RESOLVED') {
-    const remainingPending = await prisma.waiterRequest.count({
-      where: {
-        tableId: reqObj.tableId,
-        restaurantId: reqObj.restaurantId,
-        status: 'PENDING',
-      },
-    });
-    if (remainingPending === 0) {
-      await prisma.table.update({
-        where: { id: reqObj.tableId },
-        data: { hasWaiterCall: false },
+      const reqObj = await prisma.waiterRequest.update({
+        where: { id },
+        data: {
+          status,
+          resolvedAt: status === 'RESOLVED' ? new Date() : null,
+        },
       });
+
+      if (status === 'RESOLVED') {
+        const remainingPending = await prisma.waiterRequest.count({
+          where: {
+            tableId: reqObj.tableId,
+            restaurantId: reqObj.restaurantId,
+            status: 'PENDING',
+          },
+        });
+        if (remainingPending === 0) {
+          await prisma.table.update({
+            where: { id: reqObj.tableId },
+            data: { hasWaiterCall: false },
+          });
+        }
+      }
+
+      await logAuditEvent({
+        restaurantId: reqObj.restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'WAITER_STATUS_CHANGED',
+        entity: 'WaiterRequest',
+        entityId: id,
+        details: `تم تغيير حالة النداء ${id} إلى ${status}`,
+      });
+
+      return res.json({ success: true, data: reqObj, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تحديث حالة النداء', statusCode: 500 });
     }
   }
+);
 
-  return res.json({ success: true, data: reqObj, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تحديث حالة النداء', statusCode: 500 });
-  }
-});
-
-// GET /api/manager/export/orders (CSV Export Architecture)
-router.get('/export/orders', async (req: Request, res: Response) => {
+// GET /api/manager/export/orders (CSV Export — manager only, entitled plans)
+router.get('/export/orders', requireManager(), async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
-    if (!restaurantId) return res.status(400).send('restaurantId required');
+    if (!restaurantId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
+    if (!ownTenant(req, restaurantId)) return deny(req, res);
+
+    if (
+      !isPlatformUser(req) &&
+      !(await restaurantHasEntitlement(restaurantId, 'CAN_EXPORT_REPORTS'))
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: 'تصدير التقارير متاح في باقة المحترفين والمؤسسات. قم بالترقية للمتابعة.',
+        statusCode: 403,
+      });
+    }
 
     const orders = await prisma.order.findMany({
       where: { restaurantId },
@@ -905,17 +1210,29 @@ router.get('/export/orders', async (req: Request, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    let csv = 'Order ID,Table,Date,Status,Total,Items Count,Notes\n';
+    // \uFEFF BOM keeps Arabic text readable in Excel; every cell is
+    // formula-injection neutralized (CWE-1236).
+    let csv = '\uFEFFOrder ID,Table,Date,Status,Total,Items Count,Notes\n';
     orders.forEach((o) => {
       const itemsCount = o.items.reduce((s, i) => s + i.quantity, 0);
-      csv += `"${o.id}","${o.tableId}","${o.createdAt.toISOString()}","${o.status}",${o.total},${itemsCount},"${(o.notes || '').replace(/"/g, '""')}"\n`;
+      csv +=
+        [
+          csvField(o.id),
+          csvField(o.tableId),
+          csvField(o.createdAt.toISOString()),
+          csvField(o.status),
+          csvField(o.total),
+          csvField(itemsCount),
+          csvField(o.notes || ''),
+        ].join(',') + '\n';
     });
 
+    const safeName = restaurantId.replace(/[^a-zA-Z0-9-_]/g, '_').slice(0, 60);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="orders-export-${restaurantId}-${Date.now()}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="orders-export-${safeName}-${Date.now()}.csv"`);
     return res.send(csv);
   } catch (err) {
-    return res.status(500).send('CSV Export Failed');
+    return res.status(500).json({ success: false, error: 'CSV Export Failed', statusCode: 500 });
   }
 });
 
@@ -926,72 +1243,98 @@ router.get('/export/orders', async (req: Request, res: Response) => {
 // ============================================================================
 
 // ---------- Table update (capacity/zone/status/branch) ----------
-router.put('/tables/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const table = await prisma.table.findUnique({ where: { id } });
-    if (!table) return res.status(404).json({ success: false, error: 'الطاولة غير موجودة', statusCode: 404 });
-    if (!ownTenant(req, table.restaurantId)) return deny(res);
+router.put(
+  '/tables/:id',
+  requireManager(),
+  validateBody(tableUpdateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const table = await prisma.table.findUnique({ where: { id } });
+      if (!table) return res.status(404).json({ success: false, error: 'الطاولة غير موجودة', statusCode: 404 });
+      if (!ownTenant(req, table.restaurantId)) return deny(req, res);
 
-    const { tableNumber, capacity, zone, status, branchId, name } = req.body;
+      const { tableNumber, capacity, zone, status, branchId, name } = req.body as {
+        tableNumber?: number;
+        capacity?: number;
+        zone?: TableZone;
+        status?: TableStatus;
+        branchId?: string | '' | null;
+        name?: string;
+      };
 
-    if (branchId) {
-      const branch = await prisma.branch.findUnique({ where: { id: branchId } });
-      if (!branch || branch.restaurantId !== table.restaurantId) {
-        return res.status(400).json({ success: false, error: 'الفرع المحدد لا ينتمي لمطعمك', statusCode: 400 });
+      if (tableNumber !== undefined && tableNumber !== table.number) {
+        const duplicate = await prisma.table.findFirst({
+          where: { restaurantId: table.restaurantId, number: tableNumber },
+        });
+        if (duplicate) {
+          return res.status(409).json({ success: false, error: `يوجد طاولة برقم ${tableNumber} بالفعل`, statusCode: 409 });
+        }
       }
+
+      if (branchId) {
+        const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+        if (!branch || branch.restaurantId !== table.restaurantId) {
+          return res.status(400).json({ success: false, error: 'الفرع المحدد لا ينتمي لمطعمك', statusCode: 400 });
+        }
+      }
+
+      // Only the owning tenant may move its table between its own branches.
+      const updated = await prisma.table.update({
+        where: { id },
+        data: {
+          number: tableNumber !== undefined ? tableNumber : undefined,
+          name: name !== undefined ? name : undefined,
+          capacity: capacity !== undefined ? capacity : undefined,
+          zone: zone !== undefined ? zone : undefined,
+          status: status !== undefined ? status : undefined,
+          branchId: branchId !== undefined ? (branchId || null) : undefined,
+        },
+      });
+
+      await logAuditEvent({
+        restaurantId: table.restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'TABLE_UPDATED',
+        entity: 'Table',
+        entityId: id,
+        details: `تم تحديث بيانات الطاولة ${id}`,
+      });
+
+      return res.json({ success: true, data: { table: updated }, statusCode: 200 });
+    } catch (err) {
+      console.error('Table update error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر تحديث الطاولة', statusCode: 500 });
     }
-
-    // Only the owning tenant may move its table between its own branches.
-    const updated = await prisma.table.update({
-      where: { id },
-      data: {
-        number: tableNumber !== undefined ? Number(tableNumber) : undefined,
-        name: name !== undefined ? name : undefined,
-        capacity: capacity !== undefined ? Number(capacity) : undefined,
-        zone: zone !== undefined ? (zone as TableZone) : undefined,
-        status: status !== undefined ? (status as TableStatus) : undefined,
-        branchId: branchId !== undefined ? (branchId || null) : undefined,
-      },
-    });
-
-    await logAuditEvent({
-      restaurantId: table.restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'TABLE_UPDATED',
-      entity: 'Table',
-      entityId: id,
-      details: `تم تحديث بيانات الطاولة ${id}`,
-    });
-
-    return res.json({ success: true, data: { table: updated }, statusCode: 200 });
-  } catch (err) {
-    console.error('Table update error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر تحديث الطاولة', statusCode: 500 });
   }
-});
+);
 
 // ---------- Staff management (tenant users) ----------
-router.get('/staff', async (req: Request, res: Response) => {
+
+const STAFF_SAFE_SELECT = {
+  id: true,
+  restaurantId: true,
+  name: true,
+  email: true,
+  role: true,
+  status: true,
+  avatar: true,
+  createdAt: true,
+} as const;
+
+const PLATFORM_ROLE_SET = new Set(['PLATFORM_ADMIN', 'SUPER_ADMIN']);
+
+router.get('/staff', requireManager(), async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
 
     const staff = await prisma.restaurantUser.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        restaurantId: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        avatar: true,
-        createdAt: true,
-      },
+      select: STAFF_SAFE_SELECT,
     });
     return res.json({ success: true, data: staff, statusCode: 200 });
   } catch (err) {
@@ -999,93 +1342,183 @@ router.get('/staff', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/staff', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
-    const { name, email, password, pin, role } = req.body;
-    if (!name || !email || !password || !role) {
-      return res.status(400).json({ success: false, error: 'الاسم والبريد وكلمة المرور والدور مطلوبة', statusCode: 400 });
-    }
-    if (pin !== undefined && pin !== null && pin !== '' && (typeof pin !== 'string' || pin.length < 4)) {
-      return res.status(400).json({ success: false, error: 'رمز PIN يجب أن يكون 4 أرقام على الأقل', statusCode: 400 });
-    }
-    const allowedRoles = ['RESTAURANT_MANAGER', 'WAITER', 'KITCHEN', 'CASHIER', 'STAFF'];
-    if (!allowedRoles.includes(role)) {
-      return res.status(400).json({ success: false, error: 'دور غير صالح', statusCode: 400 });
-    }
-    const existing = await prisma.restaurantUser.findUnique({ where: { email: email.toLowerCase() } });
-    if (existing) return res.status(409).json({ success: false, error: 'هذا البريد مستخدم مسبقًا', statusCode: 409 });
+router.post(
+  '/staff',
+  requireManager(),
+  validateBody(staffCreateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
 
-    const user = await prisma.restaurantUser.create({
-      data: {
-        id: `user-${randomUUID()}`,
+      const { name, email, password, pin, role } = req.body as {
+        name: string;
+        email: string;
+        password: string;
+        pin?: string;
+        role: 'RESTAURANT_MANAGER' | 'WAITER' | 'KITCHEN' | 'CASHIER' | 'STAFF';
+      };
+
+      const normalizedEmail = email.toLowerCase();
+      const existing = await prisma.restaurantUser.findUnique({ where: { email: normalizedEmail } });
+      if (existing) return res.status(409).json({ success: false, error: 'هذا البريد مستخدم مسبقًا', statusCode: 409 });
+
+      const user = await prisma.restaurantUser.create({
+        data: {
+          id: `user-${randomUUID()}`,
+          restaurantId,
+          name,
+          email: normalizedEmail,
+          passwordHash: await bcrypt.hash(password, 12),
+          pinHash: pin ? await bcrypt.hash(pin, 10) : undefined,
+          role,
+          status: 'ACTIVE',
+        },
+        select: STAFF_SAFE_SELECT,
+      });
+      await logAuditEvent({
         restaurantId,
-        name,
-        email: email.toLowerCase(),
-        passwordHash: bcrypt.hashSync(password, 12),
-        pinHash: pin ? bcrypt.hashSync(String(pin), 12) : undefined,
-        role,
-        status: 'ACTIVE',
-      },
-    });
-    await logAuditEvent({
-      restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'STAFF_CREATED',
-      entity: 'RestaurantUser',
-      entityId: user.id,
-      details: `تمت إضافة موظف ${name} بدور ${role}`,
-    });
-    return res.status(201).json({ success: true, data: { user }, statusCode: 201 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر إضافة الموظف', statusCode: 500 });
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'STAFF_CREATED',
+        entity: 'RestaurantUser',
+        entityId: user.id,
+        details: `تمت إضافة موظف ${name} بدور ${role}`,
+      });
+      return res.status(201).json({ success: true, data: { user }, statusCode: 201 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر إضافة الموظف', statusCode: 500 });
+    }
   }
-});
+);
 
-router.put('/staff/:id', async (req: Request, res: Response) => {
+router.put(
+  '/staff/:id',
+  requireManager(),
+  validateBody(staffUpdateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const target = await prisma.restaurantUser.findUnique({ where: { id } });
+      if (!target) return res.status(404).json({ success: false, error: 'الموظف غير موجود', statusCode: 404 });
+      if (!target.restaurantId || !ownTenant(req, target.restaurantId)) return deny(req, res);
+
+      // Tenant managers can never touch platform accounts through this route.
+      if (PLATFORM_ROLE_SET.has(target.role) && !isPlatformUser(req)) {
+        return deny(req, res, 'غير مصرح لك بتعديل حسابات إدارة المنصة');
+      }
+
+      const { name, role, status, password, pin } = req.body as {
+        name?: string;
+        role?: 'RESTAURANT_MANAGER' | 'WAITER' | 'KITCHEN' | 'CASHIER' | 'STAFF';
+        status?: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
+        password?: string;
+        pin?: string;
+      };
+
+      // Nobody may change their own role or status (self-lockout / self-heal).
+      if (req.user!.id === id && (role !== undefined || status !== undefined)) {
+        return res.status(400).json({
+          success: false,
+          error: 'لا يمكنك تغيير دورك أو حالتك بنفسك. اطلب ذلك من مدير آخر.',
+          statusCode: 400,
+        });
+      }
+
+      // Last-manager protection: a tenant must keep at least one active manager.
+      const demotingManager =
+        target.role === 'RESTAURANT_MANAGER' &&
+        ((role !== undefined && role !== 'RESTAURANT_MANAGER') ||
+          (status !== undefined && status !== 'ACTIVE'));
+      if (demotingManager && !isPlatformUser(req)) {
+        const otherManagers = await prisma.restaurantUser.count({
+          where: {
+            restaurantId: target.restaurantId,
+            role: 'RESTAURANT_MANAGER',
+            status: 'ACTIVE',
+            id: { not: id },
+          },
+        });
+        if (otherManagers === 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'لا يمكن إزالة آخر مدير نشط للمطعم. عيّن مديراً آخر أولاً.',
+            statusCode: 400,
+          });
+        }
+      }
+
+      const credentialsChanged =
+        password !== undefined ||
+        (pin !== undefined && pin !== '') ||
+        (role !== undefined && role !== target.role) ||
+        (status !== undefined && status !== target.status);
+
+      const updated = await prisma.restaurantUser.update({
+        where: { id },
+        data: {
+          name: name !== undefined ? name : undefined,
+          role: role !== undefined ? role : undefined,
+          status: status !== undefined ? status : undefined,
+          passwordHash: password ? await bcrypt.hash(password, 12) : undefined,
+          pinHash:
+            pin !== undefined && pin !== ''
+              ? await bcrypt.hash(pin, 10)
+              : pin === ''
+                ? null
+                : undefined,
+          // Revoke the target's sessions when their authority changes.
+          tokenVersion: credentialsChanged ? { increment: 1 } : undefined,
+        },
+        select: STAFF_SAFE_SELECT,
+      });
+      await logAuditEvent({
+        restaurantId: target.restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'STAFF_UPDATED',
+        entity: 'RestaurantUser',
+        entityId: id,
+        details: `تم تحديث بيانات الموظف ${target.name}`,
+      });
+      return res.json({ success: true, data: { user: updated }, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تحديث الموظف', statusCode: 500 });
+    }
+  }
+);
+
+router.delete('/staff/:id', requireManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const target = await prisma.restaurantUser.findUnique({ where: { id } });
     if (!target) return res.status(404).json({ success: false, error: 'الموظف غير موجود', statusCode: 404 });
-    if (!target.restaurantId || !ownTenant(req, target.restaurantId)) return deny(res);
-
-    const { name, role, status, password, pin } = req.body;
-    const updated = await prisma.restaurantUser.update({
-      where: { id },
-      data: {
-        name: name !== undefined ? name : undefined,
-        role: role !== undefined ? role : undefined,
-        status: status !== undefined ? status : undefined,
-        passwordHash: password ? bcrypt.hashSync(password, 12) : undefined,
-        pinHash: pin !== undefined && pin !== null && pin !== '' ? bcrypt.hashSync(String(pin), 12) : pin === '' ? null : undefined,
-      },
-    });
-    await logAuditEvent({
-      restaurantId: target.restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'STAFF_UPDATED',
-      entity: 'RestaurantUser',
-      entityId: id,
-      details: `تم تحديث بيانات الموظف ${target.name}`,
-    });
-    return res.json({ success: true, data: { user: updated }, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تحديث الموظف', statusCode: 500 });
-  }
-});
-
-router.delete('/staff/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const target = await prisma.restaurantUser.findUnique({ where: { id } });
-    if (!target) return res.status(404).json({ success: false, error: 'الموظف غير موجود', statusCode: 404 });
-    if (!target.restaurantId || !ownTenant(req, target.restaurantId)) return deny(res);
+    if (!target.restaurantId || !ownTenant(req, target.restaurantId)) return deny(req, res);
+    if (PLATFORM_ROLE_SET.has(target.role) && !isPlatformUser(req)) {
+      return deny(req, res, 'غير مصرح لك بحذف حسابات إدارة المنصة');
+    }
     if (req.user!.id === id) return res.status(400).json({ success: false, error: 'لا يمكنك حذف حسابك الحالي', statusCode: 400 });
+
+    if (target.role === 'RESTAURANT_MANAGER' && target.status === 'ACTIVE' && !isPlatformUser(req)) {
+      const otherManagers = await prisma.restaurantUser.count({
+        where: {
+          restaurantId: target.restaurantId,
+          role: 'RESTAURANT_MANAGER',
+          status: 'ACTIVE',
+          id: { not: id },
+        },
+      });
+      if (otherManagers === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'لا يمكن حذف آخر مدير نشط للمطعم. عيّن مديراً آخر أولاً.',
+          statusCode: 400,
+        });
+      }
+    }
+
     await prisma.restaurantUser.delete({ where: { id } });
     await logAuditEvent({
       restaurantId: target.restaurantId,
@@ -1107,7 +1540,7 @@ router.delete('/staff/:id', async (req: Request, res: Response) => {
 router.get('/offers', async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
     const offers = await prisma.offer.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -1118,71 +1551,128 @@ router.get('/offers', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/offers', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
-    const offer = await prisma.offer.create({
-      data: {
-        id: `offer-${randomUUID()}`,
+router.post(
+  '/offers',
+  requireManager(),
+  validateBody(offerCreateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+      const b = req.body as {
+        title: string;
+        titleEn?: string;
+        subtitle?: string;
+        description?: string;
+        image?: string;
+        originalPrice?: number;
+        discountedPrice?: number;
+        discountPercentage?: number;
+        badge?: string;
+        bgGradient?: string;
+        isActive?: boolean;
+        code?: string;
+      };
+      const offer = await prisma.offer.create({
+        data: {
+          id: `offer-${randomUUID()}`,
+          restaurantId,
+          title: b.title,
+          titleEn: b.titleEn || undefined,
+          subtitle: b.subtitle || undefined,
+          description: b.description || undefined,
+          image: b.image || undefined,
+          originalPrice: b.originalPrice,
+          discountedPrice: b.discountedPrice,
+          discountPercentage: b.discountPercentage,
+          badge: b.badge || undefined,
+          bgGradient: b.bgGradient || undefined,
+          isActive: b.isActive !== false,
+          code: b.code || undefined,
+        },
+      });
+      await logAuditEvent({
         restaurantId,
-        title: req.body.title,
-        titleEn: req.body.titleEn || undefined,
-        subtitle: req.body.subtitle || undefined,
-        description: req.body.description || undefined,
-        image: req.body.image || undefined,
-        originalPrice: req.body.originalPrice !== undefined ? Number(req.body.originalPrice) : undefined,
-        discountedPrice: req.body.discountedPrice !== undefined ? Number(req.body.discountedPrice) : undefined,
-        discountPercentage: req.body.discountPercentage !== undefined ? Number(req.body.discountPercentage) : undefined,
-        badge: req.body.badge || undefined,
-        bgGradient: req.body.bgGradient || undefined,
-        isActive: req.body.isActive !== false,
-        code: req.body.code || undefined,
-      },
-    });
-    return res.status(201).json({ success: true, data: { offer }, statusCode: 201 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر إنشاء العرض', statusCode: 500 });
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'OFFER_CREATED',
+        entity: 'Offer',
+        entityId: offer.id,
+        details: `تم إنشاء عرض ${b.title}`,
+      });
+      return res.status(201).json({ success: true, data: { offer }, statusCode: 201 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر إنشاء العرض', statusCode: 500 });
+    }
   }
-});
+);
 
-router.put('/offers/:id', async (req: Request, res: Response) => {
+router.put(
+  '/offers/:id',
+  requireManager(),
+  validateBody(offerUpdateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const existing = await prisma.offer.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: 'العرض غير موجود', statusCode: 404 });
+      if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
+      const b = req.body as {
+        title?: string;
+        titleEn?: string;
+        subtitle?: string;
+        description?: string;
+        image?: string;
+        originalPrice?: number;
+        discountedPrice?: number;
+        discountPercentage?: number;
+        badge?: string;
+        bgGradient?: string;
+        isActive?: boolean;
+        code?: string;
+      };
+      const updated = await prisma.offer.update({
+        where: { id },
+        data: {
+          title: b.title !== undefined ? b.title : undefined,
+          titleEn: b.titleEn !== undefined ? b.titleEn : undefined,
+          subtitle: b.subtitle !== undefined ? b.subtitle : undefined,
+          description: b.description !== undefined ? b.description : undefined,
+          image: b.image !== undefined ? b.image : undefined,
+          originalPrice: b.originalPrice !== undefined ? b.originalPrice : undefined,
+          discountedPrice: b.discountedPrice !== undefined ? b.discountedPrice : undefined,
+          discountPercentage: b.discountPercentage !== undefined ? b.discountPercentage : undefined,
+          badge: b.badge !== undefined ? b.badge : undefined,
+          bgGradient: b.bgGradient !== undefined ? b.bgGradient : undefined,
+          isActive: b.isActive !== undefined ? b.isActive : undefined,
+          code: b.code !== undefined ? b.code : undefined,
+        },
+      });
+      return res.json({ success: true, data: { offer: updated }, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تعديل العرض', statusCode: 500 });
+    }
+  }
+);
+
+router.delete('/offers/:id', requireManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const existing = await prisma.offer.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ success: false, error: 'العرض غير موجود', statusCode: 404 });
-    if (!ownTenant(req, existing.restaurantId)) return deny(res);
-    const b = req.body;
-    const updated = await prisma.offer.update({
-      where: { id },
-      data: {
-        title: b.title !== undefined ? b.title : undefined,
-        titleEn: b.titleEn !== undefined ? b.titleEn : undefined,
-        subtitle: b.subtitle !== undefined ? b.subtitle : undefined,
-        description: b.description !== undefined ? b.description : undefined,
-        image: b.image !== undefined ? b.image : undefined,
-        originalPrice: b.originalPrice !== undefined ? Number(b.originalPrice) : undefined,
-        discountedPrice: b.discountedPrice !== undefined ? Number(b.discountedPrice) : undefined,
-        discountPercentage: b.discountPercentage !== undefined ? Number(b.discountPercentage) : undefined,
-        badge: b.badge !== undefined ? b.badge : undefined,
-        bgGradient: b.bgGradient !== undefined ? b.bgGradient : undefined,
-        isActive: b.isActive !== undefined ? b.isActive : undefined,
-        code: b.code !== undefined ? b.code : undefined,
-      },
-    });
-    return res.json({ success: true, data: { offer: updated }, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تعديل العرض', statusCode: 500 });
-  }
-});
-
-router.delete('/offers/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const existing = await prisma.offer.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ success: false, error: 'العرض غير موجود', statusCode: 404 });
-    if (!ownTenant(req, existing.restaurantId)) return deny(res);
+    if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
     await prisma.offer.delete({ where: { id } });
+    await logAuditEvent({
+      restaurantId: existing.restaurantId,
+      userId: req.user!.id,
+      actor: req.user!.name,
+      actorRole: req.user!.role,
+      action: 'OFFER_DELETED',
+      entity: 'Offer',
+      entityId: id,
+      details: `تم حذف العرض ${existing.title}`,
+    });
     return res.json({ success: true, message: 'تم حذف العرض', statusCode: 200 });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'تعذر حذف العرض', statusCode: 500 });
@@ -1190,10 +1680,10 @@ router.delete('/offers/:id', async (req: Request, res: Response) => {
 });
 
 // ---------- Subscription (current + plan catalog + change plan) ----------
-router.get('/subscription', async (req: Request, res: Response) => {
+router.get('/subscription', requireManager(), async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
     const subscription = await prisma.subscription.findUnique({
       where: { restaurantId },
       include: { plan: true },
@@ -1208,103 +1698,131 @@ router.get('/subscription', async (req: Request, res: Response) => {
   }
 });
 
-router.put('/subscription/plan', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
-    const { planId } = req.body;
-    const plan = await prisma.plan.findUnique({ where: { id: planId } });
-    if (!plan || plan.status !== 'ACTIVE') {
-      return res.status(400).json({ success: false, error: 'الباقة المحددة غير متاحة', statusCode: 400 });
-    }
-    // Guard against exceeding plan limits with existing data
-    const [tablesCount, productsCount] = await Promise.all([
-      prisma.table.count({ where: { restaurantId } }),
-      prisma.product.count({ where: { restaurantId } }),
-    ]);
-    if (tablesCount > plan.maxTables || productsCount > plan.maxProducts) {
-      return res.status(400).json({
-        success: false,
-        error: `لا يمكن الترقية: بياناتك الحالية تتجاوز حدود الباقة (طاولات ${plan.maxTables} / أطباق ${plan.maxProducts})`,
-        statusCode: 400,
+router.put(
+  '/subscription/plan',
+  requireManager(),
+  validateBody(planChangeSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+      const { planId } = req.body as { planId: string };
+      const plan = await prisma.plan.findUnique({ where: { id: planId } });
+      if (!plan || plan.status !== 'ACTIVE') {
+        return res.status(400).json({ success: false, error: 'الباقة المحددة غير متاحة', statusCode: 400 });
+      }
+      // Guard against exceeding plan limits with existing data
+      const [tablesCount, categoriesCount, productsCount] = await Promise.all([
+        prisma.table.count({ where: { restaurantId } }),
+        prisma.category.count({ where: { restaurantId } }),
+        prisma.product.count({ where: { restaurantId } }),
+      ]);
+      if (
+        tablesCount > plan.maxTables ||
+        categoriesCount > plan.maxCategories ||
+        productsCount > plan.maxProducts
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: `لا يمكن الترقية: بياناتك الحالية تتجاوز حدود الباقة (طاولات ${plan.maxTables} / تصنيفات ${plan.maxCategories} / أطباق ${plan.maxProducts})`,
+          statusCode: 400,
+        });
+      }
+      const subscription = await prisma.subscription.upsert({
+        where: { restaurantId },
+        create: {
+          restaurantId,
+          planId,
+          status: 'ACTIVE',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
+        },
+        update: { planId },
       });
-    }
-    const subscription = await prisma.subscription.upsert({
-      where: { restaurantId },
-      create: {
+      await prisma.restaurant.update({
+        where: { id: restaurantId },
+        data: { planId },
+      });
+      await logAuditEvent({
         restaurantId,
-        planId,
-        status: 'ACTIVE',
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
-      },
-      update: { planId },
-    });
-    await prisma.restaurant.update({
-      where: { id: restaurantId },
-      data: { planId },
-    });
-    await logAuditEvent({
-      restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'PLAN_CHANGED',
-      entity: 'Subscription',
-      entityId: subscription.id,
-      details: `تم تغيير باقة الاشتراك إلى ${plan.name}`,
-    });
-    return res.json({ success: true, data: { subscription }, statusCode: 200 });
-  } catch (err) {
-    console.error('Change plan error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر تغيير الباقة', statusCode: 500 });
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'PLAN_CHANGED',
+        entity: 'Subscription',
+        entityId: subscription.id,
+        details: `تم تغيير باقة الاشتراك إلى ${plan.name}`,
+      });
+      return res.json({ success: true, data: { subscription }, statusCode: 200 });
+    } catch (err) {
+      console.error('Change plan error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر تغيير الباقة', statusCode: 500 });
+    }
   }
-});
+);
 
 // ---------- Branding ----------
-router.put('/branding', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
-    const b = req.body;
-    const updated = await prisma.restaurant.update({
-      where: { id: restaurantId },
-      data: {
-        name: b.name !== undefined ? b.name : undefined,
-        nameEn: b.nameEn !== undefined ? b.nameEn : undefined,
-        description: b.description !== undefined ? b.description : undefined,
-        phone: b.phone !== undefined ? b.phone : undefined,
-        address: b.address !== undefined ? b.address : undefined,
-        logoUrl: b.logo !== undefined ? b.logo : undefined,
-        coverImageUrl: b.coverImage !== undefined ? b.coverImage : undefined,
-        currency: b.currency !== undefined ? b.currency : undefined,
-        language: b.language !== undefined ? b.language : undefined,
-        timezone: b.timezone !== undefined ? b.timezone : undefined,
-        primaryColor: b.primaryColor !== undefined ? b.primaryColor : undefined,
-        accentColor: b.accentColor !== undefined ? b.accentColor : undefined,
-      },
-    });
-    await logAuditEvent({
-      restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'BRANDING_UPDATED',
-      entity: 'Restaurant',
-      entityId: restaurantId,
-      details: `تم تحديث هوية المطعم البصرية`,
-    });
-    return res.json({ success: true, data: { restaurant: updated }, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تحديث الهوية البصرية', statusCode: 500 });
+router.put(
+  '/branding',
+  requireManager(),
+  validateBody(brandingSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+      const b = req.body as {
+        name?: string;
+        nameEn?: string;
+        description?: string;
+        phone?: string;
+        address?: string;
+        logo?: string;
+        coverImage?: string;
+        currency?: string;
+        language?: string;
+        timezone?: string;
+        primaryColor?: string;
+        accentColor?: string;
+      };
+      const updated = await prisma.restaurant.update({
+        where: { id: restaurantId },
+        data: {
+          name: b.name !== undefined ? b.name : undefined,
+          nameEn: b.nameEn !== undefined ? b.nameEn : undefined,
+          description: b.description !== undefined ? b.description : undefined,
+          phone: b.phone !== undefined ? b.phone : undefined,
+          address: b.address !== undefined ? b.address : undefined,
+          logoUrl: b.logo !== undefined ? b.logo : undefined,
+          coverImageUrl: b.coverImage !== undefined ? b.coverImage : undefined,
+          currency: b.currency !== undefined ? b.currency : undefined,
+          language: b.language !== undefined ? b.language : undefined,
+          timezone: b.timezone !== undefined ? b.timezone : undefined,
+          primaryColor: b.primaryColor !== undefined ? b.primaryColor : undefined,
+          accentColor: b.accentColor !== undefined ? b.accentColor : undefined,
+        },
+      });
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'BRANDING_UPDATED',
+        entity: 'Restaurant',
+        entityId: restaurantId,
+        details: `تم تحديث هوية المطعم البصرية`,
+      });
+      return res.json({ success: true, data: { restaurant: updated }, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تحديث الهوية البصرية', statusCode: 500 });
+    }
   }
-});
+);
 
 // ---------- Multi-branch management ----------
-router.get('/branches', async (req: Request, res: Response) => {
+router.get('/branches', requireManager(), async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
     const branches = await prisma.branch.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'asc' },
@@ -1316,68 +1834,101 @@ router.get('/branches', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/branches', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
-    const b = req.body;
-    if (!b.name) return res.status(400).json({ success: false, error: 'اسم الفرع مطلوب', statusCode: 400 });
-    const branch = await prisma.branch.create({
-      data: {
-        id: b.id || `branch-${randomUUID()}`,
+router.post(
+  '/branches',
+  requireManager(),
+  validateBody(branchCreateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+
+      if (
+        !isPlatformUser(req) &&
+        !(await restaurantHasEntitlement(restaurantId, 'CAN_CREATE_BRANCH'))
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: 'إدارة الفروع متاحة في باقة المؤسسات. قم بالترقية للمتابعة.',
+          statusCode: 403,
+        });
+      }
+
+      const b = req.body as {
+        name: string;
+        address?: string;
+        phone?: string;
+        color?: string;
+        isActive?: boolean;
+      };
+      const branch = await prisma.branch.create({
+        data: {
+          id: `branch-${randomUUID()}`,
+          restaurantId,
+          name: b.name,
+          address: b.address || undefined,
+          phone: b.phone || undefined,
+          color: b.color || undefined,
+          isActive: b.isActive !== false,
+        },
+      });
+      await logAuditEvent({
         restaurantId,
-        name: b.name,
-        address: b.address || undefined,
-        phone: b.phone || undefined,
-        color: b.color || undefined,
-        isActive: b.isActive !== false,
-      },
-    });
-    await logAuditEvent({
-      restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'BRANCH_CREATED',
-      entity: 'Branch',
-      entityId: branch.id,
-      details: `تم إنشاء فرع ${branch.name}`,
-    });
-    return res.status(201).json({ success: true, data: { branch }, statusCode: 201 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر إنشاء الفرع', statusCode: 500 });
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'BRANCH_CREATED',
+        entity: 'Branch',
+        entityId: branch.id,
+        details: `تم إنشاء فرع ${branch.name}`,
+      });
+      return res.status(201).json({ success: true, data: { branch }, statusCode: 201 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر إنشاء الفرع', statusCode: 500 });
+    }
   }
-});
+);
 
-router.put('/branches/:id', async (req: Request, res: Response) => {
+router.put(
+  '/branches/:id',
+  requireManager(),
+  validateBody(branchUpdateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const existing = await prisma.branch.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ success: false, error: 'الفرع غير موجود', statusCode: 404 });
+      if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
+      const b = req.body as {
+        name?: string;
+        address?: string;
+        phone?: string;
+        color?: string;
+        isActive?: boolean;
+      };
+      const branch = await prisma.branch.update({
+        where: { id },
+        data: {
+          name: b.name !== undefined ? b.name : undefined,
+          address: b.address !== undefined ? b.address : undefined,
+          phone: b.phone !== undefined ? b.phone : undefined,
+          color: b.color !== undefined ? b.color : undefined,
+          isActive: b.isActive !== undefined ? b.isActive : undefined,
+        },
+      });
+      return res.json({ success: true, data: { branch }, statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر تعديل الفرع', statusCode: 500 });
+    }
+  }
+);
+
+router.delete('/branches/:id', requireManager(), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const existing = await prisma.branch.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ success: false, error: 'الفرع غير موجود', statusCode: 404 });
-    if (!ownTenant(req, existing.restaurantId)) return deny(res);
-    const b = req.body;
-    const branch = await prisma.branch.update({
-      where: { id },
-      data: {
-        name: b.name !== undefined ? b.name : undefined,
-        address: b.address !== undefined ? b.address : undefined,
-        phone: b.phone !== undefined ? b.phone : undefined,
-        color: b.color !== undefined ? b.color : undefined,
-        isActive: b.isActive !== undefined ? b.isActive : undefined,
-      },
-    });
-    return res.json({ success: true, data: { branch }, statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر تعديل الفرع', statusCode: 500 });
-  }
-});
-
-router.delete('/branches/:id', async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params;
-    const existing = await prisma.branch.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ success: false, error: 'الفرع غير موجود', statusCode: 404 });
-    if (!ownTenant(req, existing.restaurantId)) return deny(res);
+    if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
     await prisma.branch.delete({ where: { id } }); // tables branchId -> null via onDelete: SetNull
     await logAuditEvent({
       restaurantId: existing.restaurantId,
@@ -1395,49 +1946,55 @@ router.delete('/branches/:id', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/branches/assign-tables', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
-    const { branchId, tableIds } = req.body;
-    if (!Array.isArray(tableIds) || tableIds.length === 0) {
-      return res.status(400).json({ success: false, error: 'اختر طاولة واحدة على الأقل', statusCode: 400 });
-    }
-    if (branchId) {
-      const branch = await prisma.branch.findUnique({ where: { id: branchId } });
-      if (!branch || branch.restaurantId !== restaurantId) {
-        return res.status(400).json({ success: false, error: 'الفرع لا ينتمي لمطعمك', statusCode: 400 });
+router.post(
+  '/branches/assign-tables',
+  requireManager(),
+  validateBody(assignTablesSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+      const { branchId, tableIds } = req.body as {
+        branchId?: string | '' | null;
+        tableIds: string[];
+      };
+      const uniqueTableIds = [...new Set(tableIds)];
+      if (branchId) {
+        const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+        if (!branch || branch.restaurantId !== restaurantId) {
+          return res.status(400).json({ success: false, error: 'الفرع لا ينتمي لمطعمك', statusCode: 400 });
+        }
       }
+      const owned = await prisma.table.count({
+        where: { id: { in: uniqueTableIds }, restaurantId },
+      });
+      if (owned !== uniqueTableIds.length) {
+        return res.status(403).json({ success: false, error: 'بعض الطاولات لا تنتمي لمطعمك', statusCode: 403 });
+      }
+      await prisma.table.updateMany({
+        where: { id: { in: uniqueTableIds }, restaurantId },
+        data: { branchId: branchId || null },
+      });
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'TABLES_BRANCH_ASSIGNED',
+        details: `تم توزيع ${uniqueTableIds.length} طاولات على فرع ${branchId || 'غير مصنف'}`,
+      });
+      return res.json({ success: true, message: 'تم تحديث توزيع الطاولات', statusCode: 200 });
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'تعذر توزيع الطاولات', statusCode: 500 });
     }
-    const owned = await prisma.table.count({
-      where: { id: { in: tableIds }, restaurantId },
-    });
-    if (owned !== tableIds.length) {
-      return res.status(403).json({ success: false, error: 'بعض الطاولات لا تنتمي لمطعمك', statusCode: 403 });
-    }
-    await prisma.table.updateMany({
-      where: { id: { in: tableIds }, restaurantId },
-      data: { branchId: branchId || null },
-    });
-    await logAuditEvent({
-      restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'TABLES_BRANCH_ASSIGNED',
-      details: `تم توزيع ${tableIds.length} طاولات على فرع ${branchId || 'غير مصنف'}`,
-    });
-    return res.json({ success: true, message: 'تم تحديث توزيع الطاولات', statusCode: 200 });
-  } catch (err) {
-    return res.status(500).json({ success: false, error: 'تعذر توزيع الطاولات', statusCode: 500 });
   }
-});
+);
 
 // ---------- Payments (POS ledger) ----------
-router.get('/payments', async (req: Request, res: Response) => {
+router.get('/payments', requireCashierOrManager(), async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
     const payments = await prisma.payment.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
@@ -1470,124 +2027,184 @@ router.get('/payments', async (req: Request, res: Response) => {
   }
 });
 
-router.post('/payments', async (req: Request, res: Response) => {
-  try {
-    const restaurantId = getTenantId(req);
-    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(res);
-    const { orderIds, method, cashReceived, tip, note } = req.body;
-    const tableId: string = req.body.tableId || '';
-    if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
-      return res.status(400).json({ success: false, error: 'لا توجد فواتير مفتوحة لإتمام الدفع', statusCode: 400 });
-    }
-    const isWalkIn = tableId === '__WALKIN__';
-    const table = isWalkIn ? null : await prisma.table.findFirst({ where: { id: tableId, restaurantId } });
-    if (!isWalkIn && !table) return res.status(404).json({ success: false, error: 'الطاولة غير موجودة في هذا المطعم', statusCode: 404 });
+router.post(
+  '/payments',
+  requireCashierOrManager(),
+  validateBody(paymentCreateSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+      const { orderIds, method, cashReceived, tip, note, tableId } = req.body as {
+        tableId: string;
+        orderIds: string[];
+        method: 'CASH' | 'CARD' | 'MOBILE' | 'SPLIT';
+        cashReceived?: number;
+        tip?: number;
+        note?: string;
+      };
+      const isWalkIn = tableId === '__WALKIN__';
+      const table = isWalkIn ? null : await prisma.table.findFirst({ where: { id: tableId, restaurantId } });
+      if (!isWalkIn && !table) return res.status(404).json({ success: false, error: 'الطاولة غير موجودة في هذا المطعم', statusCode: 404 });
 
-    const ordersToPay = await prisma.order.findMany({
-      where: {
-        id: { in: orderIds },
-        restaurantId,
-        status: { not: 'CANCELLED' },
-        paymentStatus: 'UNPAID',
-      },
-      include: { items: true },
-    });
-    if (ordersToPay.length === 0) {
-      return res.status(409).json({ success: false, error: 'كل الفواتير المحددة مدفوعة مسبقًا أو ملغاة', statusCode: 409 });
-    }
-
-    const total = Math.round(ordersToPay.reduce((sum, o) => sum + o.total, 0) * 100) / 100;
-    const subtotal = Math.round(ordersToPay.reduce((sum, o) => sum + o.subtotal, 0) * 100) / 100;
-    if (total <= 0) return res.status(400).json({ success: false, error: 'قيمة الفاتورة صفرية', statusCode: 400 });
-
-    const paidMethod = method || 'CASH';
-    const tipValue = Math.round(Math.max(0, Number(tip) || 0) * 100) / 100;
-    const cashValue = paidMethod === 'CASH' && cashReceived !== undefined ? Number(cashReceived) || 0 : 0;
-    const changeValue =
-      paidMethod === 'CASH' && cashValue >= total + tipValue
-        ? Math.round((cashValue - total - tipValue) * 100) / 100
-        : 0;
-
-    const seq = (await prisma.payment.count({ where: { restaurantId } })) + 1;
-    const receiptNumber = `RC-${new Date().getFullYear()}-${String(seq).padStart(4, '0')}`;
-    const now = new Date();
-
-    const payment = await prisma.$transaction(async (tx) => {
-      await tx.order.updateMany({
-        where: { id: { in: ordersToPay.map((o) => o.id) }, restaurantId },
-        data: {
-          status: 'SERVED',
-          paymentStatus: 'PAID',
-          paymentMethod: paidMethod,
-          settledAt: now,
-          cashierId: req.user!.id,
-        },
-      });
-
-      const record = await tx.payment.create({
-        data: {
-          id: `pay-${randomUUID()}`,
-          receiptNumber,
+      const ordersToPay = await prisma.order.findMany({
+        where: {
+          id: { in: orderIds },
           restaurantId,
-          branchId: table?.branchId || undefined,
-          tableId,
-          tableLabel: isWalkIn ? 'عميل مباشر (كاونتر)' : `طاولة ${table!.number}`,
-          orderIds: ordersToPay.map((o) => o.id),
-          itemsSummary: ordersToPay
-            .flatMap((o) => o.items.map((i) => i.productNameSnapshot))
-            .slice(0, 4)
-            .join('، '),
-          method: paidMethod,
-          subtotal,
-          total,
-          cashReceived: paidMethod === 'CASH' && cashValue > 0 ? cashValue : undefined,
-          changeDue: changeValue > 0 ? changeValue : undefined,
-          tip: tipValue > 0 ? tipValue : undefined,
-          cashierId: req.user!.id,
-          cashierName: req.user!.name,
-          note: note || undefined,
+          status: { not: 'CANCELLED' },
+          paymentStatus: 'UNPAID',
         },
+        include: { items: true },
       });
-
-      if (!isWalkIn && table) {
-        await tx.table.update({
-          where: { id: table.id },
-          data: { status: 'AVAILABLE', hasWaiterCall: false, lastActivityAt: now },
-        });
-        await tx.tableSession.updateMany({
-          where: { tableId: table.id, restaurantId, status: 'ACTIVE' },
-          data: { status: 'CLOSED', endedAt: now },
-        });
-        await tx.waiterRequest.updateMany({
-          where: { tableId: table.id, restaurantId, status: 'PENDING' },
-          data: { status: 'RESOLVED', resolvedAt: now },
+      if (ordersToPay.length === 0) {
+        return res.status(409).json({ success: false, error: 'كل الفواتير المحددة مدفوعة مسبقًا أو ملغاة', statusCode: 409 });
+      }
+      if (ordersToPay.length !== [...new Set(orderIds)].length) {
+        return res.status(409).json({ success: false, error: 'بعض الفواتير المحددة غير صالحة للدفع (مدفوعة أو ملغاة أو من مطعم آخر)', statusCode: 409 });
+      }
+      // Every billed order must belong to the billed table (no mixed-table bills).
+      const foreignOrder = ordersToPay.find((o) => o.tableId !== tableId);
+      if (foreignOrder) {
+        return res.status(400).json({
+          success: false,
+          error: `الفاتورة ${foreignOrder.id} لا تنتمي لهذه الطاولة ولا يمكن تحصيلها معها`,
+          statusCode: 400,
         });
       }
-      return record;
-    });
 
-    await logAuditEvent({
-      restaurantId,
-      userId: req.user!.id,
-      actor: req.user!.name,
-      actorRole: req.user!.role,
-      action: 'PROCESS_PAYMENT',
-      entity: 'Payment',
-      entityId: payment.id,
-      details: `إيصال ${receiptNumber} — ${payment.tableLabel} — ${total} (${paidMethod})`,
-    });
+      const total = roundMoney(ordersToPay.reduce((sum, o) => sum + o.total, 0));
+      const subtotal = roundMoney(ordersToPay.reduce((sum, o) => sum + o.subtotal, 0));
+      if (total <= 0) return res.status(400).json({ success: false, error: 'قيمة الفاتورة صفرية', statusCode: 400 });
 
-    realtimeService.broadcastToRestaurant(restaurantId, 'PAYMENT_RECORDED', {
-      receiptNumber,
-      tableId,
-      total,
-    });
+      const paidMethod = method;
+      const tipValue = roundMoney(Math.max(0, tip ?? 0));
+      // Cash payments must record sufficient tendered cash — a CASH payment
+      // with missing or short cash is rejected, never silently marked PAID.
+      if (paidMethod === 'CASH') {
+        if (cashReceived === undefined || !Number.isFinite(cashReceived)) {
+          return res.status(400).json({ success: false, error: 'مبلغ المقبوض النقدي مطلوب للدفع النقدي', statusCode: 400 });
+        }
+        if (cashReceived < total + tipValue) {
+          return res.status(400).json({ success: false, error: 'المبلغ المقبوض أقل من قيمة الفاتورة', statusCode: 400 });
+        }
+      }
+      const cashValue = paidMethod === 'CASH' ? roundMoney(cashReceived as number) : 0;
+      const changeValue =
+        paidMethod === 'CASH' ? roundMoney(cashValue - total - tipValue) : 0;
 
-    return res.status(201).json({ success: true, data: { payment }, statusCode: 201 });
-  } catch (err) {
-    console.error('Payment error:', err);
-    return res.status(500).json({ success: false, error: 'تعذر إتمام الدفع', statusCode: 500 });
+      const now = new Date();
+
+      // Receipt allocation retries on unique collisions (concurrent POS).
+      let payment: Awaited<ReturnType<typeof prisma.payment.create>> | null = null;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 5 && !payment; attempt += 1) {
+        const seq = (await prisma.payment.count({ where: { restaurantId } })) + 1 + attempt;
+        const receiptNumber = `RC-${now.getFullYear()}-${String(seq).padStart(4, '0')}`;
+        try {
+          payment = await prisma.$transaction(async (tx) => {
+            // Conditional claim: only still-UNPAID rows flip; the count
+            // check below turns a lost double-submit race into a 409.
+            const claimed = await tx.order.updateMany({
+              where: {
+                id: { in: ordersToPay.map((o) => o.id) },
+                restaurantId,
+                paymentStatus: 'UNPAID',
+                status: { not: 'CANCELLED' },
+              },
+              data: {
+                status: 'SERVED',
+                paymentStatus: 'PAID',
+                paymentMethod: paidMethod,
+                settledAt: now,
+                cashierId: req.user!.id,
+              },
+            });
+            if (claimed.count !== ordersToPay.length) {
+              throw Object.assign(new Error('PAYMENT_RACE'), { code: 'PAYMENT_RACE' });
+            }
+
+            const record = await tx.payment.create({
+              data: {
+                id: `pay-${randomUUID()}`,
+                receiptNumber,
+                restaurantId,
+                branchId: table?.branchId || undefined,
+                tableId,
+                tableLabel: isWalkIn ? 'عميل مباشر (كاونتر)' : `طاولة ${table!.number}`,
+                orderIds: ordersToPay.map((o) => o.id),
+                itemsSummary: ordersToPay
+                  .flatMap((o) => o.items.map((i) => i.productNameSnapshot))
+                  .slice(0, 4)
+                  .join('، '),
+                method: paidMethod,
+                subtotal,
+                total,
+                cashReceived: paidMethod === 'CASH' && cashValue > 0 ? cashValue : undefined,
+                changeDue: changeValue > 0 ? changeValue : undefined,
+                tip: tipValue > 0 ? tipValue : undefined,
+                cashierId: req.user!.id,
+                cashierName: req.user!.name,
+                note: note || undefined,
+              },
+            });
+
+            if (!isWalkIn && table) {
+              await tx.table.update({
+                where: { id: table.id },
+                data: { status: 'AVAILABLE', hasWaiterCall: false, lastActivityAt: now },
+              });
+              await tx.tableSession.updateMany({
+                where: { tableId: table.id, restaurantId, status: 'ACTIVE' },
+                data: { status: 'CLOSED', endedAt: now },
+              });
+              await tx.waiterRequest.updateMany({
+                where: { tableId: table.id, restaurantId, status: 'PENDING' },
+                data: { status: 'RESOLVED', resolvedAt: now },
+              });
+            }
+            return record;
+          });
+        } catch (txErr: unknown) {
+          lastError = txErr;
+          const code = (txErr as { code?: string })?.code;
+          if (code === 'PAYMENT_RACE') {
+            return res.status(409).json({
+              success: false,
+              error: 'تم تحصيل إحدى هذه الفواتير للتو من جهاز آخر. حدّث الصفحة وحاول مجدداً.',
+              statusCode: 409,
+            });
+          }
+          if (code !== 'P2002') throw txErr;
+        }
+      }
+      if (!payment) {
+        console.error('Payment receipt allocation failed:', lastError);
+        return res.status(500).json({ success: false, error: 'تعذر إتمام الدفع، حاول مجدداً', statusCode: 500 });
+      }
+
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'PROCESS_PAYMENT',
+        entity: 'Payment',
+        entityId: payment.id,
+        details: `إيصال ${payment.receiptNumber} — ${payment.tableLabel} — ${total} (${paidMethod})`,
+      });
+
+      realtimeService.broadcastToTable(restaurantId, tableId, 'PAYMENT_RECORDED', {
+        receiptNumber: payment.receiptNumber,
+        tableId,
+        total,
+      });
+
+      return res.status(201).json({ success: true, data: { payment }, statusCode: 201 });
+    } catch (err) {
+      console.error('Payment error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر إتمام الدفع', statusCode: 500 });
+    }
   }
-});
+);
 
 export default router;

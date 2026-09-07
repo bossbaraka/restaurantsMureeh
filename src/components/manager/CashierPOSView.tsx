@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { formatPrice } from '../../utils/formatting';
+import { escapeHtml, formatPrice } from '../../utils/formatting';
 import {
   PaymentRecord,
   Order,
@@ -220,11 +220,14 @@ export const CashierPOSView: React.FC = () => {
       const orderIds = openOrders.map((o) => o.id);
       if (createdOrderId && !orderIds.includes(createdOrderId)) orderIds.push(createdOrderId);
 
+      // Empty cash tendered = exact payment; the server requires the
+      // recorded amount to cover the bill in full.
+      const tenderedCash = method === 'CASH' ? cashReceivedValue || grandTotal : undefined;
       const payRes = await api.processPayment(currentUser, tenantId, {
         tableId,
         orderIds,
         method,
-        cashReceived: method === 'CASH' ? cashReceivedValue || undefined : undefined,
+        cashReceived: tenderedCash,
         tip: tipValue || undefined,
         note: note || undefined,
       });
@@ -252,14 +255,17 @@ export const CashierPOSView: React.FC = () => {
       showToast('warning', 'الطباعة غير متاحة', 'اسمح بالنوافذ المنبثقة لطباعة الإيصال.');
       return;
     }
+    // All receipt fields are untrusted tenant/user input — escape before
+    // building the document. No inline <script>: print from the opener.
     const ordersForReceipt = orders.filter((o) => (receipt.orderIds || []).includes(o.id));
     const lines = ordersForReceipt.flatMap((o) =>
       o.items.map(
-        (i) => `<tr><td>${i.productName || i.name || 'صنف'}</td><td>x${i.quantity}</td><td style="text-align:left">${formatPrice(i.totalPrice)}</td></tr>`
+        (i) => `<tr><td>${escapeHtml((i as { productName?: string; name?: string }).productName || (i as { name?: string }).name || 'صنف')}</td><td>x${Number(i.quantity) || 0}</td><td style="text-align:left">${escapeHtml(formatPrice(i.totalPrice))}</td></tr>`
       )
     );
+    const esc = escapeHtml;
     printWindow.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"/>
-<title>إيصال ${receipt.receiptNumber}</title>
+<title>إيصال ${esc(receipt.receiptNumber)}</title>
 <style>
 body{font-family:'Segoe UI',Tahoma,sans-serif;width:280px;margin:0 auto;padding:12px;color:#111;font-size:13px}
 h2{margin:0;text-align:center}.center{text-align:center}
@@ -267,27 +273,29 @@ table{width:100%;border-collapse:collapse;margin:8px 0}td,th{padding:3px 2px;bor
 .total td{font-weight:bold;font-size:15px}
 .dashed{border-top:1px dashed #999;margin:8px 0}
 </style></head><body>
-<h2>${currentRestaurant?.name || ''}</h2>
-<p class="center">${currentRestaurant?.address || ''}</p>
-<p class="center">${currentRestaurant?.phone || ''}</p>
+<h2>${esc(currentRestaurant?.name || '')}</h2>
+<p class="center">${esc(currentRestaurant?.address || '')}</p>
+<p class="center">${esc(currentRestaurant?.phone || '')}</p>
 <div class="dashed"></div>
-<p><b>الإيصال:</b> ${receipt.receiptNumber}</p>
-<p><b>الطاولة:</b> ${receipt.tableLabel}</p>
-<p><b>التاريخ:</b> ${new Date(receipt.createdAt).toLocaleString('ar-EG')}</p>
-<p><b>الكاشير:</b> ${receipt.cashierName}</p>
+<p><b>الإيصال:</b> ${esc(receipt.receiptNumber)}</p>
+<p><b>الطاولة:</b> ${esc(receipt.tableLabel)}</p>
+<p><b>التاريخ:</b> ${esc(new Date(receipt.createdAt).toLocaleString('ar-EG'))}</p>
+<p><b>الكاشير:</b> ${esc(receipt.cashierName)}</p>
 <table>${lines.join('')}</table>
 <table class="total">
-<tr><td>المجموع</td><td style="text-align:left">${formatPrice(receipt.total)}</td></tr>
-${receipt.tip ? `<tr><td>إكرامية</td><td style="text-align:left">${formatPrice(receipt.tip)}</td></tr>` : ''}
-${receipt.cashReceived !== undefined ? `<tr><td>مدفوع</td><td style="text-align:left">${formatPrice(receipt.cashReceived)}</td></tr>` : ''}
-${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${formatPrice(receipt.changeDue)}</td></tr>` : ''}
+<tr><td>المجموع</td><td style="text-align:left">${esc(formatPrice(receipt.total))}</td></tr>
+${receipt.tip ? `<tr><td>إكرامية</td><td style="text-align:left">${esc(formatPrice(receipt.tip))}</td></tr>` : ''}
+${receipt.cashReceived !== undefined ? `<tr><td>مدفوع</td><td style="text-align:left">${esc(formatPrice(receipt.cashReceived))}</td></tr>` : ''}
+${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${esc(formatPrice(receipt.changeDue))}</td></tr>` : ''}
 </table>
-<p class="center"><b>طريقة الدفع:</b> ${METHOD_LABELS[receipt.method] || receipt.method}</p>
+<p class="center"><b>طريقة الدفع:</b> ${esc(METHOD_LABELS[receipt.method] || receipt.method)}</p>
 <div class="dashed"></div>
 <p class="center">شكرًا لزيارتكم — نتمنى لكم أوقاتًا سعيدة 🌟</p>
-<script>window.onload=function(){window.print();}</script>
 </body></html>`);
     printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+    };
   };
 
   return (
