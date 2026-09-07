@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
 import { prisma } from '../db/prisma';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
 import { logAuditEvent } from '../services/audit';
+import { validateBody, tenantStatusSchema, onboardSchema } from '../validation/schemas';
+import { generateQrToken } from '../utils/security';
 
 const router = Router();
 
@@ -87,10 +88,10 @@ router.get('/overview', async (req: Request, res: Response) => {
 });
 
 // POST /api/admin/restaurants/:id/status (Toggle Activate / Suspend)
-router.post('/restaurants/:id/status', async (req: Request, res: Response) => {
+router.post('/restaurants/:id/status', validateBody(tenantStatusSchema), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { status } = req.body; // 'ACTIVE' | 'SUSPENDED'
+    const { status } = req.body as { status: 'ACTIVE' | 'SUSPENDED' | 'ONBOARDING' | 'MAINTENANCE' };
 
     const updated = await prisma.restaurant.update({
       where: { id },
@@ -109,13 +110,16 @@ router.post('/restaurants/:id/status', async (req: Request, res: Response) => {
     });
 
     return res.json({ success: true, data: { restaurant: updated }, statusCode: 200 });
-  } catch (err) {
+  } catch (err: unknown) {
+    if ((err as { code?: string })?.code === 'P2025') {
+      return res.status(404).json({ success: false, error: 'المطعم غير موجود', statusCode: 404 });
+    }
     return res.status(500).json({ success: false, error: 'تعذر تغيير حالة المطعم', statusCode: 500 });
   }
 });
 
 // POST /api/admin/onboard-restaurant (Onboarding Wizard)
-router.post('/onboard-restaurant', async (req: Request, res: Response) => {
+router.post('/onboard-restaurant', validateBody(onboardSchema), async (req: Request, res: Response) => {
   try {
     const {
       name,
@@ -136,110 +140,161 @@ router.post('/onboard-restaurant', async (req: Request, res: Response) => {
       tablesCount,
       categories,
       products,
-    } = req.body;
+    } = req.body as {
+      name: string;
+      nameEn?: string;
+      slug: string;
+      description?: string;
+      phone?: string;
+      address?: string;
+      currency?: string;
+      primaryColor?: string;
+      accentColor?: string;
+      logoUrl?: string;
+      coverImageUrl?: string;
+      planId?: string;
+      managerName?: string;
+      managerEmail?: string;
+      managerPassword?: string;
+      tablesCount?: number;
+      categories?: Array<{ name: string; nameEn?: string; id?: string }>;
+      products?: Array<{
+        name: string;
+        nameEn?: string;
+        description?: string;
+        price?: number;
+        imageUrl?: string;
+        categoryName?: string;
+        categoryId?: string;
+      }>;
+    };
 
-    const existingSlug = await prisma.restaurant.findUnique({ where: { slug: slug.toLowerCase() } });
+    const normalizedSlug = slug.toLowerCase();
+    const existingSlug = await prisma.restaurant.findUnique({ where: { slug: normalizedSlug } });
     if (existingSlug) {
       return res.status(400).json({ success: false, error: 'رابط المطعم (Slug) مستخدم بالفعل', statusCode: 400 });
     }
 
-    const restId = `rest-${slug.toLowerCase()}`;
-    const newRest = await prisma.restaurant.create({
-      data: {
-        id: restId,
-        name,
-        nameEn: nameEn || name,
-        slug: slug.toLowerCase(),
-        description: description || 'مطعم فاخر يقدم أرقى المأكولات',
-        phone: phone || '+970 599 000 000',
-        address: address || 'الشارع الرئيسي',
-        currency: currency || '₪',
-        primaryColor: primaryColor || '#D4AF37',
-        accentColor: accentColor || '#C5A880',
-        logoUrl: logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=200&q=80',
-        coverImageUrl: coverImageUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85',
-        status: 'ACTIVE',
-        planId: planId || 'plan-pro',
-      },
-    });
-
-    // Create Subscription
-    await prisma.subscription.create({
-      data: {
-        restaurantId: newRest.id,
-        planId: planId || 'plan-pro',
-        status: 'ACTIVE',
-        currentPeriodStart: new Date(),
-        currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
-      },
-    });
-
-    // Create Manager User
-    if (managerEmail && managerPassword) {
-      const passwordHash = bcrypt.hashSync(managerPassword, 10);
-      await prisma.restaurantUser.create({
-        data: {
-          restaurantId: newRest.id,
-          name: managerName || 'مدير المطعم',
-          email: managerEmail.toLowerCase(),
-          passwordHash,
-          role: 'RESTAURANT_MANAGER',
-          status: 'ACTIVE',
-        },
-      });
+    const targetPlanId = planId || 'plan-pro';
+    const plan = await prisma.plan.findUnique({ where: { id: targetPlanId } });
+    if (!plan || plan.status !== 'ACTIVE') {
+      return res.status(400).json({ success: false, error: 'الباقة المحددة غير متاحة', statusCode: 400 });
     }
 
-    // Provision Tables
-    const totalTables = Number(tablesCount) || 20;
-    const tablesData = Array.from({ length: totalTables }, (_, i) => {
-      const num = i + 1;
-      const numStr = num < 10 ? `0${num}` : `${num}`;
-      return {
-        id: `${newRest.id}-T${numStr}`,
-        restaurantId: newRest.id,
-        number: num,
-        name: `طاولة ${numStr}`,
-        capacity: 4,
-        zone: 'MAIN_HALL' as const,
-        status: 'AVAILABLE' as const,
-        qrToken: randomUUID(),
-      };
-    });
+    if (managerEmail) {
+      const emailTaken = await prisma.restaurantUser.findUnique({
+        where: { email: managerEmail.toLowerCase() },
+      });
+      if (emailTaken) {
+        return res.status(409).json({ success: false, error: 'بريد المدير مستخدم مسبقاً', statusCode: 409 });
+      }
+      if (!managerPassword) {
+        return res.status(400).json({ success: false, error: 'كلمة مرور المدير مطلوبة مع بريده', statusCode: 400 });
+      }
+    }
 
-    await prisma.table.createMany({ data: tablesData });
+    const restId = `rest-${normalizedSlug}`;
+    const totalTables = tablesCount ?? 20;
 
-    // Seed Initial Category & Products if provided
-    if (categories && Array.isArray(categories)) {
-      for (let i = 0; i < categories.length; i++) {
-        const c = categories[i];
-        const cat = await prisma.category.create({
+    // All-or-nothing provisioning: a partial tenant must never exist.
+    const newRest = await prisma.$transaction(async (tx) => {
+      const restaurant = await tx.restaurant.create({
+        data: {
+          id: restId,
+          name,
+          nameEn: nameEn || name,
+          slug: normalizedSlug,
+          description: description || 'مطعم فاخر يقدم أرقى المأكولات',
+          phone: phone || '+970 599 000 000',
+          address: address || 'الشارع الرئيسي',
+          currency: currency || '₪',
+          primaryColor: primaryColor || '#D4AF37',
+          accentColor: accentColor || '#C5A880',
+          logoUrl: logoUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=200&q=80',
+          coverImageUrl: coverImageUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85',
+          status: 'ACTIVE',
+          planId: targetPlanId,
+        },
+      });
+
+      // Create Subscription
+      await tx.subscription.create({
+        data: {
+          restaurantId: restaurant.id,
+          planId: targetPlanId,
+          status: 'ACTIVE',
+          currentPeriodStart: new Date(),
+          currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
+        },
+      });
+
+      // Create Manager User
+      if (managerEmail && managerPassword) {
+        await tx.restaurantUser.create({
           data: {
-            restaurantId: newRest.id,
-            name: c.name,
-            nameEn: c.nameEn,
-            sortOrder: i + 1,
+            restaurantId: restaurant.id,
+            name: managerName || 'مدير المطعم',
+            email: managerEmail.toLowerCase(),
+            passwordHash: await bcrypt.hash(managerPassword, 12),
+            role: 'RESTAURANT_MANAGER',
+            status: 'ACTIVE',
           },
         });
+      }
 
-        if (products && Array.isArray(products)) {
-          const catProducts = products.filter((p: any) => p.categoryName === c.name || p.categoryId === c.id);
-          for (const p of catProducts) {
-            await prisma.product.create({
-              data: {
-                restaurantId: newRest.id,
-                categoryId: cat.id,
-                name: p.name,
-                nameEn: p.nameEn || p.name,
-                description: p.description || '',
-                price: Number(p.price) || 50,
-                imageUrl: p.imageUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
-                available: true,
-              },
-            });
+      // Provision Tables
+      const tablesData = Array.from({ length: totalTables }, (_, i) => {
+        const num = i + 1;
+        const numStr = num < 10 ? `0${num}` : `${num}`;
+        return {
+          id: `${restaurant.id}-T${numStr}`,
+          restaurantId: restaurant.id,
+          number: num,
+          name: `طاولة ${numStr}`,
+          capacity: 4,
+          zone: 'MAIN_HALL' as const,
+          status: 'AVAILABLE' as const,
+          qrToken: generateQrToken(),
+        };
+      });
+
+      await tx.table.createMany({ data: tablesData });
+
+      // Seed Initial Category & Products if provided
+      if (categories && Array.isArray(categories)) {
+        for (let i = 0; i < categories.length; i++) {
+          const c = categories[i];
+          const cat = await tx.category.create({
+            data: {
+              restaurantId: restaurant.id,
+              name: c.name,
+              nameEn: c.nameEn,
+              sortOrder: i + 1,
+            },
+          });
+
+          if (products && Array.isArray(products)) {
+            const catProducts = products.filter((p) => p.categoryName === c.name || (c.id && p.categoryId === c.id));
+            for (const p of catProducts) {
+              await tx.product.create({
+                data: {
+                  restaurantId: restaurant.id,
+                  categoryId: cat.id,
+                  name: p.name,
+                  nameEn: p.nameEn || p.name,
+                  description: p.description || '',
+                  price: p.price ?? 50,
+                  imageUrl: p.imageUrl || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
+                  available: true,
+                },
+              });
+            }
           }
         }
       }
-    }
+
+      return restaurant;
+    });
 
     await logAuditEvent({
       restaurantId: newRest.id,

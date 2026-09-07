@@ -168,6 +168,9 @@ export interface OrderItem {
   quantity: number;
   size?: ProductSize | string;
   selectedSize?: ProductSize | string;
+  // Variant selectors trusted by the server: priced from the DB menu.
+  selectedSizeId?: string;
+  selectedAddOnIds?: string[];
   selectedAddOns?: any[];
   removedIngredients?: string[];
   itemNotes?: string;
