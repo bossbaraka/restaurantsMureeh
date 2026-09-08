@@ -57,9 +57,10 @@ export const BrandMark: React.FC<{ size?: number; className?: string }> = ({
   </span>
 );
 
-export const BrandWordmark: React.FC<{ size?: number; subtitle?: string }> = ({
+export const BrandWordmark: React.FC<{ size?: number; subtitle?: string; showTagline?: boolean }> = ({
   size = 26,
   subtitle = 'MUREEH',
+  showTagline = false,
 }) => (
   <span className="inline-flex flex-col leading-none">
     <span
@@ -80,6 +81,11 @@ export const BrandWordmark: React.FC<{ size?: number; subtitle?: string }> = ({
     >
       {subtitle}
     </span>
+    {showTagline && (
+      <span className="text-[9px] text-sky-200/80 font-medium tracking-tight mt-1 opacity-90">
+        منصة مريح للخدمات الإلكترونية
+      </span>
+    )}
   </span>
 );
 
