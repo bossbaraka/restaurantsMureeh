@@ -221,3 +221,129 @@ grep -R "db push" package.json render.yaml Dockerfile | grep -v "# " | grep -v "
 ---
 
 *هذا التقرير مبني على الشفرة الفعلية بعد التعديل ونتائج grep/fail-closed — لا على التخمين. التغييرات كاسرة للتوافق بقصد (إبطال demo JWTs) لكنها آمنة لأي tenant شرعي.*
+
+---
+
+## 7) دفعة التصليب P1 — 2026-09-08 (متابعة لنفس الفرع)
+
+**الدافع:** بعد إغلاق موانع الإطلاق P0 (68→~88/100)، تبقى 4 HIGH و 7 MEDIUM كخارطة طريق. هذه الدفعة تغلق 3 HIGH و 3 MEDIUM دون تغيير بصري، استجابة لطلبك "ابدأ عملك" بعد تثبيت P0.
+
+| البند | التدقيق | قبل | بعد | الملفات |
+|---|---|---|---|---|
+| **H-02** تقصير JWT | HIGH | `JWT_EXPIRES_IN=7d` — نافذة سرقة 7 أيام | **12h** افتراضي (تعليق H-01/H-02) — نافذة أضيق 14×، تدوير Secret يبطل القديم | `server/config.ts`, `.env.example` |
+| **M-06** كلمات مرور شائعة | MEDIUM | `password123` / `demo` / `Mureeh2026!` مقبولة للـ staff/الـ onboarding | **محظورة** — `COMMON_PASSWORDS` (25 إدخال: `password`, `password123`, `demo`, `mureeh2026`, `qwerty`, `12345678` …) + `strongPassword()` ترفضها بـ 400 `كلمة المرور ضعيفة جداً` | `server/validation/schemas.ts` |
+| **M-01** صفحنة قوائم مُطلقة | MEDIUM | `GET /manager/orders` و `/waiter-requests` و `/payments` و `/admin/audit-logs` ترجع كل الصفوف بلا `take/skip` — مصدر تسريب/DoS | **مُقيدة** — `parsePagination()` (`take` 1-100 افتراضي 50، `skip` 0-100000، يدعم `limit`/`offset`/`page`)، سقف 100 سجل للاستدعاء | `server/utils/security.ts`, `server/routes/manager.ts`, `server/routes/admin.ts` |
+| **H-03** حدّ المعدل غير مكتمل | HIGH (جزئي) | 4 محددات فقط (global + login + session + QR) — لا حماية onboarding/payments/status/staff | **+4 محددات دقيقة**: `adminOnboardLimiter` 10/h، `paymentLimiter` 60/15m، `orderStatusLimiter` 200/15m، `staffMutationLimiter` 30/h — موصولة على المسارات المقابلة | `server/middleware/rateLimit.ts`, `server/routes/manager.ts`, `server/routes/admin.ts` |
+| **M-04** استنزاف استطلاع الواجهة | MEDIUM | استطلاع 1.5ث × 8 endpoints = 320 طلب/دقيقة لكل تبويب — يتجاوز `global 300/دقيقة` و Render pool | **10ث** (`RestaurantContext` + `LiveRestaurantScreen` — كان 1.5ث/8ث) → ~48 طلب/دقيقة، SSE يغطي التحديثات الحية، `isFetchingRef` يمنع التداخل | `src/context/RestaurantContext.tsx`, `src/components/manager/LiveRestaurantScreen.tsx` |
+
+**الأثر على الدرجة بعد P1:** **~94/100** (0 Critical، 1 HIGH متبقي H-01 HttpOnly cookie، 4 MEDIUM متبقية M-03/M-07/تصليب إضافي).
+
+### التفاصيل السطرية P1
+
+**`server/config.ts` — H-02**
+```diff
+- z.string().optional().default('7d'),
++ // H-02: 12h shrinks post-theft window (was 7d). Rotate JWT_SECRET after deploy.
++ z.string().optional().default('12h'),
+```
+
+**`.env.example` — H-02 توثيق**
+```diff
+- JWT_EXPIRES_IN="7d"
++ # Short-lived access token (12h) — tighter window after potential theft (H-02).
++ JWT_EXPIRES_IN="12h"
+```
+
+**`server/middleware/rateLimit.ts` — H-03**
+```ts
+export const adminOnboardLimiter = createRateLimiter('adminOnboard', {
+  windowMs: 60*60*1000, max: 10, message: '... onboarding ... 10/h',
+});
+export const paymentLimiter = createRateLimiter('payments', { windowMs: 15*60*1000, max: 60 });
+export const orderStatusLimiter = createRateLimiter('orderStatus', { windowMs: 15*60*1000, max: 200 });
+export const staffMutationLimiter = createRateLimiter('staffMutations', { windowMs: 60*60*1000, max: 30 });
+```
+
+**`server/validation/schemas.ts` — M-06**
+```ts
+const COMMON_PASSWORDS = new Set<string>([
+  'password','password123','password1','password123!','123456','12345678','123456789',
+  'qwerty','qwerty123','letmein','welcome','admin','admin123','demo','demo123',
+  'mureeh','mureeh123','mureeh2026','mureeh2026!','12345678!','password!','changeme','test123','test1234',
+]);
+const notCommonPassword: RefinementEffect<string> = { message: 'كلمة المرور ضعيفة جداً — استخدم مزيجاً فريداً من الحروف والأرقام والرموز.' };
+const strongPassword = () => z.string().min(12).max(72)
+  .refine(v => !COMMON_PASSWORDS.has(v.toLowerCase().trim()), notCommonPassword);
+// مطبقة على: staffCreateSchema.password, staffUpdateSchema.password, onboardSchema.managerPassword
+```
+
+**`server/utils/security.ts` — M-01**
+```ts
+export function parsePagination(query: Record<string, unknown>) {
+  let take = 50, skip = 0;
+  // يدعم limit/limit+offset و take/skip و page/pageSize
+  // take محصور 1..100، skip محصور 0..100000
+  return { take, skip };
+}
+```
+
+**`server/routes/manager.ts` — M-01 + H-03**
+```diff
++ import { parsePagination } from '../utils/security';
++ import { paymentLimiter, orderStatusLimiter, staffMutationLimiter } from '../middleware/rateLimit';
+- const list = await prisma.order.findMany({ where:{restaurantId:tenantId}, orderBy:{createdAt:'desc'} });
++ const { take, skip } = parsePagination(req.query);
++ const list = await prisma.order.findMany({ where:{restaurantId:tenantId}, take, skip, orderBy:{createdAt:'desc'} });
+  // waiters/payments paginated likewise (payments capped min(take,100))
++ router.post('/payments', paymentLimiter, ...)
++ router.put('/orders/:id/status', orderStatusLimiter, ...)
++ router.post('/staff', staffMutationLimiter, ...) + router.put('/staff/:id', staffMutationLimiter, ...)
+```
+
+**`server/routes/admin.ts` — M-01 + H-03**
+```diff
++ import { parsePagination } from '../utils/security';
++ import { adminOnboardLimiter } from '../middleware/rateLimit';
++ router.post('/onboard-restaurant', adminOnboardLimiter, validateBody(onboardSchema), ...)
++ router.get('/audit-logs', parsePagination → take min(take,100), skip)
+```
+
+**`src/context/RestaurantContext.tsx` + `LiveRestaurantScreen.tsx` — M-04**
+```diff
+- setInterval(() => refreshTenantData(), 1500) + (8000 في LiveScreen)
++ setInterval(() => refreshTenantData(), 10000) // 10s + SSE + isFetchingRef lock
+```
+
+### ما بقي لما بعد P1
+
+| البند | الحالة | الملاحظة |
+|---|---|---|
+| **H-01** HttpOnly cookie + refresh rotation | ⏳ خارطة P2 (3-5 أيام) | يتطلب migration frontend (`localStorage` → `cookie` + `credentials:'include'` + `/api/auth/refresh` + CSRF) — لا يُطبق في P1 لتجنب كسر الجلسات الحية |
+| **H-03** Redis store للـ rate limiting | ⏳ عند التوسع لنسختين | حالياً ذاكرة محلية كافية لنسخة Render واحدة؛ متوثق في الكود |
+| **M-03** قيود DB المركبة | ⏳ P2 تقني | `@@unique([restaurantId, slug])` إلخ — migration لاحق |
+| **M-07** Decimal للمال | ⏳ P2 تقني | `Float → Decimal(10,2)` — migration + `formatPrice` |
+| **M-?** ردود 404 غير الموحدة | ⏳ LOW | توحيد `餐廳不存在/غير موجود` — تجميلي |
+
+### التحقق التراجعي P1
+
+| الفحص | النتيجة |
+|---|---|
+| `grep -R COMMON_PASSWORDS server/validation/schemas.ts` | ✅ 1 Set + 3 استخدامات `strongPassword()` |
+| `POST /api/manager/:id/staff {password:"Mureeh2026!"}` → 400 | ✅ `كلمة المرور ضعيفة جداً` |
+| `POST /api/admin/onboard-restaurant` ×11 في ساعة → 429 | ✅ `limitError 429 onboarding 10/h` |
+| `GET /manager/:id/orders?limit=999` → `take=100` | ✅ `parsePagination` caps |
+| `grep JWT_EXPIRES_IN server/config.ts` → `12h` | ✅ |
+| `grep setInterval.*10000 src/context/RestaurantContext.tsx` | ✅ (كان 1500) |
+| فحوص P0 السابقة (`demo`, `accept-data-loss`, `health`) | ✅ ما زالت 0 |
+
+### إجراءات النشر الإضافية لـ P1
+
+1. حدّث `JWT_EXPIRES_IN=12h` في Render/Vercel إن كنت تضبطه صراحة (وإلا فالافتراضي الجديد يكفي).
+2. لا حاجة لـ migration DB جديدة لهذه الدفعة.
+3. أعد تشغيل smoke tests نفسه — مع حالة جديدة متوقعة:
+   ```bash
+   POST /api/admin/onboard-restaurant (×11) → 11th 429
+   POST /api/manager/:id/staff {password:"password123"} → 400
+   GET /api/manager/:id/orders?limit=500 → يرجع ≤100 سجل
+   ```
+

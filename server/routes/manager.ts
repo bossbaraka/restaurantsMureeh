@@ -11,7 +11,8 @@ import {
 } from '../middleware/auth';
 import { realtimeService } from '../services/realtime';
 import { logAuditEvent } from '../services/audit';
-import { generateQrToken, csvField, roundMoney } from '../utils/security';
+import { generateQrToken, csvField, roundMoney, parsePagination } from '../utils/security';
+import { paymentLimiter, orderStatusLimiter, staffMutationLimiter } from '../middleware/rateLimit';
 import {
   validateBody,
   posOrderSchema,
@@ -244,7 +245,7 @@ router.get('/dashboard/stats', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/manager/orders
+// GET /api/manager/orders — paginated (M-01 DoS hardening, capped at 100)
 router.get('/orders', async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
@@ -252,6 +253,7 @@ router.get('/orders', async (req: Request, res: Response) => {
 
     if (!ownTenant(req, restaurantId)) return deny(req, res);
 
+    const { take, skip } = parsePagination(req.query as Record<string, unknown>);
     const orders = await prisma.order.findMany({
       where: { restaurantId },
       include: {
@@ -259,6 +261,8 @@ router.get('/orders', async (req: Request, res: Response) => {
         table: true,
       },
       orderBy: { createdAt: 'desc' },
+      take,
+      skip,
     });
 
     const formatted = orders.map((o) => ({
@@ -434,6 +438,7 @@ router.post(
 router.put(
   '/orders/:orderId/status',
   requireServiceStaff(),
+  orderStatusLimiter,
   validateBody(orderStatusSchema),
   async (req: Request, res: Response) => {
     try {
@@ -1117,15 +1122,18 @@ router.delete('/menu/products/:id', requireManager(), async (req: Request, res: 
   }
 });
 
-// GET /api/manager/waiter-requests
+// GET /api/manager/waiter-requests — paginated
 router.get('/waiter-requests', async (req: Request, res: Response) => {
   const restaurantId = getTenantId(req);
   if (!restaurantId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
   if (!ownTenant(req, restaurantId)) return deny(req, res);
 
+  const { take, skip } = parsePagination(req.query as Record<string, unknown>);
   const reqs = await prisma.waiterRequest.findMany({
     where: { restaurantId },
     orderBy: { createdAt: 'desc' },
+    take,
+    skip,
   });
   return res.json({ success: true, data: reqs, statusCode: 200 });
 });
@@ -1345,6 +1353,7 @@ router.get('/staff', requireManager(), async (req: Request, res: Response) => {
 router.post(
   '/staff',
   requireManager(),
+  staffMutationLimiter,
   validateBody(staffCreateSchema),
   async (req: Request, res: Response) => {
     try {
@@ -1396,6 +1405,7 @@ router.post(
 router.put(
   '/staff/:id',
   requireManager(),
+  staffMutationLimiter,
   validateBody(staffUpdateSchema),
   async (req: Request, res: Response) => {
     try {
@@ -1990,15 +2000,17 @@ router.post(
   }
 );
 
-// ---------- Payments (POS ledger) ----------
+// ---------- Payments (POS ledger) — paginated, hard cap 100
 router.get('/payments', requireCashierOrManager(), async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
     if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+    const { take, skip } = parsePagination(req.query as Record<string, unknown>);
     const payments = await prisma.payment.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
-      take: 500,
+      take: Math.min(take, 100),
+      skip,
     });
     const formatted = payments.map((p) => ({
       id: p.id,
@@ -2030,6 +2042,7 @@ router.get('/payments', requireCashierOrManager(), async (req: Request, res: Res
 router.post(
   '/payments',
   requireCashierOrManager(),
+  paymentLimiter,
   validateBody(paymentCreateSchema),
   async (req: Request, res: Response) => {
     try {

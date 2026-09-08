@@ -83,3 +83,34 @@ export const uploadLimiter = rateLimit({
   limit: 60,
   message: limiterError('تجاوزت حد رفع الملفات المسموح. حاول لاحقاً.'),
 });
+
+// ---------- P1 additional limiters (non-breaking, targeted) ----------
+
+// Tenant onboarding is privileged and rare — brute force / spam must be bounded.
+export const adminOnboardLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  message: limiterError('محاولات إنشاء مطاعم كثيرة. حاول لاحقاً.'),
+});
+
+export const paymentLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  message: limiterError('عمليات دفع كثيرة. يرجى الانتظار قليلاً.'),
+});
+
+export const orderStatusLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  message: limiterError('تحديثات حالة كثيرة. يرجى الانتظار قليلاً.'),
+});
+
+export const staffMutationLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  message: limiterError('عمليات موظفين كثيرة. حاول لاحقاً.'),
+});

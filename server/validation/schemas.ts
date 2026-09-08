@@ -64,6 +64,49 @@ const hexColor = z
   .regex(/^#[0-9a-fA-F]{6}$/, 'اللون يجب أن يكون بصيغة HEX مثل #D4AF37')
   .optional();
 
+// Small breached/common-password blocklist (P1 hardening — not exhaustive,
+// but catches the most abused passwords and the removed demo secrets).
+const COMMON_PASSWORDS = new Set([
+  'password',
+  'password123',
+  'password123!',
+  '123456',
+  '12345678',
+  '123456789',
+  'qwerty',
+  'abc123',
+  'letmein',
+  'admin123',
+  'welcome',
+  'welcome123',
+  'iloveyou',
+  'monkey',
+  'dragon',
+  'sunshine',
+  'princess',
+  'football',
+  '1234567',
+  '123123',
+  '111111',
+  '000000',
+  'demo',
+  'demo123',
+  'mureeh2026',
+]);
+
+function notCommonPassword(value: string): boolean {
+  return !COMMON_PASSWORDS.has(value.toLowerCase());
+}
+
+const strongPassword = (minMsg: string) =>
+  z
+    .string()
+    .min(8, minMsg)
+    .max(128, 'كلمة المرور طويلة جداً')
+    .refine(notCommonPassword, {
+      message: 'كلمة المرور ضعيفة جداً أو شائعة — اختر كلمة أقوى',
+    });
+
 // Roles a tenant (non-platform) actor may ever assign. Platform roles
 // can never be granted through tenant routes.
 export const TENANT_ASSIGNABLE_ROLES = [
@@ -160,10 +203,7 @@ export const staffCreateSchema = z
       .trim()
       .max(254)
       .email('صيغة البريد الإلكتروني غير صحيحة'),
-    password: z
-      .string()
-      .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل')
-      .max(128, 'كلمة المرور طويلة جداً'),
+    password: strongPassword('كلمة المرور يجب أن تكون 8 أحرف على الأقل'),
     pin: z
       .string()
       .regex(/^\d{4,10}$/, 'رمز PIN يجب أن يكون من 4 إلى 10 أرقام')
@@ -178,11 +218,7 @@ export const staffUpdateSchema = z
     name: safeName('اسم الموظف').optional(),
     role: z.enum(TENANT_ASSIGNABLE_ROLES, 'دور غير صالح').optional(),
     status: z.enum(USER_STATUSES, 'حالة غير صالحة').optional(),
-    password: z
-      .string()
-      .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل')
-      .max(128, 'كلمة المرور طويلة جداً')
-      .optional(),
+    password: strongPassword('كلمة المرور يجب أن تكون 8 أحرف على الأقل').optional(),
     pin: z
       .union([
         z.string().regex(/^\d{4,10}$/, 'رمز PIN غير صالح'),
@@ -534,11 +570,7 @@ export const onboardSchema = z
       .max(254)
       .email('صيغة بريد المدير غير صحيحة')
       .optional(),
-    managerPassword: z
-      .string()
-      .min(8, 'كلمة مرور المدير يجب أن تكون 8 أحرف على الأقل')
-      .max(128)
-      .optional(),
+    managerPassword: strongPassword('كلمة مرور المدير يجب أن تكون 8 أحرف على الأقل').optional(),
     tablesCount: z.number().int().min(1).max(500).optional(),
     categories: z
       .array(

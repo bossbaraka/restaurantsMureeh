@@ -4,7 +4,8 @@ import { prisma } from '../db/prisma';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
 import { logAuditEvent } from '../services/audit';
 import { validateBody, tenantStatusSchema, onboardSchema } from '../validation/schemas';
-import { generateQrToken } from '../utils/security';
+import { generateQrToken, parsePagination } from '../utils/security';
+import { adminOnboardLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -119,7 +120,7 @@ router.post('/restaurants/:id/status', validateBody(tenantStatusSchema), async (
 });
 
 // POST /api/admin/onboard-restaurant (Onboarding Wizard)
-router.post('/onboard-restaurant', validateBody(onboardSchema), async (req: Request, res: Response) => {
+router.post('/onboard-restaurant', adminOnboardLimiter, validateBody(onboardSchema), async (req: Request, res: Response) => {
   try {
     const {
       name,
@@ -314,10 +315,12 @@ router.post('/onboard-restaurant', validateBody(onboardSchema), async (req: Requ
   }
 });
 
-// GET /api/admin/audit-logs
+// GET /api/admin/audit-logs — paginated (capped)
 router.get('/audit-logs', async (req: Request, res: Response) => {
+  const { take, skip } = parsePagination(req.query as Record<string, unknown>);
   const logs = await prisma.auditLog.findMany({
-    take: 100,
+    take: Math.min(take, 100),
+    skip,
     orderBy: { createdAt: 'desc' },
     include: { restaurant: true },
   });
