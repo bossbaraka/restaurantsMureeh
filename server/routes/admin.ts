@@ -4,6 +4,7 @@ import { prisma } from '../db/prisma';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
 import { logAuditEvent } from '../services/audit';
 import { validateBody, tenantStatusSchema, onboardSchema } from '../validation/schemas';
+import { onboardLimiter } from '../middleware/rateLimit';
 import { generateQrToken } from '../utils/security';
 
 const router = Router();
@@ -119,7 +120,7 @@ router.post('/restaurants/:id/status', validateBody(tenantStatusSchema), async (
 });
 
 // POST /api/admin/onboard-restaurant (Onboarding Wizard)
-router.post('/onboard-restaurant', validateBody(onboardSchema), async (req: Request, res: Response) => {
+router.post('/onboard-restaurant', onboardLimiter, validateBody(onboardSchema), async (req: Request, res: Response) => {
   try {
     const {
       name,

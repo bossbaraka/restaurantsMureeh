@@ -83,3 +83,10 @@ export const uploadLimiter = rateLimit({
   limit: 60,
   message: limiterError('تجاوزت حد رفع الملفات المسموح. حاول لاحقاً.'),
 });
+
+export const onboardLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  message: limiterError('تجاوزت حد إنشاء مطاعم جديدة. يرجى الانتظار 15 دقيقة.'),
+});
