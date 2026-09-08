@@ -32,4 +32,7 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npx tsx server/index.ts"]
+# Schema migrations are applied by the deploy pipeline (`prisma migrate deploy`).
+# The container NEVER runs `prisma db push --accept-data-loss` on boot — that
+# flag can irreversibly drop columns/tables in production (C-02).
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx server/index.ts"]
