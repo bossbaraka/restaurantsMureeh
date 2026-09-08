@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { formatPrice } from '../../utils/formatting';
 import { AnimatedNumber, CountUp, Reveal, SectionHeading } from './landing/primitives';
 import { KdsMockup, ManagerMockup, MiniQr, PhoneMockup } from './landing/mockups';
+import { DemoVideoPlayer } from './landing/DemoVideoPlayer';
 import {
   ArrowLeft,
   BadgeCheck,
@@ -114,6 +115,7 @@ const PLANS: PlanDef[] = [
 const NAV_LINKS = [
   { href: '#how', label: 'كيف يعمل' },
   { href: '#features', label: 'المزايا' },
+  { href: '#video', label: 'الفيديو' },
   { href: '#showcase', label: 'جولة حيّة' },
   { href: '#pricing', label: 'الباقات' },
   { href: '#faq', label: 'الأسئلة الشائعة' },
@@ -766,6 +768,21 @@ export const SaaSLandingPage: FC = () => {
                 </span>
               </div>
             </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ================= Explainer video ================= */}
+      <section id="video" className="relative py-16 sm:py-24 px-4 sm:px-6 overflow-hidden">
+        <div className="absolute top-10 right-[12%] w-[420px] h-[420px] rounded-full bg-[#0072BC]/12 blur-[140px] pointer-events-none" />
+        <div className="max-w-5xl mx-auto relative z-10">
+          <SectionHeading
+            eyebrow="شاهد المنصة تعمل"
+            title={<>أربعون ثانية تختصر يوم عمل كامل</>}
+            sub="من مسح رمز QR على الطاولة حتى تقرير الإيراد في لوحة المدير — جولة داخل النظام نفسه."
+          />
+          <Reveal>
+            <DemoVideoPlayer />
           </Reveal>
         </div>
       </section>

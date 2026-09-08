@@ -16,6 +16,7 @@ import { DirectTableEntryModal } from './DirectTableEntryModal';
 import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
 import { OrderCompletedModal } from './OrderCompletedModal';
 import { LuxuryWelcomeScreen } from './LuxuryWelcomeScreen';
+import { DisplayMenu } from './DisplayMenu';
 import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 
 /** Cards rendered above the fold get eager loading + network priority. */
@@ -78,6 +79,7 @@ export const CustomerLayout: React.FC = () => {
     currentRestaurant,
     activeTableId,
     setViewMode,
+    displayMode,
   } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
@@ -216,6 +218,12 @@ export const CustomerLayout: React.FC = () => {
   );
 
   const currency = currentRestaurant?.currency || '₪';
+
+  // Read-only board (TV / social media): rendered before any gate so it never
+  // asks for a table and never mounts a cart or an ordering drawer.
+  if (displayMode) {
+    return <DisplayMenu />;
+  }
 
   const isPublicRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/r/');
   if (isPublicRoute && !activeTableId) {
