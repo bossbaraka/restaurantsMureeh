@@ -82,6 +82,9 @@ export const BrandingSettingsView: React.FC = () => {
   const [description, setDescription] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [latitude, setLatitude] = useState<number>(31.9029);
+  const [longitude, setLongitude] = useState<number>(35.2062);
+  const [mapUrl, setMapUrl] = useState('');
   const [logo, setLogo] = useState('');
   const [coverImage, setCoverImage] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#D4AF37');
@@ -105,6 +108,9 @@ export const BrandingSettingsView: React.FC = () => {
       setDescription(currentRestaurant.description);
       setPhone(currentRestaurant.phone);
       setAddress(currentRestaurant.address);
+      setLatitude(currentRestaurant.latitude || 31.9029);
+      setLongitude(currentRestaurant.longitude || 35.2062);
+      setMapUrl(currentRestaurant.mapUrl || '');
       setLogo(currentRestaurant.logo);
       setCoverImage(currentRestaurant.coverImage || '');
       setPrimaryColor(currentRestaurant.primaryColor || '#D4AF37');
@@ -196,6 +202,9 @@ export const BrandingSettingsView: React.FC = () => {
       description: description.trim(),
       phone: phone.trim(),
       address: address.trim(),
+      latitude,
+      longitude,
+      mapUrl: mapUrl.trim(),
       logo: logo.trim(),
       coverImage: coverImage.trim(),
       primaryColor,
@@ -299,6 +308,53 @@ export const BrandingSettingsView: React.FC = () => {
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl"
+                  placeholder="مثال: شارع الإرسال، رام الله"
+                />
+              </div>
+            </div>
+
+            {/* Map Location & Coordinates Settings */}
+            <div className="pt-2 border-t border-luxury-850 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-luxury-200 mb-1">خط العرض (Latitude)</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={latitude}
+                    onChange={(e) => setLatitude(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-luxury-200 mb-1">خط الطول (Longitude)</label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    value={longitude}
+                    onChange={(e) => setLongitude(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-luxury-200 mb-1">رابط Google Maps (اختياري)</label>
+                  <input
+                    type="text"
+                    value={mapUrl}
+                    onChange={(e) => setMapUrl(e.target.value)}
+                    className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl text-xs"
+                    placeholder="https://maps.app.goo.gl/..."
+                  />
+                </div>
+              </div>
+
+              {/* Live Map Preview Frame */}
+              <div className="rounded-xl overflow-hidden border border-luxury-800 h-36 bg-luxury-950 relative">
+                <iframe
+                  title="معاينة الخريطة"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.005},${latitude - 0.005},${longitude + 0.005},${latitude + 0.005}&layer=mapnik&marker=${latitude},${longitude}`}
+                  className="w-full h-full border-none"
+                  loading="lazy"
                 />
               </div>
             </div>
