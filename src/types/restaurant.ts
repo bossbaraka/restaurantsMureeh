@@ -73,6 +73,8 @@ export interface Plan {
   entitlements: EntitlementKey[];
   description: string;
   isPopular?: boolean;
+  /** Free-trial length in days (0 for paid plans). Derived by the server. */
+  trialDays?: number;
 }
 
 export interface Subscription {

@@ -27,6 +27,18 @@ import { soundFX } from '../utils/audio';
 
 export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
 
+/**
+ * True when the URL asks for the read-only menu board
+ * (`/r/:slug?view=display`) used on TVs and for social-media recording.
+ * Display mode never opens a table session, so it can never place an order.
+ */
+export function isDisplayModeUrl(): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  const view = (params.get('view') || params.get('mode') || '').toLowerCase();
+  return view === 'display' || view === 'tv';
+}
+
 interface RestaurantContextType {
   // Current Tenant Info
   currentRestaurant: Restaurant | null;
@@ -42,6 +54,8 @@ interface RestaurantContextType {
 
   // View & UI Navigation
   viewMode: AppViewMode;
+  /** True on the read-only display board (`?view=display`). */
+  displayMode: boolean;
   setViewMode: (mode: AppViewMode) => void;
   selectedCategoryId: string;
   setSelectedCategoryId: (id: string) => void;
@@ -136,6 +150,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const { currentUser, currentManagerRestaurant, setCurrentUser: authSetCurrentUser, logout: authLogout } = auth;
 
   const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
+  // Read-only menu board (TV / social media). Fixed for the session: it comes
+  // from the URL and never flips while the board is open.
+  const [displayMode] = useState<boolean>(isDisplayModeUrl);
   const [viewMode, setViewModeState] = useState<AppViewMode>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
@@ -277,13 +294,21 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setProducts(catalogRes.data.products);
           setOffers(catalogRes.data.offers);
         }
+      } else if (displayMode && currentRestaurant?.slug) {
+        // Display board: same public catalog, no table token, no session.
+        const boardRes = await api.getPublicRestaurantBySlug(currentRestaurant.slug);
+        if (boardRes.success && boardRes.data) {
+          setCategories(boardRes.data.categories);
+          setProducts(boardRes.data.products);
+          setOffers(boardRes.data.offers);
+        }
       }
     } catch {
       /* ignore transient background errors */
     } finally {
       isFetchingRef.current = false;
     }
-  }, [currentRestaurant?.id, currentRestaurant?.slug, currentUser?.id, currentTableSession?.sessionToken]);
+  }, [currentRestaurant?.id, currentRestaurant?.slug, currentUser?.id, currentTableSession?.sessionToken, displayMode]);
 
   // Load the platform tenant directory for platform admins (used by the
   // tenant switcher, admin portal and manager header).
@@ -352,6 +377,26 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const slug = rawSlug || 'mureeh';
     const qrToken = params.get('qr') || params.get('table') || params.get('t') || params.get('tableId') || '';
 
+    if (slug && displayMode) {
+      // Read-only board: load the catalog by slug only — no table session is
+      // created, so there is nothing to order against and no cart to fill.
+      urlHandledRef.done = true;
+      api.getPublicRestaurantBySlug(slug).then((catalogRes) => {
+        if (catalogRes.success && catalogRes.data) {
+          setCategories(catalogRes.data.categories);
+          setProducts(catalogRes.data.products);
+          setOffers(catalogRes.data.offers);
+          setCurrentRestaurant(catalogRes.data.restaurant);
+          setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
+          setViewMode('CUSTOMER');
+        } else {
+          showToast('error', 'تعذر تحميل قائمة العرض', catalogRes.error || 'الرابط غير صالح');
+          setViewMode('SAAS_LANDING');
+        }
+      });
+      return;
+    }
+
     if (slug) {
       urlHandledRef.done = true;
       const targetToken = qrToken || 'default';
@@ -397,6 +442,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Keep the active QR token in the public URL without exposing table numbers.
   useEffect(() => {
     if (typeof window === 'undefined' || !currentRestaurant || viewMode !== 'CUSTOMER') return;
+    if (displayMode) return; // never rewrite the shareable display link
     if (activeTableId && currentTableSession) {
       const table = tables.find((t) => t.id === activeTableId);
       const qrToken = table?.qrToken;
@@ -453,6 +499,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!currentRestaurant) return false;
       if (!subscription) return true; // not loaded yet — server enforces
       if (subscription.status === 'SUSPENDED' || subscription.status === 'CANCELLED') return false;
+      // A free trial that ran out grants nothing until a paid plan is assigned.
+      if (subscription.status === 'TRIAL' && subscription.trialEndsAt) {
+        const endsAt = new Date(subscription.trialEndsAt).getTime();
+        if (Number.isFinite(endsAt) && Date.now() > endsAt) return false;
+      }
       const plan = plans.find((p) => p.id === subscription.planId);
       if (!plan) return false;
       return plan.entitlements.includes(key);
@@ -1055,6 +1106,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         hasEntitlement,
         viewMode,
         setViewMode,
+        displayMode,
         selectedCategoryId,
         setSelectedCategoryId,
         searchQuery,

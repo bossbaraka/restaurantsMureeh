@@ -34,6 +34,7 @@ export const OrderTrackingDrawer: React.FC = () => {
     currentRestaurant,
     showToast,
   } = useRestaurant();
+  const currency = currentRestaurant?.currency || '₪';
 
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [editingNotesOrderId, setEditingNotesOrderId] = useState<string | null>(null);
@@ -56,8 +57,8 @@ export const OrderTrackingDrawer: React.FC = () => {
 
   const handleShareWhatsApp = (order: Order) => {
     const restName = currentRestaurant?.name || '';
-    const itemsList = order.items.map((i) => `• ${i.quantity}x ${i.productName || i.name} (${formatPrice(i.totalPrice)})`).join('\n');
-    const msg = `🧾 *فاتورة إلكترونية - ${restName}*\n📍 *طاولة رقم:* ${tableNumStr}\n🔢 *رقم الطلب:* ${order.id}\n\n*الأصناف:*\n${itemsList}\n\n💰 *الإجمالي:* ${formatPrice(order.total)}\n💳 *طريقة الدفع:* الدفع عند الكاشير\n\n✨ شكراً لزيارتكم!`;
+    const itemsList = order.items.map((i) => `• ${i.quantity}x ${i.productName || i.name} (${formatPrice(i.totalPrice, currency)})`).join('\n');
+    const msg = `🧾 *فاتورة إلكترونية - ${restName}*\n📍 *طاولة رقم:* ${tableNumStr}\n🔢 *رقم الطلب:* ${order.id}\n\n*الأصناف:*\n${itemsList}\n\n💰 *الإجمالي:* ${formatPrice(order.total, currency)}\n💳 *طريقة الدفع:* الدفع عند الكاشير\n\n✨ شكراً لزيارتكم!`;
 
     const encoded = encodeURIComponent(msg);
     window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
@@ -80,7 +81,7 @@ export const OrderTrackingDrawer: React.FC = () => {
         {/* Header */}
         <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-850/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
               <ChefHat className="w-5 h-5" />
             </div>
             <div className="text-right">
@@ -92,7 +93,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-gold-400 font-semibold">طاولة {tableNumStr}</span>
+                <span className="text-xs text-[var(--brand-primary-strong)] font-semibold">طاولة {tableNumStr}</span>
                 <span className="text-xs text-luxury-400">
                   ({activeTableOrders.length} طلبات نشطة)
                 </span>
@@ -122,7 +123,7 @@ export const OrderTrackingDrawer: React.FC = () => {
               </p>
               <button
                 onClick={() => setIsOrderTrackingOpen(false)}
-                className="mt-2 px-4 py-2 rounded-xl bg-gold-500 text-luxury-950 text-xs font-bold transition-all shadow-gold-glow cursor-pointer"
+                className="mt-2 px-4 py-2 rounded-xl brand-fill text-xs font-bold transition-all shadow-[0_0_22px_-6px_var(--brand-glow)] cursor-pointer"
               >
                 تصفح قائمة الطعام
               </button>
@@ -130,18 +131,18 @@ export const OrderTrackingDrawer: React.FC = () => {
           ) : (
             <>
               {/* Live Kitchen Radar Banner */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-luxury-900 via-luxury-850 to-luxury-900 border border-gold-500/40 shadow-lg space-y-3">
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-luxury-900 via-luxury-850 to-luxury-900 border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] shadow-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">👨‍🍳</span>
                     <div>
-                      <h4 className="text-sm font-bold text-gold-300">المطبخ الحي (Live KDS)</h4>
+                      <h4 className="text-sm font-bold text-[var(--brand-primary-strong)]">المطبخ الحي (Live KDS)</h4>
                       <p className="text-[11px] text-luxury-300">يتم إرسال حالة الأطباق مباشرة من شاشة المطبخ</p>
                     </div>
                   </div>
                   <div className="text-left">
                     <span className="text-[10px] text-luxury-400 block">وقت التحضير المتوقع</span>
-                    <span className="text-xs font-mono font-bold text-gold-400 flex items-center gap-1">
+                    <span className="text-xs font-mono font-bold text-[var(--brand-primary-strong)] flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       12 - 18 دقيقة
                     </span>
@@ -165,7 +166,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                     {/* Order Card Header */}
                     <div className="p-4 bg-luxury-800/50 border-b border-luxury-750 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gold-400 font-mono">
+                        <span className="text-sm font-bold text-[var(--brand-primary-strong)] font-mono">
                           طلب {order.id}
                         </span>
                         <span className="text-[11px] text-luxury-400">
@@ -231,7 +232,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                                 step.active
                                   ? step.done
                                     ? 'bg-emerald-500'
-                                    : 'bg-gold-500 animate-pulse'
+                                    : 'bg-[var(--brand-primary-strong)] animate-pulse'
                                   : 'bg-luxury-800'
                               }`}
                             />
@@ -262,7 +263,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                                 {item.quantity} × {item.productName || item.name}
                               </span>
                               {item.selectedSize && (
-                                <span className="text-[11px] text-gold-400 block">
+                                <span className="text-[11px] text-[var(--brand-primary-strong)] block">
                                   {typeof item.selectedSize === "object" ? item.selectedSize.name : item.selectedSize}
                                 </span>
                               )}
@@ -278,7 +279,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                               )}
                             </div>
                             <span className="font-bold text-luxury-200 shrink-0">
-                              {formatPrice(item.totalPrice)}
+                              {formatPrice(item.totalPrice, currency)}
                             </span>
                           </div>
                         ))}
@@ -297,7 +298,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleSaveNotes(order.id)}
-                                className="px-3 py-1 bg-gold-500 text-luxury-950 font-bold text-xs rounded-lg cursor-pointer"
+                                className="px-3 py-1 brand-fill font-bold text-xs rounded-lg cursor-pointer"
                               >
                                 حفظ الملاحظات
                               </button>
@@ -323,8 +324,8 @@ export const OrderTrackingDrawer: React.FC = () => {
                         <span className="text-luxury-400">طريقة الدفع: الدفع عند الكاشير</span>
                         <div className="text-left">
                           <span className="text-xs text-luxury-400 ml-2">الإجمالي:</span>
-                          <span className="text-sm font-bold text-gold-400">
-                            {formatPrice(order.total)}
+                          <span className="text-sm font-bold text-[var(--brand-primary-strong)]">
+                            {formatPrice(order.total, currency)}
                           </span>
                         </div>
                       </div>
@@ -341,9 +342,9 @@ export const OrderTrackingDrawer: React.FC = () => {
 
                         <button
                           onClick={() => setIsRatingModalOpen(true)}
-                          className="p-2.5 rounded-xl bg-gold-500/15 hover:bg-gold-500/25 border border-gold-500/30 text-gold-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          className="p-2.5 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] hover:bg-[rgb(var(--brand-primary-strong-rgb)/0.25)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] text-[var(--brand-primary-strong)] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         >
-                          <Star className="w-3.5 h-3.5 fill-gold-400" />
+                          <Star className="w-3.5 h-3.5 fill-[var(--brand-primary-strong)]" />
                           <span>تقييم الوجبة</span>
                         </button>
                       </div>
@@ -354,7 +355,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                           <>
                             <button
                               onClick={() => handleStartEditNotes(order)}
-                              className="flex items-center gap-1 text-xs text-gold-400 hover:text-gold-300 transition-colors cursor-pointer"
+                              className="flex items-center gap-1 text-xs text-[var(--brand-primary-strong)] hover:text-[var(--brand-primary-strong)] transition-colors cursor-pointer"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                               <span>تعديل الملاحظات</span>
@@ -403,7 +404,7 @@ export const OrderTrackingDrawer: React.FC = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsWaiterModalOpen(true)}
-              className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-gold-300 border border-luxury-750 text-xs font-bold transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-[var(--brand-primary-strong)] border border-luxury-750 text-xs font-bold transition-all cursor-pointer"
             >
               <Bell className="w-4 h-4" />
               <span>طلب النادل</span>
@@ -411,7 +412,7 @@ export const OrderTrackingDrawer: React.FC = () => {
 
             <button
               onClick={() => setIsOrderTrackingOpen(false)}
-              className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 text-luxury-950 font-bold hover:from-gold-400 hover:to-gold-500 transition-all shadow-gold-glow flex items-center justify-center gap-2 text-xs active:scale-98 cursor-pointer"
+              className="flex-1 py-3 px-4 rounded-xl brand-cta font-bold transition-all flex items-center justify-center gap-2 text-xs active:scale-98 cursor-pointer"
             >
               <PlusCircle className="w-4 h-4" />
               <span>طلب أصناف إضافية من المنيو</span>

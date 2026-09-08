@@ -10,6 +10,7 @@ import {
   isPlatformUser,
 } from '../middleware/auth';
 import { realtimeService } from '../services/realtime';
+import { FREE_TRIAL_DAYS, isTrialPlan, withTrialMeta } from '../services/plans';
 import { logAuditEvent } from '../services/audit';
 import { generateQrToken, csvField, roundMoney } from '../utils/security';
 import {
@@ -1740,9 +1741,10 @@ router.get('/subscription', requireManager(), async (req: Request, res: Response
     });
     const plans = await prisma.plan.findMany({
       where: { status: 'ACTIVE' },
-      orderBy: { priceMonthly: 'asc' },
+      orderBy: [{ priceMonthly: 'asc' }, { id: 'asc' }],
     });
-    return res.json({ success: true, data: { subscription, plans }, statusCode: 200 });
+    // trialDays is derived server-side so no client hardcodes the trial length.
+    return res.json({ success: true, data: { subscription, plans: plans.map(withTrialMeta) }, statusCode: 200 });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'تعذر استرجاع الاشتراك', statusCode: 500 });
   }
@@ -1760,6 +1762,14 @@ router.put(
       const plan = await prisma.plan.findUnique({ where: { id: planId } });
       if (!plan || plan.status !== 'ACTIVE') {
         return res.status(400).json({ success: false, error: 'الباقة المحددة غير متاحة', statusCode: 400 });
+      }
+      // The free trial is a platform-admin grant, never a self-service switch.
+      if (isTrialPlan(plan)) {
+        return res.status(403).json({
+          success: false,
+          error: `الباقة التجريبية المجانية (${FREE_TRIAL_DAYS} أيام) تُنشَّط حصرياً من قِبل إدارة المنصة`,
+          statusCode: 403,
+        });
       }
       // Guard against exceeding plan limits with existing data
       const [tablesCount, categoriesCount, productsCount] = await Promise.all([

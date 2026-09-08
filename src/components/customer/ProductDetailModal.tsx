@@ -11,7 +11,8 @@ interface ProductDetailModalProps {
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product, isOpen, onClose }) => {
-  const { addToCart } = useRestaurant();
+  const { currentRestaurant,  addToCart } = useRestaurant();
+  const currency = currentRestaurant?.currency || '₪';
 
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState<ProductSize | undefined>(undefined);
@@ -98,7 +99,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* Badge */}
           {product.badge && (
-            <div className="absolute top-4 right-4 px-3 py-1 rounded-full bg-gold-500/90 text-luxury-950 font-bold text-xs shadow-gold-glow flex items-center gap-1">
+            <div className="absolute top-4 right-4 px-3 py-1 rounded-full brand-fill font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
               <span>{product.badge}</span>
             </div>
@@ -110,7 +111,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               {product.name}
             </h2>
             {product.nameEn && (
-              <p className="text-xs text-gold-400 font-serif italic mt-0.5">
+              <p className="text-xs text-[var(--brand-primary-strong)] font-serif italic mt-0.5">
                 {product.nameEn}
               </p>
             )}
@@ -128,7 +129,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-luxury-800 text-xs text-luxury-400">
               {product.preparationTimeMinutes && (
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-gold-400" />
+                  <Clock className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
                   <span>{product.preparationTimeMinutes} دقيقة تحضير</span>
                 </span>
               )}
@@ -166,14 +167,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                       onClick={() => setSelectedSize(size)}
                       className={`p-3 rounded-xl border text-xs font-medium transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
                         isSelected
-                          ? 'bg-gold-500/15 border-gold-500 text-gold-300 ring-1 ring-gold-500/30 font-bold'
+                          ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border-[var(--brand-primary-strong)] text-[var(--brand-primary-strong)] ring-1 ring-[rgb(var(--brand-primary-strong-rgb)/0.3)] font-bold'
                           : 'bg-luxury-850/60 border-luxury-800 text-luxury-300 hover:border-luxury-700'
                       }`}
                     >
                       <div className="flex items-center gap-1.5">
                         <div
                           className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                            isSelected ? 'border-gold-500 bg-gold-500 text-luxury-950' : 'border-luxury-600'
+                            isSelected ? 'border-transparent brand-fill' : 'border-luxury-600'
                           }`}
                         >
                           {isSelected && <Check className="w-3 h-3" />}
@@ -181,7 +182,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                         <span>{size.name}</span>
                       </div>
                       {mod > 0 && (
-                        <span className="text-gold-400 font-bold">+{formatPrice(mod)}</span>
+                        <span className="text-[var(--brand-primary-strong)] font-bold">+{formatPrice(mod, currency)}</span>
                       )}
                     </button>
                   );
@@ -206,21 +207,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                       onClick={() => toggleAddOn(addOn)}
                       className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                         isChecked
-                          ? 'bg-gold-500/10 border-gold-500 text-gold-300 font-bold'
+                          ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border-[var(--brand-primary-strong)] text-[var(--brand-primary-strong)] font-bold'
                           : 'bg-luxury-850/60 border-luxury-800 text-luxury-300 hover:border-luxury-700'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
                         <div
                           className={`w-4 h-4 rounded-md border flex items-center justify-center ${
-                            isChecked ? 'border-gold-500 bg-gold-500 text-luxury-950' : 'border-luxury-600'
+                            isChecked ? 'border-transparent brand-fill' : 'border-luxury-600'
                           }`}
                         >
                           {isChecked && <Check className="w-3 h-3" />}
                         </div>
                         <span>{addOn.name}</span>
                       </div>
-                      <span className="text-gold-400 font-bold">+{formatPrice(addOn.price)}</span>
+                      <span className="text-[var(--brand-primary-strong)] font-bold">+{formatPrice(addOn.price, currency)}</span>
                     </button>
                   );
                 })}
@@ -267,7 +268,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               onChange={(e) => setSpecialInstructions(e.target.value)}
               placeholder="مثال: درجة الاستواء، بدون ملح إضافي، الصوص جانباً..."
               rows={2}
-              className="w-full bg-luxury-950 border border-luxury-800 rounded-xl p-3 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-gold-500/60 resize-none"
+              className="w-full bg-luxury-950 border border-luxury-800 rounded-xl p-3 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] resize-none"
             />
           </div>
         </div>
@@ -287,7 +288,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             </span>
             <button
               onClick={() => setQuantity((q) => q + 1)}
-              className="w-8 h-8 rounded-lg bg-gold-500 hover:bg-gold-400 text-luxury-950 flex items-center justify-center transition-colors cursor-pointer font-bold"
+              className="w-8 h-8 rounded-lg brand-cta flex items-center justify-center transition-colors cursor-pointer font-bold"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -296,13 +297,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* Add to Cart CTA Button */}
           <button
             onClick={handleAddToCart}
-            className="flex-1 py-3.5 px-4 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs sm:text-sm flex items-center justify-between shadow-gold-glow transition-all cursor-pointer"
+            className="flex-1 py-3.5 px-4 rounded-xl brand-cta font-bold text-xs sm:text-sm flex items-center justify-between shadow-[0_0_22px_-6px_var(--brand-glow)] transition-all cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4" />
               <span>إضافة إلى الطلب</span>
             </div>
-            <span className="font-mono text-xs font-black">{formatPrice(totalPrice)}</span>
+            <span className="font-mono text-xs font-black">{formatPrice(totalPrice, currency)}</span>
           </button>
         </div>
       </div>

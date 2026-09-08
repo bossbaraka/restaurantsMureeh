@@ -29,6 +29,7 @@ export const CartDrawer: React.FC = () => {
     setIsTableSelectorOpen,
     currentRestaurant,
   } = useRestaurant();
+  const currency = currentRestaurant?.currency || '₪';
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [orderNotes, setOrderNotes] = useState('');
@@ -56,7 +57,7 @@ export const CartDrawer: React.FC = () => {
           {/* Header */}
           <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-950">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+              <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <div>
@@ -79,7 +80,7 @@ export const CartDrawer: React.FC = () => {
           <div className="bg-luxury-950/80 px-5 py-2.5 border-b border-luxury-800/80 flex items-center justify-between text-xs">
             <span className="text-luxury-400">طاولة الطلب:</span>
             {activeTableId ? (
-              <span className="font-bold text-gold-400 font-mono flex items-center gap-1.5">
+              <span className="font-bold text-[var(--brand-primary-strong)] font-mono flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 طاولة رقم {activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}
               </span>
@@ -109,7 +110,7 @@ export const CartDrawer: React.FC = () => {
               cartItems.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-luxury-950/60 border border-luxury-800 rounded-2xl p-4 space-y-3 relative group transition-all hover:border-gold-500/30"
+                  className="bg-luxury-950/60 border border-luxury-800 rounded-2xl p-4 space-y-3 relative group transition-all hover:border-[rgb(var(--brand-primary-strong-rgb)/0.3)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
@@ -125,7 +126,7 @@ export const CartDrawer: React.FC = () => {
                           {item.product?.name || item.productName}
                         </h4>
                         {item.options.size && (
-                          <p className="text-[11px] text-gold-400/90 font-medium">
+                          <p className="text-[11px] text-[rgb(var(--brand-primary-strong-rgb)/0.9)] font-medium">
                             الحجم: {typeof item.options.size === 'object' ? item.options.size.name : item.options.size}
                           </p>
                         )}
@@ -148,8 +149,8 @@ export const CartDrawer: React.FC = () => {
                     </div>
 
                     <div className="text-left shrink-0">
-                      <span className="text-sm font-bold text-gold-400">
-                        {formatPrice(item.totalPrice || item.itemTotal || 0)}
+                      <span className="text-sm font-bold text-[var(--brand-primary-strong)]">
+                        {formatPrice(item.totalPrice || item.itemTotal || 0, currency)}
                       </span>
                     </div>
                   </div>
@@ -177,7 +178,7 @@ export const CartDrawer: React.FC = () => {
                       </span>
                       <button
                         onClick={() => updateCartItemQuantity(item.id, item.quantity + 1)}
-                        className="w-6 h-6 rounded-lg bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold flex items-center justify-center transition-colors"
+                        className="w-6 h-6 rounded-lg brand-cta font-bold flex items-center justify-center transition-colors"
                       >
                         <Plus className="w-3 h-3" />
                       </button>
@@ -201,7 +202,7 @@ export const CartDrawer: React.FC = () => {
                   value={orderNotes}
                   onChange={(e) => setOrderNotes(e.target.value)}
                   placeholder="مثال: تقديم المقبلات أولاً، أطباق وملاعق إضافية..."
-                  className="w-full bg-luxury-900 border border-luxury-800 rounded-xl px-3 py-2 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-gold-500/60"
+                  className="w-full bg-luxury-900 border border-luxury-800 rounded-xl px-3 py-2 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
                 />
               </div>
 
@@ -209,28 +210,28 @@ export const CartDrawer: React.FC = () => {
               <div className="space-y-1.5 pt-2 border-t border-luxury-800/80">
                 <div className="flex justify-between text-xs text-luxury-400">
                   <span>المجموع الفرعي</span>
-                  <span className="font-mono">{formatPrice(cartSubtotal)}</span>
+                  <span className="font-mono">{formatPrice(cartSubtotal, currency)}</span>
                 </div>
                 <div className="flex justify-between text-xs text-luxury-400">
                   <span>الضريبة والخدمة</span>
-                  <span className="text-gold-400/90 font-medium">مشمولة</span>
+                  <span className="text-[rgb(var(--brand-primary-strong-rgb)/0.9)] font-medium">مشمولة</span>
                 </div>
                 <div className="flex justify-between text-sm font-bold text-luxury-100 pt-1">
                   <span>الإجمالي النهائي</span>
-                  <span className="text-gold-400 font-mono text-base">{formatPrice(cartSubtotal)}</span>
+                  <span className="text-[var(--brand-primary-strong)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
                 </div>
               </div>
 
               {/* Payment Method Notice */}
               <div className="bg-luxury-900/90 border border-luxury-800 p-2.5 rounded-xl flex items-center gap-2.5 text-[11px] text-luxury-300">
-                <Receipt className="w-4 h-4 text-gold-400 shrink-0" />
+                <Receipt className="w-4 h-4 text-[var(--brand-primary-strong)] shrink-0" />
                 <span>طريقة المحاسبة: الدفع نقداً أو بالبطاقة عند الكاشير بعد الانتهاء</span>
               </div>
 
               {/* Confirm CTA */}
               <button
                 onClick={handleOpenConfirm}
-                className="w-full py-3.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-sm shadow-gold-glow flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full py-3.5 rounded-xl brand-cta font-bold text-sm shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
                 <span>مراجعة وتأكيد الطلب</span>
                 <ArrowLeft className="w-4 h-4" />
