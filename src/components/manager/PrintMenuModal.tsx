@@ -1,6 +1,7 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice } from '../../utils/formatting';
+import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
 import { Printer, X, Phone, MapPin, QrCode } from 'lucide-react';
 
 interface PrintMenuModalProps {
@@ -11,6 +12,18 @@ interface PrintMenuModalProps {
 export const PrintMenuModal: React.FC<PrintMenuModalProps> = ({ isOpen, onClose }) => {
   const { currentRestaurant, categories, products } = useRestaurant();
   const printContainerRef = useRef<HTMLDivElement>(null);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!isOpen || !currentRestaurant) return;
+    let isMounted = true;
+    generateQrDataUrl('1', currentRestaurant.slug || 'mureeh').then((url) => {
+      if (isMounted) setQrCodeUrl(url);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, currentRestaurant]);
 
   if (!isOpen || !currentRestaurant) return null;
 
@@ -122,8 +135,12 @@ export const PrintMenuModal: React.FC<PrintMenuModalProps> = ({ isOpen, onClose 
                       <MapPin className="w-3.5 h-3.5 text-luxury-400 print:text-black" />
                     </p>
                   </div>
-                  <div className="w-14 h-14 bg-white p-1 rounded-xl flex items-center justify-center shrink-0 shadow-md">
-                    <QrCode className="w-full h-full text-black" />
+                  <div className="w-16 h-16 bg-white p-1 rounded-xl flex items-center justify-center shrink-0 shadow-md border border-luxury-700 print:w-16 print:h-16">
+                    {qrCodeUrl ? (
+                      <img src={qrCodeUrl} alt="Menu QR Code" className="w-full h-full object-contain print:w-full print:h-full" />
+                    ) : (
+                      <QrCode className="w-full h-full text-black" />
+                    )}
                   </div>
                 </div>
               </div>

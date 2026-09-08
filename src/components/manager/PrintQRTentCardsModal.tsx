@@ -102,14 +102,14 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
         </div>
 
         {/* Printable Tent Cards Preview Container */}
-        <div className="p-6 overflow-y-auto flex-1 bg-neutral-950">
+        <div className="p-6 overflow-y-auto flex-1 bg-neutral-950 printable-qr-tent-cards">
           {isLoading ? (
             <div className="py-16 text-center text-luxury-400 text-sm">
               <span className="inline-block w-6 h-6 border-2 border-gold-500 border-t-transparent rounded-full animate-spin mb-2" />
               <p>جاري توليد رموز QR عالية الدقة...</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto printable-qr-tent-cards">
               {targetTables.map((table) => (
                 <div
                   key={table.id}
