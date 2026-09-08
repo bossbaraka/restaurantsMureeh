@@ -586,11 +586,34 @@ router.post(
       }
 
       // Order-number allocation retries on unique collisions.
+      const existingOrders = await prisma.order.findMany({
+        where: { restaurantId },
+        select: { id: true, numericId: true },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+      });
+      const orderCount = await prisma.order.count({ where: { restaurantId } });
+
+      let maxNum = 1000;
+      for (const ord of existingOrders) {
+        if (ord.numericId && ord.numericId > maxNum) {
+          maxNum = ord.numericId;
+        }
+        const match = ord.id.match(/\d+/);
+        if (match) {
+          const num = parseInt(match[0], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+
+      const startNum = Math.max(1001, maxNum + 1, orderCount + 1001);
+
       let newOrder: Awaited<ReturnType<typeof prisma.order.create>> | null = null;
       let lastError: unknown = null;
-      for (let attempt = 0; attempt < 5 && !newOrder; attempt += 1) {
-        const count = await prisma.order.count({ where: { restaurantId } });
-        const nextNum = 1001 + count + attempt;
+      for (let attempt = 0; attempt < 25 && !newOrder; attempt += 1) {
+        const nextNum = startNum + attempt;
         const orderId = `#${nextNum}`;
         try {
           newOrder = await prisma.order.create({
@@ -615,6 +638,33 @@ router.post(
           if ((createErr as { code?: string })?.code !== 'P2002') throw createErr;
         }
       }
+
+      if (!newOrder) {
+        try {
+          const fallbackNum = startNum + Math.floor(Math.random() * 90000) + 100;
+          const fallbackOrderId = `#${fallbackNum}`;
+          newOrder = await prisma.order.create({
+            data: {
+              id: fallbackOrderId,
+              numericId: fallbackNum,
+              restaurantId,
+              tableId,
+              sessionId,
+              status: 'PENDING',
+              paymentMethod: 'PAY AT CASHIER',
+              subtotal,
+              total: subtotal,
+              notes: notes || undefined,
+              estimatedPrepMinutes: 18,
+              items: { create: pricedItems },
+            },
+            include: { items: true },
+          });
+        } catch (fallbackErr) {
+          lastError = fallbackErr;
+        }
+      }
+
       if (!newOrder) {
         console.error('Public order id allocation failed:', lastError);
         return res.status(500).json({ success: false, error: 'تعذر إرسال الطلب للمطبخ، حاول مجدداً', statusCode: 500 });
