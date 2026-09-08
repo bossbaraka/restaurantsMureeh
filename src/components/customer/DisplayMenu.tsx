@@ -4,6 +4,19 @@ import { useBrandTheme } from '../../theme/brandTheme';
 import { formatPrice } from '../../utils/formatting';
 import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
 import {
+  SOCIAL_FORMATS,
+  canvasToBlob,
+  getFormat,
+  isRecordingSupported,
+  loadPosterImages,
+  posterFilename,
+  recordMenuClip,
+  renderPosterCanvas,
+  triggerDownload,
+  type PosterInput,
+  type SocialFormat,
+} from '../../utils/socialExport';
+import {
   Check,
   ChevronLeft,
   ChevronRight,
@@ -19,6 +32,11 @@ import {
   QrCode,
   Sparkles,
   X,
+  Camera,
+  Download,
+  Film,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 /**
@@ -72,7 +90,7 @@ const useClock = (enabled: boolean): string => {
 };
 
 export const DisplayMenu: React.FC = () => {
-  const { products, categories, currentRestaurant } = useRestaurant();
+  const { products, categories, currentRestaurant, showToast } = useRestaurant();
 
   // Same tenant palette the ordering menu uses — the display never diverges.
   useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
@@ -82,7 +100,13 @@ export const DisplayMenu: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exportFormat, setExportFormat] = useState<SocialFormat['id']>('story');
+  const [exportBusy, setExportBusy] = useState<'png' | 'clip' | null>(null);
+  const [exportProgress, setExportProgress] = useState(0);
+  const [exportError, setExportError] = useState('');
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const progressRef = useRef<HTMLDivElement | null>(null);
 
   const clock = useClock(settings.showControls === false);
@@ -186,6 +210,110 @@ export const DisplayMenu: React.FC = () => {
     const slug = currentRestaurant?.slug || 'mureeh';
     return `${window.location.origin}/r/${slug}?view=display`;
   }, [currentRestaurant?.slug]);
+
+  // ---------------------------------------------------------------------
+  // Social export: the same board, painted onto a canvas at publish ratios.
+  // ---------------------------------------------------------------------
+  const buildPosterInput = useCallback(
+    (index: number, progress = 1): PosterInput | null => {
+      const target = sections[index];
+      if (!target) return null;
+      return {
+        restaurantName: currentRestaurant?.name || 'المطعم',
+        restaurantNameEn: currentRestaurant?.nameEn,
+        tagline: currentRestaurant?.description,
+        primaryColor: currentRestaurant?.primaryColor,
+        accentColor: currentRestaurant?.accentColor,
+        currency,
+        section: {
+          name: target.category.name,
+          nameEn: target.category.nameEn,
+          dishes: target.items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            nameEn: item.nameEn,
+            description: item.description,
+            price: item.price,
+            badge: item.badge,
+            isFeatured: item.isFeatured,
+          })),
+        },
+        sectionIndex: index + 1,
+        sectionCount: sections.length,
+        note: 'الأسعار تشمل ضريبة القيمة المضافة',
+        url: displayUrl,
+        progress,
+      };
+    },
+    [sections, currentRestaurant, currency, displayUrl]
+  );
+
+  const attachImages = useCallback(async (input: PosterInput, index: number): Promise<PosterInput> => {
+    const items = sections[index]?.items || [];
+    const images = await loadPosterImages(items);
+    if (images.size === 0) return input;
+    return {
+      ...input,
+      section: {
+        ...input.section,
+        dishes: input.section.dishes.map((dish) => ({ ...dish, image: images.get(dish.id) })),
+      },
+    };
+  }, [sections]);
+
+  const handleDownloadPoster = useCallback(async () => {
+    const input = buildPosterInput(safeIndex);
+    if (!input) return;
+    setExportBusy('png');
+    setExportError('');
+    try {
+      const withImages = await attachImages(input, safeIndex);
+      const format = getFormat(exportFormat);
+      const canvas = renderPosterCanvas(withImages, format);
+      const blob = await canvasToBlob(canvas);
+      triggerDownload(blob, posterFilename(withImages, format));
+      showToast('success', 'تم تنزيل الصورة', `${format.ratio} · ${format.width}×${format.height}`);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'تعذر تصدير الصورة');
+    } finally {
+      setExportBusy(null);
+    }
+  }, [buildPosterInput, attachImages, safeIndex, exportFormat, showToast]);
+
+  const handleRecordClip = useCallback(async () => {
+    if (sections.length === 0) return;
+    const format = getFormat(exportFormat);
+    setExportBusy('clip');
+    setExportError('');
+    setExportProgress(0);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const inputs: PosterInput[] = [];
+      for (let i = 0; i < sections.length; i += 1) {
+        const input = buildPosterInput(i);
+        if (input) inputs.push(await attachImages(input, i));
+      }
+      const clip = await recordMenuClip(inputs, {
+        format,
+        secondsPerSection: 3.5,
+        onProgress: (ratio) => setExportProgress(ratio),
+        signal: controller.signal,
+      });
+      triggerDownload(clip.blob, clip.filename);
+      showToast('success', 'تم تسجيل المقطع', `${clip.durationSeconds} ثانية · ${format.ratio}`);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'تعذر تسجيل المقطع');
+    } finally {
+      abortRef.current = null;
+      setExportBusy(null);
+      setExportProgress(0);
+    }
+  }, [buildPosterInput, attachImages, sections.length, exportFormat, showToast]);
+
+  const handleStopRecording = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
 
   const copyLink = useCallback(async () => {
     try {
@@ -374,6 +502,15 @@ export const DisplayMenu: React.FC = () => {
             </button>
             <button
               type="button"
+              className="display-menu__btn display-menu__btn--accent"
+              onClick={() => setShowExport(true)}
+              title="تصدير للسوشيال ميديا"
+            >
+              <Camera className="display-menu__btn-icon" />
+              <span className="display-menu__btn-label">تصدير</span>
+            </button>
+            <button
+              type="button"
               className="display-menu__btn"
               onClick={() => setShowQr(true)}
               title="رمز QR لرابط العرض"
@@ -454,6 +591,111 @@ export const DisplayMenu: React.FC = () => {
                   <span className="display-menu__btn-label">نسخ</span>
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {showExport && (
+          <div className="display-menu__modal" role="dialog" aria-label="تصدير للسوشيال ميديا">
+            <div className="display-menu__modal-card display-menu__modal-card--wide">
+              <button
+                type="button"
+                className="display-menu__modal-close"
+                onClick={() => {
+                  abortRef.current?.abort();
+                  setShowExport(false);
+                }}
+                aria-label="إغلاق"
+              >
+                <X className="display-menu__btn-icon" />
+              </button>
+
+              <h3>تصدير لمواقع التواصل</h3>
+              <p>
+                صورة أو مقطع جاهز للنشر بألوان مطعمك — يُنشأ داخل المتصفح بدون رفع أي بيانات.
+                {sections.length > 0 ? ` المقطع يمر على ${sections.length} أقسام.` : ''}
+              </p>
+
+              <div className="display-menu__formats" role="radiogroup" aria-label="مقاس النشر">
+                {SOCIAL_FORMATS.filter((f) => f.id !== 'reel').map((format) => (
+                  <button
+                    key={format.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={exportFormat === format.id}
+                    className={`display-menu__format${exportFormat === format.id ? ' is-active' : ''}`}
+                    onClick={() => setExportFormat(format.id)}
+                    disabled={exportBusy !== null}
+                  >
+                    <span
+                      className="display-menu__format-shape"
+                      data-shape={format.id}
+                      aria-hidden="true"
+                    />
+                    <span className="display-menu__format-name">{format.label}</span>
+                    <span className="display-menu__format-ratio">{format.ratio}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="display-menu__actions">
+                <button
+                  type="button"
+                  className="display-menu__btn display-menu__btn--primary display-menu__btn--wide"
+                  onClick={handleDownloadPoster}
+                  disabled={exportBusy !== null || sections.length === 0}
+                >
+                  {exportBusy === 'png' ? (
+                    <Loader2 className="display-menu__btn-icon display-menu__spin" />
+                  ) : (
+                    <Download className="display-menu__btn-icon" />
+                  )}
+                  <span className="display-menu__btn-label">
+                    {exportBusy === 'png' ? 'جارٍ التصدير…' : `تنزيل صورة ${section?.category.name || ''}`}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="display-menu__btn display-menu__btn--wide"
+                  onClick={exportBusy === 'clip' ? handleStopRecording : handleRecordClip}
+                  disabled={(exportBusy !== null && exportBusy !== 'clip') || sections.length === 0}
+                  title={isRecordingSupported() ? '' : 'التسجيل غير مدعوم في هذا المتصفح'}
+                >
+                  {exportBusy === 'clip' ? (
+                    <Loader2 className="display-menu__btn-icon display-menu__spin" />
+                  ) : (
+                    <Film className="display-menu__btn-icon" />
+                  )}
+                  <span className="display-menu__btn-label">
+                    {exportBusy === 'clip'
+                      ? `تسجيل… ${Math.round(exportProgress * 100)}% (إيقاف)`
+                      : 'تسجيل مقطع فيديو'}
+                  </span>
+                </button>
+              </div>
+
+              {exportBusy === 'clip' && (
+                <div className="display-menu__progress display-menu__progress--inline" aria-hidden="true">
+                  <div
+                    className="display-menu__progress-bar"
+                    style={{ width: `${Math.round(exportProgress * 100)}%` }}
+                  />
+                </div>
+              )}
+
+              {exportError && (
+                <p className="display-menu__error">
+                  <AlertCircle className="display-menu__btn-icon" />
+                  {exportError}
+                </p>
+              )}
+
+              {!isRecordingSupported() && (
+                <p className="display-menu__hint">
+                  تسجيل الفيديو يحتاج متصفحاً يدعم MediaRecorder (Chrome أو Edge). تنزيل الصور يعمل في كل المتصفحات.
+                </p>
+              )}
             </div>
           </div>
         )}
