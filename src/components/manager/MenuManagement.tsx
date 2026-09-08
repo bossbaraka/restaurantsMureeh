@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { Product, Category } from '../../types/restaurant';
 import { formatPrice } from '../../utils/formatting';
 import { ProductFormModal } from './ProductFormModal';
+import { PrintMenuModal } from './PrintMenuModal';
 import {
   Utensils,
   Plus,
@@ -11,6 +12,7 @@ import {
   Search,
   CheckCircle2,
   XCircle,
+  Printer,
 } from 'lucide-react';
 
 export const MenuManagement: React.FC = () => {
@@ -30,6 +32,7 @@ export const MenuManagement: React.FC = () => {
   const [selectedCatId, setSelectedCatId] = useState<string>('ALL');
   const [searchDish, setSearchDish] = useState('');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // New category inline form state
@@ -88,6 +91,14 @@ export const MenuManagement: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsPrintModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-sky-300 border border-sky-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md"
+          >
+            <Printer className="w-4 h-4 text-sky-400" />
+            <span>طباعة المنيو الورقي</span>
+          </button>
+
           <button
             onClick={() => setIsAddingCat(true)}
             className="px-3.5 py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-gold-300 border border-luxury-750 text-xs font-semibold flex items-center gap-1.5 transition-colors"
@@ -299,6 +310,12 @@ export const MenuManagement: React.FC = () => {
         isOpen={isProductModalOpen}
         onClose={() => setIsProductModalOpen(false)}
         onSave={handleSaveProduct}
+      />
+
+      {/* Luxury Print Menu Modal */}
+      <PrintMenuModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
       />
     </div>
   );
