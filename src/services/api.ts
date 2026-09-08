@@ -69,6 +69,8 @@ export function mapRestaurantRow(raw: any): Restaurant {
     status: raw.status,
     primaryColor: raw.primaryColor || '#D4AF37',
     accentColor: raw.accentColor || '#C5A880',
+    promoVideoUrl: raw.promoVideoUrl || undefined,
+    galleryImages: Array.isArray(raw.galleryImages) ? raw.galleryImages.map(absoluteAssetUrl) : [],
     planId: raw.planId || '',
     customDomain: raw.customDomain || undefined,
     createdAt: toISO(raw.createdAt),
@@ -1050,6 +1052,8 @@ class RestaurantApiService {
         timezone: patch.timezone,
         primaryColor: patch.primaryColor,
         accentColor: patch.accentColor,
+        promoVideoUrl: patch.promoVideoUrl,
+        galleryImages: patch.galleryImages,
       },
     });
     if (res.success && res.data?.restaurant) {

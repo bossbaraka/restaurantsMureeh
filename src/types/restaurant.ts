@@ -37,6 +37,8 @@ export interface Restaurant {
   status: RestaurantStatus;
   primaryColor: string;
   accentColor: string;
+  promoVideoUrl?: string;
+  galleryImages?: string[];
   planId: string;
   customDomain?: string;
   createdAt: string;

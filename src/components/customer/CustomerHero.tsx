@@ -1,17 +1,34 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
-import { Search, Sparkles, Flame, ChefHat, Clock, CheckCircle2, ArrowLeft, UtensilsCrossed } from 'lucide-react';
+import { Search, Sparkles, Flame, ChefHat, Clock, CheckCircle2, ArrowLeft, UtensilsCrossed, Camera, Play, X, Image as ImageIcon, Video, Film, Eye } from 'lucide-react';
 import { OrderStatus } from '../../types/restaurant';
 
 export const CustomerHero: React.FC = () => {
-  const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen, setIsWaiterModalOpen } = useRestaurant();
+  const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen } = useRestaurant();
+
+  const [activeGalleryImg, setActiveGalleryImg] = useState<string | null>(null);
+  const [isPlayingVideo, setIsPlayingVideo] = useState(false);
 
   const activeOffers = offers.filter((o) => o.isActive);
 
   const heroImage = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
   const restName = currentRestaurant?.name || '';
   const restDesc = currentRestaurant?.description || 'مأكولات استثنائية محضرة بأيدي نخبة الطهاة بأرقى المكونات المعتقة.';
+  const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
+  const promoVideo = currentRestaurant?.promoVideoUrl || '';
+
+  // Default interior dining hall gallery shots if none uploaded yet
+  const defaultGallery = [
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=85',
+    'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=85',
+    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=85',
+    'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1200&q=85',
+  ];
+
+  const galleryList = (currentRestaurant?.galleryImages && currentRestaurant.galleryImages.length > 0)
+    ? currentRestaurant.galleryImages
+    : defaultGallery;
 
   const latestOrder = activeTableOrders.length > 0 ? activeTableOrders[0] : null;
   const statusCfg = latestOrder ? getOrderStatusConfig(latestOrder.status) : null;
@@ -35,31 +52,109 @@ export const CustomerHero: React.FC = () => {
 
   return (
     <div className="relative overflow-hidden mb-6">
-      {/* Background Editorial Hero Image */}
-      <div className="relative h-60 sm:h-72 w-full overflow-hidden rounded-2xl border border-luxury-800 shadow-2xl mx-auto">
-        <img
-          src={heroImage}
-          alt={restName}
-          className="w-full h-full object-cover object-center transform scale-105 transition-transform duration-1000 ease-out hover:scale-100"
-        />
-        {/* Layered luxury overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-luxury-950 via-luxury-950/70 to-luxury-950/20" />
-        <div className="absolute inset-0 bg-gradient-to-r from-luxury-950/90 via-luxury-950/40 to-transparent" />
-
-        {/* Hero Content */}
-        <div className="absolute inset-0 p-6 sm:p-8 flex flex-col justify-end text-right z-10 max-w-xl">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gold-500/20 border border-gold-500/40 text-gold-300 text-xs font-medium backdrop-blur-md mb-2 w-max">
-            <Sparkles className="w-3.5 h-3.5 text-gold-400" />
-            <span>قائمة الطعام الرقمية — {restName}</span>
+      {/* Background Editorial Hero Image & Video Container */}
+      <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl border border-luxury-800 shadow-2xl mx-auto group">
+        {isPlayingVideo && promoVideo ? (
+          <div className="relative w-full h-full bg-black">
+            {promoVideo.includes('youtube.com') || promoVideo.includes('youtu.be') ? (
+              <iframe
+                src={`${promoVideo.replace('watch?v=', 'embed/')}?autoplay=1&muted=0`}
+                title="فيديو صالة المطعم"
+                className="w-full h-full border-0"
+                allow="autoplay; encrypted-media"
+                allowFullScreen
+              />
+            ) : (
+              <video
+                src={promoVideo}
+                controls
+                autoPlay
+                className="w-full h-full object-cover"
+              />
+            )}
+            <button
+              onClick={() => setIsPlayingVideo(false)}
+              className="absolute top-3 left-3 z-20 p-2 rounded-full bg-luxury-950/80 text-white hover:bg-red-500 transition-colors"
+              title="إغلاق الفيديو"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
+        ) : (
+          <>
+            <img
+              src={heroImage}
+              alt={restName}
+              className="w-full h-full object-cover object-center transform scale-105 transition-transform duration-1000 ease-out group-hover:scale-100"
+            />
+            {/* Layered luxury overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-luxury-950 via-luxury-950/70 to-luxury-950/20" />
+            <div className="absolute inset-0 bg-gradient-to-r from-luxury-950/90 via-luxury-950/40 to-transparent" />
 
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-luxury-50 font-serif tracking-tight leading-tight mb-1.5">
-            تجربة تُكتشف.
-          </h2>
+            {/* Hero Content */}
+            <div className="absolute inset-0 p-6 sm:p-8 flex flex-col justify-end text-right z-10 max-w-xl">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <div
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-luxury-900/90 border backdrop-blur-md text-xs font-bold shadow-lg"
+                  style={{ borderColor: `${primaryCol}50`, color: primaryCol }}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>قائمة الطعام الرقمية — {restName}</span>
+                </div>
 
-          <p className="text-xs sm:text-sm text-luxury-300 leading-relaxed max-w-md line-clamp-2">
-            {restDesc}
-          </p>
+                {promoVideo && (
+                  <button
+                    onClick={() => setIsPlayingVideo(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600/90 hover:bg-red-500 text-white text-xs font-bold backdrop-blur-md shadow-lg transition-transform active:scale-95 cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>فيديو صالة المطعم</span>
+                  </button>
+                )}
+              </div>
+
+              <h2 className="text-2xl sm:text-4xl font-extrabold text-luxury-50 font-serif tracking-tight leading-tight mb-1.5">
+                أجواء فاخرة وتجربة تُكتشف.
+              </h2>
+
+              <p className="text-xs sm:text-sm text-luxury-300 leading-relaxed max-w-md line-clamp-2">
+                {restDesc}
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* RESTAURANT DINING HALL & INTERIOR CREATIVE GALLERY BAR */}
+      <div className="mt-4 p-3.5 rounded-2xl bg-luxury-900/90 border border-luxury-800 space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs font-bold text-luxury-200 flex items-center gap-1.5">
+            <Camera className="w-4 h-4 text-gold-400" />
+            <span>لقطات حية من داخل صالة المطعم والأجواء</span>
+          </span>
+          <span className="text-[11px] text-luxury-400 font-mono">
+            {galleryList.length} صور مصورة
+          </span>
+        </div>
+
+        {/* Scrollable Gallery Thumbnails Strip */}
+        <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
+          {galleryList.map((imgUrl, index) => (
+            <button
+              key={index}
+              onClick={() => setActiveGalleryImg(imgUrl)}
+              className="relative w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden shrink-0 border border-luxury-750 group cursor-pointer hover:border-gold-500/80 transition-all shadow-md"
+            >
+              <img
+                src={imgUrl}
+                alt={`صالة المطعم ${index + 1}`}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                <Eye className="w-5 h-5 text-gold-400" />
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -208,6 +303,29 @@ export const CustomerHero: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* FULLSCREEN LIGHTBOX FOR INTERIOR HALL GALLERY PHOTOS */}
+      {activeGalleryImg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+          <button
+            onClick={() => setActiveGalleryImg(null)}
+            className="absolute top-4 left-4 p-2.5 rounded-full bg-luxury-900 text-luxury-200 hover:text-white border border-luxury-700 transition-colors z-10"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          <div className="relative max-w-4xl max-h-[85vh] w-full rounded-2xl overflow-hidden border border-luxury-700 shadow-2xl">
+            <img
+              src={activeGalleryImg}
+              alt="صالة المطعم"
+              className="w-full h-full object-contain max-h-[85vh] mx-auto"
+            />
+            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 to-transparent text-right text-xs text-luxury-200">
+              <span className="font-bold font-serif text-sm text-gold-300">لقطة من داخل صالة وأجواء {restName}</span>
+            </div>
           </div>
         </div>
       )}

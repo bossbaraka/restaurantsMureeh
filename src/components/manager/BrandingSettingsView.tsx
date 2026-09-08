@@ -18,6 +18,11 @@ import {
   Plus,
   UtensilsCrossed,
   Clock,
+  Video,
+  Film,
+  Camera,
+  Trash2,
+  Eye,
 } from 'lucide-react';
 
 /** اقتراحات جاهزة لشكل موقع المطعم (Theme Presets) */
@@ -71,8 +76,6 @@ async function fileToResizedBlob(file: File, maxDim: number): Promise<{ blob: Bl
 
 export const BrandingSettingsView: React.FC = () => {
   const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast } = useRestaurant();
-  const { currentUser } = useAuth();
-  const isDemo = currentUser?.email.toLowerCase().includes('demo');
 
   const [name, setName] = useState('');
   const [nameEn, setNameEn] = useState('');
@@ -83,12 +86,17 @@ export const BrandingSettingsView: React.FC = () => {
   const [coverImage, setCoverImage] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#D4AF37');
   const [accentColor, setAccentColor] = useState('#C5A880');
+  const [promoVideoUrl, setPromoVideoUrl] = useState('');
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [newGalleryUrl, setNewGalleryUrl] = useState('');
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentRestaurant) {
@@ -101,6 +109,8 @@ export const BrandingSettingsView: React.FC = () => {
       setCoverImage(currentRestaurant.coverImage || '');
       setPrimaryColor(currentRestaurant.primaryColor || '#D4AF37');
       setAccentColor(currentRestaurant.accentColor || '#C5A880');
+      setPromoVideoUrl(currentRestaurant.promoVideoUrl || '');
+      setGalleryImages(currentRestaurant.galleryImages || []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurant?.id]);
@@ -141,6 +151,40 @@ export const BrandingSettingsView: React.FC = () => {
     }
   };
 
+  const handleAddGalleryImage = () => {
+    if (!newGalleryUrl.trim()) return;
+    setGalleryImages((prev) => [...prev, newGalleryUrl.trim()]);
+    setNewGalleryUrl('');
+  };
+
+  const handleRemoveGalleryImage = (index: number) => {
+    setGalleryImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUploadGalleryFile = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('error', 'صيغة غير مدعومة', 'يرجى اختيار صورة JPG أو PNG أو WEBP');
+      return;
+    }
+    setUploadingGallery(true);
+    try {
+      const { blob, ext } = await fileToResizedBlob(file, 1600);
+      const res = await api.uploadImage(blob, `hall-gallery-${Date.now()}.${ext}`);
+      if (!res.success || !res.data) {
+        showToast('error', 'تعذر رفع الصورة', res.error);
+        return;
+      }
+      setGalleryImages((prev) => [...prev, res.data.url]);
+      showToast('success', 'تم إضافة الصورة لمعرض الصالة', 'احفظ التعديلات لتنعكس على المنيو');
+    } catch {
+      showToast('error', 'تعذر معالجة الصورة', 'تعذر قراءة الملف');
+    } finally {
+      setUploadingGallery(false);
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
+    }
+  };
+
   const handleSave = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!currentRestaurant || isSaving) return;
@@ -156,6 +200,8 @@ export const BrandingSettingsView: React.FC = () => {
       coverImage: coverImage.trim(),
       primaryColor,
       accentColor,
+      promoVideoUrl: promoVideoUrl.trim(),
+      galleryImages,
     });
     setIsSaving(false);
     if (!res.success || !res.data) {
@@ -164,7 +210,7 @@ export const BrandingSettingsView: React.FC = () => {
     }
     setCurrentRestaurant(res.data.restaurant);
     refreshTenantData();
-    showToast('success', 'تم حفظ إعدادات الهوية بنجاح', 'سيظهر الشعار والألوان الجديدة مباشرة في منيو عملائك.');
+    showToast('success', 'تم حفظ إعدادات الهوية بنجاح', 'سيظهر الشعار، الألوان، والمعرض مباشرة لعملائك عند مسح QR.');
   };
 
   const currency = currentRestaurant.currency || '₪';
@@ -177,10 +223,10 @@ export const BrandingSettingsView: React.FC = () => {
         <div>
           <h2 className="text-lg font-bold text-luxury-50 font-serif flex items-center gap-2">
             <Palette className="w-5 h-5 text-gold-400" />
-            <span>هوية مطعمك — الشعار والألوان وشكل الموقع</span>
+            <span>هوية مطعمك — الشعار والألوان والمعرض والفيديو</span>
           </h2>
           <p className="text-xs text-luxury-400 mt-0.5">
-            اقترح شكل موقعك مباشرة: اختر طابعاً جاهزاً أو ارفع شعار مطعمك/الكافيه وشاهد المعاينة الحية
+            تحديث الهوية البصرية، إرفاق صور صالة المطعم، وفيديو الأجواء لتظهر مباشرة للعميل عند مسح كود QR
           </p>
         </div>
 
@@ -229,13 +275,13 @@ export const BrandingSettingsView: React.FC = () => {
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
+                className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 resize-none"
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-gold-400" /> رقم الهاتف
+                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-gold-400" /> رقم الهاتف للتواصل
                 </label>
                 <input
                   type="text"
@@ -245,8 +291,8 @@ export const BrandingSettingsView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-gold-400" /> العنوان
+                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-gold-400" /> العنوان والفرع
                 </label>
                 <input
                   type="text"
@@ -351,6 +397,112 @@ export const BrandingSettingsView: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* PROMO VIDEO & INTERIOR HALL GALLERY */}
+          <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs">
+            <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+              <Video className="w-4 h-4 text-gold-400" />
+              فيديو ترويجي ومعرض صور أجواء صالة المطعم
+            </h3>
+
+            {/* Video Input */}
+            <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-luxury-200">رابط الفيديو الترويجي لصالة المطعم</label>
+                <span className="text-[10px] text-luxury-500">رابط فيديو (MP4) أو فيديو YouTube</span>
+              </div>
+              <input
+                type="url"
+                dir="ltr"
+                value={promoVideoUrl}
+                onChange={(e) => setPromoVideoUrl(e.target.value)}
+                placeholder="https://... or https://youtube.com/watch?v=..."
+                className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 font-mono text-[11px]"
+              />
+              {promoVideoUrl && (
+                <div className="p-2.5 rounded-xl bg-luxury-900 border border-gold-500/30 flex items-center justify-between text-gold-300">
+                  <span className="flex items-center gap-1.5 text-[11px]">
+                    <Film className="w-4 h-4 text-gold-400" />
+                    سيظهر زر تشغيل فيديو الأجواء التفاعلي في المنيو لعملائك
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPromoVideoUrl('')}
+                    className="text-red-400 hover:text-red-300 text-[11px]"
+                  >
+                    إزالة الفيديو
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Gallery Uploader & List */}
+            <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <label className="block font-bold text-luxury-200">صور صالة المطعم والأجواء ({galleryImages.length})</label>
+                  <p className="text-[10px] text-luxury-400 mt-0.5">ارفع لقطات صالة الطعام والديكورات لعرضها في منيو الزبون عند مسح QR</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={(e) => handleUploadGalleryFile(e.target.files?.[0])}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    disabled={uploadingGallery}
+                    className="px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-gold-glow disabled:opacity-60 cursor-pointer"
+                  >
+                    {uploadingGallery ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>رفع صورة للصالة</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Paste URL inline */}
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  dir="ltr"
+                  value={newGalleryUrl}
+                  onChange={(e) => setNewGalleryUrl(e.target.value)}
+                  placeholder="أو ألصق رابط صورة مباشر https://..."
+                  className="flex-1 bg-luxury-900 border border-luxury-800 text-luxury-100 p-2 rounded-xl text-xs font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddGalleryImage}
+                  className="px-3 py-2 bg-luxury-850 hover:bg-luxury-800 text-luxury-200 font-bold rounded-xl text-xs"
+                >
+                  إضافة رابط
+                </button>
+              </div>
+
+              {/* Gallery Grid items */}
+              {galleryImages.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  {galleryImages.map((url, i) => (
+                    <div key={i} className="relative group rounded-xl overflow-hidden border border-luxury-800 h-24 bg-luxury-900">
+                      <img src={url} alt={`صالة ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveGalleryImage(i)}
+                        className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/70 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
+                        title="حذف الصورة"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -491,10 +643,19 @@ export const BrandingSettingsView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Rating chip */}
-              <div className="absolute top-9 left-3 flex items-center gap-1 px-2 py-1 rounded-full bg-black/55 border border-white/15 backdrop-blur text-[9px] text-amber-300 font-bold">
-                <Star className="w-2.5 h-2.5 fill-amber-300" /> 4.9
-              </div>
+              {/* Gallery Preview Bar */}
+              {galleryImages.length > 0 && (
+                <div className="px-3 pt-2">
+                  <div className="flex gap-1.5 overflow-hidden rounded-lg p-1 bg-luxury-900 border border-luxury-800">
+                    {galleryImages.slice(0, 3).map((g, idx) => (
+                      <img key={idx} src={g} alt="" className="w-10 h-8 rounded object-cover" />
+                    ))}
+                    {galleryImages.length > 3 && (
+                      <span className="text-[9px] text-gold-400 self-center font-mono">+{galleryImages.length - 3}</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Menu body */}
               <div className="p-3.5 space-y-2.5">
@@ -539,29 +700,13 @@ export const BrandingSettingsView: React.FC = () => {
                     </button>
                   </div>
                 ))}
-
-                {/* fake bottom nav */}
-                <div className="flex items-center justify-around pt-2 border-t border-luxury-800 text-luxury-500">
-                  <span className="flex flex-col items-center gap-0.5">
-                    <UtensilsCrossed className="w-3.5 h-3.5" style={{ color: primaryColor }} />
-                    <span className="text-[7px]">المنيو</span>
-                  </span>
-                  <span className="flex flex-col items-center gap-0.5 text-luxury-400">
-                    <Star className="w-3.5 h-3.5" />
-                    <span className="text-[7px]">العروض</span>
-                  </span>
-                  <span className="flex flex-col items-center gap-0.5 text-luxury-400">
-                    <Phone className="w-3.5 h-3.5" />
-                    <span className="text-[7px]">اتصل بنا</span>
-                  </span>
-                </div>
               </div>
             </div>
           </div>
 
           <p className="text-[10px] text-luxury-500 text-center px-4 leading-relaxed">
-            المعاينة تُظهر الألوان والشعار والغلاف التي سيراها العميل فور مسح رمز QR —
-            اضغط «حفظ ونشر الهوية الجديدة» لتطبيقها على موقعك الحقيقي.
+            المعاينة تُظهر الألوان والشعار ومعرض الصالة والفيديو التي سيراها العميل فور مسح كود QR —
+            اضغط «حفظ ونشر الهوية الجديدة» لتطبيقها على منيو موقعك الحقيقي.
           </p>
         </div>
       </div>

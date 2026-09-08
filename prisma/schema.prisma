@@ -78,6 +78,8 @@ model Restaurant {
   status          RestaurantStatus  @default(ACTIVE)
   primaryColor    String            @default("#D4AF37")
   accentColor     String            @default("#C5A880")
+  promoVideoUrl   String?
+  galleryImages   String[]          @default([])
   customDomain    String?
   planId          String?
   createdAt       DateTime          @default(now())

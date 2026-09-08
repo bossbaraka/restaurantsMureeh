@@ -1783,6 +1783,8 @@ router.put(
         timezone?: string;
         primaryColor?: string;
         accentColor?: string;
+        promoVideoUrl?: string;
+        galleryImages?: string[];
       };
       const updated = await prisma.restaurant.update({
         where: { id: restaurantId },
@@ -1799,6 +1801,8 @@ router.put(
           timezone: b.timezone !== undefined ? b.timezone : undefined,
           primaryColor: b.primaryColor !== undefined ? b.primaryColor : undefined,
           accentColor: b.accentColor !== undefined ? b.accentColor : undefined,
+          promoVideoUrl: b.promoVideoUrl !== undefined ? b.promoVideoUrl : undefined,
+          galleryImages: b.galleryImages !== undefined ? b.galleryImages : undefined,
         },
       });
       await logAuditEvent({
