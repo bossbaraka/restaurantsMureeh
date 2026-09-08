@@ -16,6 +16,7 @@ import {
 
 export const OrderCompletedModal: React.FC = () => {
   const { activeTableOrders, activeTableId, currentRestaurant, setIsWaiterModalOpen, showToast } = useRestaurant();
+  const currency = currentRestaurant?.currency || '₪';
 
   const [dismissedOrderIds, setDismissedOrderIds] = useState<string[]>([]);
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
@@ -43,8 +44,8 @@ export const OrderCompletedModal: React.FC = () => {
 
   const handleShareWhatsApp = (order: Order) => {
     const restName = currentRestaurant?.name || '';
-    const itemsList = order.items.map((i) => `• ${i.quantity}x ${i.productName || i.name} (${formatPrice(i.totalPrice)})`).join('\n');
-    const msg = `🧾 *فاتورة إلكترونية - ${restName}*\n📍 *طاولة رقم:* ${tableNumStr}\n🔢 *رقم الطلب:* ${order.id}\n\n*الأصناف:*\n${itemsList}\n\n💰 *الإجمالي:* ${formatPrice(order.total)}\n💳 *طريقة الدفع:* الدفع عند الكاشير\n\n✨ شكراً لزيارتكم!`;
+    const itemsList = order.items.map((i) => `• ${i.quantity}x ${i.productName || i.name} (${formatPrice(i.totalPrice, currency)})`).join('\n');
+    const msg = `🧾 *فاتورة إلكترونية - ${restName}*\n📍 *طاولة رقم:* ${tableNumStr}\n🔢 *رقم الطلب:* ${order.id}\n\n*الأصناف:*\n${itemsList}\n\n💰 *الإجمالي:* ${formatPrice(order.total, currency)}\n💳 *طريقة الدفع:* الدفع عند الكاشير\n\n✨ شكراً لزيارتكم!`;
 
     const encoded = encodeURIComponent(msg);
     window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
@@ -59,7 +60,7 @@ export const OrderCompletedModal: React.FC = () => {
 
         {/* Modal Dialog */}
         <div
-          className="relative w-full max-w-md bg-luxury-900 border border-gold-500/50 rounded-3xl p-6 z-10 shadow-2xl space-y-5 animate-in zoom-in-95 duration-300 text-right"
+          className="relative w-full max-w-md bg-luxury-900 border border-[rgb(var(--brand-primary-strong-rgb)/0.5)] rounded-3xl p-6 z-10 shadow-2xl space-y-5 animate-in zoom-in-95 duration-300 text-right"
           dir="rtl"
         >
           {/* Top Close Button */}
@@ -74,7 +75,7 @@ export const OrderCompletedModal: React.FC = () => {
           {/* Celebration Icon Header */}
           <div className="text-center space-y-3 pt-2">
             <div className="relative inline-flex">
-              <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-500/20 to-gold-500/30 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-gold-glow animate-bounce">
+              <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-500/20 to-[rgb(var(--brand-primary-strong-rgb)/0.3)] border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-[0_0_22px_-6px_var(--brand-glow)] animate-bounce">
                 <ChefHat className="w-10 h-10" />
               </div>
               <span className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-luxury-950 flex items-center justify-center text-xs font-bold shadow-lg">
@@ -91,7 +92,7 @@ export const OrderCompletedModal: React.FC = () => {
                 🎉 تم إنجاز طلبك بنجاح!
               </h3>
               <p className="text-xs text-luxury-300 mt-1 leading-relaxed">
-                طلبك <strong className="text-gold-400 font-mono">#{readyOrder.id}</strong> أصبح جاهزاً بالكامل الآن، وطاقم الخدمة في طريقه إلى <strong className="text-gold-300">طاولة رقم {tableNumStr}</strong>.
+                طلبك <strong className="text-[var(--brand-primary-strong)] font-mono">#{readyOrder.id}</strong> أصبح جاهزاً بالكامل الآن، وطاقم الخدمة في طريقه إلى <strong className="text-[var(--brand-primary-strong)]">طاولة رقم {tableNumStr}</strong>.
               </p>
             </div>
           </div>
@@ -112,14 +113,14 @@ export const OrderCompletedModal: React.FC = () => {
                   <span>
                     {item.quantity}× {item.productName || item.name}
                   </span>
-                  <span className="font-mono text-luxury-300">{formatPrice(item.totalPrice)}</span>
+                  <span className="font-mono text-luxury-300">{formatPrice(item.totalPrice, currency)}</span>
                 </div>
               ))}
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-luxury-800 font-bold">
               <span className="text-luxury-300">الإجمالي النهائي:</span>
-              <span className="text-gold-400 font-mono text-sm">{formatPrice(readyOrder.total)}</span>
+              <span className="text-[var(--brand-primary-strong)] font-mono text-sm">{formatPrice(readyOrder.total, currency)}</span>
             </div>
           </div>
 
@@ -132,7 +133,7 @@ export const OrderCompletedModal: React.FC = () => {
               }}
               className="p-3 rounded-2xl bg-luxury-800 hover:bg-luxury-750 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
             >
-              <Bell className="w-4 h-4 text-gold-400" />
+              <Bell className="w-4 h-4 text-[var(--brand-primary-strong)]" />
               <span>استدعاء النادل</span>
             </button>
 
@@ -141,7 +142,7 @@ export const OrderCompletedModal: React.FC = () => {
                 handleDismiss();
                 setIsRatingModalOpen(true);
               }}
-              className="p-3 rounded-2xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-gold-glow cursor-pointer"
+              className="p-3 rounded-2xl brand-cta font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-[0_0_22px_-6px_var(--brand-glow)] cursor-pointer"
             >
               <Star className="w-4 h-4 fill-luxury-950" />
               <span>تقييم الوجبة</span>

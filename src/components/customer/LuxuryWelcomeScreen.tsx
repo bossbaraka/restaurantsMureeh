@@ -55,7 +55,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-luxury-900/90 border backdrop-blur-xl shadow-2xl"
           style={{ borderColor: `${primaryCol}50`, color: primaryCol }}
         >
-          <Sparkles className="w-4 h-4 animate-spin text-gold-400" />
+          <Sparkles className="w-4 h-4 animate-spin text-[var(--brand-primary-strong)]" />
           <span className="font-bold tracking-wide">منصة مريح MUREEH · SaaS Showcase</span>
         </div>
 
@@ -141,7 +141,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           {/* 3 SaaS Feature Pillars */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="p-3 rounded-2xl bg-luxury-950/80 border border-luxury-800 flex flex-col justify-between space-y-2">
-              <div className="w-8 h-8 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+              <div className="w-8 h-8 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
                 <ChefHat className="w-4 h-4" />
               </div>
               <div>

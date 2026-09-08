@@ -10,8 +10,17 @@ export function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
-export function formatPrice(price: number): string {
-  return `₪${price.toLocaleString('en-US')}`;
+/** Numeric part of a price, without the currency symbol (e.g. "1,240.50"). */
+export function formatAmount(price: number): string {
+  const value = Number(price) || 0;
+  return value.toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export function formatPrice(price: number, currency = '₪'): string {
+  return `${currency || '₪'}${formatAmount(price)}`;
 }
 
 export function formatTime(isoDate: string): string {
