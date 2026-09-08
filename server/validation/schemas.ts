@@ -475,6 +475,8 @@ export const brandingSchema = z
     timezone: z.string().trim().max(60).optional(),
     primaryColor: hexColor,
     accentColor: hexColor,
+    promoVideoUrl: z.string().trim().max(1000).optional().or(z.literal('')),
+    galleryImages: z.array(z.string().trim().max(1000)).max(30).optional(),
   })
   .strict();
 
