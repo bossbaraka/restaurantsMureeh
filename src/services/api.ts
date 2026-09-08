@@ -103,6 +103,7 @@ export function mapPlanRow(raw: any): Plan {
     entitlements: (raw.entitlements as EntitlementKey[]) || [],
     description: raw.description || '',
     isPopular: raw.isPopular || false,
+    trialDays: Number(raw.trialDays) || 0,
   };
 }
 
@@ -1156,6 +1157,45 @@ class RestaurantApiService {
     const res = await this.request<any>('GET', '/admin/audit-logs');
     if (res.success && Array.isArray(res.data)) {
       return { success: true, data: res.data.map(mapAuditLogRow), statusCode: 200 };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  /**
+   * Platform admin granting the free 7-day limited-entitlement trial to a
+   * tenant. The server enforces "one trial per tenant, ever".
+   */
+  public async activateTenantTrial(
+    user: RestaurantUser,
+    restaurantId: string,
+    note?: string
+  ): Promise<
+    ApiResponse<{
+      subscription: Subscription;
+      restaurant: Restaurant;
+      trialEndsAt: string;
+      daysRemaining: number;
+    }>
+  > {
+    const res = await this.request<any>(
+      'POST',
+      `/admin/restaurants/${encodeURIComponent(restaurantId)}/activate-trial`,
+      { body: note ? { note } : {} }
+    );
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          subscription: mapSubscriptionRow({
+            ...res.data.subscription,
+            restaurantId: res.data.subscription.restaurantId || restaurantId,
+          }),
+          restaurant: mapRestaurantRow(res.data.restaurant),
+          trialEndsAt: res.data.trialEndsAt,
+          daysRemaining: Number(res.data.daysRemaining) || 0,
+        },
+        statusCode: 200,
+      };
     }
     return res as ApiResponse<never>;
   }

@@ -500,6 +500,14 @@ export const planChangeSchema = z
   })
   .strict();
 
+// Platform admin granting the free 7-day limited trial to a tenant.
+export const trialActivationSchema = z
+  .object({
+    restaurantId: idSchema.optional(),
+    note: optionalText(300),
+  })
+  .strict();
+
 export const paymentCreateSchema = z
   .object({
     restaurantId: idSchema.optional(),

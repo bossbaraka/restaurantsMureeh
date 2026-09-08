@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { BrandLogo } from '../brand/BrandLogo';
 import { Subscription, Plan } from '../../types/restaurant';
-import { formatPrice, formatTime } from '../../utils/formatting';
+import { formatPrice, formatTime, daysUntil } from '../../utils/formatting';
 import {
   CreditCard,
   ShieldCheck,
@@ -15,6 +15,9 @@ import {
   Clock,
   Layers,
   Crown,
+  Gift,
+  Lock,
+  Hourglass,
 } from 'lucide-react';
 
 const PLAN_DETAIL_LINES: Record<string, string[]> = {
@@ -33,6 +36,20 @@ const PLAN_DETAIL_LINES: Record<string, string[]> = {
     'إدارة الفروع المتعددة (Multi-Branch System)',
     'ربط نطاق خاص لموقعك ودعم 24/7',
   ],
+};
+
+const TRIAL_DETAIL_LINES = [
+  'منيو رقمي كامل وطلبات QR مباشرة من الطاولة',
+  'استدعاء النادل ومتابعة حالة الطلب حياً',
+  'صلاحيات محدودة: بدون تحليلات أو تصدير تقارير',
+  'بدون تخصيص هوية أو فروع متعددة',
+];
+
+/** Detail bullets per plan; the free trial carries its own honest list. */
+const planDetailLines = (plan: Plan | null): string[] => {
+  if (!plan) return [];
+  if ((plan.trialDays ?? 0) > 0) return TRIAL_DETAIL_LINES;
+  return PLAN_DETAIL_LINES[plan.id] || [];
 };
 
 export const SubscriptionView: React.FC = () => {
@@ -66,6 +83,16 @@ export const SubscriptionView: React.FC = () => {
 
   const handleSelectPlan = async (planId: string) => {
     if (!currentRestaurant || isChanging) return;
+    // The free trial is a platform-admin grant — the server rejects it too.
+    const target = allPlans.find((p) => p.id === planId);
+    if (target && (target.trialDays ?? 0) > 0) {
+      showToast(
+        'error',
+        '🔒 الباقة التجريبية تُنشَّط من إدارة المنصة',
+        'لا يمكن للمطعم تفعيل الفترة التجريبية المجانية بنفسه — يرجى التواصل مع إدارة منصة مريح.'
+      );
+      return;
+    }
     if (isDemo) {
       showToast('error', '🔒 تنبيه النسخة التجريبية', 'لا يمكن تغيير الاشتراك في النسخة التجريبية. هذا الحساب مخصص فقط لاستعراض ميزات منصة مريح.');
       return;
@@ -125,6 +152,36 @@ export const SubscriptionView: React.FC = () => {
         </button>
       </div>
 
+      {/* Free trial countdown (platform-admin granted) */}
+      {subscription?.status === 'TRIAL' && subscription.trialEndsAt && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 shrink-0">
+              <Gift className="w-5 h-5" />
+            </span>
+            <div>
+              <h3 className="text-sm font-bold text-emerald-300">
+                فترة تجريبية مجانية — تتبقى {daysUntil(subscription.trialEndsAt)}{' '}
+                {daysUntil(subscription.trialEndsAt) === 1 ? 'يوم' : 'أيام'}
+              </h3>
+              <p className="text-[11px] text-luxury-400 mt-0.5 leading-relaxed">
+                تعمل الآن بصلاحيات محدودة. تنتهي التجربة في{' '}
+                {new Date(subscription.trialEndsAt).toLocaleDateString('ar-EG', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                })}{' '}
+                — للانتقال إلى باقة مدفوعة تواصل مع إدارة منصة مريح.
+              </p>
+            </div>
+          </div>
+          <span className="inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-xl bg-luxury-950/70 border border-luxury-800 text-[11px] font-bold text-luxury-200">
+            <Hourglass className="w-3.5 h-3.5 text-emerald-400" />
+            {currentPlan?.trialDays ?? 7} أيام إجمالاً
+          </span>
+        </div>
+      )}
+
       {/* Current Plan Overview Card */}
       <div className="bg-luxury-900 border border-gold-500/30 rounded-2xl p-6 shadow-luxury space-y-5">
         <div className="flex items-start justify-between">
@@ -141,9 +198,11 @@ export const SubscriptionView: React.FC = () => {
           <div className="text-left space-y-1.5">
             <div>
               <span className="text-2xl font-bold text-gold-400 font-mono">
-                {currentPlan ? formatPrice(currentPlan.priceMonthly) : '—'}
+                {!currentPlan ? '—' : currentPlan.priceMonthly === 0 ? 'مجانية' : formatPrice(currentPlan.priceMonthly)}
               </span>
-              <span className="text-xs text-luxury-400"> / شهرياً</span>
+              {currentPlan?.priceMonthly !== 0 && (
+                <span className="text-xs text-luxury-400"> / شهرياً</span>
+              )}
             </div>
             {subscription?.currentPeriodEnd && (
               <p className="text-[10px] text-luxury-400 flex items-center gap-1 justify-end" dir="rtl">
@@ -154,7 +213,7 @@ export const SubscriptionView: React.FC = () => {
                 </span>
               </p>
             )}
-            {currentPlan && (
+            {currentPlan && currentPlan.priceMonthly > 0 && (
               <p className="text-[10px] text-luxury-500">
                 أو {formatPrice(currentPlan.priceYearly)} سنوياً — وفّر {formatPrice(currentPlan.priceMonthly * 12 - currentPlan.priceYearly)}
               </p>
@@ -213,6 +272,7 @@ export const SubscriptionView: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             {[
+              { key: 'CAN_USE_ADVANCED_FEATURES', label: 'المنيو الرقمي والطلب من الطاولة والكاشير (Core Ordering)' },
               { key: 'CAN_USE_ANALYTICS', label: 'التحليلات ومؤشرات المبيعات (Analytics & AOV)' },
               { key: 'CAN_CUSTOM_BRANDING', label: 'تخصيص الهوية البصرية وشعار المطعم (Custom Branding)' },
               { key: 'CAN_EXPORT_REPORTS', label: 'تصدير تقارير المبيعات بصيغة CSV' },
@@ -255,9 +315,10 @@ export const SubscriptionView: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
               {allPlans.map((p) => {
                 const isCurrent = currentPlan?.id === p.id;
+                const isFreeTrial = (p.trialDays ?? 0) > 0;
                 return (
                   <div
                     key={p.id}
@@ -273,7 +334,11 @@ export const SubscriptionView: React.FC = () => {
 
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        {p.isPopular && !isCurrent ? (
+                        {isFreeTrial ? (
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5" /> مجانية {p.trialDays} أيام
+                          </span>
+                        ) : p.isPopular && !isCurrent ? (
                           <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-gold-500 text-luxury-950 flex items-center gap-1">
                             <Sparkles className="w-2.5 h-2.5" /> الأكثر طلباً
                           </span>
@@ -298,14 +363,28 @@ export const SubscriptionView: React.FC = () => {
                       <p className="text-[11px] text-luxury-400 mt-1 leading-relaxed min-h-[2em]">{p.description}</p>
 
                       <div className="my-3 rounded-xl bg-luxury-950/70 border border-luxury-800 p-3 space-y-1">
-                        <div>
-                          <span className="text-2xl font-extrabold text-gold-400 font-mono">{formatPrice(p.priceMonthly)}</span>
-                          <span className="text-[10px] text-luxury-400"> / شهرياً</span>
-                        </div>
-                        <div className="text-[10px] text-luxury-400">
-                          أو <span className="font-bold text-luxury-200 font-mono">{formatPrice(p.priceYearly)}</span> سنوياً
-                          <span className="text-emerald-400 font-bold"> — وفّر {formatPrice(p.priceMonthly * 12 - p.priceYearly)}</span>
-                        </div>
+                        {isFreeTrial ? (
+                          <>
+                            <div>
+                              <span className="text-2xl font-extrabold text-emerald-400 font-mono">₪0</span>
+                              <span className="text-[10px] text-luxury-400"> / {p.trialDays} أيام</span>
+                            </div>
+                            <div className="text-[10px] text-luxury-400">
+                              بدون بطاقة دفع — تُنشَّط بواسطة إدارة المنصة
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <span className="text-2xl font-extrabold text-gold-400 font-mono">{formatPrice(p.priceMonthly)}</span>
+                              <span className="text-[10px] text-luxury-400"> / شهرياً</span>
+                            </div>
+                            <div className="text-[10px] text-luxury-400">
+                              أو <span className="font-bold text-luxury-200 font-mono">{formatPrice(p.priceYearly)}</span> سنوياً
+                              <span className="text-emerald-400 font-bold"> — وفّر {formatPrice(p.priceMonthly * 12 - p.priceYearly)}</span>
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       <div className="space-y-1.5 text-[11px] text-luxury-300 pt-2 border-t border-luxury-800">
@@ -333,7 +412,7 @@ export const SubscriptionView: React.FC = () => {
                           <span className="text-luxury-500 text-[10px] group-open:rotate-180 transition-transform">▾</span>
                         </summary>
                         <ul className="px-3 pb-3 pt-1 space-y-1.5">
-                          {(PLAN_DETAIL_LINES[p.id] || []).map((line) => (
+                          {planDetailLines(p).map((line) => (
                             <li key={line} className="flex items-start gap-1.5 text-[10.5px] leading-relaxed text-luxury-300">
                               <CheckCircle2 className="w-3 h-3 mt-0.5 shrink-0 text-emerald-400" />
                               {line}
@@ -345,16 +424,26 @@ export const SubscriptionView: React.FC = () => {
 
                     <button
                       onClick={() => handleSelectPlan(p.id)}
-                      disabled={isCurrent || isChanging}
+                      disabled={isCurrent || isChanging || isFreeTrial}
+                      title={isFreeTrial ? 'الباقة التجريبية تُنشَّط من قِبل إدارة منصة مريح' : undefined}
                       className={`mt-4 w-full py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 ${
-                        isCurrent || isChanging
+                        isCurrent || isChanging || isFreeTrial
                           ? 'bg-luxury-800 text-luxury-400 cursor-default'
                           : p.isPopular
                             ? 'bg-gradient-to-l from-[#7E14FF] to-[#47BFFF] hover:brightness-110 text-white shadow-[0_0_22px_rgba(126,20,255,0.4)]'
                             : 'bg-luxury-850 hover:bg-luxury-800 text-luxury-100 border border-luxury-700'
                       }`}
                     >
-                      {isChanging && !isCurrent ? 'جاري التفعيل...' : isCurrent ? 'باقتك الحالية' : (
+                      {isFreeTrial ? (
+                        <>
+                          <Lock className="w-3.5 h-3.5" />
+                          تُنشَّط من إدارة المنصة
+                        </>
+                      ) : isChanging && !isCurrent ? (
+                        'جاري التفعيل...'
+                      ) : isCurrent ? (
+                        'باقتك الحالية'
+                      ) : (
                         <>
                           <ArrowUpRight className="w-3.5 h-3.5" />
                           تفعيل هذه الباقة

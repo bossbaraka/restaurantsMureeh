@@ -453,6 +453,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!currentRestaurant) return false;
       if (!subscription) return true; // not loaded yet — server enforces
       if (subscription.status === 'SUSPENDED' || subscription.status === 'CANCELLED') return false;
+      // A free trial that ran out grants nothing until a paid plan is assigned.
+      if (subscription.status === 'TRIAL' && subscription.trialEndsAt) {
+        const endsAt = new Date(subscription.trialEndsAt).getTime();
+        if (Number.isFinite(endsAt) && Date.now() > endsAt) return false;
+      }
       const plan = plans.find((p) => p.id === subscription.planId);
       if (!plan) return false;
       return plan.entitlements.includes(key);
