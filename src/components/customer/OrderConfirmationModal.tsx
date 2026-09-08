@@ -15,6 +15,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   orderNotes,
 }) => {
   const { cartItems, cartSubtotal, createOrder, activeTableId, currentRestaurant } = useRestaurant();
+  const currency = currentRestaurant?.currency || '₪';
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
@@ -46,7 +47,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-luxury-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
@@ -80,7 +81,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                     {item.quantity} × {item.product?.name || item.productName}
                   </span>
                   {item.options.size && (
-                    <span className="text-gold-400/90 text-[11px] block">
+                    <span className="text-[rgb(var(--brand-primary-strong-rgb)/0.9)] text-[11px] block">
                       الحجم: {typeof item.options.size === 'object' ? item.options.size.name : item.options.size}
                     </span>
                   )}
@@ -91,7 +92,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                   )}
                 </div>
                 <span className="font-bold text-luxury-200 font-mono">
-                  {formatPrice(item.totalPrice || item.itemTotal || 0)}
+                  {formatPrice(item.totalPrice || item.itemTotal || 0, currency)}
                 </span>
               </div>
             ))}
@@ -110,7 +111,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
         <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-2">
           <div className="flex justify-between items-center text-sm font-bold">
             <span className="text-luxury-200">الإجمالي المستحق</span>
-            <span className="text-gold-400 font-mono text-base">{formatPrice(cartSubtotal)}</span>
+            <span className="text-[var(--brand-primary-strong)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
           </div>
 
           <div className="flex items-center gap-2 pt-2 border-t border-luxury-850 text-[11px] text-amber-300/90">
@@ -132,7 +133,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={handleConfirmOrder}
-            className="flex-1 py-3 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs shadow-gold-glow flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
             <span>{isSubmitting ? 'جاري الإرسال...' : 'تأكيد وإرسال الطلب للمطبخ'}</span>

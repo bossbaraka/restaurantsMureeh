@@ -56,7 +56,7 @@ export const DirectTableEntryModal: React.FC = () => {
         {/* Header */}
         <div className="p-5 bg-luxury-850/80 border-b border-luxury-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
@@ -93,11 +93,11 @@ export const DirectTableEntryModal: React.FC = () => {
                   setErrorMsg('');
                 }}
                 placeholder="مثال: 12"
-                className="flex-1 bg-luxury-900 border border-luxury-750 text-luxury-100 placeholder-luxury-500 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-gold-500/60 font-mono"
+                className="flex-1 bg-luxury-900 border border-luxury-750 text-luxury-100 placeholder-luxury-500 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] font-mono"
               />
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl bg-gold-500 text-luxury-950 font-bold text-xs hover:bg-gold-400 transition-colors shadow-gold-glow"
+                className="px-5 py-2.5 rounded-xl brand-fill font-bold text-xs hover:bg-[var(--brand-primary-strong)] transition-colors shadow-[0_0_22px_-6px_var(--brand-glow)]"
               >
                 تأكيد الطاولة
               </button>
@@ -109,7 +109,7 @@ export const DirectTableEntryModal: React.FC = () => {
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
               <h4 className="text-xs font-bold text-luxury-200 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-gold-400" />
+                <MapPin className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
                 <span>أو اختر من خريطة طاولات المطعم (50 طاولة)</span>
               </h4>
 
@@ -128,7 +128,7 @@ export const DirectTableEntryModal: React.FC = () => {
                     onClick={() => setSelectedZoneFilter(z.id as any)}
                     className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
                       selectedZoneFilter === z.id
-                        ? 'bg-gold-500/20 text-gold-300 border border-gold-500/40'
+                        ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.2)] text-[var(--brand-primary-strong)] border border-[rgb(var(--brand-primary-strong-rgb)/0.4)]'
                         : 'bg-luxury-850 text-luxury-400 hover:text-luxury-200'
                     }`}
                   >
@@ -151,10 +151,10 @@ export const DirectTableEntryModal: React.FC = () => {
                     onClick={() => handleSelectTable(table.tableNumber)}
                     className={`p-2 rounded-xl flex flex-col items-center justify-center border transition-all text-center relative group ${
                       isActiveCurrent
-                        ? 'bg-gold-500 border-gold-400 text-luxury-950 font-extrabold shadow-gold-glow scale-105 z-10'
+                        ? 'bg-[var(--brand-primary-strong)] border-[var(--brand-primary-strong)] text-luxury-950 font-extrabold shadow-[0_0_22px_-6px_var(--brand-glow)] scale-105 z-10'
                         : isOccupied
                         ? 'bg-luxury-850/90 border-amber-500/40 text-amber-300 hover:border-amber-400'
-                        : 'bg-luxury-850/50 border-luxury-800 text-luxury-300 hover:border-gold-500/40 hover:text-luxury-100'
+                        : 'bg-luxury-850/50 border-luxury-800 text-luxury-300 hover:border-[rgb(var(--brand-primary-strong-rgb)/0.4)] hover:text-luxury-100'
                     }`}
                   >
                     <span className="text-xs font-mono font-bold">

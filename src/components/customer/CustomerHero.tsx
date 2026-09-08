@@ -6,6 +6,7 @@ import { OrderStatus } from '../../types/restaurant';
 
 export const CustomerHero: React.FC = () => {
   const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen } = useRestaurant();
+  const currency = currentRestaurant?.currency || '₪';
 
   const [activeGalleryImg, setActiveGalleryImg] = useState<string | null>(null);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
@@ -129,7 +130,7 @@ export const CustomerHero: React.FC = () => {
       <div className="mt-4 p-3.5 rounded-2xl bg-luxury-900/90 border border-luxury-800 space-y-2">
         <div className="flex items-center justify-between px-1">
           <span className="text-xs font-bold text-luxury-200 flex items-center gap-1.5">
-            <Camera className="w-4 h-4 text-gold-400" />
+            <Camera className="w-4 h-4 text-[var(--brand-primary-strong)]" />
             <span>لقطات حية من داخل صالة المطعم والأجواء</span>
           </span>
           <span className="text-[11px] text-luxury-400 font-mono">
@@ -143,7 +144,7 @@ export const CustomerHero: React.FC = () => {
             <button
               key={index}
               onClick={() => setActiveGalleryImg(imgUrl)}
-              className="relative w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden shrink-0 border border-luxury-750 group cursor-pointer hover:border-gold-500/80 transition-all shadow-md"
+              className="relative w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden shrink-0 border border-luxury-750 group cursor-pointer hover:border-[rgb(var(--brand-primary-strong-rgb)/0.8)] transition-all shadow-md"
             >
               <img
                 src={imgUrl}
@@ -151,7 +152,7 @@ export const CustomerHero: React.FC = () => {
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                <Eye className="w-5 h-5 text-gold-400" />
+                <Eye className="w-5 h-5 text-[var(--brand-primary-strong)]" />
               </div>
             </button>
           ))}
@@ -160,17 +161,17 @@ export const CustomerHero: React.FC = () => {
 
       {/* PROMINENT LIVE ORDER STATUS BANNER ON MENU PAGE */}
       {latestOrder && statusCfg && (
-        <div className="mt-4 p-4 rounded-2xl bg-luxury-900/95 border border-gold-500/50 shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in zoom-in-95 duration-300">
+        <div className="mt-4 p-4 rounded-2xl bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.5)] shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in zoom-in-95 duration-300">
           <div className="flex items-center justify-between border-b border-luxury-800 pb-2.5">
             <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-gold-500/15 border border-gold-500/30 flex items-center justify-center text-gold-400">
+              <div className="w-9 h-9 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
                 <ChefHat className="w-5 h-5 animate-pulse" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-luxury-50">حالة طلبك الفعّال #{latestOrder.id.slice(-6)}</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/40 font-mono">
-                    {formatPrice(latestOrder.total)}
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[rgb(var(--brand-primary-strong-rgb)/0.2)] text-[var(--brand-primary-strong)] border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] font-mono">
+                    {formatPrice(latestOrder.total, currency)}
                   </span>
                 </div>
                 <p className="text-[11px] text-luxury-400 mt-0.5">
@@ -181,7 +182,7 @@ export const CustomerHero: React.FC = () => {
 
             <button
               onClick={() => setIsOrderTrackingOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1 shadow-gold-glow transition-all"
+              className="px-3.5 py-1.5 rounded-xl brand-cta font-bold text-xs flex items-center gap-1 shadow-[0_0_22px_-6px_var(--brand-glow)] transition-all"
             >
               <span>تفاصيل الطلب</span>
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -193,11 +194,11 @@ export const CustomerHero: React.FC = () => {
             {/* Step 1: Received */}
             <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
               currentStep >= 1
-                ? 'bg-gold-500/15 border-gold-500/50 text-gold-300'
+                ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border-[rgb(var(--brand-primary-strong-rgb)/0.5)] text-[var(--brand-primary-strong)]'
                 : 'bg-luxury-950 border-luxury-850 text-luxury-500'
             }`}>
               <div className="flex items-center justify-center mb-1">
-                <Clock className={`w-3.5 h-3.5 ${currentStep >= 1 ? 'text-gold-400' : 'text-luxury-600'}`} />
+                <Clock className={`w-3.5 h-3.5 ${currentStep >= 1 ? 'text-[var(--brand-primary-strong)]' : 'text-luxury-600'}`} />
               </div>
               <span className="block text-[10px]">استقبال</span>
             </div>
@@ -249,7 +250,7 @@ export const CustomerHero: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ابحث عن طبق، مكون، أو صنف..."
-            className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-3 pr-11 pl-4 text-sm focus:outline-none focus:border-gold-500/60 focus:ring-1 focus:ring-gold-500/30 transition-all shadow-inner"
+            className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-3 pr-11 pl-4 text-sm focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] focus:ring-1 focus:ring-[rgb(var(--brand-primary-strong-rgb)/0.3)] transition-all shadow-inner"
           />
           <Search className="w-4 h-4 text-luxury-400 absolute right-4 pointer-events-none" />
           {searchQuery && (
@@ -267,8 +268,8 @@ export const CustomerHero: React.FC = () => {
       {!searchQuery && activeOffers.length > 0 && (
         <div className="mt-5">
           <div className="flex items-center justify-between mb-2.5 px-1">
-            <span className="text-xs font-bold text-gold-400 flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-gold-400 fill-gold-400/20" />
+            <span className="text-xs font-bold text-[var(--brand-primary-strong)] flex items-center gap-1.5">
+              <Flame className="w-4 h-4 text-[var(--brand-primary-strong)] fill-[rgb(var(--brand-primary-strong-rgb)/0.2)]" />
               العروض والتجارب الحصرية
             </span>
           </div>
@@ -277,7 +278,7 @@ export const CustomerHero: React.FC = () => {
             {activeOffers.map((offer) => (
               <div
                 key={offer.id}
-                className="relative overflow-hidden rounded-xl bg-luxury-900 border border-gold-500/20 p-3.5 flex gap-3.5 items-center hover:border-gold-500/40 transition-all group"
+                className="relative overflow-hidden rounded-xl bg-luxury-900 border border-[rgb(var(--brand-primary-strong-rgb)/0.2)] p-3.5 flex gap-3.5 items-center hover:border-[rgb(var(--brand-primary-strong-rgb)/0.4)] transition-all group"
               >
                 <img
                   src={offer.image}
@@ -285,18 +286,18 @@ export const CustomerHero: React.FC = () => {
                   className="w-20 h-20 rounded-lg object-cover shrink-0 border border-luxury-800 group-hover:scale-105 transition-transform duration-300"
                 />
                 <div className="flex-1 text-right min-w-0">
-                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-gold-500/20 text-gold-300 border border-gold-500/30 mb-1">
+                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-[rgb(var(--brand-primary-strong-rgb)/0.2)] text-[var(--brand-primary-strong)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] mb-1">
                     {offer.badge}
                   </span>
                   <h4 className="text-xs font-bold text-luxury-100 truncate">{offer.title}</h4>
                   <p className="text-[11px] text-luxury-400 line-clamp-1 mt-0.5">{offer.subtitle}</p>
                   <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-sm font-bold text-gold-400">
-                      {formatPrice(offer.discountedPrice || 0)}
+                    <span className="text-sm font-bold text-[var(--brand-primary-strong)]">
+                      {formatPrice(offer.discountedPrice || 0, currency)}
                     </span>
                     {offer.originalPrice && (
                       <span className="text-xs text-luxury-500 line-through">
-                        {formatPrice(offer.originalPrice)}
+                        {formatPrice(offer.originalPrice, currency)}
                       </span>
                     )}
                   </div>
@@ -324,7 +325,7 @@ export const CustomerHero: React.FC = () => {
               className="w-full h-full object-contain max-h-[85vh] mx-auto"
             />
             <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 to-transparent text-right text-xs text-luxury-200">
-              <span className="font-bold font-serif text-sm text-gold-300">لقطة من داخل صالة وأجواء {restName}</span>
+              <span className="font-bold font-serif text-sm text-[var(--brand-primary-strong)]">لقطة من داخل صالة وأجواء {restName}</span>
             </div>
           </div>
         </div>

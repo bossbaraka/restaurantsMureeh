@@ -36,7 +36,7 @@ export const CustomerHeader: React.FC = () => {
           {/* Restaurant Identity & Table Badge */}
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-xl shadow-gold-glow shrink-0 border border-luxury-700/60"
+              className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-xl shadow-[0_0_22px_-6px_var(--brand-glow)] shrink-0 border border-luxury-700/60"
               style={{
                 background: currentRestaurant?.logo
                   ? 'transparent'
@@ -52,16 +52,16 @@ export const CustomerHeader: React.FC = () => {
             <div className="text-right min-w-0">
               <h1 className="text-sm sm:text-base font-bold text-luxury-50 font-serif tracking-wide flex items-center gap-1.5 truncate">
                 <span className="truncate">{restName}</span>
-                <span className="text-gold-400 text-xs font-serif italic hidden xs:inline">{restNameEn}</span>
+                <span className="text-[var(--brand-primary-strong)] text-xs font-serif italic hidden xs:inline">{restNameEn}</span>
               </h1>
 
               {/* Table Indicator Pill */}
               <button
                 onClick={() => setIsTableSelectorOpen(true)}
-                className="flex items-center gap-1.5 text-xs text-gold-300/90 hover:text-gold-200 mt-0.5 group cursor-pointer"
+                className="flex items-center gap-1.5 text-xs text-[rgb(var(--brand-primary-strong-rgb)/0.9)] hover:text-[var(--brand-primary-strong)] mt-0.5 group cursor-pointer"
               >
                 <span className={`w-2 h-2 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
-                <span className="font-semibold underline decoration-gold-500/40 underline-offset-2">
+                <span className="font-semibold underline decoration-[rgb(var(--brand-primary-strong-rgb)/0.4)] underline-offset-2">
                   {activeTableId ? `طاولة ${tableNumberStr}` : 'اختر رقم الطاولة'}
                 </span>
                 <span className="text-[10px] text-luxury-400 group-hover:text-luxury-300">
@@ -76,10 +76,10 @@ export const CustomerHeader: React.FC = () => {
             {/* Waiter Call Button */}
             <button
               onClick={() => setIsWaiterModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-luxury-900 hover:bg-luxury-850 text-luxury-200 hover:text-gold-300 border border-luxury-800 transition-all active:scale-95 text-xs font-medium cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-luxury-900 hover:bg-luxury-850 text-luxury-200 hover:text-[var(--brand-primary-strong)] border border-luxury-800 transition-all active:scale-95 text-xs font-medium cursor-pointer"
               title="استدعاء طاقم الضيافة"
             >
-              <Bell className="w-4 h-4 text-gold-400" />
+              <Bell className="w-4 h-4 text-[var(--brand-primary-strong)]" />
               <span>استدعاء النادل</span>
             </button>
 
@@ -87,7 +87,7 @@ export const CustomerHeader: React.FC = () => {
             {hasActiveOrders && (
               <button
                 onClick={() => setIsOrderTrackingOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-gold-500/20 via-emerald-500/20 to-gold-500/20 hover:from-gold-500/30 hover:to-emerald-500/30 text-gold-300 border border-gold-500/40 transition-all active:scale-95 text-xs font-bold shadow-gold-glow animate-pulse cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-[rgb(var(--brand-primary-strong-rgb)/0.22)] via-emerald-500/20 to-[rgb(var(--brand-primary-strong-rgb)/0.22)] hover:from-[rgb(var(--brand-primary-strong-rgb)/0.32)] hover:to-emerald-500/30 text-[var(--brand-primary-strong)] border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] transition-all active:scale-95 text-xs font-bold shadow-[0_0_22px_-6px_var(--brand-glow)] animate-pulse cursor-pointer"
                 title="متابعة حالة الطلب والمطبخ الحي"
               >
                 <ChefHat className="w-4 h-4 text-emerald-400" />
@@ -98,13 +98,13 @@ export const CustomerHeader: React.FC = () => {
             {/* Cart Button */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 text-luxury-950 font-bold hover:from-gold-400 hover:to-gold-500 transition-all shadow-gold-glow active:scale-95 text-xs cursor-pointer"
+              className="relative flex items-center gap-2 px-3.5 py-2 rounded-xl brand-cta font-bold transition-all active:scale-95 text-xs cursor-pointer"
               aria-label="عرض سلة الطلبات"
             >
               <ShoppingBag className="w-4 h-4" />
               <span>السلة</span>
               {cartTotalCount > 0 ? (
-                <span className="bg-luxury-950 text-gold-400 text-xs px-1.5 py-0.2 rounded-md font-bold">
+                <span className="bg-luxury-950 text-[var(--brand-primary-strong)] text-xs px-1.5 py-0.2 rounded-md font-bold">
                   {cartTotalCount}
                 </span>
               ) : null}
@@ -121,11 +121,11 @@ export const CustomerHeader: React.FC = () => {
             {/* Quick Cart Button for Mobile */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 text-luxury-950 font-bold text-xs shadow-gold-glow active:scale-95 cursor-pointer"
+              className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl brand-cta font-bold text-xs active:scale-95 cursor-pointer"
             >
               <ShoppingBag className="w-4 h-4" />
               {cartTotalCount > 0 && (
-                <span className="bg-luxury-950 text-gold-400 text-[11px] px-1.5 py-0.2 rounded-md font-bold">
+                <span className="bg-luxury-950 text-[var(--brand-primary-strong)] text-[11px] px-1.5 py-0.2 rounded-md font-bold">
                   {cartTotalCount}
                 </span>
               )}
@@ -134,7 +134,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Mobile Hamburger Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-xl bg-luxury-900 border border-luxury-800 text-luxury-200 hover:text-gold-400 transition-all cursor-pointer"
+              className="p-2 rounded-xl bg-luxury-900 border border-luxury-800 text-luxury-200 hover:text-[var(--brand-primary-strong)] transition-all cursor-pointer"
               aria-label="قائمة الخيارات"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -158,7 +158,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Drawer Header */}
             <div className="flex items-center justify-between pb-3 border-b border-luxury-800">
               <div className="flex items-center gap-2">
-                <Store className="w-5 h-5 text-gold-400" />
+                <Store className="w-5 h-5 text-[var(--brand-primary-strong)]" />
                 <span className="font-serif font-bold text-sm text-luxury-100">{restName}</span>
               </div>
               <button
@@ -177,7 +177,7 @@ export const CustomerHeader: React.FC = () => {
                   setIsMobileMenuOpen(false);
                   setIsTableSelectorOpen(true);
                 }}
-                className="text-gold-400 font-bold underline flex items-center gap-1"
+                className="text-[var(--brand-primary-strong)] font-bold underline flex items-center gap-1"
               >
                 <span>طاولة {tableNumberStr}</span>
                 <span className="text-[10px] text-luxury-400">(تغيير)</span>
@@ -193,13 +193,13 @@ export const CustomerHeader: React.FC = () => {
                     setIsMobileMenuOpen(false);
                     setIsOrderTrackingOpen(true);
                   }}
-                  className="w-full p-3 rounded-xl bg-gold-500/15 border border-gold-500/40 text-gold-300 text-xs font-bold flex items-center justify-between transition-all"
+                  className="w-full p-3 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] text-[var(--brand-primary-strong)] text-xs font-bold flex items-center justify-between transition-all"
                 >
                   <div className="flex items-center gap-2">
-                    <ChefHat className="w-4 h-4 text-gold-400" />
+                    <ChefHat className="w-4 h-4 text-[var(--brand-primary-strong)]" />
                     <span>متابعة حالة الطلب</span>
                   </div>
-                  <span className="text-[10px] bg-gold-500 text-luxury-950 px-2 py-0.5 rounded-full font-bold">
+                  <span className="text-[10px] brand-fill px-2 py-0.5 rounded-full font-bold">
                     {activeTableOrders.length} طلبات
                   </span>
                 </button>
@@ -211,10 +211,10 @@ export const CustomerHeader: React.FC = () => {
                   setIsMobileMenuOpen(false);
                   setIsWaiterModalOpen(true);
                 }}
-                className="w-full p-3 rounded-xl bg-luxury-850 border border-luxury-800 hover:border-gold-500/30 text-luxury-100 text-xs font-semibold flex items-center justify-between transition-all"
+                className="w-full p-3 rounded-xl bg-luxury-850 border border-luxury-800 hover:border-[rgb(var(--brand-primary-strong-rgb)/0.3)] text-luxury-100 text-xs font-semibold flex items-center justify-between transition-all"
               >
                 <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-gold-400" />
+                  <Bell className="w-4 h-4 text-[var(--brand-primary-strong)]" />
                   <span>استدعاء طاقم الضيافة (النادل)</span>
                 </div>
               </button>
@@ -225,14 +225,14 @@ export const CustomerHeader: React.FC = () => {
                   setIsMobileMenuOpen(false);
                   setIsCartOpen(true);
                 }}
-                className="w-full p-3 rounded-xl bg-luxury-850 border border-luxury-800 hover:border-gold-500/30 text-luxury-100 text-xs font-semibold flex items-center justify-between transition-all"
+                className="w-full p-3 rounded-xl bg-luxury-850 border border-luxury-800 hover:border-[rgb(var(--brand-primary-strong-rgb)/0.3)] text-luxury-100 text-xs font-semibold flex items-center justify-between transition-all"
               >
                 <div className="flex items-center gap-2">
-                  <ShoppingBag className="w-4 h-4 text-gold-400" />
+                  <ShoppingBag className="w-4 h-4 text-[var(--brand-primary-strong)]" />
                   <span>سلة الطلبات</span>
                 </div>
                 {cartSubtotal > 0 && (
-                  <span className="text-gold-400 font-bold font-mono">
+                  <span className="text-[var(--brand-primary-strong)] font-bold font-mono">
                     {formatPrice(cartSubtotal)}
                   </span>
                 )}
@@ -262,7 +262,7 @@ export const CustomerHeader: React.FC = () => {
                 className="w-full p-3 rounded-xl bg-luxury-950 border border-luxury-800 text-luxury-300 text-xs font-medium flex items-center justify-between transition-all mt-2"
               >
                 <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gold-400" />
+                  <User className="w-4 h-4 text-[var(--brand-primary-strong)]" />
                   <span>{currentUser ? `حساب: ${currentUser.name}` : 'دخول الإدارة والعمال'}</span>
                 </div>
               </button>

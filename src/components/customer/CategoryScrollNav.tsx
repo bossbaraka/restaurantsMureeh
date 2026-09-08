@@ -1,58 +1,75 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { Sparkles } from 'lucide-react';
+import { Search } from 'lucide-react';
 
+/**
+ * Horizontal category rail. Sticky under the header, themed by the tenant
+ * palette, and cheap to re-render: availability counts are derived from a
+ * single pass over the menu instead of one filter per chip.
+ */
 export const CategoryScrollNav: React.FC = () => {
-  const { categories, selectedCategoryId, setSelectedCategoryId, products, searchQuery } = useRestaurant();
-  const navContainerRef = useRef<HTMLDivElement>(null);
+  const { categories, selectedCategoryId, setSelectedCategoryId, products, searchQuery } =
+    useRestaurant();
+  const trackRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll selected category into view
-  useEffect(() => {
-    if (navContainerRef.current) {
-      const activeEl = navContainerRef.current.querySelector('[data-active="true"]');
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-      }
+  const availableCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const product of products) {
+      if (product.isAvailable === false) continue;
+      counts.set(product.categoryId, (counts.get(product.categoryId) || 0) + 1);
     }
+    return counts;
+  }, [products]);
+
+  // Keep the active chip inside the viewport while browsing with the keyboard.
+  useEffect(() => {
+    const activeEl = trackRef.current?.querySelector<HTMLElement>('[data-active="true"]');
+    if (!activeEl) return;
+    const track = trackRef.current;
+    if (!track) return;
+    const overflow = track.scrollWidth - track.clientWidth;
+    if (overflow <= 4) return;
+    activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [selectedCategoryId]);
 
   if (searchQuery) {
     return (
-      <div className="mb-4 text-xs text-luxury-400 text-right px-1">
-        نتائج البحث عن: <span className="text-gold-400 font-semibold">"{searchQuery}"</span>
+      <div className="mb-4 flex items-center gap-1.5 text-xs text-luxury-400 px-1">
+        <Search className="w-3.5 h-3.5 brand-text" aria-hidden="true" />
+        <span>
+          نتائج البحث عن <span className="font-bold brand-text">“{searchQuery}”</span>
+        </span>
       </div>
     );
   }
 
+  if (categories.length === 0) return null;
+
   return (
-    <div className="sticky top-[118px] z-20 bg-luxury-950/95 backdrop-blur-md py-2.5 -mx-4 px-4 sm:mx-0 sm:px-0 border-b border-luxury-850/80 mb-6">
-      <div
-        ref={navContainerRef}
-        className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth py-1"
-      >
+    <div className="menu-cats">
+      <div ref={trackRef} className="menu-cats__track" role="tablist" aria-label="أقسام القائمة">
         {categories.map((category) => {
           const isSelected = category.id === selectedCategoryId;
-          const count = products.filter((p) => p.categoryId === category.id && p.isAvailable).length;
+          const count = availableCountByCategory.get(category.id) || 0;
+          const icon = category.icon && category.icon.trim().length <= 4 ? category.icon.trim() : null;
 
           return (
             <button
               key={category.id}
+              type="button"
+              role="tab"
+              aria-selected={isSelected}
               data-active={isSelected}
               onClick={() => setSelectedCategoryId(category.id)}
-              className={`shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 select-none ${
-                isSelected
-                  ? 'bg-gold-500 text-luxury-950 shadow-gold-glow font-bold'
-                  : 'bg-luxury-900 text-luxury-300 hover:text-luxury-100 hover:bg-luxury-850 border border-luxury-800'
-              }`}
+              className="menu-chip"
             >
+              {icon && (
+                <span aria-hidden="true" className="text-[13px] leading-none">
+                  {icon}
+                </span>
+              )}
               <span>{category.name}</span>
-              <span
-                className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                  isSelected ? 'bg-luxury-950/20 text-luxury-950 font-bold' : 'bg-luxury-800 text-luxury-400'
-                }`}
-              >
-                {count}
-              </span>
+              <span className="menu-chip__count">{count}</span>
             </button>
           );
         })}

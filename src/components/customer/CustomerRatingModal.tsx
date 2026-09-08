@@ -50,7 +50,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
 
         {isSubmitted ? (
           <div className="py-8 space-y-3 animate-fade-in">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-gold-glow">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-[0_0_22px_-6px_var(--brand-glow)]">
               <Heart className="w-8 h-8 fill-emerald-400" />
             </div>
             <h3 className="text-xl font-bold font-serif text-luxury-50">شكراً لك من القلب!</h3>
@@ -61,7 +61,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1 pt-2">
-              <span className="text-xs text-gold-400 font-bold uppercase tracking-widest">
+              <span className="text-xs text-[var(--brand-primary-strong)] font-bold uppercase tracking-widest">
                 {currentRestaurant?.name || 'تجربة الضيافة'}
               </span>
               <h2 className="text-xl font-bold font-serif text-luxury-50">
@@ -88,7 +88,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
                     <Star
                       className={`w-8 h-8 transition-colors ${
                         isFilled
-                          ? 'text-gold-400 fill-gold-400 drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]'
+                          ? 'text-[var(--brand-primary-strong)] fill-[var(--brand-primary-strong)] drop-shadow-[0_0_8px_rgba(212,175,55,0.5)]'
                           : 'text-luxury-700'
                       }`}
                     />
@@ -97,7 +97,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
               })}
             </div>
 
-            <div className="text-xs font-bold text-gold-300">
+            <div className="text-xs font-bold text-[var(--brand-primary-strong)]">
               {rating === 5 && '🌟 تجربة استثنائية لا تُنسى!'}
               {rating === 4 && '✨ خدمة ممتازة جداً'}
               {rating === 3 && '👍 جيدة، ونتطلع للأفضل'}
@@ -112,13 +112,13 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
                 placeholder="أخبرنا عن أكثر طبق نال إعجابك أو أي ملاحظة تود مشاركتها مع الإدارة..."
                 value={feedback}
                 onChange={(e) => setFeedback(e.target.value)}
-                className="w-full bg-luxury-950 border border-luxury-800 rounded-2xl p-3 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-gold-500/60 resize-none"
+                className="w-full bg-luxury-950 border border-luxury-800 rounded-2xl p-3 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] resize-none"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-gold-500 via-gold-400 to-gold-600 text-luxury-950 font-bold text-xs shadow-gold-glow hover:from-gold-400 hover:to-gold-500 transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[var(--brand-primary-strong)] via-[var(--brand-primary-strong)] to-[var(--brand-primary-strong)] text-luxury-950 font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] hover:from-[var(--brand-primary-strong)] hover:to-[var(--brand-primary-strong)] transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <Send className="w-4 h-4" />
               <span>إرسال التقييم للإدارة</span>

@@ -1,110 +1,207 @@
 import React from 'react';
 import { Product } from '../../types/restaurant';
-import { formatPrice } from '../../utils/formatting';
-import { Plus, Sparkles, Clock, Ban } from 'lucide-react';
+import { formatAmount } from '../../utils/formatting';
+import { Plus, Minus, Sparkles, Clock, Flame, SlidersHorizontal, Ban, AlertTriangle } from 'lucide-react';
+import { ProductImage } from './ProductImage';
 
-interface ProductCardProps {
+export interface ProductCardProps {
   product: Product;
+  currency?: string;
+  /** Units of this dish already in the cart (drives the inline stepper). */
+  cartQuantity?: number;
+  /** Above-the-fold cards get eager loading + network priority. */
+  priority?: boolean;
+  /** Signature dish treatment (spans the grid, brand-tinted surface). */
+  featured?: boolean;
   onSelect: (product: Product) => void;
-  onQuickAdd: (product: Product, e: React.MouseEvent) => void;
+  onQuickAdd: (product: Product) => void;
+  onQuantityChange: (product: Product, nextQuantity: number) => void;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect, onQuickAdd }) => {
-  const hasOptions = (product.sizes && product.sizes.length > 0) || (product.addOns && product.addOns.length > 0) || (product.removableIngredients && product.removableIngredients.length > 0);
+const MemoProductCard: React.FC<ProductCardProps> = ({
+  product,
+  currency = '₪',
+  cartQuantity = 0,
+  priority = false,
+  featured = false,
+  onSelect,
+  onQuickAdd,
+  onQuantityChange,
+}) => {
+  const available = product.isAvailable !== false;
+  const sizes = product.sizes ?? [];
+  const addOns = product.addOns ?? [];
+  const removable = product.removableIngredients ?? product.ingredients ?? [];
+  const optionCount = sizes.length + addOns.length + removable.length;
+  const hasOptions = optionCount > 0;
+  const inCart = available && cartQuantity > 0;
+  // The card always shows the base (cheapest) price, so qualify it as a
+  // starting price whenever another size costs more.
+  const startsFrom =
+    sizes.length > 1 && sizes.some((s) => (s.priceModifier || s.price || 0) > 0);
+
+  const cardClass = [
+    'menu-card',
+    featured ? 'menu-card--featured' : '',
+    available ? '' : 'menu-card--unavailable',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
-    <div
-      onClick={() => product.isAvailable && onSelect(product)}
-      className={`group relative flex flex-col justify-between bg-luxury-900/90 rounded-2xl border transition-all duration-300 overflow-hidden text-right select-none ${
-        product.isAvailable
-          ? 'border-luxury-800/90 hover:border-gold-500/50 hover:shadow-2xl hover:shadow-gold-500/5 cursor-pointer'
-          : 'border-luxury-850 opacity-60 cursor-not-allowed bg-luxury-950/40'
-      }`}
-    >
-      {/* Product Image Container */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-luxury-950">
-        <img
+    <article className={cardClass}>
+      {/* Media ---------------------------------------------------------------- */}
+      <div className="menu-media">
+        <ProductImage
           src={product.image}
           alt={product.name}
-          loading="lazy"
-          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+          priority={priority}
+          sizes="(max-width: 640px) 100px, 200px"
         />
+        <div className="menu-media__scrim" aria-hidden="true" />
 
-        {/* Gradient shadow overlay for badge readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-luxury-900 via-transparent to-black/40" />
-
-        {/* Top Badges */}
-        <div className="absolute top-2.5 right-2.5 flex flex-wrap gap-1.5 z-10">
-          {product.badge && product.isAvailable && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold bg-gold-500 text-luxury-950 backdrop-blur-md shadow-md">
-              <Sparkles className="w-3 h-3 text-luxury-950" />
+        <div className="menu-media__badges">
+          {featured && (
+            <span className="menu-badge menu-badge--signature">
+              <Sparkles className="w-2.5 h-2.5" />
+              طبق الشيف
+            </span>
+          )}
+          {product.badge && available && !featured && (
+            <span className="menu-badge menu-badge--brand">
+              <Sparkles className="w-2.5 h-2.5" />
               {product.badge}
             </span>
           )}
-
-          {!product.isAvailable && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold bg-red-500/90 text-white backdrop-blur-md">
-              <Ban className="w-3 h-3" />
-              غير متوفر حالياً
+          {!available && (
+            <span className="menu-badge menu-badge--danger">
+              <Ban className="w-2.5 h-2.5" />
+              غير متوفر
+            </span>
+          )}
+          {!!product.allergens?.length && available && (
+            <span className="menu-badge menu-badge--dark" title={`مسببات الحساسية: ${product.allergens.join('، ')}`}>
+              <AlertTriangle className="w-2.5 h-2.5" />
+              حساسية
             </span>
           )}
         </div>
-
-        {/* Prep Time indicator */}
-        {product.preparationTimeMinutes && product.isAvailable && (
-          <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-luxury-950/85 backdrop-blur-md text-luxury-300 text-[10px] border border-luxury-800">
-            <Clock className="w-3 h-3 text-gold-400" />
-            <span>{product.preparationTimeMinutes} دقيقة</span>
-          </div>
-        )}
       </div>
 
-      {/* Product Content Body */}
-      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+      {/* Body ----------------------------------------------------------------- */}
+      <div className="menu-card__body">
         <div>
-          <div className="flex items-start justify-between gap-2 mb-1">
-            <h3 className="text-sm sm:text-base font-bold text-luxury-100 group-hover:text-gold-300 transition-colors line-clamp-1">
-              {product.name}
-            </h3>
-          </div>
-
-          <p className="text-xs text-luxury-400 line-clamp-2 leading-relaxed">
-            {product.description}
-          </p>
+          <h3 className="menu-card__title">{product.name}</h3>
+          {product.nameEn && <p className="menu-card__title-en">{product.nameEn}</p>}
+          {product.description && <p className="menu-card__desc">{product.description}</p>}
         </div>
 
-        {/* Card Footer: Price & Add Button */}
-        <div className="flex items-center justify-between pt-3 border-t border-luxury-800/70 mt-auto">
-          <div className="text-right">
-            <span className="text-base sm:text-lg font-bold text-gold-400 font-mono">
-              {formatPrice(product.price)}
+        {(!!product.preparationTimeMinutes || !!product.calories || hasOptions) && (
+          <ul className="menu-card__meta">
+            {!!product.preparationTimeMinutes && (
+              <li className="menu-meta">
+                <Clock aria-hidden="true" />
+                <span>{product.preparationTimeMinutes} د</span>
+              </li>
+            )}
+            {!!product.calories && (
+              <li className="menu-meta">
+                <Flame aria-hidden="true" />
+                <span>{product.calories} سعرة</span>
+              </li>
+            )}
+            {hasOptions && (
+              <li className="menu-meta">
+                <SlidersHorizontal aria-hidden="true" />
+                <span>{sizes.length > 1 ? `${sizes.length} مقاسات` : `${optionCount} خيارات`}</span>
+              </li>
+            )}
+          </ul>
+        )}
+
+        {/* Footer: price + action --------------------------------------------- */}
+        <div className="menu-card__footer">
+          <div className="menu-price">
+            {startsFrom && <span className="menu-price__from">يبدأ من</span>}
+            <span className="menu-price__value" dir="ltr">
+              {formatAmount(product.price)}
+              <span className="menu-price__currency">{currency}</span>
             </span>
-            {product.sizes && product.sizes.length > 0 && (
-              <span className="text-[10px] text-luxury-400 block -mt-1 font-serif italic">يبدأ من</span>
+          </div>
+
+          <div className="menu-actions">
+            {!available ? (
+              <span className="text-[11px] font-semibold text-luxury-500">نفد من المطبخ</span>
+            ) : inCart ? (
+              <div className="menu-qty" role="group" aria-label={`كمية ${product.name}`}>
+                <button
+                  type="button"
+                  onClick={() => onQuantityChange(product, cartQuantity - 1)}
+                  aria-label={`إنقاص كمية ${product.name}`}
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="menu-qty__value" aria-live="polite">
+                  {cartQuantity}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onQuantityChange(product, cartQuantity + 1)}
+                  aria-label={`زيادة كمية ${product.name}`}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : hasOptions ? (
+              <button
+                type="button"
+                className="menu-add menu-add--customize"
+                onClick={() => onSelect(product)}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>تخصيص</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="menu-add"
+                onClick={() => onQuickAdd(product)}
+                aria-label={`إضافة ${product.name} إلى الطلب`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>إضافة</span>
+              </button>
             )}
           </div>
-
-          {product.isAvailable ? (
-            <button
-              onClick={(e) => {
-                if (hasOptions) {
-                  e.stopPropagation();
-                  onSelect(product);
-                } else {
-                  onQuickAdd(product, e);
-                }
-              }}
-              className="flex items-center justify-center gap-1 px-3.5 py-1.5 rounded-xl bg-gold-500/10 hover:bg-gold-500 text-gold-300 hover:text-luxury-950 border border-gold-500/30 hover:border-gold-500 text-xs font-bold transition-all active:scale-95 shadow-sm cursor-pointer"
-              title={hasOptions ? 'تخصيص وإضافة' : 'إضافة سريعة'}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{hasOptions ? 'تخصيص' : 'إضافة'}</span>
-            </button>
-          ) : (
-            <span className="text-xs text-luxury-500 font-medium">غير متاح</span>
-          )}
         </div>
       </div>
-    </div>
+
+      {/* Whole-card affordance (details) — sits under the action controls. */}
+      <button
+        type="button"
+        className="menu-card__hit"
+        disabled={!available}
+        onClick={() => onSelect(product)}
+        aria-label={available ? `عرض تفاصيل ${product.name}` : `${product.name} غير متوفر حالياً`}
+        tabIndex={available ? 0 : -1}
+      />
+    </article>
   );
 };
+
+/**
+ * The grid re-renders on every cart tick and every keystroke of the search box,
+ * so cards only re-render when their own inputs actually changed.
+ */
+export const ProductCard = React.memo(
+  MemoProductCard,
+  (prev, next) =>
+    prev.product === next.product &&
+    prev.cartQuantity === next.cartQuantity &&
+    prev.currency === next.currency &&
+    prev.priority === next.priority &&
+    prev.featured === next.featured &&
+    prev.onSelect === next.onSelect &&
+    prev.onQuickAdd === next.onQuickAdd &&
+    prev.onQuantityChange === next.onQuantityChange
+);
