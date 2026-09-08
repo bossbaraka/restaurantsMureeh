@@ -100,15 +100,11 @@
   z-index: 20;
   margin-inline: -1rem;
   padding: 0.5rem 1rem 0.6rem;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--menu-surface) 92%, transparent) 0%,
-    color-mix(in srgb, var(--menu-surface) 88%, transparent) 72%,
-    transparent 100%
-  );
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  /* Fully opaque: dishes scrolling underneath must never bleed through the
+     rail, otherwise the sticky bar reads as cards stacked on top of cards. */
+  background-color: var(--menu-surface);
   border-bottom: 1px solid var(--menu-hairline);
+  box-shadow: 0 14px 24px -22px rgb(0 0 0 / 0.95);
 }
 @media (min-width: 640px) {
   .menu-rail {
@@ -174,7 +170,7 @@
   font-weight: 600;
   white-space: nowrap;
   color: color-mix(in srgb, var(--brand-muted) 70%, #cfd6e2);
-  background: color-mix(in srgb, var(--menu-surface-raised) 80%, transparent);
+  background: var(--menu-surface-raised);
   border: 1px solid var(--menu-hairline);
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
@@ -231,7 +227,7 @@
   font-size: 11px;
   font-weight: 700;
   color: #e6e9f0;
-  background-color: color-mix(in srgb, var(--menu-surface-raised) 90%, transparent);
+  background-color: var(--menu-surface-raised);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='3' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
   background-repeat: no-repeat;
   background-position: left 0.45rem center;
@@ -253,7 +249,7 @@
   font-size: 11px;
   font-weight: 700;
   color: var(--brand-muted);
-  background: color-mix(in srgb, var(--menu-surface-raised) 90%, transparent);
+  background: var(--menu-surface-raised);
   border: 1px solid var(--menu-hairline);
   cursor: pointer;
   transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
@@ -271,7 +267,7 @@
   display: inline-flex;
   padding: 2px;
   border-radius: 11px;
-  background: color-mix(in srgb, var(--menu-surface-raised) 90%, transparent);
+  background: var(--menu-surface-raised);
   border: 1px solid var(--menu-hairline);
 }
 .menu-layout-switch button {
@@ -320,19 +316,12 @@
   padding: 0.7rem;
   border-radius: 20px;
   text-align: start;
-  background: linear-gradient(
-    160deg,
-    color-mix(in srgb, var(--menu-surface-raised) 96%, transparent) 0%,
-    color-mix(in srgb, var(--menu-surface) 96%, transparent) 100%
-  );
+  background: linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%);
   border: 1px solid var(--menu-hairline);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.035),
     0 16px 30px -26px rgb(0 0 0 / 0.95);
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  /* Offscreen cards skip rendering work until they approach the viewport. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 128px;
 }
 @media (min-width: 640px) {
   .menu-card {
@@ -351,12 +340,8 @@
 .menu-card--featured {
   grid-template-columns: 116px minmax(0, 1fr);
   background:
-    radial-gradient(120% 140% at 100% 0%, rgb(var(--brand-primary-strong-rgb) / 0.14) 0%, transparent 62%),
-    linear-gradient(
-      160deg,
-      color-mix(in srgb, var(--menu-surface-raised) 96%, transparent) 0%,
-      color-mix(in srgb, var(--menu-surface) 96%, transparent) 100%
-    );
+    radial-gradient(120% 140% at 100% 0%, rgb(var(--brand-primary-strong-rgb) / 0.14) 0%, rgba(0, 0, 0, 0) 62%),
+    linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%);
   border-color: var(--brand-line);
 }
 @media (min-width: 640px) {
@@ -396,8 +381,7 @@
 /* Media --------------------------------------------------------------------- */
 .menu-media {
   position: relative;
-  align-self: stretch;
-  aspect-ratio: 1 / 1;
+  width: 100%;
   min-height: 100px;
   border-radius: 15px;
   overflow: hidden;
@@ -410,10 +394,13 @@
   }
 }
 .menu-card--featured .menu-media {
-  aspect-ratio: auto;
   min-height: 132px;
 }
+/* Absolutely filling the media box keeps the row height owned by the card
+   body alone — no aspect-ratio/height feedback loop between the two columns. */
 .menu-img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -726,7 +713,7 @@
   padding: 2.75rem 1.5rem;
   text-align: center;
   border-radius: 22px;
-  background: color-mix(in srgb, var(--menu-surface) 80%, transparent);
+  background: var(--menu-surface);
   border: 1px dashed var(--brand-line);
 }
 .menu-empty__icon {
