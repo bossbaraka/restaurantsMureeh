@@ -31,6 +31,9 @@ export interface Restaurant {
   description: string;
   phone: string;
   address: string;
+  latitude?: number;
+  longitude?: number;
+  mapUrl?: string;
   currency: string;
   language: 'ar' | 'en';
   timezone: string;
