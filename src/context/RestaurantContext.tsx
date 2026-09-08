@@ -322,16 +322,18 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentManagerRestaurant?.id]);
 
-  // Fast 1.5-second background polling with in-flight lock (no duplicate concurrent requests)
+  // 10-second background polling with in-flight lock — mitigates DoS/vector (M-04).
+  // Previous 1.5s × 8 endpoints = 320 req/min per tab exceeded global rate-limit
+  // (300/min) and hit Render pool limits. 10s → ~48 req/min; SSE covers live updates.
   useEffect(() => {
     if (!currentRestaurant?.id) return;
-    
+
     // Initial fetch on tenant load/switch
     void refreshTenantData();
 
     const interval = window.setInterval(() => {
       void refreshTenantData();
-    }, 1500);
+    }, 10000);
 
     return () => window.clearInterval(interval);
   }, [currentRestaurant?.id, refreshTenantData]);

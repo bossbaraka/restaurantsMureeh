@@ -49,3 +49,41 @@ export function escapeHtml(value: unknown): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+/**
+ * Parse pagination query params safely (M-01 DoS hardening).
+ * - limit: 1..100, default 50
+ * - offset/page: bounded to 0..100000
+ * Returns Prisma-compatible take/skip with hard caps to prevent
+ * unbounded list amplification.
+ */
+export function parsePagination(query: Record<string, unknown>): {
+  take: number;
+  skip: number;
+} {
+  const rawLimit = query.limit ?? query.take ?? query.pageSize;
+  const rawPage = query.page ?? query.offset;
+  let take = 50;
+  if (rawLimit !== undefined) {
+    const parsed = Number.parseInt(String(rawLimit), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      take = Math.min(Math.max(parsed, 1), 100);
+    }
+  }
+  let skip = 0;
+  if (rawPage !== undefined) {
+    const asPage = Number.parseInt(String(rawPage), 10);
+    if (Number.isFinite(asPage) && asPage >= 0) {
+      if (String(query.page) !== '' && Number.isFinite(Number(query.page)) && Number(query.page) > 0) {
+        skip = (Math.max(asPage, 1) - 1) * take;
+      } else {
+        skip = Math.min(asPage, 100000);
+      }
+    }
+  }
+  if (query.offset !== undefined) {
+    const off = Number.parseInt(String(query.offset), 10);
+    if (Number.isFinite(off) && off >= 0) skip = Math.min(off, 100000);
+  }
+  return { take, skip };
+}
