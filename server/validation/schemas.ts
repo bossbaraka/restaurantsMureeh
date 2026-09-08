@@ -35,6 +35,26 @@ const safeName = (label: string, max = 120) =>
     .min(1, `${label} مطلوب`)
     .max(max, `${label} طويل جداً`);
 
+const BLOCKED_WEAK_PASSWORDS = new Set([
+  'password123',
+  '12345678',
+  'password',
+  'qwertyuiop',
+  'admin1234',
+  '123456789',
+  'password1234',
+]);
+
+export const safePasswordSchema = (label = 'كلمة المرور', min = 8) =>
+  z
+    .string()
+    .trim()
+    .min(min, `${label} يجب أن تكون ${min} أحرف على الأقل`)
+    .max(128, `${label} طويلة جداً`)
+    .refine((val) => !BLOCKED_WEAK_PASSWORDS.has(val.toLowerCase()), {
+      message: `${label} ضعيفة جداً وشائعة، يرجى اختيار كلمة مرور أكثر أماناً`,
+    });
+
 const optionalText = (max: number) =>
   z.string().trim().max(max, 'النص طويل جداً').optional();
 
@@ -160,10 +180,7 @@ export const staffCreateSchema = z
       .trim()
       .max(254)
       .email('صيغة البريد الإلكتروني غير صحيحة'),
-    password: z
-      .string()
-      .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل')
-      .max(128, 'كلمة المرور طويلة جداً'),
+    password: safePasswordSchema('كلمة المرور', 8),
     pin: z
       .string()
       .regex(/^\d{4,10}$/, 'رمز PIN يجب أن يكون من 4 إلى 10 أرقام')
@@ -178,11 +195,7 @@ export const staffUpdateSchema = z
     name: safeName('اسم الموظف').optional(),
     role: z.enum(TENANT_ASSIGNABLE_ROLES, 'دور غير صالح').optional(),
     status: z.enum(USER_STATUSES, 'حالة غير صالحة').optional(),
-    password: z
-      .string()
-      .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل')
-      .max(128, 'كلمة المرور طويلة جداً')
-      .optional(),
+    password: safePasswordSchema('كلمة المرور', 8).optional(),
     pin: z
       .union([
         z.string().regex(/^\d{4,10}$/, 'رمز PIN غير صالح'),
@@ -536,11 +549,7 @@ export const onboardSchema = z
       .max(254)
       .email('صيغة بريد المدير غير صحيحة')
       .optional(),
-    managerPassword: z
-      .string()
-      .min(8, 'كلمة مرور المدير يجب أن تكون 8 أحرف على الأقل')
-      .max(128)
-      .optional(),
+    managerPassword: safePasswordSchema('كلمة مرور المدير', 8).optional(),
     tablesCount: z.number().int().min(1).max(500).optional(),
     categories: z
       .array(
