@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { FREE_TRIAL_PLAN } from '../services/plans';
+import { seedShoqrahCafe } from './seed-shoqrah';
 
 dotenv.config();
 const { prisma } = await import('./prisma');
@@ -126,7 +127,8 @@ export async function seedDatabase() {
     });
   }
 
-  console.log('✅ Platform system data ready (plans + platform admin). Tenants are created via onboarding only.');
+  console.log('✅ Platform system data ready (plans + platform admin).');
+  await seedShoqrahCafe();
 }
 
 if (process.argv[1]?.endsWith('seed.ts')) {
@@ -139,3 +141,4 @@ if (process.argv[1]?.endsWith('seed.ts')) {
       await prisma.$disconnect();
     });
 }
+
