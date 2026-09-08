@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice } from '../../utils/formatting';
-import { ShoppingBag, Bell, QrCode, Sparkles, Store, Menu, X, ChefHat, MessageCircle, User } from 'lucide-react';
+import { ShoppingBag, Bell, QrCode, Sparkles, Store, Menu, X, ChefHat, MessageCircle, User, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { RestaurantMapModal } from '../common/RestaurantMapModal';
 
 export const CustomerHeader: React.FC = () => {
   const {
@@ -19,6 +20,7 @@ export const CustomerHeader: React.FC = () => {
 
   const { setIsLoginModalOpen, currentUser } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMapOpen, setIsMapOpen] = useState(false);
 
   const tableNumberStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
   const hasActiveOrders = activeTableOrders.length > 0;
@@ -73,6 +75,16 @@ export const CustomerHeader: React.FC = () => {
 
           {/* Desktop & Tablet Action Buttons */}
           <div className="hidden sm:flex items-center gap-2 sm:gap-3">
+            {/* Restaurant Map Button */}
+            <button
+              onClick={() => setIsMapOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-luxury-900 hover:bg-luxury-850 text-luxury-200 hover:text-gold-300 border border-luxury-800 transition-all active:scale-95 text-xs font-medium cursor-pointer"
+              title="عرض خريطة وموقع المطعم"
+            >
+              <MapPin className="w-4 h-4 text-gold-400" />
+              <span>الخريطة والموقع</span>
+            </button>
+
             {/* Waiter Call Button */}
             <button
               onClick={() => setIsWaiterModalOpen(true)}
@@ -205,6 +217,20 @@ export const CustomerHeader: React.FC = () => {
                 </button>
               )}
 
+              {/* Restaurant Map Button */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  setIsMapOpen(true);
+                }}
+                className="w-full p-3 rounded-xl bg-luxury-850 border border-luxury-800 hover:border-gold-500/30 text-luxury-100 text-xs font-semibold flex items-center justify-between transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-gold-400" />
+                  <span>خريطة وموقع المطعم</span>
+                </div>
+              </button>
+
               {/* Waiter Call */}
               <button
                 onClick={() => {
@@ -270,7 +296,15 @@ export const CustomerHeader: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Restaurant Interactive Map Modal */}
+      <RestaurantMapModal
+        restaurant={currentRestaurant}
+        isOpen={isMapOpen}
+        onClose={() => setIsMapOpen(false)}
+      />
     </>
   );
 };
+
 
