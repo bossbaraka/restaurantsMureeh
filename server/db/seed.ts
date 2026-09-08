@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
+import { FREE_TRIAL_PLAN } from '../services/plans';
 
 dotenv.config();
 const { prisma } = await import('./prisma');
@@ -27,6 +28,8 @@ export async function seedDatabase() {
   // ------------------------------------------------------------------
   const planIdByKey: Record<string, string> = {};
   for (const plan of [
+    // Free 7-day trial — limited entitlements, activated by platform admins only.
+    FREE_TRIAL_PLAN,
     {
       id: 'plan-starter',
       name: 'الباقة الأساسية',

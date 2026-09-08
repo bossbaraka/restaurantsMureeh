@@ -23,6 +23,14 @@ export function formatPrice(price: number, currency = '₪'): string {
   return `${currency || '₪'}${formatAmount(price)}`;
 }
 
+/** Whole days left until an ISO date (0 once it has passed). */
+export function daysUntil(isoDate?: string | null, now: number = Date.now()): number {
+  if (!isoDate) return 0;
+  const target = new Date(isoDate).getTime();
+  if (!Number.isFinite(target)) return 0;
+  return Math.max(0, Math.ceil((target - now) / 86_400_000));
+}
+
 export function formatTime(isoDate: string): string {
   try {
     const d = new Date(isoDate);

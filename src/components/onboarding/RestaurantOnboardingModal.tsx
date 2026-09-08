@@ -354,8 +354,12 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
 
               <div>
                 <label className="block font-bold text-luxury-200 mb-2">اختر باقة الاشتراك السحابية</label>
-                <div className="grid grid-cols-3 gap-2">
+                <p className="text-[10px] text-luxury-500 mb-2">
+                  الباقة التجريبية المجانية (7 أيام) متاحة لك كمدير منصة فقط — بصلاحيات محدودة ولمرة واحدة لكل مطعم.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
+                    { id: 'plan-trial-7d', name: 'Trial 7 أيام', price: 'مجانية', desc: '8 طاولات · صلاحيات محدودة', trial: true },
                     { id: 'plan-starter', name: 'Starter', price: '₪149/شهرياً', desc: 'حتى 15 طاولة' },
                     { id: 'plan-pro', name: 'Pro Hospitality', price: '₪349/شهرياً', desc: 'حتى 50 طاولة + تحليلات', popular: true },
                     { id: 'plan-enterprise', name: 'Enterprise', price: '₪799/شهرياً', desc: 'طاولات وفروع غير محدودة' },
@@ -366,12 +370,16 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                       onClick={() => setPlanId(p.id)}
                       className={`p-3 rounded-xl border text-center transition-all ${
                         planId === p.id
-                          ? 'bg-gold-500/10 border-gold-500 text-gold-300 font-bold'
+                          ? p.trial
+                            ? 'bg-emerald-500/10 border-emerald-500 text-emerald-300 font-bold'
+                            : 'bg-gold-500/10 border-gold-500 text-gold-300 font-bold'
                           : 'bg-luxury-950 border-luxury-800 text-luxury-400'
                       }`}
                     >
                       <span className="text-xs font-bold block">{p.name}</span>
-                      <span className="text-[10px] text-gold-400 font-semibold block">{p.price}</span>
+                      <span className={`text-[10px] font-semibold block ${p.trial ? 'text-emerald-400' : 'text-gold-400'}`}>
+                        {p.price}
+                      </span>
                       <span className="text-[9px] opacity-75 mt-1 block">{p.desc}</span>
                     </button>
                   ))}

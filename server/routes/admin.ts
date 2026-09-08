@@ -3,7 +3,15 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../db/prisma';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
 import { logAuditEvent } from '../services/audit';
-import { validateBody, tenantStatusSchema, onboardSchema } from '../validation/schemas';
+import { validateBody, tenantStatusSchema, onboardSchema, trialActivationSchema } from '../validation/schemas';
+import {
+  FREE_TRIAL_DAYS,
+  FREE_TRIAL_PLAN_ID,
+  evaluateTrialActivation,
+  isTrialPlan,
+  trialWindow,
+  withTrialMeta,
+} from '../services/plans';
 import { onboardLimiter } from '../middleware/rateLimit';
 import { generateQrToken } from '../utils/security';
 
@@ -68,7 +76,7 @@ router.get('/overview', async (req: Request, res: Response) => {
           createdAt: r.createdAt.toISOString(),
         })),
         subscriptions,
-        plans,
+        plans: plans.map(withTrialMeta),
         auditLogs: auditLogs.map((l) => ({
           id: l.id,
           restaurantId: l.restaurantId || undefined,
@@ -118,6 +126,104 @@ router.post('/restaurants/:id/status', validateBody(tenantStatusSchema), async (
     return res.status(500).json({ success: false, error: 'تعذر تغيير حالة المطعم', statusCode: 500 });
   }
 });
+
+// POST /api/admin/restaurants/:id/activate-trial
+// Grants the FREE 7-day limited-entitlement plan. This is the ONLY way a tenant
+// can obtain it: the router above already enforces platform-admin auth, and the
+// manager self-service plan change explicitly rejects the trial plan.
+router.post(
+  '/restaurants/:id/activate-trial',
+  validateBody(trialActivationSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { note } = req.body as { note?: string };
+
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { id },
+        include: { subscription: true },
+      });
+      if (!restaurant) {
+        return res.status(404).json({ success: false, error: 'المطعم غير موجود', statusCode: 404 });
+      }
+
+      const trialPlan = await prisma.plan.findUnique({ where: { id: FREE_TRIAL_PLAN_ID } });
+      if (!trialPlan || trialPlan.status !== 'ACTIVE') {
+        return res.status(503).json({
+          success: false,
+          error: 'الباقة التجريبية غير موجودة في كتالوج الباقات — نفّذ أمر البذر (npm run db:seed) أولاً',
+          statusCode: 503,
+        });
+      }
+
+      // One free trial per tenant, ever.
+      const verdict = evaluateTrialActivation(restaurant.subscription);
+      if (!verdict.allowed) {
+        return res
+          .status(verdict.statusCode)
+          .json({ success: false, error: verdict.reason, statusCode: verdict.statusCode });
+      }
+
+      const { start, end } = trialWindow();
+
+      const subscription = await prisma.$transaction(async (tx) => {
+        const sub = await tx.subscription.upsert({
+          where: { restaurantId: restaurant.id },
+          create: {
+            restaurantId: restaurant.id,
+            planId: trialPlan.id,
+            status: 'TRIAL',
+            currentPeriodStart: start,
+            currentPeriodEnd: end,
+            trialEndsAt: end,
+          },
+          update: {
+            planId: trialPlan.id,
+            status: 'TRIAL',
+            currentPeriodStart: start,
+            currentPeriodEnd: end,
+            trialEndsAt: end,
+            cancelAtPeriodEnd: false,
+          },
+        });
+        await tx.restaurant.update({
+          where: { id: restaurant.id },
+          data: { planId: trialPlan.id },
+        });
+        return sub;
+      });
+
+      await logAuditEvent({
+        restaurantId: restaurant.id,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'TRIAL_ACTIVATED',
+        entity: 'Subscription',
+        entityId: subscription.id,
+        details: `تم تنشيط الباقة التجريبية المجانية (${FREE_TRIAL_DAYS} أيام، صلاحيات محدودة) لمطعم ${restaurant.name}${note ? ` — ملاحظة: ${note}` : ''}`,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          subscription,
+          restaurant,
+          planId: trialPlan.id,
+          planName: trialPlan.name,
+          trialEndsAt: end.toISOString(),
+          daysRemaining: FREE_TRIAL_DAYS,
+        },
+        statusCode: 200,
+      });
+    } catch (err) {
+      console.error('Activate trial error:', err);
+      return res
+        .status(500)
+        .json({ success: false, error: 'تعذر تنشيط الباقة التجريبية', statusCode: 500 });
+    }
+  }
+);
 
 // POST /api/admin/onboard-restaurant (Onboarding Wizard)
 router.post('/onboard-restaurant', onboardLimiter, validateBody(onboardSchema), async (req: Request, res: Response) => {
@@ -218,14 +324,21 @@ router.post('/onboard-restaurant', onboardLimiter, validateBody(onboardSchema), 
         },
       });
 
-      // Create Subscription
+      // Create Subscription — the free trial is booked as a 7-day TRIAL window,
+      // every paid plan starts a normal 30-day ACTIVE period.
+      const startsAsTrial = isTrialPlan(plan);
+      const period = startsAsTrial
+        ? trialWindow()
+        : { start: new Date(), end: new Date(Date.now() + 30 * 86400 * 1000) };
+
       await tx.subscription.create({
         data: {
           restaurantId: restaurant.id,
           planId: targetPlanId,
-          status: 'ACTIVE',
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
+          status: startsAsTrial ? 'TRIAL' : 'ACTIVE',
+          currentPeriodStart: period.start,
+          currentPeriodEnd: period.end,
+          ...(startsAsTrial ? { trialEndsAt: period.end } : {}),
         },
       });
 
