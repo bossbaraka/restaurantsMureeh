@@ -287,11 +287,11 @@ export const SaaSLandingPage: FC = () => {
   const estimatedRevenueBoost = tablesInput * 350;
   const sliderPct = ((tablesInput - 5) / (100 - 5)) * 100;
 
-  const handleContactWhatsApp = (planName: string = 'الاحترافية') => {
+  const handleContactTelegram = (planName: string = 'الاحترافية') => {
     const text = encodeURIComponent(
       `مرحباً! أود الاشتراك في منصة مُريح للخدمات الإلكترونية للمطاعم (${planName}) والاستفسار عن تدشين الخدمة لمطعمي.`,
     );
-    window.open(`https://api.whatsapp.com/send?phone=970593498909&text=${text}`, '_blank');
+    window.open(`https://t.me/+972599891559?text=${text}`, '_blank');
   };
 
   const openManagerConsole = () => {
@@ -340,11 +340,11 @@ export const SaaSLandingPage: FC = () => {
           </nav>
           <div className="hidden lg:flex items-center gap-2.5">
             <button
-              onClick={() => handleContactWhatsApp('تواصل عام')}
+              onClick={() => handleContactTelegram('تواصل عام')}
               className="px-4 py-2.5 rounded-xl bg-[#0072BC]/15 hover:bg-[#0072BC]/25 border border-[#0072BC]/40 text-[#7DD3FC] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <MessageSquare className="w-3.5 h-3.5" />
-              واتساب المبيعات
+              تليجرام المبيعات
             </button>
             <button
               onClick={openManagerConsole}
@@ -376,11 +376,11 @@ export const SaaSLandingPage: FC = () => {
             ))}
             <div className="flex gap-2 pt-3">
               <button
-                onClick={() => handleContactWhatsApp('تواصل عام')}
+                onClick={() => handleContactTelegram('تواصل عام')}
                 className="flex-1 py-3 rounded-xl bg-[#0072BC]/15 border border-[#0072BC]/40 text-[#7DD3FC] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                واتساب
+                تليجرام
               </button>
               <button
                 onClick={openManagerConsole}
@@ -952,7 +952,7 @@ export const SaaSLandingPage: FC = () => {
                       </p>
                     </div>
                     <button
-                      onClick={() => handleContactWhatsApp('استشارة باقة')}
+                      onClick={() => handleContactTelegram('استشارة باقة')}
                       className="btn-shine shrink-0 px-6 py-3.5 rounded-xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-white text-xs font-black shadow-[0_0_26px_rgba(0,114,188,0.45)] flex items-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
                     >
                       استشر خبير مُريح مجاناً
@@ -1112,7 +1112,7 @@ export const SaaSLandingPage: FC = () => {
 
                      <div className="mt-auto pt-2">
                        <button
-                         onClick={() => handleContactWhatsApp(plan.name)}
+                         onClick={() => handleContactTelegram(plan.name)}
                          className={`w-full py-3.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] ${
                            isPro
                              ? 'btn-shine bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white shadow-[0_0_26px_rgba(0,114,188,0.45)] hover:brightness-110'
@@ -1300,7 +1300,7 @@ export const SaaSLandingPage: FC = () => {
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                   <button
-                    onClick={() => handleContactWhatsApp('تواصل عام')}
+                    onClick={() => handleContactTelegram('تواصل عام')}
                     className="btn-shine w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_36px_rgba(0,114,188,0.5)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
                   >
                     <MessageSquare className="w-4 h-4" />
@@ -1344,11 +1344,12 @@ export const SaaSLandingPage: FC = () => {
                 منيو QR، شاشة مطبخ، ونقطة بيع في مكان واحد.
               </p>
               <button
-                onClick={() => handleContactWhatsApp('تواصل عام')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all cursor-pointer"
+                onClick={() => handleContactTelegram('تواصل عام')}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 text-xs font-bold transition-all cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                <span className="font-mono" dir="ltr">00970593498909</span>
+                <span>تليجرام: </span>
+                <span className="font-mono" dir="ltr">+972 599 891 559</span>
               </button>
             </div>
             <nav aria-label="روابط سريعة">
@@ -1380,10 +1381,10 @@ export const SaaSLandingPage: FC = () => {
               <ul className="space-y-2.5 text-xs font-bold text-slate-400">
                 <li className="flex items-center gap-2">
                   <MessageSquare className="w-3.5 h-3.5 text-[#38BDF8]" />
-                  واتساب:{' '}
-                  <span className="font-mono text-slate-300" dir="ltr">
-                    00970593498909
-                  </span>
+                  تليجرام:{' '}
+                  <a href="https://t.me/+972599891559" target="_blank" rel="noopener noreferrer" className="font-mono text-slate-300 hover:text-sky-400" dir="ltr">
+                    +972 599 891 559
+                  </a>
                 </li>
                 <li className="flex items-center gap-2">
                   <Clock className="w-3.5 h-3.5 text-[#38BDF8]" />
