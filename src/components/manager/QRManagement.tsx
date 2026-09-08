@@ -13,6 +13,8 @@ import {
   Search,
   Check,
   Building2,
+  MonitorPlay,
+  Link2,
 } from 'lucide-react';
 
 export const QRManagement: React.FC = () => {
@@ -26,6 +28,47 @@ export const QRManagement: React.FC = () => {
   const [selectedTableForPrint, setSelectedTableForPrint] = useState<RestaurantTable | null>(null);
 
   const slug = currentRestaurant?.slug || 'mureeh';
+
+  // Read-only menu board: one shareable link per tenant, no table attached.
+  const displayLink =
+    typeof window !== 'undefined' ? `${window.location.origin}/r/${slug}?view=display` : '';
+  const [displayQr, setDisplayQr] = useState('');
+  const [displayCopied, setDisplayCopied] = useState(false);
+
+  useEffect(() => {
+    if (!displayLink) return;
+    let isMounted = true;
+    void generateQrDataUrl('display', slug, displayLink).then((dataUrl) => {
+      if (isMounted) setDisplayQr(dataUrl);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [displayLink, slug]);
+
+  const handleCopyDisplayLink = () => {
+    if (!displayLink) return;
+    void navigator.clipboard.writeText(displayLink);
+    setDisplayCopied(true);
+    showToast('success', 'تم نسخ رابط شاشة العرض', displayLink);
+    setTimeout(() => setDisplayCopied(false), 2000);
+  };
+
+  const handleDownloadDisplayQr = () => {
+    if (!displayQr) return;
+    const link = document.createElement('a');
+    link.href = displayQr;
+    link.download = `display-menu-${slug}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('info', 'تم تنزيل رمز QR', 'شاشة عرض القائمة');
+  };
+
+  const handleOpenDisplay = () => {
+    if (!displayLink) return;
+    window.open(displayLink, '_blank', 'noopener,noreferrer');
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -103,6 +146,57 @@ export const QRManagement: React.FC = () => {
             <Printer className="w-4 h-4" />
             <span>طباعة بطاقات الطاولات دفعة واحدة</span>
           </button>
+        </div>
+      </div>
+
+      {/* Display Menu (read-only board for TVs & social media) */}
+      <div className="bg-luxury-900 border border-luxury-800 hover:border-gold-500/40 rounded-2xl p-5 flex flex-col md:flex-row gap-5 transition-all shadow-luxury">
+        <div className="flex-1 min-w-0 space-y-2">
+          <h3 className="text-sm font-bold text-luxury-50 font-serif flex items-center gap-2">
+            <MonitorPlay className="w-4 h-4 text-gold-400" />
+            <span>شاشة عرض القائمة (للقراءة فقط)</span>
+          </h3>
+          <p className="text-xs text-luxury-400 leading-relaxed">
+            عرض تقديمي متحرك لقائمة المطعم بدون سلة ولا طلب — مناسب لشاشات الصالة وللتصوير
+            على مواقع التواصل الاجتماعي. يتنقل بين الأقسام تلقائياً ويعمل بملء الشاشة.
+          </p>
+          <code className="block text-[10px] text-gold-400/80 font-mono truncate bg-luxury-950 border border-luxury-800 rounded-lg px-2.5 py-1.5">
+            {displayLink}
+          </code>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <button
+              onClick={handleOpenDisplay}
+              className="px-3.5 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-gold-glow"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>فتح شاشة العرض</span>
+            </button>
+            <button
+              onClick={handleCopyDisplayLink}
+              className="px-3.5 py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-200 text-xs font-semibold flex items-center gap-1.5 border border-luxury-800"
+            >
+              {displayCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5 text-gold-400" />}
+              <span>{displayCopied ? 'تم النسخ' : 'نسخ الرابط'}</span>
+            </button>
+            <button
+              onClick={handleDownloadDisplayQr}
+              disabled={!displayQr}
+              className="px-3.5 py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-200 text-xs font-semibold flex items-center gap-1.5 border border-luxury-800 disabled:opacity-40"
+            >
+              <Download className="w-3.5 h-3.5 text-gold-400" />
+              <span>تنزيل QR</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="shrink-0 p-3 bg-white rounded-xl shadow-inner mx-auto md:mx-0 w-[150px] border border-gold-500/20">
+          {displayQr ? (
+            <img src={displayQr} alt="رمز QR لشاشة عرض القائمة" className="w-full aspect-square object-contain" />
+          ) : (
+            <div className="w-full aspect-square flex items-center justify-center text-luxury-800">
+              <QrCode className="w-9 h-9 animate-spin" />
+            </div>
+          )}
         </div>
       </div>
 

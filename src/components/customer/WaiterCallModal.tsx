@@ -78,7 +78,7 @@ export const WaiterCallModal: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-luxury-800 pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gold-500/10 border border-gold-500/30 flex items-center justify-center text-gold-400">
+            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
               <Bell className="w-5 h-5 animate-bounce" />
             </div>
             <div>
@@ -130,7 +130,7 @@ export const WaiterCallModal: React.FC = () => {
                       onClick={() => setSelectedReason(r.id)}
                       className={`p-3 rounded-2xl border text-right transition-all flex items-center gap-3 ${
                         isSelected
-                          ? 'bg-gold-500/15 border-gold-500/60 ring-1 ring-gold-500/40 text-gold-300'
+                          ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border-[rgb(var(--brand-primary-strong-rgb)/0.6)] ring-1 ring-[rgb(var(--brand-primary-strong-rgb)/0.4)] text-[var(--brand-primary-strong)]'
                           : 'bg-luxury-850/60 border-luxury-800 text-luxury-300 hover:border-luxury-700'
                       }`}
                     >
@@ -152,12 +152,12 @@ export const WaiterCallModal: React.FC = () => {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="مثال: يرجى إحضار كراسي إضافية أو مكعبات ثلج..."
-                className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-gold-500/60"
+                className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
               />
             </div>
 
             {cooldownSeconds > 0 && (
-              <div className="text-center text-[11px] text-gold-400/80 bg-gold-500/5 py-1.5 rounded-lg border border-gold-500/20">
+              <div className="text-center text-[11px] text-[rgb(var(--brand-primary-strong-rgb)/0.8)] bg-[rgb(var(--brand-primary-strong-rgb)/0.05)] py-1.5 rounded-lg border border-[rgb(var(--brand-primary-strong-rgb)/0.2)]">
                 يرجى الانتظار {cooldownSeconds} ثانية قبل إرسال نداء آخر منعاً للتكرار.
               </div>
             )}
@@ -165,7 +165,7 @@ export const WaiterCallModal: React.FC = () => {
             <button
               type="submit"
               disabled={isSubmitting || cooldownSeconds > 0}
-              className="w-full py-3.5 rounded-2xl bg-gold-500 hover:bg-gold-400 disabled:opacity-50 text-luxury-950 font-bold text-xs shadow-gold-glow flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
+              className="w-full py-3.5 rounded-2xl bg-[var(--brand-primary-strong)] hover:bg-[var(--brand-primary-strong)] disabled:opacity-50 text-luxury-950 font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
             >
               <Bell className="w-4 h-4" />
               <span>{isSubmitting ? 'جاري الإرسال...' : cooldownSeconds > 0 ? `انتظر (${cooldownSeconds}s)` : 'إرسال النداء الآن'}</span>

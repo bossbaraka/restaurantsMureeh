@@ -3,7 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { Restaurant, Subscription, Plan, AuditLog } from '../../types/restaurant';
 import { api } from '../../services/api';
-import { formatPrice, formatTime, formatRelativeMinutes } from '../../utils/formatting';
+import { formatPrice, formatTime, formatRelativeMinutes, daysUntil } from '../../utils/formatting';
 import {
   ShieldCheck,
   Building2,
@@ -20,6 +20,9 @@ import {
   Layers,
   Sparkles,
   AlertTriangle,
+  Gift,
+  Clock,
+  Ban,
 } from 'lucide-react';
 
 export const PlatformAdminPortal: React.FC = () => {
@@ -58,6 +61,42 @@ export const PlatformAdminPortal: React.FC = () => {
       showToast('info', 'تم تحديث حالة المستأجر', `حالة المطعم الآن: ${nextStatus}`);
       loadData();
     }
+  };
+
+  const [activatingTrialFor, setActivatingTrialFor] = useState<string | null>(null);
+
+  /** The free trial plan is identified by its server-derived trialDays. */
+  const trialPlan = plans.find((p) => (p.trialDays ?? 0) > 0) || null;
+  const trialLength = trialPlan?.trialDays ?? 7;
+
+  /**
+   * Trial state per tenant, derived from the subscription the overview returns:
+   * `trialEndsAt` is the one-per-tenant marker the server writes on activation.
+   */
+  const trialStateOf = (restaurantId: string) => {
+    const sub = subscriptions.find((s) => s.restaurantId === restaurantId);
+    if (!sub?.trialEndsAt) return { state: 'AVAILABLE' as const, daysLeft: 0 };
+    const daysLeft = daysUntil(sub.trialEndsAt);
+    return daysLeft > 0
+      ? { state: 'RUNNING' as const, daysLeft }
+      : { state: 'CONSUMED' as const, daysLeft: 0 };
+  };
+
+  const handleActivateTrial = async (restaurantId: string, restaurantName: string) => {
+    if (!currentUser || activatingTrialFor) return;
+    setActivatingTrialFor(restaurantId);
+    const res = await api.activateTenantTrial(currentUser, restaurantId);
+    setActivatingTrialFor(null);
+    if (!res.success) {
+      showToast('error', 'تعذر تنشيط الباقة التجريبية', res.error || 'يرجى المحاولة لاحقاً');
+      return;
+    }
+    showToast(
+      'success',
+      '🎁 تم تنشيط الباقة التجريبية المجانية',
+      `${restaurantName} — ${res.data?.daysRemaining ?? trialLength} أيام بصلاحيات محدودة`
+    );
+    loadData();
   };
 
   const handleInspectRestaurant = (slug: string, restId: string) => {
@@ -238,6 +277,26 @@ export const PlatformAdminPortal: React.FC = () => {
                           <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gold-500/10 text-gold-300 border border-gold-500/30">
                             {plan?.name || rest.planId}
                           </span>
+                          {(() => {
+                            const trial = trialStateOf(rest.id);
+                            if (trial.state === 'RUNNING') {
+                              return (
+                                <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                                  <Clock className="w-3 h-3" />
+                                  تجربة مجانية · يتبقى {trial.daysLeft} {trial.daysLeft === 1 ? 'يوم' : 'أيام'}
+                                </span>
+                              );
+                            }
+                            if (trial.state === 'CONSUMED') {
+                              return (
+                                <span className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-luxury-800 text-luxury-400 border border-luxury-700">
+                                  <Ban className="w-3 h-3" />
+                                  استُخدمت التجربة
+                                </span>
+                              );
+                            }
+                            return null;
+                          })()}
                         </td>
 
                         <td className="p-4">
@@ -268,6 +327,23 @@ export const PlatformAdminPortal: React.FC = () => {
                               <span>إدارة</span>
                             </button>
 
+                            {(() => {
+                              const trial = trialStateOf(rest.id);
+                              if (trial.state !== 'AVAILABLE') return null;
+                              const busy = activatingTrialFor === rest.id;
+                              return (
+                                <button
+                                  onClick={() => handleActivateTrial(rest.id, rest.name)}
+                                  disabled={busy}
+                                  title={`منح ${trialLength} أيام مجانية بصلاحيات محدودة`}
+                                  className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 hover:text-luxury-950 text-emerald-400 font-bold border border-emerald-500/30 text-xs flex items-center gap-1 transition-all disabled:opacity-60 disabled:cursor-wait"
+                                >
+                                  <Gift className="w-3.5 h-3.5" />
+                                  <span>{busy ? 'جاري التنشيط…' : `تجربة ${trialLength} أيام`}</span>
+                                </button>
+                              );
+                            })()}
+
                             <button
                               onClick={() => handleToggleStatus(rest.id, rest.status)}
                               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
@@ -292,7 +368,7 @@ export const PlatformAdminPortal: React.FC = () => {
 
       {/* TAB 2: PLANS */}
       {activeTab === 'SUBSCRIPTIONS' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {plans.map((p) => (
             <div
               key={p.id}

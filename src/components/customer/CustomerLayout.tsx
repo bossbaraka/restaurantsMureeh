@@ -1,9 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { Product } from '../../types/restaurant';
+import { CartItem, Product } from '../../types/restaurant';
+import { useBrandTheme } from '../../theme/brandTheme';
+import { useMenuPreferences } from '../../hooks/useMenuPreferences';
 import { CustomerHeader } from './CustomerHeader';
 import { CustomerHero } from './CustomerHero';
 import { CategoryScrollNav } from './CategoryScrollNav';
+import { MenuToolbar, type MenuLayout, type MenuSortKey } from './MenuToolbar';
 import { ProductCard } from './ProductCard';
 import { ProductDetailModal } from './ProductDetailModal';
 import { CartDrawer } from './CartDrawer';
@@ -13,19 +16,81 @@ import { DirectTableEntryModal } from './DirectTableEntryModal';
 import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
 import { OrderCompletedModal } from './OrderCompletedModal';
 import { LuxuryWelcomeScreen } from './LuxuryWelcomeScreen';
+import { DisplayMenu } from './DisplayMenu';
 import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 
+/** Cards rendered above the fold get eager loading + network priority. */
+const PRIORITY_CARDS = 4;
+
+interface CartIndexEntry {
+  quantity: number;
+  lastItem: CartItem;
+  /** True when the last line carries no customization, so it can be re-used. */
+  lastItemIsPlain: boolean;
+}
+
+function isPlainCartLine(item: CartItem, product?: Product): boolean {
+  const options = item.options || {};
+  const size = (options.size ?? options.selectedSize) as { priceModifier?: number; price?: number } | string | undefined;
+  const sizeModifier =
+    size && typeof size === 'object' ? Number(size.priceModifier || size.price) || 0 : 0;
+  const addOns = Array.isArray(options.selectedAddOns) ? options.selectedAddOns : [];
+  const removed = Array.isArray(options.removedIngredients) ? options.removedIngredients : [];
+  const basePrice = product?.price ?? item.unitPrice ?? 0;
+  return (
+    sizeModifier === 0 &&
+    addOns.length === 0 &&
+    removed.length === 0 &&
+    !options.specialInstructions &&
+    !options.notes &&
+    Math.abs((item.unitPrice || 0) - basePrice) < 0.001
+  );
+}
+
+const sortProducts = (list: Product[], sort: MenuSortKey): Product[] => {
+  if (sort === 'menu') return list;
+  const copy = [...list];
+  switch (sort) {
+    case 'featured':
+      // Array#sort is stable: equal keys keep the kitchen's own ordering.
+      return copy.sort((a, b) => Number(!!b.isFeatured) - Number(!!a.isFeatured));
+    case 'price-asc':
+      return copy.sort((a, b) => a.price - b.price);
+    case 'price-desc':
+      return copy.sort((a, b) => b.price - a.price);
+    case 'fastest':
+      return copy.sort(
+        (a, b) => (a.preparationTimeMinutes ?? 999) - (b.preparationTimeMinutes ?? 999)
+      );
+    default:
+      return copy;
+  }
+};
+
 export const CustomerLayout: React.FC = () => {
-  const { products, categories, selectedCategoryId, searchQuery, addToCart, currentRestaurant, activeTableId, setViewMode } = useRestaurant();
+  const {
+    products,
+    categories,
+    selectedCategoryId,
+    searchQuery,
+    cartItems,
+    addToCart,
+    updateCartItemQuantity,
+    currentRestaurant,
+    activeTableId,
+    setViewMode,
+    displayMode,
+  } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  React.useEffect(() => {
-    if (typeof document === 'undefined' || !currentRestaurant) return;
-    const primary = currentRestaurant.primaryColor || '#D4AF37';
-    const accent = currentRestaurant.accentColor || '#C5A880';
-    document.documentElement.style.setProperty('--brand-primary', primary);
-    document.documentElement.style.setProperty('--brand-accent', accent);
-  }, [currentRestaurant?.primaryColor, currentRestaurant?.accentColor]);
+  // Tenant palette -> CSS custom properties consumed by the whole menu.
+  useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
+
+  const [preferences, updatePreferences] = useMenuPreferences(currentRestaurant?.slug || 'default');
+  const { sort, layout, availableOnly } = preferences;
+
+  // Typing in the search box must never block the frame that paints the input.
+  const deferredSearch = useDeferredValue(searchQuery);
 
   const [showWelcome, setShowWelcome] = useState<boolean>(() => {
     // Show welcome screen initially once per session
@@ -43,31 +108,122 @@ export const CustomerLayout: React.FC = () => {
     }
   };
 
-  // Filter products based on search query OR selected category
-  const filteredProducts = useMemo(() => {
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      return products.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.nameEn.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q) ||
-          (p.badge && p.badge.toLowerCase().includes(q))
-      );
+  // Filter by search query or category, then apply the guest's ordering.
+  const scopedProducts = useMemo(() => {
+    const query = deferredSearch.trim().toLowerCase();
+    if (!query) return products.filter((p) => p.categoryId === selectedCategoryId);
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(query) ||
+        p.nameEn.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query) ||
+        (p.badge && p.badge.toLowerCase().includes(query))
+    );
+  }, [products, selectedCategoryId, deferredSearch]);
+
+  const visibleProducts = useMemo(() => {
+    const filtered = availableOnly
+      ? scopedProducts.filter((p) => p.isAvailable !== false)
+      : scopedProducts;
+    return sortProducts(filtered, sort);
+  }, [scopedProducts, availableOnly, sort]);
+
+  // One pass over the cart -> per-dish quantity + the line the stepper drives.
+  const cartIndex = useMemo(() => {
+    const index = new Map<string, CartIndexEntry>();
+    for (const item of cartItems) {
+      const productId = item.productId || item.product?.id;
+      if (!productId) continue;
+      const entry = index.get(productId);
+      const plain = isPlainCartLine(item, item.product);
+      if (entry) {
+        entry.quantity += item.quantity;
+        entry.lastItem = item;
+        entry.lastItemIsPlain = plain;
+      } else {
+        index.set(productId, {
+          quantity: item.quantity,
+          lastItem: item,
+          lastItemIsPlain: plain,
+        });
+      }
     }
-    return products.filter((p) => p.categoryId === selectedCategoryId);
-  }, [products, selectedCategoryId, searchQuery]);
+    return index;
+  }, [cartItems]);
 
   const activeCategoryObj = categories.find((c) => c.id === selectedCategoryId);
+  const isSearching = deferredSearch.trim().length > 0;
 
-  const handleQuickAdd = (product: Product, e: React.MouseEvent) => {
-    e.stopPropagation();
-    addToCart(product, 1, {
-      size: product.sizes && product.sizes.length > 0 ? product.sizes[0] : undefined,
-      selectedAddOns: [],
-      removedIngredients: [],
-    });
-  };
+  // The signature dish anchors the grid — only when a grid can give it room.
+  const featuredProductId = useMemo(() => {
+    if (layout !== 'grid') return undefined;
+    return visibleProducts.find((p) => p.isFeatured && p.isAvailable !== false)?.id;
+  }, [layout, visibleProducts]);
+
+  const handleSelect = useCallback((product: Product) => {
+    setSelectedProduct(product);
+  }, []);
+
+  const handleCloseDetail = useCallback(() => {
+    setSelectedProduct(null);
+  }, []);
+
+  const handleQuickAdd = useCallback(
+    (product: Product) => {
+      addToCart(product, 1, {
+        size: product.sizes && product.sizes.length > 0 ? product.sizes[0] : undefined,
+        selectedAddOns: [],
+        removedIngredients: [],
+      });
+    },
+    [addToCart]
+  );
+
+  const handleQuantityChange = useCallback(
+    (product: Product, nextQuantity: number) => {
+      const entry = cartIndex.get(product.id);
+      if (!entry) return;
+
+      if (nextQuantity <= 0) {
+        updateCartItemQuantity(entry.lastItem.id, 0);
+        return;
+      }
+
+      if (nextQuantity > entry.quantity) {
+        if (entry.lastItemIsPlain) {
+          updateCartItemQuantity(entry.lastItem.id, entry.lastItem.quantity + 1);
+        } else {
+          // A customized line can't absorb another unit — start a clean line.
+          handleQuickAdd(product);
+        }
+        return;
+      }
+
+      updateCartItemQuantity(entry.lastItem.id, Math.max(0, entry.lastItem.quantity - 1));
+    },
+    [cartIndex, handleQuickAdd, updateCartItemQuantity]
+  );
+
+  const handleSortChange = useCallback(
+    (value: MenuSortKey) => updatePreferences({ sort: value }),
+    [updatePreferences]
+  );
+  const handleAvailableOnlyChange = useCallback(
+    (value: boolean) => updatePreferences({ availableOnly: value }),
+    [updatePreferences]
+  );
+  const handleLayoutChange = useCallback(
+    (value: MenuLayout) => updatePreferences({ layout: value }),
+    [updatePreferences]
+  );
+
+  const currency = currentRestaurant?.currency || '₪';
+
+  // Read-only board (TV / social media): rendered before any gate so it never
+  // asks for a table and never mounts a cart or an ordering drawer.
+  if (displayMode) {
+    return <DisplayMenu />;
+  }
 
   const isPublicRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/r/');
   if (isPublicRoute && !activeTableId) {
@@ -107,51 +263,67 @@ export const CustomerLayout: React.FC = () => {
       <CustomerHeader />
 
       {/* Main Customer Content */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 w-full flex-1">
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-4 w-full flex-1">
         {/* Editorial Hero & Search & Offers */}
         <CustomerHero />
 
-        {/* Horizontal Category Nav */}
-        <CategoryScrollNav />
+        {/* Sticky rail: categories + menu controls */}
+        <div className="menu-rail mb-5">
+          <CategoryScrollNav />
+          <MenuToolbar
+            shownCount={visibleProducts.length}
+            totalCount={scopedProducts.length}
+            sort={sort}
+            onSortChange={handleSortChange}
+            availableOnly={availableOnly}
+            onAvailableOnlyChange={handleAvailableOnlyChange}
+            layout={layout}
+            onLayoutChange={handleLayoutChange}
+          />
+        </div>
 
         {/* Section Title when browsing by category */}
-        {!searchQuery && activeCategoryObj && (
-          <div className="flex items-center justify-between mb-4 px-1">
-            <div className="text-right">
-              <h3 className="text-lg font-bold text-luxury-100 font-serif">
-                {activeCategoryObj.name}
-              </h3>
+        {!isSearching && activeCategoryObj && (
+          <div className="menu-section-head">
+            <div>
+              <h3 className="menu-section-head__title">{activeCategoryObj.name}</h3>
               {activeCategoryObj.nameEn && (
-                <p className="text-xs text-gold-400/80 font-serif italic">
-                  {activeCategoryObj.nameEn}
-                </p>
+                <p className="menu-section-head__sub">{activeCategoryObj.nameEn}</p>
               )}
             </div>
-            <span className="text-xs text-luxury-400">
-              {filteredProducts.length} أطباق متوفرة
+            <span className="menu-section-head__rule" aria-hidden="true" />
+            <span className="text-[11px] font-semibold text-luxury-500 whitespace-nowrap pb-1">
+              {visibleProducts.length} أطباق
             </span>
           </div>
         )}
 
         {/* Products Grid */}
-        {filteredProducts.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl bg-luxury-900/50 border border-luxury-800/80 my-8">
-            <div className="w-14 h-14 rounded-full bg-luxury-800 text-luxury-400 flex items-center justify-center mx-auto mb-3">
+        {visibleProducts.length === 0 ? (
+          <div className="menu-empty my-8">
+            <div className="menu-empty__icon">
               <UtensilsCrossed className="w-6 h-6 stroke-1" />
             </div>
             <h4 className="text-base font-bold text-luxury-200">لا توجد أطباق مطابقة</h4>
-            <p className="text-xs text-luxury-400 mt-1 max-w-xs mx-auto">
-              جرب البحث بكلمات أخرى أو تصفح الفئات المختلفة في القائمة.
+            <p className="text-xs text-luxury-400 mt-1.5 max-w-xs mx-auto leading-relaxed">
+              {availableOnly
+                ? 'كل أطباق هذا القسم غير متوفرة حالياً. جرّب إلغاء فلتر "المتوفر فقط" أو تصفح قسم آخر.'
+                : 'جرّب البحث بكلمات أخرى أو تصفح الفئات المختلفة في القائمة.'}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4 sm:gap-5">
-            {filteredProducts.map((product) => (
+          <div className="menu-grid" data-layout={layout}>
+            {visibleProducts.map((product, index) => (
               <ProductCard
                 key={product.id}
                 product={product}
-                onSelect={(p) => setSelectedProduct(p)}
+                currency={currency}
+                cartQuantity={cartIndex.get(product.id)?.quantity || 0}
+                priority={index < PRIORITY_CARDS}
+                featured={product.id === featuredProductId}
+                onSelect={handleSelect}
                 onQuickAdd={handleQuickAdd}
+                onQuantityChange={handleQuantityChange}
               />
             ))}
           </div>
@@ -161,7 +333,7 @@ export const CustomerLayout: React.FC = () => {
       {/* Customer Footer */}
       <footer className="mt-16 border-t border-luxury-850 py-8 px-4 text-center text-xs text-luxury-500 bg-luxury-950">
         <div className="max-w-md mx-auto space-y-3">
-          <div className="font-serif text-sm font-bold text-gold-400/90 tracking-widest uppercase">
+          <div className="font-serif text-sm font-bold brand-text tracking-widest uppercase">
             {currentRestaurant?.name} · {currentRestaurant?.nameEn}
           </div>
           <p className="text-[11px] text-luxury-400">
@@ -203,11 +375,7 @@ export const CustomerLayout: React.FC = () => {
       <ActiveOrdersFloatingBar />
 
       {/* Modals & Drawers */}
-      <ProductDetailModal
-        product={selectedProduct}
-        isOpen={!!selectedProduct}
-        onClose={() => setSelectedProduct(null)}
-      />
+      <ProductDetailModal product={selectedProduct} isOpen={!!selectedProduct} onClose={handleCloseDetail} />
 
       <CartDrawer />
       <OrderTrackingDrawer />
