@@ -26,10 +26,10 @@ const ROLE_VIEW_ACCESS: Record<string, string[]> = {
   PLATFORM_ADMIN: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'PLATFORM_ADMIN', 'SAAS_LANDING', 'SPLIT_PREVIEW', 'LIVE_SCREEN'],
   SUPER_ADMIN: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'PLATFORM_ADMIN', 'SAAS_LANDING', 'SPLIT_PREVIEW', 'LIVE_SCREEN'],
   RESTAURANT_MANAGER: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'SAAS_LANDING', 'SPLIT_PREVIEW', 'LIVE_SCREEN'],
-  CASHIER: ['CUSTOMER', 'MANAGER', 'LIVE_SCREEN'],
-  WAITER: ['CUSTOMER', 'KITCHEN_KDS'],
-  KITCHEN: ['CUSTOMER', 'KITCHEN_KDS'],
-  STAFF: ['CUSTOMER'],
+  CASHIER: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'LIVE_SCREEN'],
+  WAITER: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'LIVE_SCREEN'],
+  KITCHEN: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'LIVE_SCREEN'],
+  STAFF: ['CUSTOMER', 'MANAGER', 'KITCHEN_KDS', 'LIVE_SCREEN'],
   GUEST: ['CUSTOMER'],
 };
 
@@ -37,10 +37,10 @@ const ROLE_MANAGER_TAB_ACCESS: Record<string, string[]> = {
   PLATFORM_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
   SUPER_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
   RESTAURANT_MANAGER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
-  CASHIER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES'],
-  WAITER: [],
+  CASHIER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'WAITERS'],
+  WAITER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'WAITERS'],
   KITCHEN: ['OVERVIEW', 'ORDERS'],
-  STAFF: [],
+  STAFF: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'WAITERS', 'MENU'],
   GUEST: [],
 };
 
@@ -272,7 +272,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'PLATFORM_ADMIN';
   // No demo accounts exist on the platform anymore — every account is real.
   const isRestaurantManager = currentUser?.role === 'RESTAURANT_MANAGER' || isSuperAdmin;
-  const isStaff = currentUser?.role === 'WAITER' || currentUser?.role === 'KITCHEN' || currentUser?.role === 'CASHIER';
+  const isStaff = currentUser?.role === 'WAITER' || currentUser?.role === 'KITCHEN' || currentUser?.role === 'CASHIER' || currentUser?.role === 'STAFF';
   const isAuthenticated = !!currentUser;
 
   const canAccessView = useCallback((view: string) => {
