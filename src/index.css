@@ -1628,3 +1628,40 @@ input[type='range'].saas-range::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .display-menu__spin { animation: none; }
 }
+
+/* ==========================================================================
+   iOS / Safari compatibility fixes
+   - -webkit-fill-available for 100vh bug
+   - Sticky header positioning (Safari needs translate3d to stay in flow)
+   - Backdrop-filter prefix for older Safari
+   ========================================================================== */
+@supports (-webkit-touch-callout: none) {
+  /* iOS Safari only: the visual viewport is shorter than 100vh when the
+     URL bar is visible; -webkit-fill-available adapts to the real height. */
+  .min-h-screen,
+  .h-screen,
+  [style*="min-height: 100vh"],
+  [style*="height: 100vh"] {
+    min-height: -webkit-fill-available;
+  }
+  /* Force sticky headers to their own GPU layer so they don't jitter behind
+     fixed-position drawers while the rubber-band scroll is active. */
+  .sticky {
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Older Safari needs -webkit- prefix for backdrop-filter. */
+.backdrop-blur-md,
+[class*="backdrop-blur"] {
+  -webkit-backdrop-filter: blur(12px);
+}
+.glass-panel {
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Prevent sticky headers from disappearing behind the iOS status bar
+   when viewport-fit=cover is active. The inline style on CustomerHeader
+   applies the same rule more specifically; the selector here is a
+   safety net for any other sticky bar in the customer experience. */

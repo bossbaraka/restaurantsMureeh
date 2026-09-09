@@ -1,7 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getTableZoneLabel } from '../../utils/formatting';
 import { X, QrCode, ArrowRight, Check, Sparkles, MapPin, Search } from 'lucide-react';
+
+/** Extract a zero-padded human-readable table number from any table ID. */
+function formatTableLabel(id: string | null): string {
+  if (!id) return 'غير محددة';
+  const digits = id.replace(/\D+/g, '');
+  if (!digits) return id;
+  const n = parseInt(digits, 10);
+  return `طاولة ${n < 10 ? `0${n}` : n}`;
+}
 
 export const DirectTableEntryModal: React.FC = () => {
   const { isTableSelectorOpen, setIsTableSelectorOpen, activeTableId, validateAndSetTable, tables } = useRestaurant();
@@ -184,7 +193,7 @@ export const DirectTableEntryModal: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-amber-400 mr-2" />
             <span>مشغولة</span>
           </div>
-          <span>الطاولة الحالية: {activeTableId || 'غير محددة'}</span>
+          <span>الطاولة الحالية: {formatTableLabel(activeTableId)}</span>
         </div>
       </div>
     </div>

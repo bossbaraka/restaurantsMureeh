@@ -3,6 +3,7 @@ import { Product, ProductAddOn, ProductSize } from '../../types/restaurant';
 import { formatPrice } from '../../utils/formatting';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { X, Plus, Minus, Check, Sparkles, Clock, Flame, ShieldAlert, ShoppingBag } from 'lucide-react';
+import { optimizeImageUrl } from './ProductImage';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -82,11 +83,15 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
       >
         {/* Sticky Header with Close Button & Image */}
         <div className="relative aspect-[16/9] w-full shrink-0 bg-luxury-950">
-          <img
-            src={product.image}
-            alt={product.name}
-            className="w-full h-full object-cover"
-          />
+          {product.image ? (
+            <img
+              src={optimizeImageUrl(product.image, 960, 75)}
+              alt={product.name}
+              loading="eager"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
+          ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-luxury-900 via-luxury-900/30 to-black/60" />
 
           {/* Close button */}
