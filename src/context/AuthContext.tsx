@@ -14,7 +14,7 @@ interface AuthContextType {
   lockoutRemainingSeconds: number;
   canAccessView: (view: string) => boolean;
   canAccessManagerTab: (tab: string) => boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string, pin?: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
   loginWithPin: (pin: string, restaurantId?: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
   logout: () => void;
   switchManagerRestaurant: (restaurantId: string) => void;
@@ -149,7 +149,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [lockoutRemainingSeconds]);
 
   const login = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, pin?: string) => {
       if (lockoutRemainingSeconds > 0) {
         return {
           success: false,
@@ -157,7 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      const res = await api.login(email.trim().toLowerCase(), password);
+      const res = await api.login(email.trim().toLowerCase(), password, pin);
 
       if (res.success && res.data) {
         setFailedAttempts(0);
@@ -168,7 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           localStorage.setItem(RESTAURANT_SESSION_KEY, JSON.stringify(res.data.restaurant));
         }
         setIsLoginModalOpen(false);
-        return { success: true };
+        return { success: true, role: res.data.user.role as TenantRole };
       }
 
       const nextAttempts = failedAttempts + 1;
@@ -182,7 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return {
         success: false,
-        error: `${res.error || 'البريد أو كلمة المرور غير صحيحة'} (تبقى لك ${MAX_FAILED_ATTEMPTS - nextAttempts} محاولات)`,
+        error: `${res.error || 'بيانات الدخول أو رمز PIN غير صحيح'} (تبقى لك ${MAX_FAILED_ATTEMPTS - nextAttempts} محاولات)`,
       };
     },
     [failedAttempts, lockoutRemainingSeconds]

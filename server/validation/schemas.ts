@@ -157,6 +157,10 @@ export const loginSchema = z
       .string()
       .min(1, 'كلمة المرور مطلوبة')
       .max(128, 'كلمة المرور طويلة جداً'),
+    pin: z
+      .string()
+      .regex(/^\d{4,10}$/, 'رمز PIN يجب أن يكون من 4 إلى 10 أرقام')
+      .optional(),
   })
   .strict();
 

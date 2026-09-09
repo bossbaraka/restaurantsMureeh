@@ -389,10 +389,10 @@ class RestaurantApiService {
     return res;
   }
 
-  public async login(email: string, password: string): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
+  public async login(email: string, password: string, pin?: string): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
     const res = await this.request<{ user: any; restaurant: any | null; token?: string }>('POST', '/auth/login', {
       auth: false,
-      body: { email: email.trim().toLowerCase(), password },
+      body: { email: email.trim().toLowerCase(), password, pin: pin ? pin.trim() : undefined },
     });
     if (res.success && res.data) {
       if (res.data.token && typeof window !== 'undefined') {

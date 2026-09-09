@@ -47,9 +47,10 @@ router.post(
   validateBody(loginSchema),
   async (req: Request, res: Response) => {
     try {
-      const { email, password } = req.body as {
+      const { email, password, pin } = req.body as {
         email: string;
         password: string;
+        pin?: string;
       };
       const normalizedEmail = email.toLowerCase();
 
@@ -123,6 +124,34 @@ router.post(
           error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
           statusCode: 401,
         });
+      }
+
+      // If worker PIN is provided along with account email & password, switch identity to specific staff worker
+      if (pin && user.restaurantId) {
+        const candidates = await prisma.restaurantUser.findMany({
+          where: {
+            restaurantId: user.restaurantId,
+            status: 'ACTIVE',
+            pinHash: { not: null },
+          },
+          include: { restaurant: true },
+        });
+        let staffWorker: (typeof candidates)[number] | undefined;
+        for (const candidate of candidates) {
+          if (candidate.pinHash && (await bcrypt.compare(pin, candidate.pinHash))) {
+            staffWorker = candidate;
+            break;
+          }
+        }
+        if (staffWorker) {
+          user = staffWorker;
+        } else {
+          return res.status(401).json({
+            success: false,
+            error: 'رمز الـ PIN الخاص بالعامل غير صحيح لهذا المطعم',
+            statusCode: 401,
+          });
+        }
       }
 
       if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
