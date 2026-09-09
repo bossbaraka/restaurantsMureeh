@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
 import { Search, Sparkles, Flame, ChefHat, Clock, CheckCircle2, ArrowLeft, UtensilsCrossed, Camera, Play, X, Image as ImageIcon, Video, Film, Eye } from 'lucide-react';
 import { OrderStatus } from '../../types/restaurant';
+import { optimizeImageUrl } from './ProductImage';
 
 export const CustomerHero: React.FC = () => {
   const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen } = useRestaurant();
@@ -84,8 +85,12 @@ export const CustomerHero: React.FC = () => {
         ) : (
           <>
             <img
-              src={heroImage}
+              src={optimizeImageUrl(heroImage, 1280, 75)}
               alt={restName}
+              loading="eager"
+              decoding="async"
+              // React 19 prop; DOM attribute is `fetchpriority`.
+              {...({ fetchPriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)}
               className="w-full h-full object-cover object-center transform scale-105 transition-transform duration-1000 ease-out group-hover:scale-100"
             />
             {/* Layered luxury overlay */}
@@ -147,8 +152,10 @@ export const CustomerHero: React.FC = () => {
               className="relative w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden shrink-0 border border-luxury-750 group cursor-pointer hover:border-[rgb(var(--brand-primary-strong-rgb)/0.8)] transition-all shadow-md"
             >
               <img
-                src={imgUrl}
+                src={optimizeImageUrl(imgUrl, 420, 70)}
                 alt={`صالة المطعم ${index + 1}`}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
@@ -281,8 +288,10 @@ export const CustomerHero: React.FC = () => {
                 className="relative overflow-hidden rounded-xl bg-luxury-900 border border-[rgb(var(--brand-primary-strong-rgb)/0.2)] p-3.5 flex gap-3.5 items-center hover:border-[rgb(var(--brand-primary-strong-rgb)/0.4)] transition-all group"
               >
                 <img
-                  src={offer.image}
+                  src={offer.image ? optimizeImageUrl(offer.image, 240, 75) : ''}
                   alt={offer.title}
+                  loading="lazy"
+                  decoding="async"
                   className="w-20 h-20 rounded-lg object-cover shrink-0 border border-luxury-800 group-hover:scale-105 transition-transform duration-300"
                 />
                 <div className="flex-1 text-right min-w-0">

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Sparkles, ArrowLeft, UtensilsCrossed, MessageCircle, QrCode, ShieldCheck, PhoneCall, Award, ChefHat, Clock, Zap, CheckCircle2 } from 'lucide-react';
+import { optimizeImageUrl } from './ProductImage';
 
 interface LuxuryWelcomeScreenProps {
   onDismiss: () => void;
@@ -10,10 +11,24 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
   const { currentRestaurant, activeTableId } = useRestaurant();
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
 
-  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
-  const restName = currentRestaurant?.name || 'مطعم مريح الأخرق';
+  /**
+   * Extract a clean table number (zero-padded) from whatever QR slug we got.
+   * Reuses the same robust digit-extraction pattern as CustomerHeader so the
+   * welcome screen and the header always agree on the displayed number.
+   */
+  const tableNumStr = useMemo(() => {
+    if (!activeTableId) return '—';
+    const digits = activeTableId.replace(/\D+/g, '');
+    if (!digits) return activeTableId;
+    const n = parseInt(digits, 10);
+    return n < 10 ? `0${n}` : String(n);
+  }, [activeTableId]);
+
+  const restName = currentRestaurant?.name || 'مطعم مريح';
   const restNameEn = currentRestaurant?.nameEn || 'MUREEH DINING';
-  const coverImg = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
+  const rawCoverImg = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
+  const coverImg = optimizeImageUrl(rawCoverImg, 1280, 70);
+  const logoImg = currentRestaurant?.logo ? optimizeImageUrl(currentRestaurant.logo, 180, 75) : '';
   const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
   const accentCol = currentRestaurant?.accentColor || '#C5A880';
 
@@ -38,6 +53,9 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
         <img
           src={coverImg}
           alt={restName}
+          loading="eager"
+          decoding="async"
+          {...({ fetchPriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)}
           className="w-full h-full object-cover object-center opacity-25 filter blur-[2px] scale-110 transform animate-pulse duration-10000"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#050608] via-[#050608]/90 to-[#050608]/80" />
@@ -89,8 +107,14 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
                 : `linear-gradient(135deg, ${primaryCol}, ${accentCol})`,
             }}
           >
-            {currentRestaurant?.logo ? (
-              <img src={currentRestaurant.logo} alt={restName} className="w-full h-full object-cover" />
+            {logoImg ? (
+              <img
+                src={logoImg}
+                alt={restName}
+                className="w-full h-full object-cover"
+                loading="eager"
+                decoding="async"
+              />
             ) : (
               restNameEn.charAt(0) || 'M'
             )}
