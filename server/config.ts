@@ -31,6 +31,12 @@ const envSchema = z.object({
 
 const parsed = envSchema.safeParse(process.env);
 
+// Rule 4: the database connection string comes from the environment ONLY.
+// There is intentionally no `process.env.DATABASE_URL || '<literal>'`
+// anywhere in this codebase — a missing URL must fail closed in production
+// rather than silently connecting to a hard-coded (and historically
+// committed) production database. See audit finding C-01.
+
 if (!parsed.success) {
   console.error('❌ Invalid environment configuration — refusing to start:');
   for (const issue of parsed.error.issues) {
@@ -52,6 +58,17 @@ export const allowedOrigins = env.CORS_ORIGIN.split(',')
 if (isProd && allowedOrigins.length === 0) {
   throw new Error(
     'CORS_ORIGIN must be configured with exact production origin(s). Refusing to start.'
+  );
+}
+
+// Fail closed: a production API without a database is not "degraded", it is
+// broken — and booting anyway invites a fallback connection string being
+// added later "to make it work". Development/test may run without a DB so
+// the pure-logic test suite keeps working offline.
+if (isProd && !env.DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL is required in production and must be supplied by the environment ' +
+      '(no in-source fallback). Refusing to start.'
   );
 }
 

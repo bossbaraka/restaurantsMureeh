@@ -2,12 +2,24 @@ services:
   - type: web
     name: restaurant-api
     runtime: node
-    buildCommand: npm ci && npx prisma generate && npx prisma db push
+    # Build must NEVER mutate the database schema (audit C-03).
+    # Migrations are applied by `prisma migrate deploy` in startCommand.
+    buildCommand: npm ci && npx prisma generate
     startCommand: npm run start:server
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      # Render terminates TLS at exactly one reverse proxy in front of the
+      # app. Without this, req.ip is the proxy address for every request, so
+      # all rate limiters collapse into a single shared bucket and audit logs
+      # cannot attribute an actor (audit H-03). Must equal the real number of
+      # trusted proxies — never `true`, which would trust a spoofed
+      # X-Forwarded-For chain.
+      - key: TRUST_PROXY
+        value: "1"
+      - key: FRAME_ANCESTORS
+        value: "'self'"
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

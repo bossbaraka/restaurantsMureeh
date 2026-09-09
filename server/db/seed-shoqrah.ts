@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import bcrypt from 'bcryptjs';
+import { provisionTenantManager } from './seed-utils';
 
 export async function seedShoqrahCafe() {
   console.log('🌱 Seeding الشقرة كافيه | SHOQRAH CAFÉ with High-Res Image URLs...');
@@ -163,25 +163,15 @@ export async function seedShoqrahCafe() {
     },
   });
 
-  // Manager Account
-  const managerEmail = 'manager@shoqrah.com';
-  await prisma.restaurantUser.upsert({
-    where: { email: managerEmail },
-    update: {
-      restaurantId: restaurant.id,
-      name: 'مدير الشقرة كافيه',
-      passwordHash: bcrypt.hashSync('Password123!', 12),
-      role: 'RESTAURANT_MANAGER',
-      status: 'ACTIVE',
-    },
-    create: {
-      restaurantId: restaurant.id,
-      name: 'مدير الشقرة كافيه',
-      email: managerEmail,
-      passwordHash: bcrypt.hashSync('Password123!', 12),
-      role: 'RESTAURANT_MANAGER',
-      status: 'ACTIVE',
-    },
+  // Manager Account — provisioned ONLY from environment configuration.
+  // Never a credential literal, and never a rewrite of an existing
+  // account's password/role/status (audit C-02).
+  await provisionTenantManager({
+    restaurantId: restaurant.id,
+    name: 'مدير الشقرة كافيه',
+    emailVar: 'SHOQRAH_MANAGER_EMAIL',
+    passwordVar: 'SHOQRAH_MANAGER_PASSWORD',
+    label: 'Shoqrah Cafe',
   });
 
   // Tables
