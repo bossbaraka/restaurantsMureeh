@@ -1,18 +1,13 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import {
   ArrowLeft,
   MapPin,
   Sparkles,
-  ChevronLeft,
-  ChevronRight,
-  ShieldCheck,
   MessageCircle,
   Star,
   Quote,
   X,
-  Maximize2,
-  CheckCircle2,
   Flame,
 } from 'lucide-react';
 import { optimizeImageUrl } from './ProductImage';
@@ -89,9 +84,12 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
   const [isDismissing, setIsDismissing] = useState(false);
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [showTapHint, setShowTapHint] = useState(false);
+  const [reviewPaused, setReviewPaused] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
+  const convergingRef = useRef(false);
 
   // Extract clean table number
   const tableNumStr = useMemo(() => {
@@ -110,7 +108,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
   const coverImg = optimizeImageUrl(rawCoverImg, 1280, 70);
   const logoImg = currentRestaurant?.logo ? optimizeImageUrl(currentRestaurant.logo, 240, 85) : '';
   const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
-  const accentCol = currentRestaurant?.accentColor || '#0A2472';
 
   // Build curated gallery images from restaurant & products
   const galleryImages = useMemo(() => {
@@ -151,15 +148,12 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
         });
     }
 
-    if (list.length >= 4) {
-      return list.slice(0, 4);
-    }
-
+    if (list.length >= 4) return list.slice(0, 4);
     return [...list, ...DEFAULT_GALLERY_PHOTOS].slice(0, 4);
   }, [currentRestaurant, products, restName]);
 
   // ---------------------------------------------------------------------------
-  // Step 1: Digital Networking Canvas Particle Effect
+  // Canvas Particle Network + Logo Reveal Animation
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (step === 'WELCOME_SHOWCASE') return;
@@ -179,39 +173,62 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
     };
     window.addEventListener('resize', handleResize);
 
-    const particleCount = 42;
+    // Richer particle set: 60 nodes with varied speeds and colors
+    const particleCount = 60;
+    const goldShades = ['rgba(212,175,55,', 'rgba(226,192,103,', 'rgba(255,235,150,', 'rgba(180,140,30,'];
     const particles = Array.from({ length: particleCount }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      vx: (Math.random() - 0.5) * 1.2,
-      vy: (Math.random() - 0.5) * 1.2,
-      radius: Math.random() * 2 + 1.2,
-      alpha: Math.random() * 0.7 + 0.3,
+      vx: (Math.random() - 0.5) * 1.4,
+      vy: (Math.random() - 0.5) * 1.4,
+      radius: Math.random() * 2.5 + 1.0,
+      alpha: Math.random() * 0.65 + 0.35,
+      colorBase: goldShades[Math.floor(Math.random() * goldShades.length)],
+      // Target positions for convergence (toward center cluster)
+      targetX: width / 2 + (Math.random() - 0.5) * 60,
+      targetY: height / 2 + (Math.random() - 0.5) * 60,
     }));
 
-    let converging = step === 'LOGO_REVEAL';
+    // Pulse rings state
+    let pulsePhase = 0;
 
     const render = () => {
       ctx.clearRect(0, 0, width, height);
 
       const centerX = width / 2;
       const centerY = height / 2;
+      const isConverging = convergingRef.current;
+
+      // Draw subtle pulse rings in NETWORKING stage
+      if (!isConverging) {
+        pulsePhase += 0.018;
+        for (let r = 1; r <= 3; r++) {
+          const radius = 55 + r * 55 + Math.sin(pulsePhase + r) * 12;
+          const alpha = Math.max(0, 0.08 - (r * 0.02)) * (0.5 + 0.5 * Math.sin(pulsePhase * 1.5 + r));
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(212,175,55,${alpha})`;
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+        }
+      }
 
       // Draw connection lines
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
           const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const maxDist = 120;
+          const distSq = dx * dx + dy * dy;
+          const maxDist = isConverging ? 90 : 130;
 
-          if (dist < maxDist) {
+          if (distSq < maxDist * maxDist) {
+            const dist = Math.sqrt(distSq);
+            const lineAlpha = (1 - dist / maxDist) * (isConverging ? 0.4 : 0.22);
             ctx.beginPath();
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
-            const lineAlpha = (1 - dist / maxDist) * 0.25;
-            ctx.strokeStyle = `rgba(212, 175, 55, ${lineAlpha})`;
-            ctx.lineWidth = 0.8;
+            ctx.strokeStyle = `rgba(212,175,55,${lineAlpha})`;
+            ctx.lineWidth = isConverging ? 1.0 : 0.7;
             ctx.stroke();
           }
         }
@@ -219,25 +236,30 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
 
       // Update and draw particles
       for (const p of particles) {
-        if (converging) {
-          // Particles pull smoothly toward the center to form the logo
-          const cdx = centerX - p.x;
-          const cdy = centerY - p.y;
-          p.x += cdx * 0.08;
-          p.y += cdy * 0.08;
+        if (isConverging) {
+          // Smooth pull toward individual target positions (cluster around center)
+          const cdx = p.targetX - p.x;
+          const cdy = p.targetY - p.y;
+          p.x += cdx * 0.07;
+          p.y += cdy * 0.07;
+          // Slightly increase alpha as they converge
+          p.alpha = Math.min(1, p.alpha + 0.004);
         } else {
           p.x += p.vx;
           p.y += p.vy;
-
           if (p.x < 0 || p.x > width) p.vx *= -1;
           if (p.y < 0 || p.y > height) p.vy *= -1;
         }
 
+        // Glow effect for larger particles
+        if (p.radius > 2) {
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#D4AF37';
+        }
+
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(226, 192, 103, ${p.alpha})`;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = '#D4AF37';
+        ctx.fillStyle = `${p.colorBase}${p.alpha})`;
         ctx.fill();
         ctx.shadowBlur = 0;
       }
@@ -249,52 +271,85 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      if (animationFrameIdRef.current) {
-        cancelAnimationFrame(animationFrameIdRef.current);
-      }
+      if (animationFrameIdRef.current) cancelAnimationFrame(animationFrameIdRef.current);
     };
   }, [step]);
 
-  // Transition from NETWORKING to LOGO_REVEAL after ~1.4s
+  // ---------------------------------------------------------------------------
+  // Stage timings: NETWORKING (2.5s) → LOGO_REVEAL → show tap hint after 1.2s
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (step !== 'NETWORKING') return;
     const timer = setTimeout(() => {
+      convergingRef.current = true;
       setStep('LOGO_REVEAL');
-    }, 1400);
+    }, 2500);
     return () => clearTimeout(timer);
   }, [step]);
 
-  // Click handler on the revealed logo to enter the welcome showcase
+  useEffect(() => {
+    if (step !== 'LOGO_REVEAL') return;
+    // Delay tap hint so user first sees the logo assembled, then the CTA appears
+    const timer = setTimeout(() => {
+      setShowTapHint(true);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [step]);
+
+  // ---------------------------------------------------------------------------
+  // Auto-rotating reviews every 3.5s (pause on interaction)
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (step !== 'WELCOME_SHOWCASE' || reviewPaused) return;
+    const interval = setInterval(() => {
+      setActiveReviewIndex((prev) => (prev + 1) % CURATED_REVIEWS.length);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [step, reviewPaused]);
+
   const handleLogoTap = () => {
     soundFX.playTap();
     setStep('WELCOME_SHOWCASE');
   };
 
-  // Final CTA to dismiss and enter the menu directly
   const handleStartBrowsing = () => {
     soundFX.playChime();
     setIsDismissing(true);
-    setTimeout(() => {
-      onDismiss();
-    }, 320);
+    setTimeout(() => onDismiss(), 320);
+  };
+
+  const handleReviewSelect = (idx: number) => {
+    soundFX.playTap();
+    setActiveReviewIndex(idx);
+    setReviewPaused(true);
+    // Resume auto-rotate after 8s of inactivity
+    setTimeout(() => setReviewPaused(false), 8000);
   };
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col justify-between bg-[#00072D] text-slate-100 transition-opacity duration-300 select-none overflow-y-auto ${
+      className={`fixed inset-0 z-50 flex flex-col bg-[#00072D] text-slate-100 select-none overflow-y-auto transition-opacity duration-300 ${
         isDismissing ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
       dir="rtl"
     >
-      {/* ===================================================================== */}
-      {/* STAGE 1 & 2: Digital Networking Animation & Logo Reveal Overlay       */}
-      {/* ===================================================================== */}
+      {/* =================================================================== */}
+      {/* STAGE 1 & 2: Digital Networking Animation & Logo Reveal             */}
+      {/* =================================================================== */}
       {step !== 'WELCOME_SHOWCASE' && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-between p-6 bg-[#00072D] animate-fade-in">
-          {/* Dynamic Networking Canvas */}
+        <div className="absolute inset-0 z-40 flex flex-col items-center justify-between p-6 bg-[#00072D]">
+          {/* Canvas Background */}
           <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-0" />
 
-          {/* Quick Skip Button in Top Corner */}
+          {/* Ambient radial glow at center */}
+          <div
+            className="absolute inset-0 z-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(ellipse 60% 40% at 50% 50%, rgba(10,36,114,0.55) 0%, transparent 70%)',
+            }}
+          />
+
+          {/* Skip Button */}
           <div className="relative z-10 w-full flex justify-end">
             <button
               type="button"
@@ -305,61 +360,79 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
             </button>
           </div>
 
-          {/* Center Stage: Networking Pulse & Particle Logo Reveal */}
-          <div className="relative z-10 my-auto flex flex-col items-center text-center space-y-6 max-w-sm">
+          {/* Center Stage Content */}
+          <div className="relative z-10 my-auto flex flex-col items-center text-center space-y-6 max-w-sm w-full px-4">
             {step === 'NETWORKING' ? (
-              <div className="space-y-4 animate-in fade-in duration-500">
-                <div className="relative w-24 h-24 mx-auto flex items-center justify-center">
-                  <div className="absolute inset-0 rounded-full border border-amber-400/30 animate-ping duration-1000" />
-                  <div className="absolute inset-2 rounded-full border border-amber-400/50 animate-pulse" />
+              <div className="space-y-5 animate-in fade-in duration-600">
+                {/* Glowing pulse icon */}
+                <div className="relative w-28 h-28 mx-auto flex items-center justify-center">
+                  <div className="absolute inset-0 rounded-full border border-amber-400/20 animate-ping" style={{ animationDuration: '2s' }} />
+                  <div className="absolute inset-3 rounded-full border border-amber-400/40 animate-ping" style={{ animationDuration: '1.5s', animationDelay: '0.3s' }} />
+                  <div className="absolute inset-6 rounded-full border border-amber-400/60 animate-pulse" />
                   <div
-                    className="w-16 h-16 rounded-2xl flex items-center justify-center bg-[#051650] border border-amber-400/60 shadow-xl shadow-amber-400/20"
-                    style={{ background: `radial-gradient(circle, #0A2472 0%, #00072D 100%)` }}
+                    className="relative w-14 h-14 rounded-2xl flex items-center justify-center shadow-xl"
+                    style={{ background: 'radial-gradient(circle, #0A2472 0%, #00072D 100%)', boxShadow: '0 0 24px rgba(212,175,55,0.25)' }}
                   >
-                    <Sparkles className="w-8 h-8 text-amber-300 animate-spin" />
+                    <Sparkles className="w-7 h-7 text-amber-300 animate-spin" style={{ animationDuration: '3s' }} />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <h3 className="text-lg sm:text-xl font-bold font-serif text-white tracking-wide">
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold font-serif text-white tracking-wide">
                     أهلاً بك...
                   </h3>
                   <p className="text-xs text-slate-300/80 leading-relaxed font-sans">
                     جاري إنشاء الاتصال الرقمي الآمن مع {restName}
                   </p>
                   {tableNumStr && (
-                    <span className="inline-block mt-1 px-3 py-1 rounded-full text-[11px] font-mono text-emerald-300 bg-emerald-950/60 border border-emerald-500/40">
-                      طاولة {tableNumStr}
+                    <span className="inline-block mt-1 px-3 py-1 rounded-full text-[11px] font-mono text-emerald-300 bg-emerald-950/60 border border-emerald-500/40 animate-pulse">
+                      ● طاولة {tableNumStr}
                     </span>
                   )}
                 </div>
+
+                {/* Animated connecting dots */}
+                <div className="flex items-center gap-2">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce"
+                      style={{ animationDelay: `${i * 0.15}s`, animationDuration: '1s' }}
+                    />
+                  ))}
+                </div>
               </div>
             ) : (
-              /* Step: LOGO_REVEAL */
+              /* LOGO_REVEAL */
               <div
-                className="space-y-5 animate-in zoom-in-90 fade-in duration-700 cursor-pointer group"
-                onClick={handleLogoTap}
+                className="space-y-5 animate-in zoom-in-90 fade-in duration-700 cursor-pointer group w-full"
+                onClick={showTapHint ? handleLogoTap : undefined}
               >
                 {/* Assembled Glowing Restaurant Logo */}
                 <div className="relative inline-block">
                   <div
-                    className="absolute -inset-3 rounded-full opacity-80 blur-xl group-hover:opacity-100 transition-opacity animate-pulse"
-                    style={{ background: `radial-gradient(circle, ${primaryCol}90 0%, #123499 70%)` }}
+                    className="absolute -inset-4 rounded-full opacity-75 blur-2xl animate-pulse"
+                    style={{ background: `radial-gradient(circle, ${primaryCol}80 0%, #123499 65%)` }}
+                  />
+                  {/* Secondary shimmer ring */}
+                  <div
+                    className="absolute -inset-1 rounded-3xl opacity-50 blur-sm"
+                    style={{ background: `linear-gradient(135deg, ${primaryCol}60, transparent, #123499 80%)` }}
                   />
                   <div
-                    className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-3xl mx-auto flex items-center justify-center overflow-hidden shadow-2xl border-2 bg-[#051650] transform group-hover:scale-105 transition-transform duration-300"
+                    className={`relative w-32 h-32 sm:w-36 sm:h-36 rounded-3xl mx-auto flex items-center justify-center overflow-hidden shadow-2xl border-2 bg-[#051650] transform transition-transform duration-500 ${showTapHint ? 'group-hover:scale-105' : ''}`}
                     style={{ borderColor: `${primaryCol}90` }}
                   >
                     {logoImg ? (
                       <img
                         src={logoImg}
                         alt={restName}
-                        className="w-full h-full object-cover p-1.5"
+                        className="w-full h-full object-cover p-2"
                         loading="eager"
                         decoding="async"
                       />
                     ) : (
-                      <div className="font-serif font-black text-3xl sm:text-4xl text-amber-300">
+                      <div className="font-serif font-black text-4xl sm:text-5xl text-amber-300">
                         {restNameEn.charAt(0) || 'M'}
                       </div>
                     )}
@@ -371,15 +444,24 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
                     {restName}
                   </h2>
                   {restNameEn && (
-                    <p className="text-xs font-serif tracking-widest uppercase font-semibold text-amber-300">
+                    <p className="text-[11px] font-serif tracking-[0.25em] uppercase font-semibold text-amber-300">
                       {restNameEn}
                     </p>
                   )}
                 </div>
 
-                {/* Elegant Interaction Hint */}
-                <div className="pt-2">
-                  <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 text-[#00072D] font-bold text-xs sm:text-sm shadow-xl shadow-amber-400/30 group-hover:brightness-110 transition-all">
+                {/* Tap hint — delayed reveal */}
+                <div
+                  className={`pt-1 transition-all duration-700 ${showTapHint ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'}`}
+                >
+                  <div
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-full font-bold text-sm shadow-xl transition-all group-hover:brightness-110"
+                    style={{
+                      background: `linear-gradient(135deg, ${primaryCol}, #E2C067)`,
+                      color: '#00072D',
+                      boxShadow: `0 0 28px -4px ${primaryCol}80`,
+                    }}
+                  >
                     <span>المس الشعار للدخول</span>
                     <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
                   </div>
@@ -388,16 +470,16 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
             )}
           </div>
 
-          {/* Subtle Bottom Brand Watermark */}
-          <div className="relative z-10 text-[10px] text-slate-400/70 font-sans">
-            منصة مريح MUREEH · تجربة الضيافة الرقمية
+          {/* Subtle Brand Watermark */}
+          <div className="relative z-10 text-[10px] text-slate-400/60 font-sans tracking-widest">
+            MUREEH · منصة الضيافة الرقمية
           </div>
         </div>
       )}
 
-      {/* ===================================================================== */}
-      {/* STAGE 3: Full Restaurant Welcome Showcase                             */}
-      {/* ===================================================================== */}
+      {/* =================================================================== */}
+      {/* STAGE 3: Full Restaurant Welcome Showcase                           */}
+      {/* =================================================================== */}
       {step === 'WELCOME_SHOWCASE' && (
         <div className="relative z-10 w-full min-h-screen flex flex-col justify-between animate-in fade-in duration-500">
           {/* Ambient Background Cover Art */}
@@ -407,24 +489,22 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
               alt={restName}
               loading="eager"
               decoding="async"
-              className="w-full h-full object-cover object-center opacity-20 filter blur-[2px] scale-105"
+              className="w-full h-full object-cover object-center opacity-15 filter blur-sm scale-105"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#00072D]/95 via-[#00072D]/90 to-[#00072D]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#00072D]/97 via-[#00072D]/88 to-[#00072D]" />
             <div
-              className="absolute inset-0 opacity-40 pointer-events-none"
-              style={{
-                background: `radial-gradient(circle at 50% 12%, ${primaryCol}35 0%, transparent 65%)`,
-              }}
+              className="absolute inset-0 opacity-35 pointer-events-none"
+              style={{ background: `radial-gradient(circle at 50% 10%, ${primaryCol}30 0%, transparent 60%)` }}
             />
           </div>
 
-          {/* Top Sticky Header: Table Badge & Branch Presence */}
+          {/* Top Header: Table Badge & Branch */}
           <header className="relative z-10 w-full max-w-xl mx-auto pt-4 px-4 sm:px-6 flex items-center justify-between text-xs">
             {tableNumStr ? (
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#051650]/90 border border-[#123499]/60 text-slate-100 shadow-md backdrop-blur-md">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="font-semibold">أنت الآن على طاولة</span>
-                <span className="font-mono font-black text-amber-300 text-sm px-1.5 py-0.2 rounded-md bg-white/10">
+                <span className="font-mono font-black text-amber-300 text-sm px-1.5 rounded-md bg-white/10">
                   {tableNumStr}
                 </span>
                 <span className="text-[10px] text-emerald-400 font-medium">● متصل</span>
@@ -444,13 +524,13 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
             )}
           </header>
 
-          {/* Main Content Area */}
+          {/* Main Content */}
           <main className="relative z-10 w-full max-w-xl mx-auto px-4 sm:px-6 py-4 flex-1 space-y-6">
-            {/* 1. Restaurant Hero & Warm Human Welcome */}
+            {/* 1. Restaurant Hero */}
             <div className="text-center space-y-3 pt-2">
               <div className="relative inline-block">
                 <div
-                  className="absolute -inset-1 rounded-2xl opacity-60 blur-md"
+                  className="absolute -inset-1 rounded-2xl opacity-50 blur-md"
                   style={{ background: `linear-gradient(135deg, ${primaryCol}, #123499)` }}
                 />
                 <div
@@ -474,13 +554,12 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
               </div>
 
               <div className="space-y-1">
-                {/* A11Y-005: <h2> preserves single <h1> on document in CustomerHeader */}
                 <h2 className="text-2xl sm:text-3xl font-serif font-black text-white tracking-tight leading-snug">
                   {restName}
                 </h2>
                 {restNameEn && (
                   <p
-                    className="text-xs font-serif tracking-widest uppercase font-semibold"
+                    className="text-[11px] font-serif tracking-[0.22em] uppercase font-semibold"
                     style={{ color: primaryCol }}
                   >
                     {restNameEn}
@@ -488,14 +567,13 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
                 )}
               </div>
 
-              {/* Human Welcome Note */}
               <p className="text-xs sm:text-sm text-slate-300 max-w-md mx-auto leading-relaxed pt-1">
                 {currentRestaurant?.description ||
                   `أهلاً وسهلاً بكم في ${restName}، حيث نحرص على أن تكون كل زيارة تجربة طعام استثنائية تستحق أن تُتذكر.`}
               </p>
             </div>
 
-            {/* 2. Customer Reviews & Experiences (آراء وتجارب العملاء) */}
+            {/* 2. Customer Reviews — Auto-rotating */}
             <div className="rounded-2xl bg-[#051650]/60 border border-[#123499]/40 p-4 backdrop-blur-md shadow-lg space-y-3 text-right">
               <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
                 <div className="flex items-center gap-2">
@@ -506,18 +584,18 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
                   </div>
                   <span className="text-xs font-bold text-white font-mono">4.9 / 5.0</span>
                 </div>
-                <span className="text-[11px] text-slate-400 font-sans">
-                  من آراء ضيوفنا الكرام
-                </span>
+                <span className="text-[11px] text-slate-400 font-sans">من آراء ضيوفنا الكرام</span>
               </div>
 
-              {/* Active Review Quote */}
-              <div className="relative pt-1 space-y-2">
+              {/* Review content with fade transition */}
+              <div className="relative pt-1 space-y-2 min-h-[80px]">
                 <Quote className="w-5 h-5 text-amber-400/40 absolute -top-1 right-0" />
-                <p className="text-xs text-slate-200 leading-relaxed pr-6 italic">
-                  "{CURATED_REVIEWS[activeReviewIndex].comment}"
+                <p
+                  key={activeReviewIndex}
+                  className="text-xs text-slate-200 leading-relaxed pr-6 italic animate-in fade-in duration-500"
+                >
+                  &ldquo;{CURATED_REVIEWS[activeReviewIndex].comment}&rdquo;
                 </p>
-
                 <div className="flex items-center justify-between text-[11px] pt-1">
                   <span className="font-bold text-amber-300">
                     — {CURATED_REVIEWS[activeReviewIndex].author}
@@ -528,19 +606,16 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
                 </div>
               </div>
 
-              {/* Review Switcher Dots */}
-              <div className="flex items-center justify-center gap-1.5 pt-1">
+              {/* Dot Navigation */}
+              <div className="flex items-center justify-center gap-2 pt-1">
                 {CURATED_REVIEWS.map((_, idx) => (
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => {
-                      soundFX.playTap();
-                      setActiveReviewIndex(idx);
-                    }}
-                    className={`h-1.5 rounded-full transition-all cursor-pointer ${
+                    onClick={() => handleReviewSelect(idx)}
+                    className={`h-1.5 rounded-full transition-all duration-300 cursor-pointer ${
                       idx === activeReviewIndex
-                        ? 'w-5 bg-amber-400'
+                        ? 'w-6 bg-amber-400'
                         : 'w-1.5 bg-white/20 hover:bg-white/40'
                     }`}
                     aria-label={`عرض التقييم ${idx + 1}`}
@@ -549,7 +624,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
               </div>
             </div>
 
-            {/* 3. Restaurant Gallery Grid (صور وأجواء المطعم في شبكة فاخرة) */}
+            {/* 3. Restaurant Gallery Grid */}
             <div className="space-y-2.5 text-right">
               <div className="flex items-center justify-between px-1">
                 <h3 className="text-xs font-bold text-slate-200 font-serif flex items-center gap-1.5">
@@ -559,55 +634,55 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
                 <span className="text-[10px] text-slate-400">المس أي صورة للتكبير</span>
               </div>
 
-              {/* Editorial Dynamic Asymmetric Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                {/* Large Hero Card (Spans 2 cols on small screens or taller) */}
+              {/* Asymmetric Editorial Grid */}
+              <div className="grid grid-cols-2 gap-2">
+                {/* Large Hero (spans full width) */}
                 {galleryImages[0] && (
                   <div
                     onClick={() => setLightboxImage(galleryImages[0].url)}
-                    className="col-span-2 sm:col-span-2 relative h-40 sm:h-48 rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-md group cursor-pointer"
+                    className="col-span-2 relative h-44 sm:h-52 rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-md group cursor-pointer"
                   >
                     <img
                       src={optimizeImageUrl(galleryImages[0].url, 800, 80)}
                       alt={galleryImages[0].title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       loading="lazy"
                       decoding="async"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                    <div className="absolute bottom-2.5 inset-x-3 z-10 flex items-center justify-between">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+                    <div className="absolute bottom-3 inset-x-3 z-10 flex items-end justify-between">
                       <span className="text-xs font-bold text-white drop-shadow truncate">
                         {galleryImages[0].title}
                       </span>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/60 backdrop-blur-md text-amber-300 border border-white/10">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/60 backdrop-blur-md text-amber-300 border border-white/10 shrink-0 ml-2">
                         {galleryImages[0].tag}
                       </span>
                     </div>
                   </div>
                 )}
 
-                {/* Supporting Grid Images */}
-                {galleryImages.slice(1, 4).map((item) => (
+                {/* Supporting Cards */}
+                {galleryImages.slice(1, 4).map((item, idx) => (
                   <div
                     key={item.id}
                     onClick={() => setLightboxImage(item.url)}
-                    className="relative h-28 sm:h-48 rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-md group cursor-pointer"
+                    className={`relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 shadow-md group cursor-pointer ${
+                      idx === 0 ? 'col-span-2 h-36 sm:h-40' : 'h-28 sm:h-36'
+                    }`}
                   >
                     <img
-                      src={optimizeImageUrl(item.url, 400, 75)}
+                      src={optimizeImageUrl(item.url, 500, 75)}
                       alt={item.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                       loading="lazy"
                       decoding="async"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
-                    <div className="absolute bottom-2 inset-x-2 z-10 text-right">
+                    <div className="absolute bottom-2 inset-x-2.5 z-10 text-right">
                       <span className="text-[10px] font-bold text-white truncate block drop-shadow">
                         {item.title}
                       </span>
-                      <span className="text-[9px] text-amber-300 font-medium">
-                        {item.tag}
-                      </span>
+                      <span className="text-[9px] text-amber-300 font-medium">{item.tag}</span>
                     </div>
                   </div>
                 ))}
@@ -615,30 +690,27 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
             </div>
           </main>
 
-          {/* Bottom Fixed Action Section: Dominant Primary CTA */}
-          <footer className="relative z-10 w-full max-w-xl mx-auto px-4 sm:px-6 pb-5 pt-3 space-y-3 bg-gradient-to-t from-[#00072D] via-[#00072D]/95 to-transparent">
-            {/* Dominant Primary CTA */}
+          {/* Sticky Bottom CTA */}
+          <footer className="relative z-10 w-full max-w-xl mx-auto px-4 sm:px-6 pb-6 pt-3 space-y-3 bg-gradient-to-t from-[#00072D] via-[#00072D]/95 to-transparent">
             <button
               type="button"
               onClick={handleStartBrowsing}
-              className="w-full min-h-[52px] py-3.5 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-3 transition-all transform active:scale-[0.98] shadow-2xl hover:brightness-110 cursor-pointer text-[#00072D]"
+              className="w-full min-h-[54px] py-4 px-6 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-3 transition-all transform active:scale-[0.97] shadow-2xl hover:brightness-110 cursor-pointer text-[#00072D]"
               style={{
                 background: `linear-gradient(135deg, ${primaryCol}, #E2C067)`,
-                boxShadow: `0 0 25px -4px ${primaryCol}90`,
+                boxShadow: `0 0 30px -4px ${primaryCol}85`,
               }}
             >
               <span>ابدأ التصفح واستكشف القائمة</span>
               <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
             </button>
 
-            {/* Secondary Details: Support & Mureeh Identity */}
             <div className="flex items-center justify-between text-[11px] text-slate-400/80 px-1">
               <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                <span>تجربة ضيافة رقمية مدعومة بـ</span>
+                <span>مدعوم بـ</span>
                 <span className="font-bold text-slate-200 tracking-wide">MUREEH</span>
               </div>
-
               <a
                 href="https://t.me/Mureeh_tech_bot"
                 target="_blank"
@@ -651,7 +723,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
             </div>
           </footer>
 
-          {/* Fullscreen Lightbox Modal for Gallery Image Preview */}
+          {/* Lightbox */}
           {lightboxImage && (
             <div
               className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-4 animate-in fade-in duration-200"
@@ -665,7 +737,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
               >
                 <X className="w-5 h-5" />
               </button>
-
               <div
                 className="relative max-w-2xl w-full max-h-[80vh] rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
