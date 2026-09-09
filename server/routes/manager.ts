@@ -10,7 +10,12 @@ import {
   isPlatformUser,
 } from '../middleware/auth';
 import { realtimeService } from '../services/realtime';
-import { FREE_TRIAL_DAYS, isTrialPlan, withTrialMeta } from '../services/plans';
+import {
+  FREE_TRIAL_DAYS,
+  isTrialPlan,
+  withTrialMeta,
+  evaluatePlanChange,
+} from '../services/plans';
 import { logAuditEvent } from '../services/audit';
 import { generateQrToken, csvField, roundMoney } from '../utils/security';
 import {
@@ -29,6 +34,7 @@ import {
   offerCreateSchema,
   offerUpdateSchema,
   planChangeSchema,
+  tableSettleSchema,
   brandingSchema,
   branchCreateSchema,
   branchUpdateSchema,
@@ -648,7 +654,11 @@ router.post(
 );
 
 // POST /api/manager/tables/:id/settle (Settle Table Bill)
-router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request, res: Response) => {
+router.post(
+  '/tables/:id/settle',
+  requireCashierOrManager(),
+  validateBody(tableSettleSchema),
+  async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const table = await prisma.table.findUnique({ where: { id } });
@@ -802,7 +812,8 @@ router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request
     console.error('Table settle error:', err);
     return res.status(500).json({ success: false, error: 'تعذر تصفية حساب الطاولة', statusCode: 500 });
   }
-});
+  }
+);
 
 // POST /api/manager/tables/:id/regenerate-qr (Regenerate Secure QR Token)
 router.post('/tables/:id/regenerate-qr', requireManager(), async (req: Request, res: Response) => {
@@ -1848,12 +1859,33 @@ router.put(
       if (!plan || plan.status !== 'ACTIVE') {
         return res.status(400).json({ success: false, error: 'الباقة المحددة غير متاحة', statusCode: 400 });
       }
-      // The free trial is a platform-admin grant, never a self-service switch.
-      if (isTrialPlan(plan)) {
-        return res.status(403).json({
+      // Audit H-02: authorize the *transition*, not merely the target plan.
+      // Trusting a client-supplied planId let any manager grant themselves a
+      // higher-tier plan for free, since no payment provider is wired up.
+      const currentSubscription = await prisma.subscription.findUnique({
+        where: { restaurantId },
+        include: { plan: true },
+      });
+      const verdict = evaluatePlanChange({
+        current: currentSubscription?.plan ?? null,
+        target: plan,
+        isPlatformActor: isPlatformUser(req),
+      });
+      if (!verdict.allowed) {
+        await logAuditEvent({
+          restaurantId,
+          userId: req.user!.id,
+          actor: req.user!.name,
+          actorRole: req.user!.role,
+          action: 'PLAN_CHANGE_DENIED',
+          entity: 'Subscription',
+          entityId: restaurantId,
+          details: `محاولة تغيير الباقة إلى ${plan.name} رُفضت: ${verdict.reason}`,
+        });
+        return res.status(verdict.statusCode).json({
           success: false,
-          error: `الباقة التجريبية المجانية (${FREE_TRIAL_DAYS} أيام) تُنشَّط حصرياً من قِبل إدارة المنصة`,
-          statusCode: 403,
+          error: verdict.reason,
+          statusCode: verdict.statusCode,
         });
       }
       // Guard against exceeding plan limits with existing data

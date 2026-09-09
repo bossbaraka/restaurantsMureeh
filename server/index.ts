@@ -26,6 +26,20 @@ const PORT = config.port;
 // would poison rate-limit keys and audit IPs.
 app.set('trust proxy', config.trustProxy);
 
+// Misconfiguration alarm (audit H-03): behind a reverse proxy with
+// TRUST_PROXY=0, req.ip resolves to the proxy for every request, so every
+// rate limiter shares ONE bucket (a single client can lock out the whole
+// platform) and audit IPs are meaningless. Warn loudly rather than fail —
+// a directly-exposed deployment legitimately uses 0.
+if (isProd && config.trustProxy === 0) {
+  console.warn(
+    '⚠️ TRUST_PROXY=0 in production. If this service runs behind a reverse ' +
+      'proxy/load balancer (Render, Nginx, Cloudflare), set TRUST_PROXY to the ' +
+      'number of trusted proxies (Render = 1). Otherwise rate limiting is ' +
+      'global-bucketed and audit client IPs are wrong.'
+  );
+}
+
 // ============================================================
 // SECURITY HEADERS
 // ============================================================
@@ -98,13 +112,23 @@ app.use(
   })
 );
 
-// Staff SSE streams authenticate via `?token=` (EventSource cannot set
-// headers) — redact it so bearer tokens never land in access logs.
+// Credential-bearing query parameters must never reach access logs
+// (audit H-01). Staff SSE streams authenticate via `?token=` and QR guest
+// streams via `?sessionToken=` (EventSource cannot set headers), and a
+// leaked sessionToken is a live 6-hour capability over a table's orders.
+//
+// The previous pattern only matched `token=`, which — because it is
+// anchored on a `?`/`&` boundary — did NOT match `sessionToken=`.
+// Matching the full parameter name explicitly closes that gap.
+const SENSITIVE_QUERY_PARAMS =
+  /([?&])(sessionToken|qrToken|token|access_token|refresh_token|pin|password|secret|apiKey)=[^&\s]*/gi;
+
+export function redactSensitiveUrl(url: string): string {
+  return url.replace(SENSITIVE_QUERY_PARAMS, '$1$2=[REDACTED]');
+}
+
 morgan.token('url', (req) =>
-  (req.originalUrl || req.url || '').replace(
-    /([?&])token=[^&\s]*/g,
-    '$1token=[REDACTED]'
-  )
+  redactSensitiveUrl(req.originalUrl || req.url || '')
 );
 
 app.use(

@@ -111,6 +111,76 @@ export function trialDaysRemaining(
   return Math.max(0, Math.ceil((end - now) / 86_400_000));
 }
 
+// ============================================================
+// Self-service plan-change authorization (audit H-02)
+// ------------------------------------------------------------
+// A tenant manager must never be able to grant themselves a more
+// expensive plan by POSTing a planId: there is no payment provider in
+// this deployment, so an "upgrade" would be a free entitlement grant
+// (Enterprise = multi-branch, analytics, exports, custom domain).
+//
+// Rule: tenants may move to a plan costing the same or less (downgrade /
+// lateral). Anything that increases the price is a commercial action that
+// only platform staff can complete, after payment is settled out-of-band.
+// ============================================================
+
+export interface PricedPlanLike extends PlanLike {
+  name?: string;
+  priceMonthly?: number | null;
+}
+
+export type PlanChangeVerdict =
+  | { allowed: true; kind: 'downgrade' | 'lateral' | 'platform-override' }
+  | { allowed: false; statusCode: 402 | 403; reason: string };
+
+/** Monthly price of a plan, defaulting to 0 for malformed rows. */
+export function planPrice(plan?: PricedPlanLike | null): number {
+  const price = Number(plan?.priceMonthly ?? 0);
+  return Number.isFinite(price) && price > 0 ? price : 0;
+}
+
+/**
+ * Decides whether an actor may switch a tenant from `current` to `target`.
+ *
+ * Platform staff always pass (they complete paid upgrades manually once
+ * payment clears). Tenant actors may never increase spend.
+ */
+export function evaluatePlanChange(params: {
+  current?: PricedPlanLike | null;
+  target: PricedPlanLike;
+  isPlatformActor: boolean;
+}): PlanChangeVerdict {
+  const { current, target, isPlatformActor } = params;
+
+  if (isPlatformActor) return { allowed: true, kind: 'platform-override' };
+
+  // The free trial is a platform grant, never self-service.
+  if (isTrialPlan(target)) {
+    return {
+      allowed: false,
+      statusCode: 403,
+      reason: `الباقة التجريبية المجانية (${FREE_TRIAL_DAYS} أيام) تُنشَّط حصرياً من قِبل إدارة المنصة`,
+    };
+  }
+
+  const currentPrice = planPrice(current);
+  const targetPrice = planPrice(target);
+
+  if (targetPrice > currentPrice) {
+    return {
+      allowed: false,
+      statusCode: 402,
+      reason:
+        'ترقية الباقة تتطلب إتمام الدفع عبر إدارة المنصة. تم تسجيل طلبك وسيتم التواصل معك لإتمام الاشتراك.',
+    };
+  }
+
+  return {
+    allowed: true,
+    kind: targetPrice === currentPrice ? 'lateral' : 'downgrade',
+  };
+}
+
 export type TrialActivationVerdict =
   | { allowed: true }
   | { allowed: false; statusCode: 409 | 410; reason: string };

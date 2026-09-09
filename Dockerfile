@@ -32,4 +32,12 @@ EXPOSE 3001
 ENV NODE_ENV=production
 ENV PORT=3001
 
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npm run db:seed && npx tsx server/index.ts"]
+# Production boot: apply committed migrations, then start.
+#
+# NEVER `db push --accept-data-loss` (destroys schema drift silently) and
+# NEVER `db:seed` at boot — seeding on every restart reverted operator
+# password rotations and rewrote the plan catalogue (audit C-02 / C-03).
+# `migrate deploy` is additive and refuses to apply anything not committed
+# as a migration. Seeding is a deliberate one-time operator action:
+#   docker compose exec app npm run db:seed
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx server/index.ts"]

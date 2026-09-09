@@ -3,27 +3,37 @@ import bcrypt from 'bcryptjs';
 import { FREE_TRIAL_PLAN } from '../services/plans';
 import { seedShoqrahCafe } from './seed-shoqrah';
 import { seedGhosnCafe } from './seed-ghosn';
+import { assertStrongSeedPassword, isDemoSeedAllowed } from './seed-utils';
 
 dotenv.config();
 const { prisma } = await import('./prisma');
 
 /**
- * Seeds ONLY platform-level system data into PostgreSQL:
+ * Seeds platform-level system data into PostgreSQL:
  *   1. SaaS subscription plans (catalog of the platform)
  *   2. The Platform Super Admin account (from env credentials)
  *
- * Restaurants (tenants) are NEVER seeded here — each tenant is created
- * exclusively through the real onboarding flow (`POST /api/admin/onboard-restaurant`),
- * so there is no mock/demo tenant data anywhere in the system.
+ * PRODUCTION vs DEVELOPMENT (audit C-02)
+ * --------------------------------------
+ * Tenant restaurants are NOT part of the production seed. Real tenants are
+ * created exclusively through the onboarding flow
+ * (`POST /api/admin/onboard-restaurant`).
+ *
+ * The demo tenants (Shoqrah / Ghosn) are development fixtures. They run only
+ * when `isDemoSeedAllowed()` returns true, which requires BOTH
+ * `ALLOW_DEMO_SEED=1` AND `NODE_ENV !== 'production'`. Their manager accounts
+ * are provisioned from environment variables and never from literals.
  */
 export async function seedDatabase() {
   console.log('🌱 Seeding platform system data (plans + platform admin)...');
 
-  const platformAdminEmail = process.env.PLATFORM_ADMIN_EMAIL;
+  const platformAdminEmail = process.env.PLATFORM_ADMIN_EMAIL?.trim().toLowerCase();
   const platformAdminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
   if (!platformAdminEmail || !platformAdminPassword) {
     throw new Error('PLATFORM_ADMIN_EMAIL and PLATFORM_ADMIN_PASSWORD must be configured before seeding');
   }
+  // Reject weak/previously-leaked secrets for the highest-privilege account.
+  assertStrongSeedPassword(platformAdminPassword, 'PLATFORM_ADMIN_PASSWORD');
 
   // ------------------------------------------------------------------
   // 1. SaaS Subscription Plans (platform catalog)
@@ -105,15 +115,14 @@ export async function seedDatabase() {
     where: { email: platformAdminEmail.toLowerCase() },
   });
   if (existingAdmin) {
-    await prisma.restaurantUser.update({
-      where: { id: existingAdmin.id },
-      data: {
-        name: 'مدير المنصة',
-        passwordHash: bcrypt.hashSync(platformAdminPassword, 12),
-        role: 'PLATFORM_ADMIN',
-        status: 'ACTIVE',
-      },
-    });
+    // Do NOT rewrite passwordHash / role / status for an existing platform
+    // admin (audit C-02). Re-running the seed must never resurrect an old
+    // password or silently re-activate a suspended admin account.
+    // Deliberate credential rotation has its own tool: `npm run db:provision-admins`.
+    console.log(
+      '↩️  Platform admin already exists — credentials left unchanged. ' +
+        'Use `npm run db:provision-admins` to rotate deliberately.'
+    );
   } else {
     await prisma.restaurantUser.create({
       data: {
@@ -129,8 +138,22 @@ export async function seedDatabase() {
   }
 
   console.log('✅ Platform system data ready (plans + platform admin).');
-  await seedShoqrahCafe();
-  await seedGhosnCafe();
+
+  // ------------------------------------------------------------------
+  // 3. Demo tenants — DEVELOPMENT ONLY (audit C-02)
+  // ------------------------------------------------------------------
+  // Requires ALLOW_DEMO_SEED=1 *and* NODE_ENV !== 'production'. A staging
+  // env file copied into production therefore cannot seed demo tenants.
+  if (isDemoSeedAllowed()) {
+    console.log('🧪 ALLOW_DEMO_SEED=1 (non-production) — seeding demo tenants...');
+    await seedShoqrahCafe();
+    await seedGhosnCafe();
+  } else {
+    console.log(
+      'ℹ️  Demo tenants skipped (production seed). ' +
+        'Real tenants are created via POST /api/admin/onboard-restaurant.'
+    );
+  }
 }
 
 if (process.argv[1]?.endsWith('seed.ts')) {

@@ -78,6 +78,60 @@ const httpsUrl = (label: string) =>
     )
     .optional();
 
+/**
+ * Promo video URL (audit H-04).
+ *
+ * `promoVideoUrl` is rendered by the customer hero into an <iframe src> when
+ * it looks like a YouTube link, and into a <video src> otherwise. Accepting
+ * an arbitrary string there let a compromised/malicious manager point the
+ * frame at attacker-controlled HTML, which renders inside the tenant's page
+ * for every guest scanning a QR code (phishing for the table PIN, fake
+ * payment prompts, clickjacking over the ordering UI). `javascript:` and
+ * `data:text/html` values were likewise unfiltered.
+ *
+ * Fix: https-only, plus a host allowlist for the embeddable providers the
+ * product actually supports. Direct video files are allowed only from the
+ * same origin or the app's own upload path.
+ */
+const VIDEO_HOST_ALLOWLIST = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'youtu.be',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+  'player.vimeo.com',
+  'vimeo.com',
+  'www.vimeo.com',
+]);
+
+export function isAllowedPromoVideoUrl(value: string): boolean {
+  if (!value) return true;
+  // Relative path served by this app (e.g. an uploaded MP4).
+  if (value.startsWith('/uploads/') || value.startsWith('/')) {
+    return !value.startsWith('//');
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  // Blocks javascript:, data:, vbscript:, file: and plaintext http.
+  if (url.protocol !== 'https:') return false;
+  if (url.username || url.password) return false;
+  return VIDEO_HOST_ALLOWLIST.has(url.hostname.toLowerCase());
+}
+
+const promoVideoUrl = z
+  .string()
+  .trim()
+  .max(1000, 'رابط الفيديو طويل جداً')
+  .refine(isAllowedPromoVideoUrl, {
+    message:
+      'رابط الفيديو يجب أن يكون رابط HTTPS من YouTube أو Vimeo، أو ملفاً مرفوعاً على المنصة',
+  });
+
 const hexColor = z
   .string()
   .trim()
@@ -492,8 +546,33 @@ export const brandingSchema = z
     timezone: z.string().trim().max(60).optional(),
     primaryColor: hexColor,
     accentColor: hexColor,
-    promoVideoUrl: z.string().trim().max(1000).optional().or(z.literal('')),
-    galleryImages: z.array(z.string().trim().max(1000)).max(30).optional(),
+    promoVideoUrl: promoVideoUrl.optional().or(z.literal('')),
+    // Gallery entries are rendered as <img src>; constrain them to the same
+    // https/relative-path rules used for logo and cover (audit H-04).
+    galleryImages: z
+      .array(httpsUrl('رابط صورة المعرض').unwrap())
+      .max(30)
+      .optional(),
+  })
+  .strict();
+
+/**
+ * Table settlement (audit H-05).
+ *
+ * `POST /tables/:id/settle` previously read `paymentMethod` and `note`
+ * straight off `req.body` with no `validateBody`, so a cashier could write
+ * an arbitrary-length, arbitrary-content string into the payment ledger
+ * (receipt forgery, log/CSV injection into finance exports) and free-text
+ * values silently bypassed cash-vs-card reconciliation reporting.
+ */
+export const tableSettleSchema = z
+  .object({
+    // Reuse the canonical ledger enum so settlement and the payments
+    // endpoint can never drift apart in reconciliation reports.
+    paymentMethod: z
+      .enum(PAYMENT_METHODS, { message: 'طريقة الدفع غير صالحة' })
+      .default('CASH'),
+    note: z.string().trim().max(500, 'الملاحظة طويلة جداً').optional(),
   })
   .strict();
 

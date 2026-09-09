@@ -1,5 +1,5 @@
 import { prisma } from './prisma';
-import bcrypt from 'bcryptjs';
+import { provisionTenantManager } from './seed-utils';
 
 export async function seedGhosnCafe() {
   console.log('🌱 Seeding غصن كافيه | Ghosn Cafe...');
@@ -316,25 +316,15 @@ export async function seedGhosnCafe() {
     },
   });
 
-  // Manager Account
-  const managerEmail = 'manager@ghosncafe.com';
-  await prisma.restaurantUser.upsert({
-    where: { email: managerEmail },
-    update: {
-      restaurantId: restaurant.id,
-      name: 'مدير غصن كافيه',
-      passwordHash: bcrypt.hashSync('Password123!', 12),
-      role: 'RESTAURANT_MANAGER',
-      status: 'ACTIVE',
-    },
-    create: {
-      restaurantId: restaurant.id,
-      name: 'مدير غصن كافيه',
-      email: managerEmail,
-      passwordHash: bcrypt.hashSync('Password123!', 12),
-      role: 'RESTAURANT_MANAGER',
-      status: 'ACTIVE',
-    },
+  // Manager Account — provisioned ONLY from environment configuration.
+  // Never a credential literal, and never a rewrite of an existing
+  // account's password/role/status (audit C-02).
+  await provisionTenantManager({
+    restaurantId: restaurant.id,
+    name: 'مدير غصن كافيه',
+    emailVar: 'GHOSN_MANAGER_EMAIL',
+    passwordVar: 'GHOSN_MANAGER_PASSWORD',
+    label: 'Ghosn Cafe',
   });
 
   // Tables (1 to 20)
