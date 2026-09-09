@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { RestaurantTable } from '../../types/restaurant';
 import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
-import { getTableZoneLabel } from '../../utils/formatting';
+import { getTableZoneLabel, formatTableNumber } from '../../utils/formatting';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { X, Printer, Sparkles, QrCode } from 'lucide-react';
 
@@ -76,7 +76,7 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-luxury-50 font-serif">
-                {selectedTable ? `معاينة بطاقة طاولة ${selectedTable.tableNumber}` : `معاينة طباعة بطاقات طاولات ${restName}`}
+                {selectedTable ? `معاينة باركود طاولة ${formatTableNumber(selectedTable.tableNumber || selectedTable.id)}` : `معاينة طباعة بطاقات طاولات ${restName}`}
               </h3>
               <p className="text-xs text-luxury-400">
                 تصميم فاخر جاهز للطباعة بدقة عالية ووضعه على الطاولات
@@ -148,7 +148,7 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
                   {/* Table Number & Instructions Bottom */}
                   <div className="relative z-10 mb-1 space-y-1">
                     <div className="text-xl font-extrabold text-gold-400 font-serif">
-                      طاولة {table.tableNumber < 10 ? `0${table.tableNumber}` : table.tableNumber}
+                      باركود الطاولة {formatTableNumber(table.tableNumber || table.id)}
                     </div>
                     <p className="text-[11px] text-luxury-300 font-medium">
                       امسح الرمز بكاميرا هاتفك لتصفح المنيو والطلب

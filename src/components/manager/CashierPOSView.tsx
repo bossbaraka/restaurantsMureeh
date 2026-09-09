@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { escapeHtml, formatPrice } from '../../utils/formatting';
+import { escapeHtml, formatPrice, formatTableNumber } from '../../utils/formatting';
 import {
   PaymentRecord,
   Order,
@@ -369,7 +369,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                           : 'bg-luxury-950 border-luxury-750 text-luxury-300 hover:border-gold-500/40'
                     }`}
                   >
-                    <div className="text-sm font-bold font-mono">{t.tableNumber}</div>
+                    <div className="text-sm font-bold font-mono">{formatTableNumber(t.tableNumber || t.id)}</div>
                     <div className="text-[9px] opacity-80">{t.capacity} مقعد</div>
                     {occupied && openTotal > 0 && (
                       <div className="text-[9px] font-bold text-gold-300">{formatPrice(openTotal)}</div>
@@ -383,7 +383,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
           {/* Open bill summary for selected context */}
           <div className="rounded-2xl bg-luxury-900 border border-luxury-800 p-3">
             <h3 className="text-xs font-bold text-luxury-100 mb-2">
-              {isWalkIn ? 'فاتورة الكاونتر' : activeTable ? `فاتورة طاولة ${activeTable.tableNumber}` : 'فاتورة جديدة'}
+              {isWalkIn ? 'فاتورة الكاونتر' : activeTable ? `فاتورة طاولة ${formatTableNumber(activeTable.tableNumber || activeTable.id)}` : 'فاتورة جديدة'}
             </h3>
             {activeTable && (
               <div className="text-[10px] text-luxury-400 mb-2">

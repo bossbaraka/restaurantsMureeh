@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { FREE_TRIAL_PLAN } from '../services/plans';
 import { seedShoqrahCafe } from './seed-shoqrah';
+import { seedGhosnCafe } from './seed-ghosn';
 
 dotenv.config();
 const { prisma } = await import('./prisma');
@@ -129,6 +130,7 @@ export async function seedDatabase() {
 
   console.log('✅ Platform system data ready (plans + platform admin).');
   await seedShoqrahCafe();
+  await seedGhosnCafe();
 }
 
 if (process.argv[1]?.endsWith('seed.ts')) {

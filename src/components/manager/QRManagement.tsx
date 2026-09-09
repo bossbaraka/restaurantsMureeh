@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { RestaurantTable } from '../../types/restaurant';
 import { generateQrDataUrl, getTableLink } from '../../utils/qrCodeGenerator';
-import { getTableZoneLabel } from '../../utils/formatting';
+import { getTableZoneLabel, formatTableNumber } from '../../utils/formatting';
 import { PrintQRTentCardsModal } from './PrintQRTentCardsModal';
 import {
   QrCode,
@@ -113,7 +113,7 @@ export const QRManagement: React.FC = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('info', 'تم تنزيل رمز QR', `بطاقة ${table.id}`);
+    showToast('info', 'تم تنزيل رمز QR', `باركود الطاولة ${formatTableNumber(table.tableNumber || table.id)}`);
   };
 
   const handleOpenCustomer = (tableId: string) => {
@@ -250,7 +250,7 @@ export const QRManagement: React.FC = () => {
               {/* Card Top */}
               <div className="flex items-center justify-between pb-2 border-b border-luxury-800 text-xs">
                 <span className="font-bold text-luxury-100 font-serif">
-                  {table.id.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
+                  باركود الطاولة {formatTableNumber(table.tableNumber || table.id)}
                 </span>
                 <span className="text-[10px] text-luxury-400 bg-luxury-850 px-2 py-0.5 rounded-full border border-luxury-800">
                   {getTableZoneLabel(table.zone)}
