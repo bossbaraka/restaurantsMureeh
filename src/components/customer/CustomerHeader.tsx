@@ -4,6 +4,7 @@ import { formatPrice } from '../../utils/formatting';
 import { ShoppingBag, Bell, QrCode, Sparkles, Store, Menu, X, ChefHat, MessageCircle, User, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { RestaurantMapModal } from '../common/RestaurantMapModal';
+import { optimizeImageUrl } from './ProductImage';
 
 export const CustomerHeader: React.FC = () => {
   const {
@@ -22,7 +23,20 @@ export const CustomerHeader: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
 
-  const tableNumberStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
+  /**
+   * Extract the human-readable table number from whatever slug/ID the backend
+   * or QR generator produced. Accepts formats like `TABLE-07`, `tbl-07`,
+   * `T07`, `shoqrah-t-07`, `table-12` and plain numeric IDs — strips any
+   * non-digit prefix/suffix and left-pads single digits to two digits so the
+   * mobile header shows "05" consistently instead of "T05" or "5".
+   */
+  const tableNumberStr = React.useMemo(() => {
+    if (!activeTableId) return '—';
+    const digits = activeTableId.replace(/\D+/g, '');
+    if (!digits) return activeTableId;
+    const n = parseInt(digits, 10);
+    return n < 10 ? `0${n}` : String(n);
+  }, [activeTableId]);
   const hasActiveOrders = activeTableOrders.length > 0;
 
   const restName = currentRestaurant?.name || '';
@@ -33,7 +47,10 @@ export const CustomerHeader: React.FC = () => {
 
   return (
     <>
-      <header className="sticky top-14 z-30 bg-luxury-950/95 backdrop-blur-md border-b border-luxury-850 px-4 sm:px-6 py-3.5 transition-all">
+      <header
+        className="sticky top-14 z-30 bg-luxury-950/95 backdrop-blur-md border-b border-luxury-850 px-4 sm:px-6 py-3.5 transition-all"
+        style={{ paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}
+      >
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
           {/* Restaurant Identity & Table Badge */}
           <div className="flex items-center gap-3 min-w-0">
@@ -46,7 +63,13 @@ export const CustomerHeader: React.FC = () => {
               }}
             >
               {currentRestaurant?.logo ? (
-                <img src={currentRestaurant.logo} alt={restName} className="w-full h-full object-cover" />
+                <img
+                  src={optimizeImageUrl(currentRestaurant.logo, 120, 75)}
+                  alt={restName}
+                  className="w-full h-full object-cover"
+                  loading="eager"
+                  decoding="async"
+                />
               ) : (
                 initialLetter
               )}

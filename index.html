@@ -3,8 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#2A0B57" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#020A14" />
     <meta name="description" content="مُريح للخدمات الإلكترونية — منصة إدارة المطاعم والمنيو الرقمي والطلب الذكي" />
     <title>مُريح | منصة الخدمات الإلكترونية للمطاعم</title>
     <!-- Fonts: Tajawal and Cormorant Garamond -->
@@ -35,6 +38,24 @@
         background-color: #0A0B0D;
         color: #F8FAFC;
         overflow-x: hidden;
+        /* Safari mobile: respect safe area insets. */
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        min-height: 100vh;
+        /* Prevent iOS Safari "bounce" white gap under the header. */
+        -webkit-overflow-scrolling: touch;
+      }
+      /* Safari flex gap / 100vh fixes */
+      html, body, #root {
+        min-height: 100vh;
+        min-height: -webkit-fill-available;
+      }
+      /* Avoid iOS Safari auto-zoom on input focus */
+      input, select, textarea, button {
+        font-size: 16px;
+      }
+      @supports (padding-top: env(safe-area-inset-top)) {
+        .safe-top { padding-top: env(safe-area-inset-top); }
       }
     </style>
   </head>
