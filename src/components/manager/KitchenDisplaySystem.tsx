@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { formatPrice, formatTime, getOrderStatusConfig } from '../../utils/formatting';
+import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { ChefHat, Clock, CheckCircle2, AlertCircle, Volume2, VolumeX, Sparkles, Filter, Utensils } from 'lucide-react';
 
 export const KitchenDisplaySystem: React.FC = () => {
@@ -120,7 +120,7 @@ export const KitchenDisplaySystem: React.FC = () => {
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-base font-extrabold font-serif">
-                      طاولة {order.tableId.replace(/^(?:TABLE-|.*-T)/, '')}
+                      طاولة {formatTableNumber(order.tableId)}
                     </span>
                     <span className="text-[10px] bg-black/40 px-2 py-0.5 rounded font-mono font-bold">
                       {order.id}
