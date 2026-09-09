@@ -88,17 +88,27 @@ router.post(
       });
     }
 
-    // Server-generated filename + server-verified extension: the client
-    // controls neither the name nor the served content type.
+    const mimeType =
+      sniffed.ext === '.png'
+        ? 'image/png'
+        : sniffed.ext === '.jpg'
+        ? 'image/jpeg'
+        : sniffed.ext === '.webp'
+        ? 'image/webp'
+        : 'image/gif';
+
+    const base64Data = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
+
+    // Server-generated filename + server-verified extension
     const filename = `img-${Date.now()}-${randomUUID().slice(0, 8)}${sniffed.ext}`;
     const filePath = path.join(uploadDir, filename);
     fs.writeFileSync(filePath, req.file.buffer);
 
-    const imageUrl = `/uploads/${filename}`;
     return res.json({
       success: true,
       data: {
-        url: imageUrl,
+        url: base64Data,
+        pathUrl: `/uploads/${filename}`,
         filename,
         size: req.file.size,
       },

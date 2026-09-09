@@ -1,7 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Product, ProductSize, ProductAddOn, Category } from '../../types/restaurant';
-import { X, Plus, Trash2, Sparkles, Image as ImageIcon, Check } from 'lucide-react';
+import { api } from '../../services/api';
+import { X, Plus, Trash2, Sparkles, Image as ImageIcon, Check, Upload, Loader2 } from 'lucide-react';
+
+async function fileToResizedBlob(file: File, maxDim: number): Promise<{ blob: Blob; ext: string }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      const ratio = Math.min(1, maxDim / Math.max(width, height));
+      width = Math.max(1, Math.round(width * ratio));
+      height = Math.max(1, Math.round(height * ratio));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('canvas'));
+      ctx.drawImage(img, 0, 0, width, height);
+      const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
+      canvas.toBlob(
+        (b) => (b ? resolve({ blob: b, ext: isPng ? 'png' : 'jpg' }) : reject(new Error('encode'))),
+        isPng ? 'image/png' : 'image/jpeg',
+        0.84
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('load'));
+    };
+    img.src = url;
+  });
+}
 
 interface ProductFormModalProps {
   product: Product | null;
@@ -18,7 +50,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   categories: propCategories,
   onSave,
 }) => {
-  const { categories: ctxCategories, addProduct, updateProduct, currentRestaurant } = useRestaurant();
+  const { categories: ctxCategories, addProduct, updateProduct, currentRestaurant, showToast } = useRestaurant();
   const categories = propCategories || ctxCategories;
 
   const [categoryId, setCategoryId] = useState('');
@@ -32,6 +64,32 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [calories, setCalories] = useState<number | ''>('');
   const [isAvailable, setIsAvailable] = useState(true);
   const [isFeatured, setIsFeatured] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDishImageUpload = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('error', 'صيغة غير مدعومة', 'يرجى اختيار صورة JPG أو PNG أو WEBP');
+      return;
+    }
+    setIsUploadingImage(true);
+    try {
+      const { blob, ext } = await fileToResizedBlob(file, 1000);
+      const res = await api.uploadImage(blob, `dish-${Date.now()}.${ext}`);
+      if (!res.success || !res.data) {
+        showToast('error', 'تعذر رفع صورة الطبق', res.error);
+        return;
+      }
+      setImage(res.data.url);
+      showToast('success', 'تم رفع صورة الطبق بنجاح');
+    } catch {
+      showToast('error', 'تعذر معالجة الصورة');
+    } finally {
+      setIsUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   // Removable ingredients
   const [removableIngredients, setRemovableIngredients] = useState<string[]>([]);
@@ -287,16 +345,53 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
           </div>
 
-          {/* Image URL */}
-          <div>
-            <label className="block font-bold text-luxury-200 mb-1">رابط الصورة (Unsplash URL) *</label>
-            <input
-              type="url"
-              required
-              value={image}
-              onChange={(e) => setImage(e.target.value)}
-              className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:outline-none focus:border-gold-500/60 font-mono text-[11px]"
-            />
+          {/* Image Upload & URL */}
+          <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block font-bold text-luxury-200">صورة الطبق (Dish Image) *</label>
+              <span className="text-[10px] text-luxury-500">اختر صورة من الجهاز أو ضع رابطاً</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 rounded-xl overflow-hidden border border-luxury-700 bg-luxury-900 shrink-0 flex items-center justify-center">
+                {image ? (
+                  <img src={image} alt="معاينة الطبق" className="w-full h-full object-cover" />
+                ) : (
+                  <ImageIcon className="w-6 h-6 text-luxury-600" />
+                )}
+              </div>
+
+              <div className="flex-1 space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => handleDishImageUpload(e.target.files?.[0])}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingImage}
+                  className="w-full py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
+                >
+                  {isUploadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}
+                  {isUploadingImage ? 'جاري رفع صورة الطبق...' : 'رفع صورة الطبق من الجهاز'}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-luxury-400 mb-1">أو رابط الصورة المباشر</label>
+              <input
+                type="url"
+                required
+                value={image}
+                onChange={(e) => setImage(e.target.value)}
+                placeholder="https://..."
+                className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:outline-none focus:border-gold-500/60 font-mono text-[11px]"
+              />
+            </div>
           </div>
 
           {/* Availability Toggles */}
