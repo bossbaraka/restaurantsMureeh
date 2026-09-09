@@ -335,19 +335,19 @@ export const SubscriptionView: React.FC = () => {
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
                         {isFreeTrial ? (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-500/15 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
                             <Lock className="w-2.5 h-2.5" /> مجانية {p.trialDays} أيام
                           </span>
                         ) : p.isPopular && !isCurrent ? (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-gold-500 text-luxury-950 flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-gold-500 text-luxury-950 flex items-center gap-1">
                             <Sparkles className="w-2.5 h-2.5" /> الأكثر طلباً
                           </span>
                         ) : isCurrent ? (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500 text-white flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white flex items-center gap-1">
                             <CheckCircle2 className="w-2.5 h-2.5" /> باقتك الحالية
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-luxury-850 text-luxury-400 border border-luxury-700">
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-luxury-850 text-luxury-400 border border-luxury-700">
                             باقة متاحة
                           </span>
                         )}

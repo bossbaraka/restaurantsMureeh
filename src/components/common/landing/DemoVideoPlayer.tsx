@@ -504,7 +504,7 @@ export const DemoVideoPlayer: FC = () => {
                   type="button"
                   onClick={togglePlay}
                   aria-label={playing ? 'إيقاف مؤقت' : 'تشغيل'}
-                  className="grid place-items-center w-8 h-8 rounded-lg bg-[#0072BC] text-white cursor-pointer hover:brightness-110"
+                  className="grid place-items-center w-9 h-9 rounded-lg relative before:absolute before:left-1/2 before:top-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:min-w-[44px] before:min-h-[44px] bg-[#0072BC] text-white cursor-pointer hover:brightness-110"
                 >
                   {playing ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
                 </button>
@@ -512,7 +512,7 @@ export const DemoVideoPlayer: FC = () => {
                   type="button"
                   onClick={restart}
                   aria-label="إعادة من البداية"
-                  className="grid place-items-center w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-300 cursor-pointer hover:text-white"
+                  className="grid place-items-center w-9 h-9 rounded-lg relative before:absolute before:left-1/2 before:top-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:min-w-[44px] before:min-h-[44px] bg-white/5 border border-white/10 text-slate-300 cursor-pointer hover:text-white"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
@@ -533,7 +533,7 @@ export const DemoVideoPlayer: FC = () => {
                 type="button"
                 onClick={openFullscreen}
                 aria-label="ملء الشاشة"
-                className="grid place-items-center w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-slate-300 cursor-pointer hover:text-white"
+                className="grid place-items-center w-9 h-9 rounded-lg relative before:absolute before:left-1/2 before:top-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:min-w-[44px] before:min-h-[44px] bg-white/5 border border-white/10 text-slate-300 cursor-pointer hover:text-white"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
               </button>

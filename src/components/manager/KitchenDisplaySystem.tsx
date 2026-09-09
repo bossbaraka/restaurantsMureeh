@@ -86,7 +86,7 @@ export const KitchenDisplaySystem: React.FC = () => {
           <div className="w-16 h-16 rounded-full bg-luxury-800 text-luxury-400 flex items-center justify-center mx-auto mb-3">
             <CheckCircle2 className="w-8 h-8 text-emerald-400" />
           </div>
-          <h3 className="text-lg font-bold text-luxury-100">المطبخ جاهز بالكامل</h3>
+          <h2 className="text-lg font-bold text-luxury-100">المطبخ جاهز بالكامل</h2>
           <p className="text-xs text-luxury-400 mt-1">لا توجد طلبات معلقة حالياً. ستظهر الطلبات هنا فور إرسالها من الطاولات.</p>
         </div>
       ) : (

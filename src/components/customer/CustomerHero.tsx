@@ -149,6 +149,7 @@ export const CustomerHero: React.FC = () => {
             <button
               key={index}
               onClick={() => setActiveGalleryImg(imgUrl)}
+              aria-label={`عرض صورة المعرض رقم ${index + 1}`}
               className="relative w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden shrink-0 border border-luxury-750 group cursor-pointer hover:border-[rgb(var(--brand-primary-strong-rgb)/0.8)] transition-all shadow-md"
             >
               <img
@@ -257,6 +258,7 @@ export const CustomerHero: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ابحث عن طبق، مكون، أو صنف..."
+            aria-label="ابحث عن طبق، مكون، أو صنف"
             className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-3 pr-11 pl-4 text-sm focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] focus:ring-1 focus:ring-[rgb(var(--brand-primary-strong-rgb)/0.3)] transition-all shadow-inner"
           />
           <Search className="w-4 h-4 text-luxury-400 absolute right-4 pointer-events-none" />

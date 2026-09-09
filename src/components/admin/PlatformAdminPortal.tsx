@@ -223,7 +223,7 @@ export const PlatformAdminPortal: React.FC = () => {
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div className="relative w-full sm:w-72">
-              <input
+              <input aria-label="بحث عن مطعم بالاسم أو الرابط..."
                 type="text"
                 placeholder="بحث عن مطعم بالاسم أو الرابط..."
                 value={searchQuery}

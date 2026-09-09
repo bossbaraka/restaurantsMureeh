@@ -4,6 +4,7 @@ import { formatPrice } from '../../utils/formatting';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { X, Plus, Minus, Check, Sparkles, Clock, Flame, ShieldAlert, ShoppingBag } from 'lucide-react';
 import { optimizeImageUrl } from './ProductImage';
+import { useDialog } from '../../hooks/useDialog';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -31,6 +32,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
       setSpecialInstructions('');
     }
   }, [product]);
+
+  // UX-001: Escape-to-close + body scroll lock (see hooks/useDialog).
+  useDialog({ isOpen, onClose });
 
   if (!isOpen || !product) return null;
 
@@ -158,7 +162,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* SIZES SELECTOR */}
           {product.sizes && product.sizes.length > 0 && (
             <div>
-              <label className="block text-xs font-bold text-luxury-200 mb-2">
+              <label className="block text-xs font-bold text-luxury-200 mb-2" htmlFor="productdetailmodal-f1">
                 اختر الحجم
               </label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -268,7 +272,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             <label className="block text-xs font-bold text-luxury-200 mb-1.5">
               ملاحظات أو طلبات خاصة للشيف
             </label>
-            <textarea
+            <textarea id="productdetailmodal-f1"
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
               placeholder="مثال: درجة الاستواء، بدون ملح إضافي، الصوص جانباً..."

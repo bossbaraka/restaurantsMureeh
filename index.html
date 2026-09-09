@@ -3,7 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+    <!-- A11y (WCAG 2.1 SC 1.4.4 Resize Text): never block pinch-zoom.
+         `maximum-scale=1.0, user-scalable=no` prevented low-vision users from
+         zooming the menu at all. iOS auto-zoom-on-focus is instead prevented
+         the correct way — by using a >=16px font-size on form controls (see
+         the `input, select, textarea` rule below). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />

@@ -191,7 +191,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
                     }`}
                   />
                   <span
-                    className={`text-[9px] font-bold block transition-colors ${
+                    className={`text-[11px] font-bold block transition-colors ${
                       isActive ? 'text-emerald-300' : 'text-luxury-500'
                     }`}
                   >

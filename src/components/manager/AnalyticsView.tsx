@@ -179,7 +179,7 @@ export const AnalyticsView: React.FC = () => {
                     title={`محصّل ${d.label}: ${formatPrice(d.collected)}`}
                   />
                 </div>
-                <span className="text-[9px] text-luxury-400 font-bold">{d.label}</span>
+                <span className="text-[11px] text-luxury-400 font-bold">{d.label}</span>
               </div>
             ))}
           </div>
@@ -246,21 +246,21 @@ export const AnalyticsView: React.FC = () => {
           <div className="grid grid-cols-3 gap-2 text-center mb-4">
             <div className="bg-luxury-950 rounded-xl p-2.5">
               <div className="text-lg font-bold text-sky-300">{visitors.activeNow}</div>
-              <div className="text-[9px] text-luxury-500 font-bold mt-0.5">حضور الآن</div>
+              <div className="text-[11px] text-luxury-500 font-bold mt-0.5">حضور الآن</div>
             </div>
             <div className="bg-luxury-950 rounded-xl p-2.5">
               <div className="text-lg font-bold text-luxury-100">{visitors.visitsToday}</div>
-              <div className="text-[9px] text-luxury-500 font-bold mt-0.5">جلسات اليوم</div>
+              <div className="text-[11px] text-luxury-500 font-bold mt-0.5">جلسات اليوم</div>
             </div>
             <div className="bg-luxury-950 rounded-xl p-2.5">
               <div className="text-lg font-bold text-luxury-100">{visitors.visitsYesterday}</div>
-              <div className="text-[9px] text-luxury-500 font-bold mt-0.5">أمس</div>
+              <div className="text-[11px] text-luxury-500 font-bold mt-0.5">أمس</div>
             </div>
           </div>
           <div className="flex items-end justify-between gap-1 h-16 mb-1">
             {visitors.weekSeries.map((d) => (
               <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full gap-1">
-                <span className="text-[8px] text-luxury-500 font-mono">{d.visits || ''}</span>
+                <span className="text-[11px] text-luxury-500 font-mono">{d.visits || ''}</span>
                 <div
                   className="w-full max-w-5 rounded-t bg-sky-500/60"
                   style={{ height: d.visits ? `${(d.visits / Math.max(maxVisits, 1)) * 100}%` : '2px' }}
@@ -268,7 +268,7 @@ export const AnalyticsView: React.FC = () => {
               </div>
             ))}
           </div>
-          <div className="flex justify-between text-[8px] text-luxury-500 font-bold">
+          <div className="flex justify-between text-[11px] text-luxury-500 font-bold">
             {visitors.weekSeries.map((d) => <span key={d.date}>{d.label}</span>)}
           </div>
           <div className="mt-3 pt-3 border-t border-luxury-800 grid grid-cols-2 gap-2 text-[11px]">
@@ -321,7 +321,7 @@ export const AnalyticsView: React.FC = () => {
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] text-luxury-200 truncate">{p.name}</div>
-                  <div className="text-[9px] text-luxury-500">{p.count} طلب • {formatPrice(p.revenue)}</div>
+                  <div className="text-[11px] text-luxury-500">{p.count} طلب • {formatPrice(p.revenue)}</div>
                 </div>
                 <span className="text-[10px] font-bold text-luxury-300 shrink-0 font-mono">×{p.count}</span>
               </div>

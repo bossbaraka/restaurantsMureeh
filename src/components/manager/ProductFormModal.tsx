@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { Product, ProductSize, ProductAddOn, Category } from '../../types/restaurant';
 import { api } from '../../services/api';
 import { X, Plus, Trash2, Sparkles, Image as ImageIcon, Check, Upload, Loader2 } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 async function fileToResizedBlob(file: File, maxDim: number): Promise<{ blob: Blob; ext: string }> {
   return new Promise((resolve, reject) => {
@@ -140,6 +141,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, isOpen]);
 
+  // UX-001: Escape-to-close + body scroll lock (see hooks/useDialog).
+  useDialog({ isOpen, onClose });
+
   if (!isOpen) return null;
 
   const handleAddSize = () => {
@@ -230,7 +234,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             <Sparkles className="w-4 h-4 text-gold-400" />
             <span>{product ? `تعديل طبق: ${product.name}` : 'إضافة طبق فاخر جديد'}</span>
           </h3>
-          <button onClick={onClose} className="p-1 text-luxury-400 hover:text-white">
+          <button onClick={onClose} aria-label="إغلاق النافذة" className="p-1 text-luxury-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -240,8 +244,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           {/* Category & Badge */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">القسم / التصنيف *</label>
-              <select
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f1">القسم / التصنيف *</label>
+              <select id="productformmodal-f1"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value)}
                 required
@@ -256,8 +260,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">شارة مميزة (Badge)</label>
-              <input
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f2">شارة مميزة (Badge)</label>
+              <input id="productformmodal-f2"
                 type="text"
                 value={badge}
                 onChange={(e) => setBadge(e.target.value)}
@@ -270,8 +274,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           {/* Names */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">اسم الطبق بالعربية *</label>
-              <input
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f3">اسم الطبق بالعربية *</label>
+              <input id="productformmodal-f3"
                 type="text"
                 required
                 value={name}
@@ -282,8 +286,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">الاسم بالإنجليزية</label>
-              <input
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f4">الاسم بالإنجليزية</label>
+              <input id="productformmodal-f4"
                 type="text"
                 value={nameEn}
                 onChange={(e) => setNameEn(e.target.value)}
@@ -295,8 +299,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
           {/* Description */}
           <div>
-            <label className="block font-bold text-luxury-200 mb-1">وصف الطبق والمكونات *</label>
-            <textarea
+            <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f5">وصف الطبق والمكونات *</label>
+            <textarea id="productformmodal-f5"
               required
               rows={2}
               value={description}
@@ -309,8 +313,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           {/* Price, Prep Time, Calories */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">السعر الأساسي (₪) *</label>
-              <input
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f6">السعر الأساسي (₪) *</label>
+              <input id="productformmodal-f6"
                 type="number"
                 required
                 min="0"
@@ -323,8 +327,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">وقت التحضير (دقيقة)</label>
-              <input
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f7">وقت التحضير (دقيقة)</label>
+              <input id="productformmodal-f7"
                 type="number"
                 value={preparationTimeMinutes}
                 onChange={(e) => setPreparationTimeMinutes(e.target.value === '' ? '' : Number(e.target.value))}
@@ -334,8 +338,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">السعرات الحرارية</label>
-              <input
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="productformmodal-f8">السعرات الحرارية</label>
+              <input id="productformmodal-f8"
                 type="number"
                 value={calories}
                 onChange={(e) => setCalories(e.target.value === '' ? '' : Number(e.target.value))}
@@ -348,7 +352,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           {/* Image Upload & URL */}
           <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
             <div className="flex items-center justify-between">
-              <label className="block font-bold text-luxury-200">صورة الطبق (Dish Image) *</label>
+              <label className="block font-bold text-luxury-200" htmlFor="productformmodal-f9">صورة الطبق (Dish Image) *</label>
               <span className="text-[10px] text-luxury-500">اختر صورة من الجهاز أو ضع رابطاً</span>
             </div>
 
@@ -366,6 +370,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   ref={fileInputRef}
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
+                  aria-label="اختيار صورة الطبق من الجهاز"
                   className="hidden"
                   onChange={(e) => handleDishImageUpload(e.target.files?.[0])}
                 />
@@ -383,7 +388,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
 
             <div>
               <label className="block text-[10px] text-luxury-400 mb-1">أو رابط الصورة المباشر</label>
-              <input
+              <input id="productformmodal-f9"
                 type="url"
                 required
                 value={image}
@@ -426,6 +431,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 value={newSizeName}
                 onChange={(e) => setNewSizeName(e.target.value)}
                 placeholder="اسم الحجم (مثل: 300 غرام، كبير)"
+                aria-label="اسم الحجم"
                 className="flex-1 bg-luxury-900 border border-luxury-800 p-2 rounded-xl text-xs text-luxury-100"
               />
               <input
@@ -433,6 +439,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 value={newSizeMod}
                 onChange={(e) => setNewSizeMod(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="+₪ زيادة السعر"
+                aria-label="زيادة السعر لهذا الحجم"
                 className="w-28 bg-luxury-900 border border-luxury-800 p-2 rounded-xl text-xs text-luxury-100 font-mono"
               />
               <button
@@ -469,6 +476,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 value={newAddOnName}
                 onChange={(e) => setNewAddOnName(e.target.value)}
                 placeholder="اسم الإضافة (مثل: زبدة الترفل، جبن إضافي)"
+                aria-label="اسم الإضافة"
                 className="flex-1 bg-luxury-900 border border-luxury-800 p-2 rounded-xl text-xs text-luxury-100"
               />
               <input
@@ -476,6 +484,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 value={newAddOnPrice}
                 onChange={(e) => setNewAddOnPrice(e.target.value === '' ? '' : Number(e.target.value))}
                 placeholder="سعر الإضافة ₪"
+                aria-label="سعر الإضافة"
                 className="w-28 bg-luxury-900 border border-luxury-800 p-2 rounded-xl text-xs text-luxury-100 font-mono"
               />
               <button

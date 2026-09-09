@@ -230,6 +230,7 @@ export const QRManagement: React.FC = () => {
             value={searchTable}
             onChange={(e) => setSearchTable(e.target.value)}
             placeholder="بحث برقم الطاولة..."
+            aria-label="بحث برقم الطاولة"
             className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-2 pr-8 pl-3 text-xs focus:outline-none focus:border-gold-500/60 font-mono"
           />
           <Search className="w-3.5 h-3.5 text-luxury-400 absolute right-3 top-2.5 pointer-events-none" />

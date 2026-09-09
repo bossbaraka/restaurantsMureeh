@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { WaiterCallReason } from '../../types/restaurant';
 import { Bell, Check, X, Clock, AlertCircle } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 export const WaiterCallModal: React.FC = () => {
   const {
@@ -36,6 +37,9 @@ export const WaiterCallModal: React.FC = () => {
     }
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
+
+  // UX-001: Escape-to-close + body scroll lock (see hooks/useDialog).
+  useDialog({ isOpen: isWaiterModalOpen, onClose: () => setIsWaiterModalOpen(false) });
 
   if (!isWaiterModalOpen) return null;
 
@@ -119,7 +123,7 @@ export const WaiterCallModal: React.FC = () => {
         {!justCalled && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-luxury-200 mb-2">نوع الطلب:</label>
+              <label className="block text-xs font-bold text-luxury-200 mb-2" htmlFor="waitercallmodal-f1">نوع الطلب:</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {reasons.map((r) => {
                   const isSelected = selectedReason === r.id;
@@ -147,7 +151,7 @@ export const WaiterCallModal: React.FC = () => {
 
             <div>
               <label className="block text-xs font-bold text-luxury-200 mb-1.5">ملاحظة إضافية (اختياري):</label>
-              <input
+              <input id="waitercallmodal-f1"
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}

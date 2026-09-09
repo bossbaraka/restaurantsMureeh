@@ -40,7 +40,42 @@ export default {
           800: '#15181D',
           700: '#1E2229',
           600: '#2A303A',
-        }
+        },
+        /**
+         * MUREEH PLATFORM BLUE — the SaaS/console brand ramp.
+         *
+         * Design-QA finding DS-001: these values were hardcoded as raw hex
+         * literals ~345 times across the app (#0072BC alone appeared 106
+         * times) while the Tailwind theme only defined gold/luxury. That made
+         * the primary brand colour impossible to retheme and invited
+         * near-duplicate shades to creep in.
+         *
+         * Tokenised here with the EXACT existing values, so adopting
+         * `bg-brand-500` in place of `bg-[#0072BC]` is a pure refactor with
+         * zero visual change. Numbering follows luminance, matching the
+         * `luxury`/`gold` ramps above.
+         *
+         * NOTE: `brand-*` is the platform identity. It is deliberately
+         * distinct from the per-tenant `--brand-primary` CSS variables in
+         * index.css, which restyle the CUSTOMER menu per restaurant.
+         */
+        brand: {
+          950: '#020A14', // page background (deepest)
+          900: '#031326',
+          880: '#040D1A', // app shell background
+          860: '#04121F',
+          850: '#071B2E',
+          800: '#081B33', // raised surface / card
+          750: '#0B2545',
+          700: '#0B3C63',
+          600: '#003865', // gradient start
+          500: '#004B87', // borders / gradient mid
+          400: '#0072BC', // PRIMARY action
+          300: '#009FE3', // gradient end
+          200: '#38BDF8', // accent text / icons
+          150: '#7DD3FC',
+          100: '#E0F2FE', // lightest text on blue
+        },
       },
       fontFamily: {
         sans: ['Tajawal', 'Cairo', 'system-ui', '-apple-system', 'sans-serif'],

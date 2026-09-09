@@ -198,15 +198,15 @@ export const BranchManagementView: React.FC = () => {
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="bg-luxury-950 rounded-xl p-2">
                   <div className="text-sm font-bold text-luxury-100">{assigned.length}</div>
-                  <div className="text-[9px] text-luxury-500 font-bold">طاولة</div>
+                  <div className="text-[11px] text-luxury-500 font-bold">طاولة</div>
                 </div>
                 <div className="bg-luxury-950 rounded-xl p-2">
                   <div className="text-sm font-bold text-amber-300">{occupied}</div>
-                  <div className="text-[9px] text-luxury-500 font-bold">مشغولة</div>
+                  <div className="text-[11px] text-luxury-500 font-bold">مشغولة</div>
                 </div>
                 <div className="bg-luxury-950 rounded-xl p-2">
                   <div className="text-sm font-bold text-gold-400">{activeOrders}</div>
-                  <div className="text-[9px] text-luxury-500 font-bold">فاتورة نشطة</div>
+                  <div className="text-[11px] text-luxury-500 font-bold">فاتورة نشطة</div>
                 </div>
               </div>
               <button
@@ -255,8 +255,8 @@ export const BranchManagementView: React.FC = () => {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="text-[10px] text-luxury-400 font-bold block mb-1">اسم الفرع *</label>
-                <input
+                <label className="text-[10px] text-luxury-400 font-bold block mb-1" htmlFor="branchmanagementview-f1">اسم الفرع *</label>
+                <input id="branchmanagementview-f1"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="مثال: فرع شارع النخيل"
@@ -265,8 +265,8 @@ export const BranchManagementView: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-luxury-400 font-bold block mb-1">العنوان</label>
-                  <input
+                  <label className="text-[10px] text-luxury-400 font-bold block mb-1" htmlFor="branchmanagementview-f2">العنوان</label>
+                  <input id="branchmanagementview-f2"
                     value={address}
                     onChange={(e) => setAddress(e.target.value)}
                     placeholder="اختياري"
@@ -274,8 +274,8 @@ export const BranchManagementView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-luxury-400 font-bold block mb-1">الهاتف</label>
-                  <input
+                  <label className="text-[10px] text-luxury-400 font-bold block mb-1" htmlFor="branchmanagementview-f3">الهاتف</label>
+                  <input id="branchmanagementview-f3"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="اختياري"
@@ -347,7 +347,7 @@ export const BranchManagementView: React.FC = () => {
                       className="accent-gold-500"
                     />
                     <span className="font-mono font-bold text-luxury-100">طاولة {t.tableNumber}</span>
-                    <span className="text-[9px] text-luxury-500 mr-auto">{ZONE_LABELS[t.zone] || t.zone}</span>
+                    <span className="text-[11px] text-luxury-500 mr-auto">{ZONE_LABELS[t.zone] || t.zone}</span>
                   </label>
                 );
               })}

@@ -181,6 +181,7 @@ export const TableManagement: React.FC = () => {
             value={searchTableNum}
             onChange={(e) => setSearchTableNum(e.target.value)}
             placeholder="رقم الطاولة..."
+            aria-label="رقم الطاولة"
             className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-2 pr-8 pl-3 text-xs focus:outline-none focus:border-gold-500/60 font-mono"
           />
           <Search className="w-3.5 h-3.5 text-luxury-400 absolute right-3 top-2.5 pointer-events-none" />
@@ -312,8 +313,8 @@ export const TableManagement: React.FC = () => {
 
             <form onSubmit={handleSaveTable} className="space-y-3">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">رقم الطاولة *</label>
-                <input
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="tablemanagement-f1">رقم الطاولة *</label>
+                <input id="tablemanagement-f1"
                   type="number"
                   required
                   min={1}
@@ -325,8 +326,8 @@ export const TableManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">عدد المقاعد (السعة)</label>
-                <select
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="tablemanagement-f2">عدد المقاعد (السعة)</label>
+                <select id="tablemanagement-f2"
                   value={capacityInput}
                   onChange={(e) => setCapacityInput(Number(e.target.value))}
                   className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl"
@@ -339,8 +340,8 @@ export const TableManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">موقع الطاولة / الصالة</label>
-                <select
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="tablemanagement-f3">موقع الطاولة / الصالة</label>
+                <select id="tablemanagement-f3"
                   value={zoneInput}
                   onChange={(e) => setZoneInput(e.target.value as TableZone)}
                   className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl"
