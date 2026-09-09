@@ -656,14 +656,85 @@ router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request
     // Strict ownership: only the tenant that owns the table (or a platform admin) can settle it.
     if (!ownTenant(req, table.restaurantId)) return deny(req, res);
 
-    // Mark active orders as SERVED
+    const now = new Date();
+    const { paymentMethod, note } = req.body as { paymentMethod?: string; note?: string };
+    const paidMethod = paymentMethod || 'CASH';
+
+    // Find active/unpaid orders on this table
+    const unpaidOrders = await prisma.order.findMany({
+      where: {
+        tableId: id,
+        restaurantId: table.restaurantId,
+        status: { not: 'CANCELLED' },
+        paymentStatus: 'UNPAID',
+      },
+      include: { items: true },
+    });
+
+    let paymentRecord: Awaited<ReturnType<typeof prisma.payment.create>> | null = null;
+
+    if (unpaidOrders.length > 0) {
+      const total = roundMoney(unpaidOrders.reduce((sum, o) => sum + o.total, 0));
+      const subtotal = roundMoney(unpaidOrders.reduce((sum, o) => sum + o.subtotal, 0));
+
+      const seq = (await prisma.payment.count({ where: { restaurantId: table.restaurantId } })) + 1;
+      const receiptNumber = `RC-${now.getFullYear()}-${String(seq).padStart(4, '0')}`;
+
+      // Mark orders as PAID, SERVED and record official Payment receipt in ledger
+      paymentRecord = await prisma.$transaction(async (tx) => {
+        await tx.order.updateMany({
+          where: {
+            id: { in: unpaidOrders.map((o) => o.id) },
+            restaurantId: table.restaurantId,
+          },
+          data: {
+            status: 'SERVED',
+            paymentStatus: 'PAID',
+            paymentMethod: paidMethod,
+            settledAt: now,
+            cashierId: req.user!.id,
+          },
+        });
+
+        return tx.payment.create({
+          data: {
+            id: `pay-${randomUUID()}`,
+            receiptNumber,
+            restaurantId: table.restaurantId,
+            branchId: table.branchId || undefined,
+            tableId: id,
+            tableLabel: `طاولة ${table.number}`,
+            orderIds: unpaidOrders.map((o) => o.id),
+            itemsSummary: unpaidOrders
+              .flatMap((o) => o.items.map((i) => i.productNameSnapshot))
+              .slice(0, 4)
+              .join('، '),
+            method: paidMethod,
+            subtotal,
+            total,
+            cashReceived: paidMethod === 'CASH' ? total : undefined,
+            changeDue: 0,
+            cashierId: req.user!.id,
+            cashierName: req.user!.name,
+            note: note || 'تسوية إغلاق الطاولة وإثبات الدفع',
+          },
+        });
+      });
+    }
+
+    // Mark remaining non-cancelled active orders as SERVED and PAID
     await prisma.order.updateMany({
       where: {
         tableId: id,
         restaurantId: table.restaurantId,
         status: { in: ['PENDING', 'PREPARING', 'READY'] },
       },
-      data: { status: 'SERVED' },
+      data: {
+        status: 'SERVED',
+        paymentStatus: 'PAID',
+        settledAt: now,
+        cashierId: req.user!.id,
+      },
     });
 
     // Reset table status and resolve waiter calls
@@ -672,6 +743,7 @@ router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request
       data: {
         status: 'AVAILABLE',
         hasWaiterCall: false,
+        lastActivityAt: now,
       },
     });
 
@@ -684,7 +756,7 @@ router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request
       },
       data: {
         status: 'CLOSED',
-        endedAt: new Date(),
+        endedAt: now,
       },
     });
 
@@ -696,7 +768,7 @@ router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request
       },
       data: {
         status: 'RESOLVED',
-        resolvedAt: new Date(),
+        resolvedAt: now,
       },
     });
 
@@ -708,13 +780,26 @@ router.post('/tables/:id/settle', requireCashierOrManager(), async (req: Request
       action: 'TABLE_SETTLED',
       entity: 'Table',
       entityId: id,
-      details: `تمت تسوية حساب الطاولة ${id} وإعادتها متاحة`,
+      details: `تمت تسوية ودفع طلبات الطاولة ${table.number} ${paymentRecord ? `(إيصال ${paymentRecord.receiptNumber})` : ''}`,
     });
 
     realtimeService.broadcastToTable(table.restaurantId, id, 'TABLE_SETTLED', { tableId: id });
+    if (paymentRecord) {
+      realtimeService.broadcastToTable(table.restaurantId, id, 'PAYMENT_RECORDED', {
+        receiptNumber: paymentRecord.receiptNumber,
+        tableId: id,
+        total: paymentRecord.total,
+      });
+    }
 
-    return res.json({ success: true, message: `تمت تسوية حساب ${id} بنجاح`, statusCode: 200 });
+    return res.json({
+      success: true,
+      message: `تمت تسوية ودفع حساب طاولة ${table.number} بنجاح`,
+      data: { payment: paymentRecord },
+      statusCode: 200,
+    });
   } catch (err) {
+    console.error('Table settle error:', err);
     return res.status(500).json({ success: false, error: 'تعذر تصفية حساب الطاولة', statusCode: 500 });
   }
 });
@@ -2035,6 +2120,14 @@ router.post(
       if (owned !== uniqueTableIds.length) {
         return res.status(403).json({ success: false, error: 'بعض الطاولات لا تنتمي لمطعمك', statusCode: 403 });
       }
+      // Unassign tables previously assigned to this branch that are not in the new selection list
+      if (branchId) {
+        await prisma.table.updateMany({
+          where: { branchId, id: { notIn: uniqueTableIds }, restaurantId },
+          data: { branchId: null },
+        });
+      }
+
       await prisma.table.updateMany({
         where: { id: { in: uniqueTableIds }, restaurantId },
         data: { branchId: branchId || null },
@@ -2045,9 +2138,9 @@ router.post(
         actor: req.user!.name,
         actorRole: req.user!.role,
         action: 'TABLES_BRANCH_ASSIGNED',
-        details: `تم توزيع ${uniqueTableIds.length} طاولات على فرع ${branchId || 'غير مصنف'}`,
+        details: `تم تحديث توزيع الطاولات على فرع ${branchId || 'غير مصنف'} (إجمالي: ${uniqueTableIds.length} طاولة)`,
       });
-      return res.json({ success: true, message: 'تم تحديث توزيع الطاولات', statusCode: 200 });
+      return res.json({ success: true, message: 'تم تحديث توزيع الطاولات بنجاح', statusCode: 200 });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر توزيع الطاولات', statusCode: 500 });
     }

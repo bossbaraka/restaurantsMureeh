@@ -59,64 +59,9 @@ router.post(
         include: { restaurant: true },
       });
 
-      // Auto-provision Demo Account for Stakeholder Presentations & Marketing
-      if (
-        !user &&
-        (normalizedEmail === 'demo@mureeh.com' ||
-          normalizedEmail === 'demo@merar.com' ||
-          normalizedEmail.startsWith('demo@'))
-      ) {
-        let firstRest = await prisma.restaurant.findFirst({
-          where: { status: 'ACTIVE' },
-        });
-        if (!firstRest) {
-          firstRest = await prisma.restaurant.create({
-            data: {
-              id: 'rest-demo-mureeh',
-              name: 'مطعم مريح التجريبي (Mureeh Demo)',
-              nameEn: 'Mureeh Demo Venue',
-              slug: 'mureeh',
-              currency: '₪',
-              status: 'ACTIVE',
-            },
-          });
-        }
-        user = await prisma.restaurantUser.create({
-          data: {
-            id: `user-demo-${Date.now()}`,
-            restaurantId: firstRest.id,
-            name: 'مدير المطعم التجريبي',
-            email: normalizedEmail,
-            passwordHash: bcrypt.hashSync(password || 'demo', 12),
-            role: 'RESTAURANT_MANAGER',
-            status: 'ACTIVE',
-          },
-          include: { restaurant: true },
-        });
-      }
-
-      if (user && normalizedEmail.includes('demo') && user.role !== 'RESTAURANT_MANAGER') {
-        user = await prisma.restaurantUser
-          .update({
-            where: { id: user.id },
-            data: { role: 'RESTAURANT_MANAGER' },
-            include: { restaurant: true },
-          })
-          .catch(() => user!);
-      }
-
-      const isDemoOverride =
-        normalizedEmail.includes('demo') &&
-        (password === 'demo' ||
-          password === 'demo123' ||
-          password === '123456' ||
-          password === 'mureeh2026' ||
-          password === 'Password123!');
-
-      // Uniform response + uniform work factor: unknown accounts cost
-      // the same as a failed password so timing reveals nothing.
+      // Password comparison: bcrypt compare against user hash or dummy hash for timing attack prevention
       const hashToCheck = user ? user.passwordHash : DUMMY_HASH;
-      const isMatch = isDemoOverride || (await bcrypt.compare(password, hashToCheck));
+      const isMatch = await bcrypt.compare(password, hashToCheck);
 
       if (!user || !isMatch) {
         return res.status(401).json({

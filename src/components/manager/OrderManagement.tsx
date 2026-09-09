@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Order, OrderStatus } from '../../types/restaurant';
-import { escapeHtml, formatPrice, formatTime, formatRelativeMinutes, getOrderStatusConfig } from '../../utils/formatting';
+import { escapeHtml, formatPrice, formatTime, formatRelativeMinutes, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { TableAggregationModal } from './TableAggregationModal';
 import {
   ChefHat,
@@ -36,7 +36,7 @@ export const OrderManagement: React.FC = () => {
       .join('');
     const restaurantName = 'مُريح | MUREEH';
     const orderId = escapeHtml(order.id);
-    const tableLabel = escapeHtml(order.tableId.replace(/^(?:TABLE-|.*-T)/, ''));
+    const tableLabel = escapeHtml(formatTableNumber(order.tableId));
     printWindow.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>فاتورة ${orderId}</title><style>body{font-family:Tahoma,Arial,sans-serif;color:#111;max-width:620px;margin:32px auto;padding:0 20px}header{border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:20px;display:flex;justify-content:space-between}h1{font-size:22px;margin:0 0 6px}p{margin:4px 0;color:#555;font-size:13px}table{width:100%;border-collapse:collapse;margin:20px 0}td{padding:10px 4px;border-bottom:1px solid #ddd;font-size:14px}td:last-child{text-align:left;font-weight:bold}.total{display:flex;justify-content:space-between;font-size:18px;font-weight:bold;border-top:2px solid #111;padding-top:14px}@media print{body{margin:0}}</style></head><body><header><div><h1>${restaurantName}</h1><p>فاتورة طلب ${orderId}</p></div><div><p>التاريخ: ${escapeHtml(formatTime(order.createdAt))}</p><p>الطاولة: ${tableLabel}</p></div></header><table>${itemsHtml}</table><div class="total"><span>الإجمالي</span><span>${escapeHtml(formatPrice(order.total))}</span></div><p style="text-align:center;margin-top:32px">شكرًا لزيارتكم</p></body></html>`);
     printWindow.document.close();
     printWindow.onload = () => {
@@ -161,7 +161,7 @@ export const OrderManagement: React.FC = () => {
                       className="text-xs font-bold text-gold-400 hover:underline flex items-center gap-1"
                       title="عرض كافة طلبات هذه الطاولة مجمعة"
                     >
-                      <span>{order.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}</span>
+                      <span>طاولة {formatTableNumber(order.tableId)}</span>
                       <Layers className="w-3.5 h-3.5" />
                     </button>
                     <span className="text-[11px] text-luxury-400 font-mono">({order.id})</span>

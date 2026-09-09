@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { formatPrice } from '../../utils/formatting';
+import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import { ShoppingBag, Bell, QrCode, Sparkles, Store, Menu, X, ChefHat, MessageCircle, User, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { RestaurantMapModal } from '../common/RestaurantMapModal';
@@ -23,20 +23,7 @@ export const CustomerHeader: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
 
-  /**
-   * Extract the human-readable table number from whatever slug/ID the backend
-   * or QR generator produced. Accepts formats like `TABLE-07`, `tbl-07`,
-   * `T07`, `shoqrah-t-07`, `table-12` and plain numeric IDs — strips any
-   * non-digit prefix/suffix and left-pads single digits to two digits so the
-   * mobile header shows "05" consistently instead of "T05" or "5".
-   */
-  const tableNumberStr = React.useMemo(() => {
-    if (!activeTableId) return '—';
-    const digits = activeTableId.replace(/\D+/g, '');
-    if (!digits) return activeTableId;
-    const n = parseInt(digits, 10);
-    return n < 10 ? `0${n}` : String(n);
-  }, [activeTableId]);
+  const tableNumberStr = activeTableId ? formatTableNumber(activeTableId) : '—';
   const hasActiveOrders = activeTableOrders.length > 0;
 
   const restName = currentRestaurant?.name || '';

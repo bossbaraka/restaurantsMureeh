@@ -19,6 +19,7 @@ import {
   Globe,
   Plus,
 } from 'lucide-react';
+import { formatTableNumber } from '../../utils/formatting';
 
 export const ViewSwitcher: React.FC = () => {
   const {
@@ -163,7 +164,7 @@ export const ViewSwitcher: React.FC = () => {
               title="تغيير طاولة العميل الحالية"
             >
               <QrCode className="w-3.5 h-3.5 text-gold-400" />
-              <span>{activeTableId ? `طاولة ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : 'اختر طاولة'}</span>
+              <span>{activeTableId ? `طاولة ${formatTableNumber(activeTableId)}` : 'اختر طاولة'}</span>
             </button>
           )}
 

@@ -492,6 +492,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, viewMode]);
 
+  // SSE real-time listener for staff (Manager / Kitchen KDS / Cashier / Waiter)
+  useEffect(() => {
+    if (!currentRestaurant?.id || !currentUser || typeof window === 'undefined') return;
+    const token = localStorage.getItem('merar_auth_token');
+    if (!token) return;
+
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource(
+        `/api/public/events?restaurantId=${currentRestaurant.id}&token=${encodeURIComponent(token)}`
+      );
+      eventSource.addEventListener('ORDER_CREATED', () => {
+        refreshTenantData();
+        soundFX.playChime();
+      });
+      eventSource.addEventListener('ORDER_STATUS_UPDATED', () => refreshTenantData());
+      eventSource.addEventListener('ORDER_CANCELLED', () => refreshTenantData());
+      eventSource.addEventListener('TABLE_SETTLED', () => refreshTenantData());
+      eventSource.addEventListener('PAYMENT_RECORDED', () => refreshTenantData());
+    } catch {
+      /* fallback to background polling */
+    }
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, [currentRestaurant?.id, currentUser?.id, refreshTenantData]);
+
   // Entitlement checker — resolved from the tenant's live subscription.
   // This is a UI hint only: the server re-verifies every gated action.
   const checkEntitlement = useCallback(

@@ -10,6 +10,28 @@ export function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Format table ID/number cleanly as numbers only (e.g. "rest-merar-T01" -> "1", "TABLE-05" -> "5").
+ */
+export function formatTableNumber(tableIdOrNumber: string | number | undefined | null): string {
+  if (tableIdOrNumber === undefined || tableIdOrNumber === null) return '';
+  const str = String(tableIdOrNumber).trim();
+  if (!str) return '';
+
+  if (str.toUpperCase().includes('WALK-IN') || str.includes('مباشر') || str === '__WALKIN__') {
+    return 'عميل مباشر';
+  }
+
+  // Extract clean number, stripping prefixed letters, zeros and symbols
+  const match = str.match(/(?:(?:-T|TABLE-|^T|\bT)\s*0*)(\d+)/i) || str.match(/(\d+)/);
+  if (match) {
+    const num = parseInt(match[1], 10);
+    return isNaN(num) ? match[1] : String(num);
+  }
+
+  return str;
+}
+
 /** Numeric part of a price, without the currency symbol (e.g. "1,240.50"). */
 export function formatAmount(price: number): string {
   const value = Number(price) || 0;
