@@ -39,6 +39,8 @@ export const LoginModal: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const [staffPinInput, setStaffPinInput] = useState('');
+
   React.useEffect(() => {
     if (currentRestaurant?.id) {
       setSelectedRestaurantId(currentRestaurant.id);
@@ -59,11 +61,15 @@ export const LoginModal: React.FC = () => {
     }
     setIsLoading(true);
     setErrorMsg('');
-    const res = await login(emailInput.trim(), passwordInput);
+    const res = await login(
+      emailInput.trim(),
+      passwordInput,
+      staffPinInput.trim() || undefined
+    );
     setIsLoading(false);
 
     if (res.success) {
-      showToast('success', 'تم تسجيل الدخول بنجاح', 'مرحباً بك في لوحة تحكم المنظومة.');
+      showToast('success', 'تم تسجيل الدخول بنجاح', 'مرحباً بك في وردية العمل والمساعد.');
       setIsLoginModalOpen(false);
       const role = (res as any).role || currentUser?.role;
       if (role === 'KITCHEN') {
@@ -220,12 +226,12 @@ export const LoginModal: React.FC = () => {
             <form onSubmit={handleManagerLogin} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-medium text-luxury-300 mb-1.5">
-                  البريد الإلكتروني الإداري *
+                  البريد الإلكتروني الإداري أو حساب المطعم *
                 </label>
                 <input
                   type="email"
                   required
-                  placeholder="manager@your-restaurant.com"
+                  placeholder="staff@merar.com أو manager@your-restaurant.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
@@ -260,6 +266,28 @@ export const LoginModal: React.FC = () => {
                 </div>
               </div>
 
+              {/* Staff Worker PIN (Optional for managers, required for specific worker shift identification) */}
+              <div className="p-3 bg-luxury-950/80 rounded-2xl border border-luxury-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-gold-400">
+                    رمز PIN الخاص بالعامل (لتأكيد هويتك في الوردية)
+                  </label>
+                  <span className="text-[10px] text-luxury-500">مثال: 1234</span>
+                </div>
+                <input
+                  type="password"
+                  maxLength={6}
+                  placeholder="أدخل رمز الـ PIN المكون من 4 أرقام (إن وجد)"
+                  value={staffPinInput}
+                  onChange={(e) => setStaffPinInput(e.target.value)}
+                  className="w-full bg-luxury-900 border border-luxury-750 rounded-xl px-3 py-2 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60 text-center tracking-widest font-bold"
+                  disabled={lockoutRemainingSeconds > 0 || isLoading}
+                />
+                <p className="text-[10px] text-luxury-400">
+                  عند إدخال رمز الـ PIN الخاص بك كعامل، سيتم تسجيل دخولك مباشرة باسمك ودورك (نادل / كاشير / مطبخ).
+                </p>
+              </div>
+
               {errorMsg && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -273,7 +301,7 @@ export const LoginModal: React.FC = () => {
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-luxury-950 font-bold text-xs shadow-gold-glow transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <Lock className="w-4 h-4" />
-                <span>{isLoading ? 'جاري التحقق والمصادقة...' : 'دخول لوحة التحكم'}</span>
+                <span>{isLoading ? 'جاري التحقق والمصادقة...' : 'دخول وردية العمل واللوحة'}</span>
               </button>
 
             </form>
