@@ -293,7 +293,7 @@ export const SaaSLandingPage: FC = () => {
     const text = encodeURIComponent(
       `مرحباً! أود الاشتراك في منصة مُريح للخدمات الإلكترونية للمطاعم (${planName}) والاستفسار عن تدشين الخدمة لمطعمي.`,
     );
-    window.open(`https://t.me/+972599891559?text=${text}`, '_blank');
+    window.open(`https://t.me/Mureeh_tech_bot?start=${encodeURIComponent(planName)}`, '_blank');
   };
 
   const openManagerConsole = () => {
@@ -1366,7 +1366,7 @@ export const SaaSLandingPage: FC = () => {
               >
                 <MessageSquare className="w-3.5 h-3.5" />
                 <span>تليجرام: </span>
-                <span className="font-mono" dir="ltr">+972 599 891 559</span>
+                <span className="font-mono" dir="ltr">@Mureeh_tech_bot</span>
               </button>
             </div>
             <nav aria-label="روابط سريعة">
@@ -1399,8 +1399,8 @@ export const SaaSLandingPage: FC = () => {
                 <li className="flex items-center gap-2">
                   <MessageSquare className="w-3.5 h-3.5 text-[#38BDF8]" />
                   تليجرام:{' '}
-                  <a href="https://t.me/+972599891559" target="_blank" rel="noopener noreferrer" className="font-mono text-slate-300 hover:text-sky-400" dir="ltr">
-                    +972 599 891 559
+                  <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" className="font-mono text-slate-300 hover:text-sky-400" dir="ltr">
+                    @Mureeh_tech_bot
                   </a>
                 </li>
                 <li className="flex items-center gap-2">

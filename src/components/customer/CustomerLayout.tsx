@@ -355,13 +355,13 @@ export const CustomerLayout: React.FC = () => {
                 هل تملك مطعماً؟ احصل على نظام مريح الذكي ⚡
               </button>
               <a
-                href={`https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، أتواصل معكم عبر منصة مريح`)}`}
+                href="https://t.me/Mureeh_tech_bot"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0072BC]/20 border border-[#0072BC]/40 text-[#38BDF8] text-[11px] font-bold hover:bg-[#0072BC]/30 transition-colors"
               >
-                <span>واتساب المبيعات:</span>
-                <span className="font-mono text-[#38BDF8] font-bold direction-ltr">00970593498909</span>
+                <span>تليجرام الدعم الفني:</span>
+                <span className="font-mono text-[#38BDF8] font-bold direction-ltr">@Mureeh_tech_bot</span>
               </a>
             </div>
           </div>
