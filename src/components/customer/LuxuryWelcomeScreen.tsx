@@ -206,17 +206,17 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
           )}
         </div>
 
-        {/* WhatsApp Contact Badge */}
-        <div className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs font-semibold backdrop-blur-md shadow-lg">
-          <MessageCircle className="w-4 h-4 text-emerald-400 animate-bounce" />
-          <span>للتواصل والدعم الفني عبر واتساب:</span>
+        {/* Telegram Contact Badge */}
+        <div className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-2xl bg-sky-950/70 border border-sky-500/40 text-sky-300 text-xs font-semibold backdrop-blur-md shadow-lg">
+          <MessageCircle className="w-4 h-4 text-sky-400 animate-bounce" />
+          <span>للتواصل والدعم الفني عبر تليجرام:</span>
           <a
-            href={whatsappUrl}
+            href="https://t.me/Mureeh_tech_bot"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-mono font-bold text-emerald-300 hover:text-white underline direction-ltr"
+            className="font-mono font-bold text-sky-300 hover:text-white underline direction-ltr"
           >
-            00970593498909
+            @Mureeh_tech_bot
           </a>
         </div>
       </div>
@@ -240,7 +240,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
             منصة مريح MUREEH · نظام إدارة المطاعم الذكي
           </p>
           <p className="text-[10px] text-luxury-500">
-            للتواصل المباشر مع المنصة واتساب: <span className="font-mono" style={{ color: primaryCol }}>00970593498909</span>
+            للتواصل المباشر مع المنصة تليجرام: <span className="font-mono" style={{ color: primaryCol }}>@Mureeh_tech_bot</span>
           </p>
         </div>
       </div>
