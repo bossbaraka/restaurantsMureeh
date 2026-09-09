@@ -14,6 +14,7 @@ import { OrderTrackingDrawer } from './OrderTrackingDrawer';
 import { WaiterCallModal } from './WaiterCallModal';
 import { DirectTableEntryModal } from './DirectTableEntryModal';
 import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
+import { CustomerOrderLiveNotifier } from './CustomerOrderLiveNotifier';
 import { OrderCompletedModal } from './OrderCompletedModal';
 import { LuxuryWelcomeScreen } from './LuxuryWelcomeScreen';
 import { DisplayMenu } from './DisplayMenu';
@@ -371,7 +372,8 @@ export const CustomerLayout: React.FC = () => {
         </div>
       </footer>
 
-      {/* Floating Active Orders Bar */}
+      {/* Floating Active Orders Bar & Real-time Live Order Notifier */}
+      <CustomerOrderLiveNotifier />
       <ActiveOrdersFloatingBar />
 
       {/* Modals & Drawers */}
