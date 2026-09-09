@@ -120,9 +120,9 @@ describe('C-02: seeds do not hardcode credentials', () => {
 // C-03 — destructive `prisma db push` in deploy paths
 // ---------------------------------------------------------------
 describe('C-03: deploys never run destructive schema pushes', () => {
-  it('Dockerfile and package.json start scripts use migrate deploy', () => {
+  it('Dockerfile and package.json start scripts use migrate deploy wrapper', () => {
     const dockerfile = read('Dockerfile');
-    expect(dockerfile).toContain('prisma migrate deploy');
+    expect(dockerfile).toMatch(/deploy-migrations|prisma migrate deploy/);
     // Only executable lines matter; comments may reference the banned command.
     const dockerCmd = dockerfile
       .split('\n')
@@ -131,7 +131,7 @@ describe('C-03: deploys never run destructive schema pushes', () => {
     expect(dockerCmd).not.toMatch(/db\s+push/);
     const pkg = JSON.parse(read('package.json'));
     for (const script of ['start', 'start:server']) {
-      expect(pkg.scripts[script]).toContain('prisma migrate deploy');
+      expect(pkg.scripts[script]).toMatch(/deploy-migrations|prisma migrate deploy/);
       expect(pkg.scripts[script]).not.toMatch(/db\s+push/);
     }
   });

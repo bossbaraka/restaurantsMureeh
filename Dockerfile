@@ -40,4 +40,4 @@ ENV PORT=3001
 # `migrate deploy` is additive and refuses to apply anything not committed
 # as a migration. Seeding is a deliberate one-time operator action:
 #   docker compose exec app npm run db:seed
-CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx server/index.ts"]
+CMD ["sh", "-c", "npx tsx server/db/deploy-migrations.ts && npx tsx server/index.ts"]
