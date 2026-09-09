@@ -100,7 +100,7 @@ async function getPlanLimits(restaurantId: string): Promise<typeof FREE_LIMITS> 
   });
   if (
     !subscription ||
-    subscription.status !== 'ACTIVE' ||
+    (subscription.status !== 'ACTIVE' && subscription.status !== 'TRIAL') ||
     !subscription.plan ||
     subscription.plan.status !== 'ACTIVE'
   ) {
@@ -123,7 +123,7 @@ async function restaurantHasEntitlement(
   });
   return (
     !!subscription &&
-    subscription.status === 'ACTIVE' &&
+    (subscription.status === 'ACTIVE' || subscription.status === 'TRIAL') &&
     !!subscription.plan &&
     subscription.plan.status === 'ACTIVE' &&
     subscription.plan.entitlements.includes(key)
@@ -1931,6 +1931,26 @@ router.put(
         promoVideoUrl?: string;
         galleryImages?: string[];
       };
+
+      const hasCustomBrandingFields =
+        b.logo !== undefined ||
+        b.coverImage !== undefined ||
+        b.primaryColor !== undefined ||
+        b.accentColor !== undefined ||
+        b.promoVideoUrl !== undefined ||
+        b.galleryImages !== undefined;
+
+      if (
+        hasCustomBrandingFields &&
+        !isPlatformUser(req) &&
+        !(await restaurantHasEntitlement(restaurantId, 'CAN_CUSTOM_BRANDING'))
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: 'تخصيص الهوية البصرية وشعار المطعم يتطلب باقة المحترفين الفاخرة أو باقة المؤسسات.',
+          statusCode: 403,
+        });
+      }
       const updated = await prisma.restaurant.update({
         where: { id: restaurantId },
         data: {

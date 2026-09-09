@@ -361,7 +361,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                   {[
                     { id: 'plan-trial-7d', name: 'Trial 7 أيام', price: 'مجانية', desc: '8 طاولات · صلاحيات محدودة', trial: true },
                     { id: 'plan-starter', name: 'Starter', price: '₪299/شهرياً', desc: 'حتى 15 طاولة' },
-                    { id: 'plan-pro', name: 'Pro Hospitality', price: '₪349/شهرياً', desc: 'حتى 50 طاولة + تحليلات', popular: true },
+                    { id: 'plan-pro', name: 'Pro Hospitality', price: '₪499/شهرياً', desc: 'حتى 50 طاولة + تحليلات', popular: true },
                     { id: 'plan-enterprise', name: 'Enterprise', price: '₪799/شهرياً', desc: 'طاولات وفروع غير محدودة' },
                   ].map((p) => (
                     <button

@@ -81,9 +81,9 @@ const PLANS: PlanDef[] = [
     id: 'pro',
     name: 'الباقة الاحترافية (الأكثر طلباً)',
     tagline: 'الحل المتكامل لإدارة الصالات وشاشة المطبخ والـ POS',
-    priceMonthly: 299,
-    priceYearly: 2990,
-    priceYearlyPerMonth: Math.round(2990 / 12),
+    priceMonthly: 499,
+    priceYearly: 4990,
+    priceYearlyPerMonth: Math.round(4990 / 12),
     features: [
       'جميع مزايا الباقة الأساسية بالكامل',
       'شاشة المطبخ الحية (KDS) بتنبيهات صوتية فورية',
