@@ -64,9 +64,9 @@ const PLANS: PlanDef[] = [
     id: 'starter',
     name: 'الباقة الأساسية',
     tagline: 'للمطاعم والكافيهات الواعدة',
-    priceMonthly: 149,
-    priceYearly: 1490,
-    priceYearlyPerMonth: Math.round(1490 / 12),
+    priceMonthly: 299,
+    priceYearly: 2990,
+    priceYearlyPerMonth: Math.round(2990 / 12),
     features: [
       'منيو رقمي فاخر وتفاعلي عبر رمز الـ QR',
       'طلب فوري مباشر من الطاولة بدون أي تطبيق',

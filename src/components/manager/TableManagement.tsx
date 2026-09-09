@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { TableZone, RestaurantTable } from '../../types/restaurant';
-import { getTableZoneLabel, formatPrice } from '../../utils/formatting';
+import { getTableZoneLabel, formatPrice, formatTableNumber } from '../../utils/formatting';
 import { TableAggregationModal } from './TableAggregationModal';
 import { api } from '../../services/api';
 import {
@@ -214,7 +214,7 @@ export const TableManagement: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-sm font-bold text-luxury-100 font-mono flex items-center gap-1.5">
-                    <span>{table.id.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}</span>
+                    <span>طاولة {formatTableNumber(table.tableNumber || table.id)}</span>
                   </span>
                   <span className="text-[10px] text-luxury-400 block mt-0.5">
                     {getTableZoneLabel(table.zone)} · {table.capacity} مقاعد

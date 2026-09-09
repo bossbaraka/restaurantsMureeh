@@ -30,6 +30,7 @@ export const BranchManagementView: React.FC = () => {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [color, setColor] = useState(BRANCH_COLORS[0]);
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false);
   const [assignmentBranchId, setAssignmentBranchId] = useState<string | null>(null);
   const [assignedIds, setAssignedIds] = useState<string[]>([]);
   const [pendingSave, setPendingSave] = useState(false);
@@ -108,16 +109,17 @@ export const BranchManagementView: React.FC = () => {
         ? tables.filter((t) => t.branchId === branchId).map((t) => t.id)
         : tables.filter((t) => !t.branchId).map((t) => t.id)
     );
+    setAssignmentModalOpen(true);
   };
 
   const confirmAssignment = async () => {
-    if (!currentUser || !tenantId || assignmentBranchId === undefined) return;
+    if (!currentUser || !tenantId) return;
     setPendingSave(true);
     const res = await api.assignTablesToBranch(currentUser, tenantId, assignmentBranchId, assignedIds);
     setPendingSave(false);
     if (res.success) {
       refreshTenantData();
-      setAssignmentBranchId(null);
+      setAssignmentModalOpen(false);
       showToast('success', 'تم تحديث توزيع الطاولات', `عدد الطاولات الموزعة: ${assignedIds.length}`);
     } else {
       showToast('error', 'فشل التوزيع', res.error);
@@ -307,7 +309,7 @@ export const BranchManagementView: React.FC = () => {
       )}
 
       {/* Table assignment modal */}
-      {assignmentBranchId !== null && (
+      {assignmentModalOpen && (
         <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-2xl shadow-2xl p-5 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between mb-3">
@@ -315,7 +317,7 @@ export const BranchManagementView: React.FC = () => {
                 <Users className="w-4 h-4 text-gold-400" />
                 توزيع الطاولات — {assignmentBranchId ? branches.find((b) => b.id === assignmentBranchId)?.name : 'غير مصنفة'}
               </h3>
-              <button onClick={() => setAssignmentBranchId(null)} className="text-luxury-400 hover:text-luxury-100 cursor-pointer">
+              <button onClick={() => setAssignmentModalOpen(false)} className="text-luxury-400 hover:text-luxury-100 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -359,7 +361,7 @@ export const BranchManagementView: React.FC = () => {
                 <Check className="w-4 h-4" /> حفظ التوزيع
               </button>
               <button
-                onClick={() => setAssignmentBranchId(null)}
+                onClick={() => setAssignmentModalOpen(false)}
                 className="px-4 py-2.5 rounded-xl bg-luxury-850 text-luxury-300 text-sm hover:text-luxury-100 cursor-pointer"
               >
                 إلغاء
