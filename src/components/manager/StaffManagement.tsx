@@ -338,7 +338,7 @@ export const StaffManagement: React.FC = () => {
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-luxury-400" />
-          <input
+          <input aria-label="بحث بالاسم أو البريد..."
             type="text"
             placeholder="بحث بالاسم أو البريد..."
             value={searchQuery}
@@ -466,8 +466,8 @@ export const StaffManagement: React.FC = () => {
 
             <form onSubmit={handleAddStaff} className="space-y-4">
               <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5">اسم الموظف *</label>
-                <input
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f1">اسم الموظف *</label>
+                <input id="staffmanagement-f1"
                   type="text"
                   required
                   placeholder="مثال: يوسف الخالد"
@@ -478,8 +478,8 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5">الدور الوظيفي *</label>
-                <select
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f2">الدور الوظيفي *</label>
+                <select id="staffmanagement-f2"
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value as TenantRole)}
                   className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
@@ -492,8 +492,8 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5">الصالة أو المكان المخصص</label>
-                <input
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f3">الصالة أو المكان المخصص</label>
+                <input id="staffmanagement-f3"
                   type="text"
                   placeholder="مثال: الصالة الرئيسية (الطاولات 1-20)"
                   value={newZone}
@@ -504,8 +504,8 @@ export const StaffManagement: React.FC = () => {
 
               {newRole === 'RESTAURANT_MANAGER' ? (
                 <div>
-                  <label className="block text-xs text-luxury-300 font-medium mb-1.5">كلمة مرور المساعد (تُستخدم للدخول بلوحة التحكم) *</label>
-                  <input
+                  <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f4">كلمة مرور المساعد (تُستخدم للدخول بلوحة التحكم) *</label>
+                  <input id="staffmanagement-f4"
                     type="password"
                     minLength={6}
                     placeholder="6 أحرف على الأقل"
@@ -516,8 +516,8 @@ export const StaffManagement: React.FC = () => {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs text-luxury-300 font-medium mb-1.5">رمز الدخول السريع (PIN 4-Digits)</label>
-                  <input
+                  <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f5">رمز الدخول السريع (PIN 4-Digits)</label>
+                  <input id="staffmanagement-f5"
                     type="text"
                     maxLength={6}
                     placeholder="مثال: 5566 (أو اتركه لتوليده تلقائياً)"
@@ -564,8 +564,8 @@ export const StaffManagement: React.FC = () => {
 
             <form onSubmit={handleSaveEditStaff} className="space-y-4">
               <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5">اسم الموظف *</label>
-                <input
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f6">اسم الموظف *</label>
+                <input id="staffmanagement-f6"
                   type="text"
                   required
                   value={editName}
@@ -575,8 +575,8 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5 font-mono">البريد الإلكتروني</label>
-                <input
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5 font-mono" htmlFor="staffmanagement-f7">البريد الإلكتروني</label>
+                <input id="staffmanagement-f7"
                   type="email"
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
@@ -585,8 +585,8 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5">الدور الوظيفي *</label>
-                <select
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f8">الدور الوظيفي *</label>
+                <select id="staffmanagement-f8"
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value as TenantRole)}
                   className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
@@ -599,8 +599,8 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5">الصالة المخصصة</label>
-                <input
+                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f9">الصالة المخصصة</label>
+                <input id="staffmanagement-f9"
                   type="text"
                   value={editZone}
                   onChange={(e) => setEditZone(e.target.value)}
@@ -610,8 +610,8 @@ export const StaffManagement: React.FC = () => {
 
               {editRole !== 'RESTAURANT_MANAGER' && (
                 <div>
-                  <label className="block text-xs text-luxury-300 font-medium mb-1.5">رمز PIN الجديد</label>
-                  <input
+                  <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f10">رمز PIN الجديد</label>
+                  <input id="staffmanagement-f10"
                     type="text"
                     maxLength={6}
                     placeholder="أدخل رمز PIN الجديد..."

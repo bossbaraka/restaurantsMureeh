@@ -123,9 +123,13 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({ onDism
 
         {/* Restaurant Branding Header */}
         <div className="space-y-1">
-          <h1 className="text-3xl sm:text-5xl font-black text-luxury-50 font-serif tracking-tight leading-tight drop-shadow-md">
+          {/* A11Y-005: this splash overlays the menu, which already renders the
+              page's <h1> in CustomerHeader. Two <h1>s on one page breaks the
+              document outline for screen readers, so the transient welcome
+              title is an <h2>. Visual styling is unchanged. */}
+          <h2 className="text-3xl sm:text-5xl font-black text-luxury-50 font-serif tracking-tight leading-tight drop-shadow-md">
             {restName}
-          </h1>
+          </h2>
           <p
             className="text-xs sm:text-sm font-serif tracking-widest uppercase font-bold"
             style={{ color: primaryCol }}

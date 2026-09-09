@@ -143,6 +143,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Quick Cart Button for Mobile */}
             <button
               onClick={() => setIsCartOpen(true)}
+              aria-label={cartTotalCount > 0 ? `عرض السلة — ${cartTotalCount} صنف` : 'عرض السلة'}
               className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl brand-cta font-bold text-xs active:scale-95 cursor-pointer"
             >
               <ShoppingBag className="w-4 h-4" />

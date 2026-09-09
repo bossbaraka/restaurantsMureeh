@@ -132,8 +132,8 @@ export const OffersManagement: React.FC = () => {
 
             <form onSubmit={handleCreateOffer} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">عنوان العرض الرئيسي *</label>
-                <input
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="offersmanagement-f1">عنوان العرض الرئيسي *</label>
+                <input id="offersmanagement-f1"
                   type="text"
                   required
                   value={title}
@@ -144,8 +144,8 @@ export const OffersManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">وصف العرض / تفاصيل الأطباق المشمولة</label>
-                <input
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="offersmanagement-f2">وصف العرض / تفاصيل الأطباق المشمولة</label>
+                <input id="offersmanagement-f2"
                   type="text"
                   value={subtitle}
                   onChange={(e) => setSubtitle(e.target.value)}
@@ -156,8 +156,8 @@ export const OffersManagement: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">السعر بعد الخصم (₪) *</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="offersmanagement-f3">السعر بعد الخصم (₪) *</label>
+                  <input id="offersmanagement-f3"
                     type="number"
                     required
                     value={discountedPrice}
@@ -168,8 +168,8 @@ export const OffersManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">السعر الأصلي قبل الخصم (₪)</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="offersmanagement-f4">السعر الأصلي قبل الخصم (₪)</label>
+                  <input id="offersmanagement-f4"
                     type="number"
                     value={originalPrice}
                     onChange={(e) => setOriginalPrice(e.target.value === '' ? '' : Number(e.target.value))}
@@ -181,8 +181,8 @@ export const OffersManagement: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">شارة العرض (Badge)</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="offersmanagement-f5">شارة العرض (Badge)</label>
+                  <input id="offersmanagement-f5"
                     type="text"
                     value={badge}
                     onChange={(e) => setBadge(e.target.value)}
@@ -192,8 +192,8 @@ export const OffersManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">رابط صورة العرض (Unsplash URL)</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="offersmanagement-f6">رابط صورة العرض (Unsplash URL)</label>
+                  <input id="offersmanagement-f6"
                     type="url"
                     value={image}
                     onChange={(e) => setImage(e.target.value)}

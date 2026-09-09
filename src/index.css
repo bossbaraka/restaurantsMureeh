@@ -18,6 +18,37 @@
     @apply bg-[#0A0B0D] text-[#F8FAFC] antialiased selection:bg-gold-500/20 selection:text-gold-300;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+
+  /* ==========================================================================
+     A11Y-003 — GLOBAL KEYBOARD FOCUS RING  (WCAG 2.1 SC 2.4.7 Focus Visible)
+     --------------------------------------------------------------------------
+     The console used `focus:outline-none` in 46 places with no replacement
+     ring, so keyboard and switch users had NO visible focus indicator across
+     the manager and admin dashboards.
+
+     `:focus-visible` only paints for keyboard/AT focus, never for mouse
+     clicks, so this restores accessibility without adding a ring on tap.
+     Declared in @layer base so any component-level `focus-visible:` utility
+     (which lands in Tailwind's utilities layer) still wins.
+     ========================================================================== */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--brand-primary-strong, #e6c86e);
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+
+  /* Respect users who ask for less motion. Long-running decorative
+     animations on the landing page otherwise keep moving indefinitely. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 /* Custom Utilities for Luxury Responsive UI */
@@ -274,12 +305,26 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  /* A11Y-004: the visual chip stays compact to preserve the toolbar's
+     density, but the *hit area* is expanded to ~44px via a pseudo-element
+     so it meets the recommended touch-target size on phones — this is the
+     primary layout control on the customer menu. */
+  position: relative;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   color: var(--brand-muted);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease;
+}
+.menu-layout-switch button::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
 }
 .menu-layout-switch button[data-on='true'] {
   color: var(--brand-ink);

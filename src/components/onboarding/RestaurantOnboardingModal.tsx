@@ -20,6 +20,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useDialog } from '../../hooks/useDialog';
 
 interface RestaurantOnboardingModalProps {
   isOpen: boolean;
@@ -51,6 +52,10 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
   const [managerEmail, setManagerEmail] = useState('');
   const [managerPassword, setManagerPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // UX-001: body scroll lock. Escape is disabled on purpose — this is a
+  // multi-step wizard and an accidental Escape would discard entered data.
+  useDialog({ isOpen, onClose, closeOnEscape: false });
 
   if (!isOpen) return null;
 
@@ -176,7 +181,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
             </div>
           </div>
 
-          <button onClick={onClose} className="p-1.5 rounded-lg text-luxury-400 hover:text-white">
+          <button onClick={onClose} aria-label="إغلاق النافذة" className="p-1.5 rounded-lg text-luxury-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -210,8 +215,8 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
           {step === 1 && (
             <div className="space-y-3.5 animate-in fade-in">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">اسم المطعم (بالعربية) *</label>
-                <input
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f1">اسم المطعم (بالعربية) *</label>
+                <input id="restaurantonboardingmodal-f1"
                   type="text"
                   required
                   placeholder="مثال: مطعم الأوركيد الفاخر"
@@ -223,8 +228,8 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">الاسم بالإنجليزية *</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f2">الاسم بالإنجليزية *</label>
+                  <input id="restaurantonboardingmodal-f2"
                     type="text"
                     required
                     placeholder="e.g. Orchid Fine Dining"
@@ -234,10 +239,10 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">الرابط المخصص (Slug) *</label>
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f3">الرابط المخصص (Slug) *</label>
                   <div className="flex items-center bg-luxury-950 border border-luxury-800 rounded-xl px-2.5 text-luxury-400 font-mono">
                     <span>restaurantsmureeh-2.onrender.com/r/</span>
-                    <input
+                    <input aria-label="orchid"
                       type="text"
                       required
                       placeholder="orchid"
@@ -252,7 +257,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-luxury-200 mb-1">رقم الهاتف للتواصل</label>
-                  <input
+                  <input id="restaurantonboardingmodal-f3"
                     type="text"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
@@ -260,8 +265,8 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">العنوان والموقع</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f4">العنوان والموقع</label>
+                  <input id="restaurantonboardingmodal-f4"
                     type="text"
                     placeholder="المدينة، الشارع، الحي..."
                     value={address}
@@ -272,8 +277,8 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
               </div>
 
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">نبذة قصيرة عن المطعم</label>
-                <textarea
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f5">نبذة قصيرة عن المطعم</label>
+                <textarea id="restaurantonboardingmodal-f5"
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -288,8 +293,8 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
           {step === 2 && (
             <div className="space-y-4 animate-in fade-in">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">رابط صورة الغلاف الفاخرة (Cover Image)</label>
-                <input
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f6">رابط صورة الغلاف الفاخرة (Cover Image)</label>
+                <input id="restaurantonboardingmodal-f6"
                   type="url"
                   value={coverImage}
                   onChange={(e) => setCoverImage(e.target.value)}
@@ -300,7 +305,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">لون التمييز الأساسي (Primary Accent)</label>
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f7">لون التمييز الأساسي (Primary Accent)</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
@@ -314,7 +319,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
 
                 <div>
                   <label className="block font-bold text-luxury-200 mb-1">العملة الافتراضية</label>
-                  <select
+                  <select id="restaurantonboardingmodal-f7"
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value)}
                     className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl font-bold text-gold-400"
@@ -333,7 +338,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
           {step === 3 && (
             <div className="space-y-4 animate-in fade-in">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">عدد الطاولات الأولية المراد توليد رموز QR لها</label>
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="restaurantonboardingmodal-f8">عدد الطاولات الأولية المراد توليد رموز QR لها</label>
                 <div className="flex items-center gap-3">
                   <input
                     type="range"
@@ -380,7 +385,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                       <span className={`text-[10px] font-semibold block ${p.trial ? 'text-emerald-400' : 'text-gold-400'}`}>
                         {p.price}
                       </span>
-                      <span className="text-[9px] opacity-75 mt-1 block">{p.desc}</span>
+                      <span className="text-[11px] opacity-75 mt-1 block">{p.desc}</span>
                     </button>
                   ))}
                 </div>
@@ -424,7 +429,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] text-luxury-400 mb-1 font-semibold">بريد المدير الإلكتروني</label>
-                    <input
+                    <input id="restaurantonboardingmodal-f8"
                       type="email"
                       dir="ltr"
                       value={managerEmail}
@@ -434,8 +439,8 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-luxury-400 mb-1 font-semibold">كلمة المرور الأولية *</label>
-                    <input
+                    <label className="block text-[11px] text-luxury-400 mb-1 font-semibold" htmlFor="restaurantonboardingmodal-f9">كلمة المرور الأولية *</label>
+                    <input id="restaurantonboardingmodal-f9"
                       type="text"
                       dir="ltr"
                       value={managerPassword}

@@ -356,7 +356,7 @@ export const SaaSLandingPage: FC = () => {
             </button>
           </div>
           <button
-            className="lg:hidden w-10 h-10 rounded-xl bg-[#081B33] border border-[#004B87]/60 text-slate-200 flex items-center justify-center cursor-pointer"
+            className="lg:hidden w-11 h-11 rounded-xl bg-[#081B33] border border-[#004B87]/60 text-slate-200 flex items-center justify-center cursor-pointer"
             onClick={() => setMenuOpen((o) => !o)}
             aria-label="فتح القائمة"
             aria-expanded={menuOpen}

@@ -107,7 +107,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
 
             {/* Feedback Text Area */}
             <div>
-              <textarea
+              <textarea aria-label="أخبرنا عن أكثر طبق نال إعجابك أو أي ملاحظة تود مشاركتها مع الإدارة..."
                 rows={3}
                 placeholder="أخبرنا عن أكثر طبق نال إعجابك أو أي ملاحظة تود مشاركتها مع الإدارة..."
                 value={feedback}

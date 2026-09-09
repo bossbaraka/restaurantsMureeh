@@ -370,9 +370,9 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                     }`}
                   >
                     <div className="text-sm font-bold font-mono">{formatTableNumber(t.tableNumber || t.id)}</div>
-                    <div className="text-[9px] opacity-80">{t.capacity} مقعد</div>
+                    <div className="text-[11px] opacity-80">{t.capacity} مقعد</div>
                     {occupied && openTotal > 0 && (
-                      <div className="text-[9px] font-bold text-gold-300">{formatPrice(openTotal)}</div>
+                      <div className="text-[11px] font-bold text-gold-300">{formatPrice(openTotal)}</div>
                     )}
                   </button>
                 );
@@ -527,7 +527,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono font-bold text-luxury-100">{p.receiptNumber}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
                       p.method === 'CASH' ? 'bg-emerald-500/15 text-emerald-300'
                         : p.method === 'CARD' ? 'bg-sky-500/15 text-sky-300'
                           : 'bg-violet-500/15 text-violet-300'
@@ -568,7 +568,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
               </div>
             </div>
 
-            <label className="text-[10px] text-luxury-400 font-bold block mb-1">طريقة الدفع</label>
+            <label className="text-[10px] text-luxury-400 font-bold block mb-1" htmlFor="cashierposview-f1">طريقة الدفع</label>
             <div className="grid grid-cols-3 gap-2 mb-3">
               {PAY_METHODS.map((m) => {
                 const Icon = m.icon;
@@ -591,7 +591,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
             {method === 'CASH' && (
               <div className="mb-3">
                 <label className="text-[10px] text-luxury-400 font-bold block mb-1">المبلغ المقبوض</label>
-                <input
+                <input id="cashierposview-f1"
                   type="number"
                   value={cashReceived}
                   onChange={(e) => setCashReceived(e.target.value)}
@@ -622,8 +622,8 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
 
             <div className="grid grid-cols-2 gap-2 mb-3">
               <div>
-                <label className="text-[10px] text-luxury-400 font-bold block mb-1">إكرامية (اختياري)</label>
-                <input
+                <label className="text-[10px] text-luxury-400 font-bold block mb-1" htmlFor="cashierposview-f2">إكرامية (اختياري)</label>
+                <input id="cashierposview-f2"
                   type="number"
                   value={tip}
                   onChange={(e) => setTip(e.target.value)}
@@ -632,8 +632,8 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                 />
               </div>
               <div>
-                <label className="text-[10px] text-luxury-400 font-bold block mb-1">ملاحظة</label>
-                <input
+                <label className="text-[10px] text-luxury-400 font-bold block mb-1" htmlFor="cashierposview-f3">ملاحظة</label>
+                <input id="cashierposview-f3"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="اختياري"

@@ -225,10 +225,10 @@ export const LoginModal: React.FC = () => {
           {authTab === 'MANAGERS' && (
             <form onSubmit={handleManagerLogin} className="space-y-3.5">
               <div>
-                <label className="block text-xs font-medium text-luxury-300 mb-1.5">
+                <label className="block text-xs font-medium text-luxury-300 mb-1.5" htmlFor="loginmodal-f1">
                   البريد الإلكتروني الإداري أو حساب المطعم *
                 </label>
-                <input
+                <input id="loginmodal-f1"
                   type="email"
                   required
                   placeholder="staff@merar.com أو manager@your-restaurant.com"
@@ -241,13 +241,13 @@ export const LoginModal: React.FC = () => {
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-medium text-luxury-300">
+                  <label className="block text-xs font-medium text-luxury-300" htmlFor="loginmodal-f2">
                     كلمة المرور المشفرة *
                   </label>
                   <span className="text-[10px] text-luxury-500">Bcrypt Protected</span>
                 </div>
                 <div className="relative">
-                  <input
+                  <input aria-label="••••••••"
                     type={showPassword ? 'text' : 'password'}
                     required
                     placeholder="••••••••"
@@ -274,7 +274,7 @@ export const LoginModal: React.FC = () => {
                   </label>
                   <span className="text-[10px] text-luxury-500">مثال: 1234</span>
                 </div>
-                <input
+                <input aria-label="أدخل رمز الـ PIN المكون من 4 أرقام (إن وجد)"
                   type="password"
                   maxLength={6}
                   placeholder="أدخل رمز الـ PIN المكون من 4 أرقام (إن وجد)"
@@ -316,7 +316,7 @@ export const LoginModal: React.FC = () => {
                   <label className="block text-[11px] font-semibold text-luxury-300">
                     اختر المطعم للوردية *
                   </label>
-                  <select
+                  <select id="loginmodal-f2"
                     value={selectedRestaurantId}
                     onChange={(e) => setSelectedRestaurantId(e.target.value)}
                     className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-gold-500/60 cursor-pointer"

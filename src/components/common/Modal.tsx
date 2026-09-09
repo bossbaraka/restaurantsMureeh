@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useId } from 'react';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -20,6 +20,8 @@ export const Modal: React.FC<ModalProps> = ({
   maxWidth = 'md',
   showCloseButton = true,
 }) => {
+  const titleId = useId();
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -53,19 +55,29 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
       />
 
-      {/* Dialog container */}
+      {/* Dialog container.
+          DS-006: exposed as a real modal dialog. Previously this was a plain
+          <div>, so screen readers announced no dialog boundary, did not trap
+          virtual-cursor navigation, and never read the title. */}
       <div
         className={`relative w-full ${maxWidthClasses[maxWidth]} bg-luxury-900 border border-luxury-700/80 rounded-2xl shadow-luxury overflow-hidden z-10 transition-all my-8 animate-in fade-in zoom-in-95 duration-200`}
         dir="rtl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={typeof title === 'string' ? titleId : undefined}
+        aria-label={typeof title === 'string' ? undefined : 'نافذة'}
       >
         {/* Header */}
         {(title || showCloseButton) && (
           <div className="flex items-center justify-between p-5 border-b border-luxury-800 bg-luxury-850/50">
             <div className="text-right">
               {typeof title === 'string' ? (
-                <h3 className="text-lg font-bold text-luxury-50">{title}</h3>
+                <h3 id={titleId} className="text-lg font-bold text-luxury-50">
+                  {title}
+                </h3>
               ) : (
                 title
               )}

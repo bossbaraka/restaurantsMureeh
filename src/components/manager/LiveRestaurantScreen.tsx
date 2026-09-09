@@ -151,7 +151,7 @@ export const LiveRestaurantScreen: React.FC = () => {
             return (
               <section key={zone} className="rounded-xl bg-luxury-950/70 border border-luxury-800/60 p-2">
                 <header className="flex items-center justify-between px-1 pb-1.5 border-b border-luxury-800/50 mb-1.5">
-                  <h3 className="text-[11px] font-bold text-luxury-200">{ZONE_LABELS[zone] || zone}</h3>
+                  <h2 className="text-[11px] font-bold text-luxury-200">{ZONE_LABELS[zone] || zone}</h2>
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${zoneLive.length ? 'bg-amber-500/15 text-amber-300' : 'bg-luxury-800/60 text-luxury-500'}`}>
                     {zoneLive.length}/{zoneTables.length}
                   </span>
@@ -188,7 +188,7 @@ export const LiveRestaurantScreen: React.FC = () => {
                             />
                           </div>
                         </div>
-                        <div className="flex items-center justify-between text-[9px] text-luxury-500 mt-0.5">
+                        <div className="flex items-center justify-between text-[11px] text-luxury-500 mt-0.5">
                           <span>
                             {isLive
                               ? isBill
@@ -230,9 +230,9 @@ export const LiveRestaurantScreen: React.FC = () => {
           {/* Active orders feed */}
           <div className="flex-1 rounded-xl bg-luxury-950/70 border border-luxury-800/60 p-2 min-h-0 flex flex-col">
             <header className="flex items-center justify-between pb-1.5 border-b border-luxury-800/50 mb-1.5 shrink-0">
-              <h3 className="text-[11px] font-bold text-luxury-200 flex items-center gap-1.5">
+              <h2 className="text-[11px] font-bold text-luxury-200 flex items-center gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-gold-400" /> سير الطلبات المباشر
-              </h3>
+              </h2>
               <span className="text-[10px] text-luxury-500 font-mono">{liveOrders.length}</span>
             </header>
             <div className="flex-1 overflow-y-auto no-scrollbar space-y-1.5">
@@ -253,7 +253,7 @@ export const LiveRestaurantScreen: React.FC = () => {
                     <p className="text-[10px] text-luxury-300 truncate mt-0.5">
                       {o.items.map((i) => `${i.productName || i.name} ×${i.quantity}`).join('، ')}
                     </p>
-                    <div className="flex items-center justify-between mt-1 text-[9px] text-luxury-500">
+                    <div className="flex items-center justify-between mt-1 text-[11px] text-luxury-500">
                       <span>طاولة {o.tableId.replace(/^(?:TABLE-|.*-T)/, '')}</span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-2.5 h-2.5" />
@@ -284,7 +284,7 @@ export const LiveRestaurantScreen: React.FC = () => {
           </div>
         </div>
       </div>
-      <footer className="text-center text-[9px] text-luxury-600 pb-1.5">
+      <footer className="text-center text-[11px] text-luxury-600 pb-1.5">
         اضغط F لملء الشاشة • {currentRestaurant?.name} — نظام تشغيل المطاعم MÉRAR •{' '}
         {viewMode === 'LIVE_SCREEN' ? 'شاشة العرض الحية' : ''}
       </footer>

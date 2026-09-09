@@ -14,6 +14,7 @@ import {
   CreditCard,
   CheckCircle2,
 } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -33,6 +34,9 @@ export const CartDrawer: React.FC = () => {
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [orderNotes, setOrderNotes] = useState('');
+
+  // UX-001: Escape-to-close + body scroll lock (see hooks/useDialog).
+  useDialog({ isOpen: isCartOpen, onClose: () => setIsCartOpen(false) });
 
   if (!isCartOpen) return null;
 
@@ -194,10 +198,10 @@ export const CartDrawer: React.FC = () => {
             <div className="p-5 bg-luxury-950 border-t border-luxury-800 space-y-4 shrink-0">
               {/* Order Notes Input */}
               <div>
-                <label className="block text-[11px] font-bold text-luxury-300 mb-1">
+                <label className="block text-[11px] font-bold text-luxury-300 mb-1" htmlFor="cartdrawer-f1">
                   ملاحظات عامة للطلب (اختياري)
                 </label>
-                <input
+                <input id="cartdrawer-f1"
                   type="text"
                   value={orderNotes}
                   onChange={(e) => setOrderNotes(e.target.value)}

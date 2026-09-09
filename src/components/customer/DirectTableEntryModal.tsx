@@ -169,12 +169,12 @@ export const DirectTableEntryModal: React.FC = () => {
                     <span className="text-xs font-mono font-bold">
                       {table.tableNumber < 10 ? `0${table.tableNumber}` : table.tableNumber}
                     </span>
-                    <span className="text-[9px] opacity-75 truncate max-w-full">
+                    <span className="text-[11px] opacity-75 truncate max-w-full">
                       {table.capacity} مقاعد
                     </span>
 
                     {isActiveCurrent && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[8px] font-bold">
+                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[11px] font-bold">
                         ✓
                       </span>
                     )}

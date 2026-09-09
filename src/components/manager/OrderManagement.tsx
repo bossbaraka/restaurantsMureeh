@@ -95,6 +95,7 @@ export const OrderManagement: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="بحث برقم الطلب، الطاولة، أو الصنف..."
+            aria-label="بحث برقم الطلب، الطاولة، أو الصنف"
             className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-2 pr-9 pl-3 text-xs focus:outline-none focus:border-gold-500/60"
           />
           <Search className="w-4 h-4 text-luxury-400 absolute right-3 top-2.5 pointer-events-none" />

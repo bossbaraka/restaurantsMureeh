@@ -120,7 +120,7 @@ export const MenuManagement: React.FC = () => {
       {/* New Category Inline Form */}
       {isAddingCat && (
         <form onSubmit={handleCreateCategory} className="p-4 rounded-2xl bg-luxury-850 border border-gold-500/30 flex flex-col sm:flex-row items-center gap-3">
-          <input
+          <input aria-label="اسم الفئة (بالعربية) *"
             type="text"
             required
             placeholder="اسم الفئة (بالعربية) *"
@@ -128,7 +128,7 @@ export const MenuManagement: React.FC = () => {
             onChange={(e) => setNewCatName(e.target.value)}
             className="flex-1 bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl text-xs"
           />
-          <input
+          <input aria-label="الاسم بالإنجليزية"
             type="text"
             placeholder="الاسم بالإنجليزية"
             value={newCatNameEn}
@@ -192,6 +192,7 @@ export const MenuManagement: React.FC = () => {
             value={searchDish}
             onChange={(e) => setSearchDish(e.target.value)}
             placeholder="بحث في القائمة..."
+            aria-label="بحث في القائمة"
             className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-2 pr-8 pl-3 text-xs focus:outline-none focus:border-gold-500/60"
           />
           <Search className="w-3.5 h-3.5 text-luxury-400 absolute right-3 top-2.5 pointer-events-none" />

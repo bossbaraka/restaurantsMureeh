@@ -260,8 +260,8 @@ export const BrandingSettingsView: React.FC = () => {
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">اسم المطعم (بالعربية)</label>
-                <input
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f1">اسم المطعم (بالعربية)</label>
+                <input id="brandingsettingsview-f1"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -269,8 +269,8 @@ export const BrandingSettingsView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-bold text-luxury-200 mb-1">الاسم بالإنجليزية</label>
-                <input
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f2">الاسم بالإنجليزية</label>
+                <input id="brandingsettingsview-f2"
                   type="text"
                   value={nameEn}
                   onChange={(e) => setNameEn(e.target.value)}
@@ -279,8 +279,8 @@ export const BrandingSettingsView: React.FC = () => {
               </div>
             </div>
             <div>
-              <label className="block font-bold text-luxury-200 mb-1">الوصف (يظهر للعميل تحت اسم المطعم)</label>
-              <textarea
+              <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f3">الوصف (يظهر للعميل تحت اسم المطعم)</label>
+              <textarea id="brandingsettingsview-f3"
                 rows={2}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -289,10 +289,10 @@ export const BrandingSettingsView: React.FC = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1">
+                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1" htmlFor="brandingsettingsview-f4">
                   <Phone className="w-3.5 h-3.5 text-gold-400" /> رقم الهاتف للتواصل
                 </label>
-                <input
+                <input id="brandingsettingsview-f4"
                   type="text"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -300,10 +300,10 @@ export const BrandingSettingsView: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1">
+                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1" htmlFor="brandingsettingsview-f5">
                   <MapPin className="w-3.5 h-3.5 text-gold-400" /> العنوان والفرع
                 </label>
-                <input
+                <input id="brandingsettingsview-f5"
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
@@ -317,8 +317,8 @@ export const BrandingSettingsView: React.FC = () => {
             <div className="pt-2 border-t border-luxury-850 space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">خط العرض (Latitude)</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f6">خط العرض (Latitude)</label>
+                  <input id="brandingsettingsview-f6"
                     type="number"
                     step="0.0001"
                     value={latitude}
@@ -327,8 +327,8 @@ export const BrandingSettingsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">خط الطول (Longitude)</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f7">خط الطول (Longitude)</label>
+                  <input id="brandingsettingsview-f7"
                     type="number"
                     step="0.0001"
                     value={longitude}
@@ -337,8 +337,8 @@ export const BrandingSettingsView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-luxury-200 mb-1">رابط Google Maps (اختياري)</label>
-                  <input
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f8">رابط Google Maps (اختياري)</label>
+                  <input id="brandingsettingsview-f8"
                     type="text"
                     value={mapUrl}
                     onChange={(e) => setMapUrl(e.target.value)}
@@ -371,7 +371,7 @@ export const BrandingSettingsView: React.FC = () => {
               {/* Logo */}
               <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="block font-bold text-luxury-200">شعار المطعم / الكافيه</label>
+                  <label className="block font-bold text-luxury-200" htmlFor="brandingsettingsview-f9">شعار المطعم / الكافيه</label>
                   <span className="text-[10px] text-luxury-500">يظهر أعلى منيو عملائك</span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -410,7 +410,7 @@ export const BrandingSettingsView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-luxury-400 mb-1">أو رابط مباشر للشعار</label>
-                  <input
+                  <input id="brandingsettingsview-f9"
                     type="url"
                     dir="ltr"
                     value={logo}
@@ -672,7 +672,7 @@ export const BrandingSettingsView: React.FC = () => {
                 <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(7,8,10,0.95), rgba(7,8,10,0.15))' }} />
 
                 {/* Status bar */}
-                <div className="absolute top-2 inset-x-3 flex items-center justify-between text-[8px] text-luxury-200/90 font-mono">
+                <div className="absolute top-2 inset-x-3 flex items-center justify-between text-[11px] text-luxury-200/90 font-mono">
                   <span>9:41</span>
                   <span className="w-16 h-3.5 rounded-full bg-black/60 border border-luxury-700" />
                 </div>
@@ -694,7 +694,7 @@ export const BrandingSettingsView: React.FC = () => {
                   </div>
                   <div className="min-w-0 pb-0.5">
                     <div className="text-sm font-serif font-bold text-white truncate">{name || 'اسم المطعم'}</div>
-                    <div className="text-[9px] text-luxury-300 truncate">{nameEn || 'Restaurant Name'}</div>
+                    <div className="text-[11px] text-luxury-300 truncate">{nameEn || 'Restaurant Name'}</div>
                   </div>
                 </div>
               </div>
@@ -707,7 +707,7 @@ export const BrandingSettingsView: React.FC = () => {
                       <img key={idx} src={g} alt="" className="w-10 h-8 rounded object-cover" />
                     ))}
                     {galleryImages.length > 3 && (
-                      <span className="text-[9px] text-gold-400 self-center font-mono">+{galleryImages.length - 3}</span>
+                      <span className="text-[11px] text-gold-400 self-center font-mono">+{galleryImages.length - 3}</span>
                     )}
                   </div>
                 </div>
@@ -720,7 +720,7 @@ export const BrandingSettingsView: React.FC = () => {
                   {['الأطباق الرئيسية', 'مشاوي', 'مقبلات'].map((c) => (
                     <span
                       key={c}
-                      className="px-2.5 py-1 rounded-full text-[9px] font-bold whitespace-nowrap text-white"
+                      className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap text-white"
                       style={{ background: `${primaryColor}22`, color: primaryColor, border: `1px solid ${primaryColor}55` }}
                     >
                       {c}
@@ -741,7 +741,7 @@ export const BrandingSettingsView: React.FC = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-[10px] font-bold text-luxury-100 truncate">{dish.n}</div>
-                      <div className="text-[9px] text-luxury-400 flex items-center gap-1">
+                      <div className="text-[11px] text-luxury-400 flex items-center gap-1">
                         <Clock className="w-2.5 h-2.5" /> 15-20 دقيقة
                       </div>
                       <div className="text-[10px] font-bold mt-0.5" style={{ color: primaryColor }}>
