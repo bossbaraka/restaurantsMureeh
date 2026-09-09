@@ -26,15 +26,26 @@ export const LoginModal: React.FC = () => {
     failedAttempts,
     lockoutRemainingSeconds,
   } = useAuth();
-  const { showToast, setViewMode, currentRestaurant } = useRestaurant();
+  const { showToast, setViewMode, currentRestaurant, tenantsList } = useRestaurant();
 
   const [authTab, setAuthTab] = useState<'MANAGERS' | 'STAFF_PIN'>('MANAGERS');
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(
+    () => currentRestaurant?.id || tenantsList[0]?.id || ''
+  );
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [pinInput, setPinInput] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  React.useEffect(() => {
+    if (currentRestaurant?.id) {
+      setSelectedRestaurantId(currentRestaurant.id);
+    } else if (tenantsList.length > 0 && !selectedRestaurantId) {
+      setSelectedRestaurantId(tenantsList[0].id);
+    }
+  }, [currentRestaurant?.id, tenantsList, selectedRestaurantId]);
 
   if (!isLoginModalOpen) return null;
 
@@ -54,7 +65,12 @@ export const LoginModal: React.FC = () => {
     if (res.success) {
       showToast('success', 'تم تسجيل الدخول بنجاح', 'مرحباً بك في لوحة تحكم المنظومة.');
       setIsLoginModalOpen(false);
-      setViewMode('MANAGER');
+      const role = (res as any).role || currentUser?.role;
+      if (role === 'KITCHEN') {
+        setViewMode('KITCHEN_KDS');
+      } else {
+        setViewMode('MANAGER');
+      }
     } else {
       setErrorMsg(res.error || 'بيانات الدخول غير صحيحة');
     }
@@ -66,23 +82,26 @@ export const LoginModal: React.FC = () => {
       return;
     }
 
+    const targetRestaurantId = selectedRestaurantId || currentRestaurant?.id || tenantsList[0]?.id;
+    if (!targetRestaurantId) {
+      setErrorMsg('يرجى اختيار المطعم أولاً قبل إدخال الرمز');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMsg('');
-    const res = await loginWithPin(pinToVerify, currentRestaurant?.id);
+    const res = await loginWithPin(pinToVerify, targetRestaurantId);
     setIsLoading(false);
 
     if (res.success) {
       showToast('success', 'تم الدخول بنجاح', 'مرحباً بك في وردية العمل.');
       setIsLoginModalOpen(false);
 
-      // Landing screen follows the authenticated ROLE — never the PIN value.
       const staffRole = res.role || currentUser?.role || 'WAITER';
-      if (staffRole === 'RESTAURANT_MANAGER' || staffRole === 'CASHIER') {
-        setViewMode('MANAGER');
-      } else if (staffRole === 'WAITER' || staffRole === 'KITCHEN') {
+      if (staffRole === 'KITCHEN') {
         setViewMode('KITCHEN_KDS');
       } else {
-        setViewMode('CUSTOMER');
+        setViewMode('MANAGER');
       }
     } else {
       setErrorMsg(res.error || 'رمز PIN غير صالح');
@@ -263,6 +282,26 @@ export const LoginModal: React.FC = () => {
           {/* TAB 2: STAFF NUMERIC PIN PAD */}
           {authTab === 'STAFF_PIN' && (
             <div className="space-y-4 text-center">
+              {/* Restaurant Selector for PIN login */}
+              {tenantsList.length > 0 && (
+                <div className="text-right bg-luxury-950 p-3 rounded-2xl border border-luxury-800 space-y-1">
+                  <label className="block text-[11px] font-semibold text-luxury-300">
+                    اختر المطعم للوردية *
+                  </label>
+                  <select
+                    value={selectedRestaurantId}
+                    onChange={(e) => setSelectedRestaurantId(e.target.value)}
+                    className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-gold-500/60 cursor-pointer"
+                  >
+                    {tenantsList.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} {t.id === currentRestaurant?.id ? '(المطعم الحالي)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <span className="text-xs text-luxury-300 font-medium">أدخل رمز PIN المكون من 4 أرقام للوردية</span>
                 <div className="flex justify-center gap-3 my-3">
