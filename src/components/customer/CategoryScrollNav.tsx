@@ -43,11 +43,27 @@ export const CategoryScrollNav: React.FC = () => {
     );
   }
 
+  const totalAvailableCount = useMemo(() => {
+    return products.filter((p) => p.isAvailable !== false).length;
+  }, [products]);
+
   if (categories.length === 0) return null;
 
   return (
     <div className="menu-cats">
       <div ref={trackRef} className="menu-cats__track" role="tablist" aria-label="أقسام القائمة">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={selectedCategoryId === 'all'}
+          data-active={selectedCategoryId === 'all'}
+          onClick={() => setSelectedCategoryId('all')}
+          className="menu-chip"
+        >
+          <span aria-hidden="true" className="text-[13px] leading-none">✨</span>
+          <span>الكل</span>
+          <span className="menu-chip__count">{totalAvailableCount}</span>
+        </button>
         {categories.map((category) => {
           const isSelected = category.id === selectedCategoryId;
           const count = availableCountByCategory.get(category.id) || 0;

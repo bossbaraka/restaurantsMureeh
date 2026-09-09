@@ -145,6 +145,17 @@ const RestaurantContext = createContext<RestaurantContextType | undefined>(undef
 
 const OPEN_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'PREPARING', 'READY', 'SERVED'];
 
+export function resolveBestInitialCategory(cats: Category[], prods: Product[]): string {
+  if (!cats || cats.length === 0) return 'all';
+  const withAvailable = cats.find((c) =>
+    prods.some((p) => p.categoryId === c.id && p.isAvailable !== false)
+  );
+  if (withAvailable) return withAvailable.id;
+  const withAny = cats.find((c) => prods.some((p) => p.categoryId === c.id));
+  if (withAny) return withAny.id;
+  return cats[0]?.id || 'all';
+}
+
 export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useAuth();
   const { currentUser, currentManagerRestaurant, setCurrentUser: authSetCurrentUser, logout: authLogout } = auth;
@@ -252,6 +263,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (menuRes.success && menuRes.data) {
           setCategories(menuRes.data.categories);
           setProducts(menuRes.data.products);
+          setSelectedCategoryId((prev) =>
+            prev && (prev === 'all' || menuRes.data!.categories.some((c) => c.id === prev))
+              ? prev
+              : resolveBestInitialCategory(menuRes.data!.categories, menuRes.data!.products)
+          );
         }
         let nextOrders: Order[] = [];
         if (ordersRes.success && ordersRes.data) {
@@ -293,6 +309,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setCategories(catalogRes.data.categories);
           setProducts(catalogRes.data.products);
           setOffers(catalogRes.data.offers);
+          setSelectedCategoryId((prev) =>
+            prev && (prev === 'all' || catalogRes.data!.categories.some((c) => c.id === prev))
+              ? prev
+              : resolveBestInitialCategory(catalogRes.data!.categories, catalogRes.data!.products)
+          );
         }
       } else if (displayMode && currentRestaurant?.slug) {
         // Display board: same public catalog, no table token, no session.
@@ -301,6 +322,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setCategories(boardRes.data.categories);
           setProducts(boardRes.data.products);
           setOffers(boardRes.data.offers);
+          setSelectedCategoryId((prev) =>
+            prev && (prev === 'all' || boardRes.data!.categories.some((c) => c.id === prev))
+              ? prev
+              : resolveBestInitialCategory(boardRes.data!.categories, boardRes.data!.products)
+          );
         }
       }
     } catch {
@@ -387,7 +413,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setProducts(catalogRes.data.products);
           setOffers(catalogRes.data.offers);
           setCurrentRestaurant(catalogRes.data.restaurant);
-          setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
+          setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
           setViewMode('CUSTOMER');
         } else {
           showToast('error', 'تعذر تحميل قائمة العرض', catalogRes.error || 'الرابط غير صالح');
@@ -415,7 +441,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               setProducts(catalogRes.data.products);
               setOffers(catalogRes.data.offers);
               setCurrentRestaurant(catalogRes.data.restaurant);
-              setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
+              setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
             }
           });
         } else {
@@ -426,7 +452,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               setProducts(catalogRes.data.products);
               setOffers(catalogRes.data.offers);
               setCurrentRestaurant(catalogRes.data.restaurant);
-              setSelectedCategoryId(catalogRes.data.categories[0]?.id || '');
+              setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
               setViewMode('CUSTOMER');
             } else {
               showToast('error', 'تعذر تحميل قائمة المطعم', catalogRes.error || 'رمز QR غير صالح');

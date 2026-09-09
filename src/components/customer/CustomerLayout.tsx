@@ -1,4 +1,4 @@
-import React, { useCallback, useDeferredValue, useMemo, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { CartItem, Product } from '../../types/restaurant';
 import { useBrandTheme } from '../../theme/brandTheme';
@@ -73,7 +73,9 @@ export const CustomerLayout: React.FC = () => {
     products,
     categories,
     selectedCategoryId,
+    setSelectedCategoryId,
     searchQuery,
+    setSearchQuery,
     cartItems,
     addToCart,
     updateCartItemQuantity,
@@ -109,18 +111,66 @@ export const CustomerLayout: React.FC = () => {
     }
   };
 
+  // Ensure we always have an effective category that contains actual dishes
+  const effectiveCategoryId = useMemo(() => {
+    if (selectedCategoryId === 'all') return 'all';
+    if (selectedCategoryId) {
+      const catExists = categories.some((c) => c.id === selectedCategoryId);
+      const hasProducts = products.some((p) => p.categoryId === selectedCategoryId);
+      if (catExists && hasProducts) {
+        return selectedCategoryId;
+      }
+    }
+    // Fallback: pick the first category that actually has dishes
+    const firstWithAvailable = categories.find((c) =>
+      products.some((p) => p.categoryId === c.id && p.isAvailable !== false)
+    );
+    if (firstWithAvailable) return firstWithAvailable.id;
+
+    const firstWithAny = categories.find((c) =>
+      products.some((p) => p.categoryId === c.id)
+    );
+    if (firstWithAny) return firstWithAny.id;
+
+    return categories[0]?.id || 'all';
+  }, [selectedCategoryId, categories, products]);
+
+  // Keep selectedCategoryId synchronized if it was empty or pointing to an empty category
+  useEffect(() => {
+    if (categories.length > 0 && products.length > 0) {
+      if (!selectedCategoryId || (selectedCategoryId !== 'all' && !products.some((p) => p.categoryId === selectedCategoryId))) {
+        if (effectiveCategoryId && effectiveCategoryId !== selectedCategoryId) {
+          setSelectedCategoryId(effectiveCategoryId);
+        }
+      }
+    }
+  }, [categories, products, selectedCategoryId, effectiveCategoryId, setSelectedCategoryId]);
+
   // Filter by search query or category, then apply the guest's ordering.
   const scopedProducts = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
-    if (!query) return products.filter((p) => p.categoryId === selectedCategoryId);
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.nameEn.toLowerCase().includes(query) ||
-        p.description.toLowerCase().includes(query) ||
-        (p.badge && p.badge.toLowerCase().includes(query))
-    );
-  }, [products, selectedCategoryId, deferredSearch]);
+    if (query) {
+      return products.filter(
+        (p) =>
+          p.name.toLowerCase().includes(query) ||
+          p.nameEn.toLowerCase().includes(query) ||
+          p.description.toLowerCase().includes(query) ||
+          (p.badge && p.badge.toLowerCase().includes(query))
+      );
+    }
+    if (effectiveCategoryId === 'all' || !effectiveCategoryId) {
+      return products;
+    }
+    return products.filter((p) => p.categoryId === effectiveCategoryId);
+  }, [products, effectiveCategoryId, deferredSearch]);
+
+  // If "availableOnly" is active but results in 0 items for this category while dishes exist,
+  // automatically relax it so the customer is not greeted with a dead-end screen on opening.
+  useEffect(() => {
+    if (availableOnly && scopedProducts.length > 0 && scopedProducts.every((p) => p.isAvailable === false)) {
+      updatePreferences({ availableOnly: false });
+    }
+  }, [availableOnly, scopedProducts, updatePreferences]);
 
   const visibleProducts = useMemo(() => {
     const filtered = availableOnly
@@ -152,7 +202,12 @@ export const CustomerLayout: React.FC = () => {
     return index;
   }, [cartItems]);
 
-  const activeCategoryObj = categories.find((c) => c.id === selectedCategoryId);
+  const activeCategoryObj = useMemo(() => {
+    if (effectiveCategoryId === 'all') {
+      return { id: 'all', name: 'كافة الأطباق والمشروبات', nameEn: 'All Dishes & Drinks', sortOrder: 0 };
+    }
+    return categories.find((c) => c.id === effectiveCategoryId);
+  }, [categories, effectiveCategoryId]);
   const isSearching = deferredSearch.trim().length > 0;
 
   // The signature dish anchors the grid — only when a grid can give it room.
@@ -301,16 +356,45 @@ export const CustomerLayout: React.FC = () => {
 
         {/* Products Grid */}
         {visibleProducts.length === 0 ? (
-          <div className="menu-empty my-8">
-            <div className="menu-empty__icon">
+          <div className="menu-empty my-8 p-6 sm:p-8 text-center rounded-2xl bg-luxury-900/60 border border-luxury-800">
+            <div className="menu-empty__icon mx-auto mb-3 w-12 h-12 rounded-full bg-luxury-800/80 flex items-center justify-center text-luxury-400">
               <UtensilsCrossed className="w-6 h-6 stroke-1" />
             </div>
-            <h4 className="text-base font-bold text-luxury-200">لا توجد أطباق مطابقة</h4>
-            <p className="text-xs text-luxury-400 mt-1.5 max-w-xs mx-auto leading-relaxed">
-              {availableOnly
-                ? 'كل أطباق هذا القسم غير متوفرة حالياً. جرّب إلغاء فلتر "المتوفر فقط" أو تصفح قسم آخر.'
-                : 'جرّب البحث بكلمات أخرى أو تصفح الفئات المختلفة في القائمة.'}
+            <h4 className="text-base font-bold text-luxury-200">
+              {isSearching ? `لا توجد نتائج بحث عن "${deferredSearch}"` : 'لا توجد أطباق في هذا القسم حالياً'}
+            </h4>
+            <p className="text-xs text-luxury-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
+              {isSearching
+                ? 'جرّب البحث بكلمات أخرى أو تصفح الأقسام المختلفة في القائمة.'
+                : 'يمكنك استعراض كامل قائمة الطعام أو تصفح الأقسام المتوفرة الأخرى.'}
             </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+              {isSearching && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
+                >
+                  مسح البحث
+                </button>
+              )}
+              {availableOnly && (
+                <button
+                  type="button"
+                  onClick={() => updatePreferences({ availableOnly: false })}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
+                >
+                  إلغاء فلتر المتوفر فقط
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryId('all')}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--brand-primary)] text-luxury-950 hover:brightness-110 transition-all shadow-md cursor-pointer"
+              >
+                تصفح كامل القائمة
+              </button>
+            </div>
           </div>
         ) : (
           <div className="menu-grid" data-layout={layout}>
