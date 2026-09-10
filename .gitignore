@@ -17,6 +17,11 @@ dist-ssr
 backups/*.sql
 uploads/*
 
+# Local design-preview harnesses (e.g. `preview/welcome` renders the QR splash
+# against stub tenant palettes so the theming can be eyeballed without a DB).
+# Local only — nothing in here is part of the shipped app.
+preview/
+
 # Local debugging / throwaway scripts. NEVER commit: these historically
 # carried live database connection strings (audit C-01). Anything needing
 # database access must read process.env.DATABASE_URL with no fallback.
