@@ -1,20 +1,23 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { randomUUID } from 'crypto';
-import { requireManager } from '../middleware/auth';
+import { requireManager, isPlatformUser } from '../middleware/auth';
 import { uploadLimiter } from '../middleware/rateLimit';
+import { logAuditEvent } from '../services/audit';
+import {
+  getStorage,
+  normalizeKind,
+  keyBelongsToRestaurant,
+} from '../services/storage';
+import {
+  sniffImage,
+  MAX_IMAGE_BYTES,
+  isWithinUploadSizeLimit,
+} from '../services/storage/imageSniff';
 
 const router = Router();
 
-const uploadDir = path.resolve(process.cwd(), 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Memory storage: the file is inspected BEFORE anything touches disk,
-// so rejected uploads never leave attacker-controlled bytes behind.
+// Memory storage: the file is inspected BEFORE anything is persisted, so a
+// rejected upload never leaves attacker-controlled bytes behind.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -31,86 +34,190 @@ const upload = multer({
   },
 });
 
-type SniffedImage = { ext: '.png' | '.jpg' | '.webp' | '.gif' } | null;
-
-/** Verify magic bytes — MIME headers and extensions are attacker input. */
-function sniffImage(buffer: Buffer): SniffedImage {
-  if (buffer.length < 12) return null;
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47 &&
-    buffer[4] === 0x0d &&
-    buffer[5] === 0x0a &&
-    buffer[6] === 0x1a &&
-    buffer[7] === 0x0a
-  ) {
-    return { ext: '.png' };
+/**
+ * Resolve the tenant an upload/delete belongs to. Tenant users always act on
+ * their own JWT restaurantId; platform admins may target a tenant explicitly
+ * via query/body (mirroring the tenant-resolution convention in manager.ts).
+ */
+function resolveTenantId(req: Request): string | undefined {
+  if (isPlatformUser(req)) {
+    return (
+      (req.query.restaurantId as string) ||
+      (typeof req.body?.restaurantId === 'string' ? req.body.restaurantId : undefined) ||
+      undefined
+    );
   }
-  // JPEG: FF D8 FF
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return { ext: '.jpg' };
-  }
-  // WEBP: RIFF....WEBP
-  if (
-    buffer.toString('ascii', 0, 4) === 'RIFF' &&
-    buffer.toString('ascii', 8, 12) === 'WEBP'
-  ) {
-    return { ext: '.webp' };
-  }
-  // GIF: GIF87a / GIF89a
-  const gifHeader = buffer.toString('ascii', 0, 6);
-  if (gifHeader === 'GIF87a' || gifHeader === 'GIF89a') {
-    return { ext: '.gif' };
-  }
-  return null;
+  return req.user?.restaurantId || undefined;
 }
 
-// POST /api/uploads/image — tenant branding assets (managers only).
+// POST /api/uploads/image — tenant image upload (managers only).
+// Form fields: `image` (file), optional `kind` (logo|cover|gallery|product|…).
 router.post(
   '/image',
   requireManager(),
   uploadLimiter,
   upload.single('image'),
-  (req: Request, res: Response) => {
-    if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ success: false, error: 'لم يتم استلام أي صورة', statusCode: 400 });
-    }
+  async (req: Request, res: Response) => {
+    try {
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({
+          success: false,
+          error: 'لم يتم استلام أي صورة',
+          statusCode: 400,
+        });
+      }
 
-    const sniffed = sniffImage(req.file.buffer);
-    if (!sniffed) {
+      // Size validation (defense-in-depth alongside the multer limit).
+      if (!isWithinUploadSizeLimit(req.file.size)) {
+        return res.status(400).json({
+          success: false,
+          error: `حجم الصورة يتجاوز الحد المسموح (${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)}MB)`,
+          statusCode: 400,
+        });
+      }
+
+      // Magic-byte validation: MIME headers and filenames are attacker input.
+      const sniffed = sniffImage(req.file.buffer);
+      if (!sniffed) {
+        return res.status(400).json({
+          success: false,
+          error: 'الملف ليس صورة حقيقية بصيغة JPG أو PNG أو WEBP أو GIF',
+          statusCode: 400,
+        });
+      }
+
+      const restaurantId = resolveTenantId(req);
+      if (!restaurantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'restaurantId مطلوب لرفع الصورة',
+          statusCode: 400,
+        });
+      }
+
+      const kind = normalizeKind(req.body?.kind);
+
+      const stored = await getStorage().upload({
+        restaurantId,
+        kind,
+        buffer: req.file.buffer,
+        mimeType: sniffed.mimeType,
+        ext: sniffed.ext,
+        size: req.file.size,
+      });
+
+      // Audit is best-effort: a logging failure must not fail the upload.
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: 'IMAGE_UPLOADED',
+        entity: 'Storage',
+        entityId: stored.key,
+        details: `رفع صورة (${kind}) بحجم ${stored.size} بايت`,
+        metadata: { mimeType: stored.mimeType },
+      }).catch(() => undefined);
+
+      // `url` is the permanent public URL the client persists in PostgreSQL;
+      // `key` is the object key (needed for deletes and diagnostics).
+      return res.json({
+        success: true,
+        data: {
+          url: stored.url,
+          pathUrl: stored.url,
+          key: stored.key,
+          filename: stored.key.split('/').pop(),
+          size: stored.size,
+          mimeType: stored.mimeType,
+        },
+        statusCode: 200,
+      });
+    } catch (err) {
+      console.error('Image upload error:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'تعذر رفع الصورة إلى التخزين',
+        statusCode: 500,
+      });
+    }
+  }
+);
+
+// POST /api/uploads/delete — delete a previously uploaded image by URL.
+// Body: { url }. Only the owning tenant (or a platform admin) may delete.
+router.post('/delete', requireManager(), async (req: Request, res: Response) => {
+  try {
+    const { url } = (req.body ?? {}) as { url?: unknown };
+    if (typeof url !== 'string' || !url.trim()) {
       return res.status(400).json({
         success: false,
-        error: 'الملف ليس صورة حقيقية بصيغة JPG أو PNG أو WEBP أو GIF',
+        error: 'url مطلوب لحذف الصورة',
         statusCode: 400,
       });
     }
 
-    // Server-generated filename + server-verified extension
-    const filename = `img-${Date.now()}-${randomUUID().slice(0, 8)}${sniffed.ext}`;
-    const filePath = path.join(uploadDir, filename);
-    fs.writeFileSync(filePath, req.file.buffer);
+    const storage = getStorage();
+    const key = storage.keyFromUrl(url);
 
-    // The client persists `url` in the database (logo / cover / dish image),
-    // so it MUST be the small on-disk path. Returning the full base64 data
-    // URL here (the old behaviour) made every subsequent branding/product
-    // save POST megabytes of JSON and trip the 1MB body limit with
-    // `PayloadTooLargeError: request entity too large`.
-    const fileUrl = `/uploads/${filename}`;
+    // Not a URL this storage driver manages (external/CDN/legacy) — nothing
+    // to delete; report success so callers can treat it as a no-op.
+    if (!key) {
+      return res.json({
+        success: true,
+        data: { deleted: false, key: null, reason: 'not-managed' },
+        statusCode: 200,
+      });
+    }
+
+    // Tenant isolation: a tenant can only delete files under its own folder.
+    if (!isPlatformUser(req)) {
+      const restaurantId = req.user?.restaurantId;
+      if (!restaurantId || !keyBelongsToRestaurant(key, restaurantId)) {
+        await logAuditEvent({
+          restaurantId: req.user?.restaurantId ?? null,
+          userId: req.user!.id,
+          actor: req.user!.name,
+          actorRole: req.user!.role,
+          action: 'STORAGE_DELETE_DENIED',
+          entity: 'Storage',
+          entityId: key,
+          details: `محاولة حذف ملف خارج نطاق المطعم: ${key}`,
+        }).catch(() => undefined);
+        return res.status(403).json({
+          success: false,
+          error: 'غير مصرح لك بحذف هذا الملف',
+          statusCode: 403,
+        });
+      }
+    }
+
+    await storage.delete(key);
+
+    await logAuditEvent({
+      restaurantId: req.user?.restaurantId ?? null,
+      userId: req.user!.id,
+      actor: req.user!.name,
+      actorRole: req.user!.role,
+      action: 'IMAGE_DELETED',
+      entity: 'Storage',
+      entityId: key,
+      details: `حذف صورة: ${key}`,
+    }).catch(() => undefined);
 
     return res.json({
       success: true,
-      data: {
-        url: fileUrl,
-        pathUrl: fileUrl,
-        filename,
-        size: req.file.size,
-      },
+      data: { deleted: true, key },
       statusCode: 200,
     });
+  } catch (err) {
+    console.error('Image delete error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'تعذر حذف الصورة من التخزين',
+      statusCode: 500,
+    });
   }
-);
+});
 
 export default router;

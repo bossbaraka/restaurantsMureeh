@@ -390,9 +390,10 @@ export const PlatformAdminPortal: React.FC = () => {
                 </div>
 
                 <div className="space-y-2 pt-3 border-t border-luxury-800 text-xs text-luxury-300">
-                  <div>✓ حتى {p.maxTables === 999 ? 'غير محدود من' : p.maxTables} طاولة</div>
-                  <div>✓ حتى {p.maxCategories === 999 ? 'أقسام غير محدودة' : `${p.maxCategories} أقسام`}</div>
-                  <div>✓ حتى {p.maxProducts === 999 ? 'أطباق غير محدودة' : `${p.maxProducts} طبق`}</div>
+                  <div>✓ حتى {p.maxTables} طاولة</div>
+                  <div>✓ حتى {p.maxCategories} أقسام</div>
+                  <div>✓ حتى {p.maxProducts} طبق</div>
+                  <div>✓ حتى {p.maxBranches} فروع</div>
                   {p.entitlements.map((e) => (
                     <div key={e} className="text-emerald-400 font-medium">✓ ميزة: {e.replace('CAN_', '')}</div>
                   ))}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -34,8 +34,23 @@ export const BranchManagementView: React.FC = () => {
   const [assignmentBranchId, setAssignmentBranchId] = useState<string | null>(null);
   const [assignedIds, setAssignedIds] = useState<string[]>([]);
   const [pendingSave, setPendingSave] = useState(false);
+  // Branch ceiling of the tenant's plan (server-enforced; shown as a hint here).
+  const [maxBranches, setMaxBranches] = useState<number | null>(null);
 
   const tenantId = currentRestaurant?.id || '';
+
+  useEffect(() => {
+    if (!tenantId) return;
+    let alive = true;
+    api.getManagerSubscription(tenantId).then((res) => {
+      if (!alive || !res.success || !res.data) return;
+      const plan = res.data.plans.find((p) => p.id === res.data.subscription?.planId);
+      if (plan) setMaxBranches(plan.maxBranches);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [tenantId]);
   const branchTables = (branchId: string | null): RestaurantTable[] => {
     const list = branchId ? tables.filter((t) => t.branchId === branchId) : tables.filter((t) => !t.branchId);
     return list.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
@@ -153,11 +168,22 @@ export const BranchManagementView: React.FC = () => {
           </h2>
           <p className="text-[11px] text-luxury-400 mt-1">
             وزّع طاولاتك على فروع متعددة وافتح لكل فرع شاشة كاشير وتقارير مستقلة.
+            {maxBranches !== null && (
+              <span className="inline-block mr-2 text-gold-400/90 font-bold">
+                ({branches.length} / {maxBranches} فرع)
+              </span>
+            )}
           </p>
         </div>
         <button
           onClick={startCreate}
-          className="flex items-center gap-1.5 bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer"
+          disabled={maxBranches !== null && branches.length >= maxBranches}
+          className="flex items-center gap-1.5 bg-gold-500 hover:bg-gold-400 disabled:opacity-40 disabled:cursor-not-allowed text-luxury-950 font-bold px-3.5 py-2 rounded-xl text-xs transition-colors cursor-pointer"
+          title={
+            maxBranches !== null && branches.length >= maxBranches
+              ? `وصلت للحد الأقصى لعدد الفروع في باقتك (${maxBranches})`
+              : 'إضافة فرع جديد'
+          }
         >
           <Plus className="w-4 h-4" /> فرع جديد
         </button>

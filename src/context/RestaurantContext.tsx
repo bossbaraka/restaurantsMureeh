@@ -150,6 +150,67 @@ const RestaurantContext = createContext<RestaurantContextType | undefined>(undef
 
 const OPEN_ORDER_STATUSES: OrderStatus[] = ['PENDING', 'PREPARING', 'READY', 'SERVED'];
 
+/**
+ * One-table-per-device binding.
+ *
+ * The customer experience is QR-only: a device that scans a table QR is bound
+ * to THAT table for the lifetime of the tab. The binding is persisted in
+ * sessionStorage (so a refresh does not unbind it) and is re-checked whenever
+ * the URL handling effect runs — a second, different QR token is rejected
+ * instead of silently switching tables.
+ */
+const TABLE_BINDING_KEY = 'merar_table_binding';
+
+interface TableBinding {
+  restaurantId: string;
+  tableId: string;
+  tableNumber: number;
+  qrToken: string;
+}
+
+function readTableBinding(): TableBinding | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(TABLE_BINDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<TableBinding>;
+    if (
+      typeof parsed.restaurantId === 'string' &&
+      typeof parsed.tableId === 'string' &&
+      typeof parsed.qrToken === 'string' &&
+      parsed.qrToken
+    ) {
+      return {
+        restaurantId: parsed.restaurantId,
+        tableId: parsed.tableId,
+        tableNumber: Number(parsed.tableNumber) || 0,
+        qrToken: parsed.qrToken,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeTableBinding(binding: TableBinding): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(TABLE_BINDING_KEY, JSON.stringify(binding));
+  } catch {
+    /* storage unavailable — binding enforcement degrades to URL-only */
+  }
+}
+
+function clearTableBinding(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(TABLE_BINDING_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
 export function resolveBestInitialCategory(cats: Category[], prods: Product[]): string {
   if (!cats || cats.length === 0) return 'all';
   const withAvailable = cats.find((c) =>
@@ -334,7 +395,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setPlans(subRes.data.plans);
         }
       } else if (currentRestaurant?.slug && currentTableSession?.sessionToken) {
-        const catalogRes = await api.getPublicRestaurantBySlug(currentRestaurant.slug, currentTableSession.sessionToken);
+        // Fetch the menu AND the live orders of this QR session in parallel.
+        // Orders are what power the guest's "المطبخ الحي" status tracker.
+        const ordersPromise = activeTableId
+          ? api.getTableSessionOrders(currentRestaurant.id, activeTableId, currentTableSession.sessionToken)
+          : Promise.resolve(null);
+        const [catalogRes, ordersRes] = await Promise.all([
+          api.getPublicRestaurantBySlug(currentRestaurant.slug, currentTableSession.sessionToken),
+          ordersPromise,
+        ]);
+
+        if (ordersRes && ordersRes.success && ordersRes.data) {
+          setOrders(ordersRes.data);
+        }
+
         if (catalogRes.success && catalogRes.data) {
           setCategories(catalogRes.data.categories);
           setProducts(catalogRes.data.products);
@@ -367,7 +441,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } finally {
       isFetchingRef.current = false;
     }
-  }, [currentRestaurant?.id, currentRestaurant?.slug, currentUser?.id, currentTableSession?.sessionToken, displayMode]);
+  }, [currentRestaurant?.id, currentRestaurant?.slug, currentUser?.id, currentTableSession?.sessionToken, activeTableId, displayMode]);
 
   // Load the platform tenant directory for platform admins (used by the
   // tenant switcher, admin portal and manager header) or public active restaurants for staff login.
@@ -474,7 +548,22 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     if (slug) {
       urlHandledRef.done = true;
-      const targetToken = qrToken || 'default';
+      let targetToken = qrToken || 'default';
+
+      // One-table-per-device: if this tab already scanned a table QR, the
+      // guest stays bound to it. A different QR token in the URL is rejected
+      // (no table switching) and the bound token is used instead.
+      const storedBinding = readTableBinding();
+      if (storedBinding && storedBinding.qrToken) {
+        if (targetToken !== 'default' && targetToken !== storedBinding.qrToken) {
+          showToast(
+            'error',
+            'لا يمكن تغيير الطاولة',
+            `هذا الجهاز مرتبط حالياً بطاولة ${storedBinding.tableNumber || '—'}. لبدء جلسة جديدة أغلق الصفحة وأعد مسح الرمز الموجود على طاولتك.`
+          );
+        }
+        targetToken = storedBinding.qrToken;
+      }
 
       api.createTableSession(targetToken, slug).then((sessionRes) => {
         if (sessionRes.success && sessionRes.data) {
@@ -492,7 +581,18 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             setTables((prev) => (prev.some((t) => t.id === sessionTable.id) ? prev : [...prev, sessionTable]));
           }
 
-          const cleanQr = sessionRes.data.table.qrToken || (targetToken !== 'default' ? targetToken : undefined);
+          // Persist the binding so a refresh (or a URL with another table's
+          // QR) can never move this device to a different table.
+          if (targetToken !== 'default') {
+            writeTableBinding({
+              restaurantId: sessionRes.data.restaurant.id,
+              tableId: sessionRes.data.table.id,
+              tableNumber: sessionRes.data.table.tableNumber,
+              qrToken: targetToken,
+            });
+          }
+
+          const cleanQr = targetToken !== 'default' ? targetToken : undefined;
           api.getPublicRestaurantBySlug(slug, cleanQr).then((catalogRes) => {
             if (catalogRes.success && catalogRes.data) {
               setCategories(catalogRes.data.categories);
@@ -505,6 +605,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
             }
           });
+
+          // Kick off the guest's live order-status stream immediately.
+          void refreshTenantData();
         } else {
           // If session by token failed, load public menu directly by slug
           api.getPublicRestaurantBySlug(slug).then((catalogRes) => {
@@ -535,7 +638,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (displayMode) return; // never rewrite the shareable display link
     if (activeTableId && currentTableSession) {
       const table = tables.find((t) => t.id === activeTableId);
-      const qrToken = table?.qrToken;
+      const qrToken = table?.qrToken || readTableBinding()?.qrToken;
       if (!qrToken) return;
       const newUrl = `/r/${currentRestaurant.slug}?qr=${encodeURIComponent(qrToken)}`;
       if (window.location.pathname + window.location.search !== newUrl) {
@@ -641,6 +744,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setCurrentTableSession(null);
       setActiveTableId(null);
       setActiveTableNumber(null);
+      clearTableBinding();
       showToast('info', 'تم التبديل إلى مطعم', target.name);
     },
     [availableRestaurants, showToast]
@@ -654,6 +758,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setActiveTableId(null);
     setActiveTableNumber(null);
     setCurrentTableSession(null);
+    clearTableBinding();
     setViewMode('SAAS_LANDING');
     showToast('info', 'تم تسجيل الخروج');
   }, [authLogout, showToast]);
@@ -674,6 +779,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
       setActiveTableId(table.id);
       setActiveTableNumber(table.tableNumber);
+      // Staff/manager preview picks a table explicitly — it is not a guest QR
+      // scan, so drop any stale one-table binding before switching.
+      clearTableBinding();
       api.createTableSession(table.qrToken).then((res) => {
         if (res.success && res.data) {
           setCurrentTableSession(res.data.session);

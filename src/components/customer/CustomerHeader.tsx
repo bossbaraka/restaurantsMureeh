@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, formatTableNumber } from '../../utils/formatting';
-import { ShoppingBag, Bell, QrCode, Sparkles, Store, Menu, X, ChefHat, MessageCircle, User, MapPin } from 'lucide-react';
+import { ShoppingBag, Bell, Store, Menu, X, ChefHat, MessageCircle, User, MapPin, HelpCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { RestaurantMapModal } from '../common/RestaurantMapModal';
+import { openCustomerGuide } from './guideBus';
 import { optimizeImageUrl } from './ProductImage';
 
 export const CustomerHeader: React.FC = () => {
@@ -62,7 +63,11 @@ export const CustomerHeader: React.FC = () => {
                 <img
                   src={optimizeImageUrl(currentRestaurant.logo, 120, 75)}
                   alt={restName}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full"
+                  style={{
+                    objectFit: currentRestaurant.logoFit === 'contain' ? 'contain' : 'cover',
+                    objectPosition: currentRestaurant.logoPosition || '50% 50%',
+                  }}
                   loading="eager"
                   decoding="async"
                 />
@@ -76,27 +81,51 @@ export const CustomerHeader: React.FC = () => {
                 <span className="text-[var(--brand-primary-strong)] text-xs font-serif italic hidden xs:inline">{restNameEn}</span>
               </h1>
 
-              {/* Table Indicator Pill */}
-              <button
-                onClick={() => setIsTableSelectorOpen(true)}
-                className="flex items-center gap-1.5 text-xs text-[rgb(var(--brand-primary-strong-rgb)/0.9)] hover:text-[var(--brand-primary-strong)] mt-0.5 group cursor-pointer"
-              >
-                <span className={`w-2 h-2 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
-                <span className="font-semibold underline decoration-[rgb(var(--brand-primary-strong-rgb)/0.4)] underline-offset-2">
-                  {activeTableId ? `طاولة ${tableNumberStr}` : 'اختر رقم الطاولة'}
-                </span>
-                <span className="text-[10px] text-luxury-400 group-hover:text-luxury-300">
-                  ({activeTableId ? 'تغيير' : 'تحديد'})
-                </span>
-              </button>
+              {/* Table Indicator Pill — guests are locked to their scanned
+                  table (one barcode); staff/managers may switch for preview. */}
+              {currentUser ? (
+                <button
+                  onClick={() => setIsTableSelectorOpen(true)}
+                  className="flex items-center gap-1.5 text-xs text-[rgb(var(--brand-primary-strong-rgb)/0.9)] hover:text-[var(--brand-primary-strong)] mt-0.5 group cursor-pointer"
+                >
+                  <span className={`w-2 h-2 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+                  <span className="font-semibold underline decoration-[rgb(var(--brand-primary-strong-rgb)/0.4)] underline-offset-2">
+                    {activeTableId ? `طاولة ${tableNumberStr}` : 'اختر رقم الطاولة'}
+                  </span>
+                  <span className="text-[10px] text-luxury-400 group-hover:text-luxury-300">
+                    ({activeTableId ? 'تغيير' : 'تحديد'})
+                  </span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-[rgb(var(--brand-primary-strong-rgb)/0.9)] mt-0.5" data-guide="table">
+                  <span className={`w-2 h-2 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+                  <span className="font-semibold">
+                    {activeTableId ? `طاولة ${tableNumberStr}` : 'امسح رمز QR للطاولة'}
+                  </span>
+                  {activeTableId && (
+                    <span className="text-[10px] text-luxury-500">مقفلة 🔒</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Desktop & Tablet Action Buttons */}
           <div className="hidden sm:flex items-center gap-2 sm:gap-3">
+            {/* Usage Guide Button */}
+            <button
+              onClick={() => openCustomerGuide()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-luxury-900 hover:bg-luxury-850 text-luxury-200 hover:text-[var(--brand-primary-strong)] border border-luxury-800 transition-all active:scale-95 text-xs font-medium cursor-pointer"
+              title="دليل استخدام القائمة خطوة بخطوة"
+            >
+              <HelpCircle className="w-4 h-4 text-[var(--brand-primary-strong)]" />
+              <span>دليل الاستخدام</span>
+            </button>
+
             {/* Restaurant Map Button */}
             <button
               onClick={() => setIsMapOpen(true)}
+              data-guide="map"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-luxury-900 hover:bg-luxury-850 text-luxury-200 hover:text-gold-300 border border-luxury-800 transition-all active:scale-95 text-xs font-medium cursor-pointer"
               title="عرض خريطة وموقع المطعم"
             >
@@ -107,6 +136,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Waiter Call Button */}
             <button
               onClick={() => setIsWaiterModalOpen(true)}
+              data-guide="waiter"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-luxury-900 hover:bg-luxury-850 text-luxury-200 hover:text-[var(--brand-primary-strong)] border border-luxury-800 transition-all active:scale-95 text-xs font-medium cursor-pointer"
               title="استدعاء طاقم الضيافة"
             >
@@ -118,6 +148,7 @@ export const CustomerHeader: React.FC = () => {
             {hasActiveOrders && (
               <button
                 onClick={() => setIsOrderTrackingOpen(true)}
+                data-guide="kitchen"
                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-[rgb(var(--brand-primary-strong-rgb)/0.22)] via-emerald-500/20 to-[rgb(var(--brand-primary-strong-rgb)/0.22)] hover:from-[rgb(var(--brand-primary-strong-rgb)/0.32)] hover:to-emerald-500/30 text-[var(--brand-primary-strong)] border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] transition-all active:scale-95 text-xs font-bold shadow-[0_0_22px_-6px_var(--brand-glow)] animate-pulse cursor-pointer"
                 title="متابعة حالة الطلب والمطبخ الحي"
               >
@@ -129,6 +160,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Cart Button */}
             <button
               onClick={() => setIsCartOpen(true)}
+              data-guide="cart"
               className="relative flex items-center gap-2 px-3.5 py-2 rounded-xl brand-cta font-bold transition-all active:scale-95 text-xs cursor-pointer"
               aria-label="عرض سلة الطلبات"
             >
@@ -152,6 +184,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Quick Cart Button for Mobile */}
             <button
               onClick={() => setIsCartOpen(true)}
+              data-guide="cart"
               aria-label={cartTotalCount > 0 ? `عرض السلة — ${cartTotalCount} صنف` : 'عرض السلة'}
               className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl brand-cta font-bold text-xs active:scale-95 cursor-pointer"
             >
@@ -218,6 +251,20 @@ export const CustomerHeader: React.FC = () => {
 
             {/* Menu Options List */}
             <div className="space-y-2 pt-1">
+              {/* Usage Guide */}
+              <button
+                onClick={() => {
+                  setIsMobileMenuOpen(false);
+                  openCustomerGuide();
+                }}
+                className="w-full p-3 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] text-[var(--brand-primary-strong)] text-xs font-bold flex items-center justify-between transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4" />
+                  <span>دليل الاستخدام خطوة بخطوة</span>
+                </div>
+              </button>
+
               {/* Order Tracking */}
               {hasActiveOrders && (
                 <button

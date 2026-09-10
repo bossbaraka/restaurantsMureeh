@@ -66,6 +66,26 @@ const THEME_PRESETS: Array<{
   { id: 'silver', label: 'فضي معدني', desc: 'حديث بسيط نظيف', primary: '#94A3B8', accent: '#3E4A5B' },
 ];
 
+/**
+ * Logo framing presets. A 3×3 grid maps to CSS `object-position` anchors so a
+ * manager can keep the focal point of a wide/tall logo visible inside the
+ * fixed square box, instead of having it cropped awkwardly.
+ */
+const LOGO_POSITION_GRID: Array<{ label: string; value: string }> = [
+  // Rendered inside a dir="rtl" page, so the grid flows right-to-left: the
+  // first cell of each row sits on the RIGHT, matching its label. The stored
+  // value is a physical CSS object-position (0% = left, 100% = right).
+  { label: 'أعلى يمين', value: '100% 0%' },
+  { label: 'أعلى وسط', value: '50% 0%' },
+  { label: 'أعلى يسار', value: '0% 0%' },
+  { label: 'وسط يمين', value: '100% 50%' },
+  { label: 'وسط المنتصف', value: '50% 50%' },
+  { label: 'وسط يسار', value: '0% 50%' },
+  { label: 'أسفل يمين', value: '100% 100%' },
+  { label: 'أسفل وسط', value: '50% 100%' },
+  { label: 'أسفل يسار', value: '0% 100%' },
+];
+
 /** ضغط الصورة على جهاز المستخدم ثم رفعها للسيرفر الحقيقي */
 async function fileToResizedBlob(file: File, maxDim: number): Promise<{ blob: Blob; ext: string }> {
   return new Promise((resolve, reject) => {
@@ -110,6 +130,8 @@ export const BrandingSettingsView: React.FC = () => {
   const [longitude, setLongitude] = useState<number>(35.2062);
   const [mapUrl, setMapUrl] = useState('');
   const [logo, setLogo] = useState('');
+  const [logoFit, setLogoFit] = useState<'cover' | 'contain'>('cover');
+  const [logoPosition, setLogoPosition] = useState('50% 50%');
   const [coverImage, setCoverImage] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#D4AF37');
   const [accentColor, setAccentColor] = useState('#C5A880');
@@ -137,6 +159,8 @@ export const BrandingSettingsView: React.FC = () => {
       setLongitude(currentRestaurant.longitude || 35.2062);
       setMapUrl(currentRestaurant.mapUrl || '');
       setLogo(currentRestaurant.logo);
+      setLogoFit(currentRestaurant.logoFit === 'contain' ? 'contain' : 'cover');
+      setLogoPosition(currentRestaurant.logoPosition || '50% 50%');
       setCoverImage(currentRestaurant.coverImage || '');
       const prim = currentRestaurant.primaryColor || '#D4AF37';
       const acc = currentRestaurant.accentColor || '#C5A880';
@@ -185,7 +209,7 @@ export const BrandingSettingsView: React.FC = () => {
     setUploading(kind);
     try {
       const { blob, ext } = await fileToResizedBlob(file, kind === 'logo' ? 512 : 1600);
-      const res = await api.uploadImage(blob, `brand-${kind}-${Date.now()}.${ext}`);
+      const res = await api.uploadImage(blob, `brand-${kind}-${Date.now()}.${ext}`, kind);
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع الصورة إلى الخادم', res.error);
         return;
@@ -221,7 +245,7 @@ export const BrandingSettingsView: React.FC = () => {
     setUploadingGallery(true);
     try {
       const { blob, ext } = await fileToResizedBlob(file, 1600);
-      const res = await api.uploadImage(blob, `hall-gallery-${Date.now()}.${ext}`);
+      const res = await api.uploadImage(blob, `hall-gallery-${Date.now()}.${ext}`, 'gallery');
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع الصورة', res.error);
         return;
@@ -262,6 +286,8 @@ export const BrandingSettingsView: React.FC = () => {
       longitude,
       mapUrl: mapUrl.trim(),
       logo: logo.trim(),
+      logoFit,
+      logoPosition,
       coverImage: coverImage.trim(),
       primaryColor,
       accentColor,
@@ -505,7 +531,12 @@ export const BrandingSettingsView: React.FC = () => {
                     }
                   >
                     {logoPreview ? (
-                      <img src={logoPreview} alt={name} className="w-full h-full object-cover" />
+                      <img
+                        src={logoPreview}
+                        alt={name}
+                        className="w-full h-full"
+                        style={{ objectFit: logoFit, objectPosition: logoPosition }}
+                      />
                     ) : (
                       (nameEn.charAt(0) || 'م')
                     )}
@@ -540,6 +571,66 @@ export const BrandingSettingsView: React.FC = () => {
                     className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2 rounded-lg focus:border-gold-500/60 text-left"
                   />
                 </div>
+
+                {/* Logo framing controls — make the logo appear regularly */}
+                {logoPreview && (
+                  <div className="pt-3 border-t border-luxury-800 space-y-3">
+                    <div>
+                      <span className="block text-luxury-300 font-bold mb-1.5">طريقة إظهار الشعار داخل الصندوق</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLogoFit('cover')}
+                          className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition-colors cursor-pointer ${
+                            logoFit === 'cover'
+                              ? 'bg-gold-500/15 border-gold-500/60 text-gold-300'
+                              : 'bg-luxury-900 border-luxury-800 text-luxury-400 hover:text-luxury-200'
+                          }`}
+                        >
+                          تغطية الصندوق (قصّ)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLogoFit('contain')}
+                          className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition-colors cursor-pointer ${
+                            logoFit === 'contain'
+                              ? 'bg-gold-500/15 border-gold-500/60 text-gold-300'
+                              : 'bg-luxury-900 border-luxury-800 text-luxury-400 hover:text-luxury-200'
+                          }`}
+                        >
+                          إظهار الشعار كاملاً
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="block text-luxury-300 font-bold mb-1.5">موضع الشعار (اتجاه القصّ أو التمركز)</span>
+                      <div className="grid grid-cols-3 gap-1.5 w-full max-w-[150px]">
+                        {LOGO_POSITION_GRID.map((cell) => {
+                          const active = logoPosition === cell.value;
+                          return (
+                            <button
+                              key={cell.value}
+                              type="button"
+                              title={cell.label}
+                              aria-label={cell.label}
+                              onClick={() => setLogoPosition(cell.value)}
+                              className={`h-9 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                                active
+                                  ? 'bg-gold-500/20 border-gold-500/70'
+                                  : 'bg-luxury-900 border-luxury-800 hover:border-luxury-600'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-gold-400' : 'bg-luxury-600'}`}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Cover */}
@@ -812,7 +903,12 @@ export const BrandingSettingsView: React.FC = () => {
                     }}
                   >
                     {logoPreview ? (
-                      <img src={logoPreview} alt="" className="w-full h-full object-cover" />
+                      <img
+                        src={logoPreview}
+                        alt=""
+                        className="w-full h-full"
+                        style={{ objectFit: logoFit, objectPosition: logoPosition }}
+                      />
                     ) : (
                       (nameEn.charAt(0) || 'م')
                     )}

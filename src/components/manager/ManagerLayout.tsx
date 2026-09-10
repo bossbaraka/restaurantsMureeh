@@ -133,7 +133,15 @@ export const ManagerLayout: React.FC = () => {
                   }}
                 >
                   {currentRestaurant?.logo ? (
-                    <img src={currentRestaurant.logo} alt={currentRestaurant?.name || ''} className="w-full h-full object-cover" />
+                    <img
+                      src={currentRestaurant.logo}
+                      alt={currentRestaurant?.name || ''}
+                      className="w-full h-full"
+                      style={{
+                        objectFit: currentRestaurant.logoFit === 'contain' ? 'contain' : 'cover',
+                        objectPosition: currentRestaurant.logoPosition || '50% 50%',
+                      }}
+                    />
                   ) : (
                     currentRestaurant?.nameEn.charAt(0) || 'M'
                   )}

@@ -32,7 +32,7 @@ const PLAN_DETAIL_LINES: Record<string, string[]> = {
     'تحليلات مبيعات تفاعلية وتخصيص الهوية',
   ],
   'plan-enterprise': [
-    'سعة مفتوحة للفروع والأصناف والطلبات',
+    'حتى 10 فروع و200 طاولة و500 صنف',
     'إدارة الفروع المتعددة (Multi-Branch System)',
     'ربط نطاق خاص لموقعك ودعم 24/7',
   ],
@@ -53,7 +53,7 @@ const planDetailLines = (plan: Plan | null): string[] => {
 };
 
 export const SubscriptionView: React.FC = () => {
-  const { currentRestaurant, tables, products, categories, refreshTenantData, showToast } = useRestaurant();
+  const { currentRestaurant, tables, products, categories, branches, refreshTenantData, showToast } = useRestaurant();
   const { currentUser } = useAuth();
   const isDemo = currentUser?.email.toLowerCase().includes('demo');
 
@@ -222,11 +222,11 @@ export const SubscriptionView: React.FC = () => {
         </div>
 
         {/* Usage Resource Bars */}
-        <div className="pt-4 border-t border-luxury-800 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="pt-4 border-t border-luxury-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-3.5 rounded-xl bg-luxury-950 border border-luxury-850">
             <div className="flex justify-between text-xs mb-1.5">
               <span className="text-luxury-400">الطاولات المفعلة</span>
-              <span className="font-bold text-luxury-100">{tables.length} / {currentPlan?.maxTables === 999 ? '∞' : currentPlan?.maxTables}</span>
+              <span className="font-bold text-luxury-100">{tables.length} / {currentPlan?.maxTables ?? '—'}</span>
             </div>
             <div className="w-full bg-luxury-800 h-2 rounded-full overflow-hidden">
               <div
@@ -239,7 +239,7 @@ export const SubscriptionView: React.FC = () => {
           <div className="p-3.5 rounded-xl bg-luxury-950 border border-luxury-850">
             <div className="flex justify-between text-xs mb-1.5">
               <span className="text-luxury-400">أقسام القائمة</span>
-              <span className="font-bold text-luxury-100">{categories.length} / {currentPlan?.maxCategories === 999 ? '∞' : currentPlan?.maxCategories}</span>
+              <span className="font-bold text-luxury-100">{categories.length} / {currentPlan?.maxCategories ?? '—'}</span>
             </div>
             <div className="w-full bg-luxury-800 h-2 rounded-full overflow-hidden">
               <div
@@ -252,12 +252,25 @@ export const SubscriptionView: React.FC = () => {
           <div className="p-3.5 rounded-xl bg-luxury-950 border border-luxury-850">
             <div className="flex justify-between text-xs mb-1.5">
               <span className="text-luxury-400">الأطباق المتاحة</span>
-              <span className="font-bold text-luxury-100">{products.length} / {currentPlan?.maxProducts === 999 ? '∞' : currentPlan?.maxProducts}</span>
+              <span className="font-bold text-luxury-100">{products.length} / {currentPlan?.maxProducts ?? '—'}</span>
             </div>
             <div className="w-full bg-luxury-800 h-2 rounded-full overflow-hidden">
               <div
                 className="bg-gold-500 h-full rounded-full transition-all"
                 style={{ width: `${Math.min(100, (products.length / (currentPlan?.maxProducts || 150)) * 100)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-luxury-950 border border-luxury-850">
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className="text-luxury-400">الفروع (الأماكن)</span>
+              <span className="font-bold text-luxury-100">{branches.length} / {currentPlan?.maxBranches ?? '—'}</span>
+            </div>
+            <div className="w-full bg-luxury-800 h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-gold-500 h-full rounded-full transition-all"
+                style={{ width: `${Math.min(100, (branches.length / (currentPlan?.maxBranches || 3)) * 100)}%` }}
               />
             </div>
           </div>
@@ -277,7 +290,6 @@ export const SubscriptionView: React.FC = () => {
               { key: 'CAN_CUSTOM_BRANDING', label: 'تخصيص الهوية البصرية وشعار المطعم (Custom Branding)' },
               { key: 'CAN_EXPORT_REPORTS', label: 'تصدير تقارير المبيعات بصيغة CSV' },
               { key: 'CAN_CREATE_BRANCH', label: 'إدارة فروع وسلاسل المطاعم المتعددة' },
-              { key: 'CAN_UNLIMITED_TABLES', label: 'عدد طاولات ورموز QR غير محدود' },
               { key: 'CAN_PRIORITY_SUPPORT', label: 'دعم فني وكونسيرج مباشر 24/7' },
             ].map((item) => {
               const isIncluded = currentPlan?.entitlements.includes(item.key as any);
@@ -390,11 +402,17 @@ export const SubscriptionView: React.FC = () => {
                       <div className="space-y-1.5 text-[11px] text-luxury-300 pt-2 border-t border-luxury-800">
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-3 h-3 text-gold-400/80" />
-                          {p.maxTables === 999 ? 'طاولات ورموز QR غير محدودة' : `حتى ${p.maxTables} طاولة برموز QR`}
+                          {`حتى ${p.maxTables} طاولة برموز QR`}
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-3 h-3 text-gold-400/80" />
-                          {p.maxProducts === 999 ? 'أطباق وأقسام غير محدودة' : `حتى ${p.maxProducts} طبقاً و ${p.maxCategories} قسماً`}
+                          {`حتى ${p.maxProducts} طبقاً و ${p.maxCategories} قسماً`}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Zap className="w-3 h-3 text-gold-400/80" />
+                          {p.entitlements.includes('CAN_CREATE_BRANCH' as any)
+                            ? `حتى ${p.maxBranches} فروع`
+                            : 'فرع واحد فقط'}
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Zap className="w-3 h-3 text-gold-400/80" />

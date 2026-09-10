@@ -102,7 +102,7 @@ const PLANS: PlanDef[] = [
     priceYearly: 8500,
     priceYearlyPerMonth: Math.round(8500 / 12),
     features: [
-      'سعة مفتوحة للفروع والأصناف والطلبات',
+      'حتى 10 فروع و200 طاولة و500 صنف',
       'إدارة الفروع المتعددة (Multi-Branch System)',
       'ربط نطاق خاص لموقعك (Custom Domain)',
       'مدير حساب خاص ودعم أولوية قصوى 24/7',

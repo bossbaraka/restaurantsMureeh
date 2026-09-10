@@ -153,6 +153,27 @@ export function isAllowedPromoVideoUrl(value: string): boolean {
   return VIDEO_HOST_ALLOWLIST.has(url.hostname.toLowerCase());
 }
 
+/**
+ * A manager-supplied map link (e.g. `https://maps.app.goo.gl/…`). It is only
+ * ever opened in a new tab / inside a Google Maps embed, never interpolated
+ * raw into an <iframe src> of attacker-controllable HTML. https-only and
+ * credential-free, but the host itself is unrestricted (Google Maps, Waze,
+ * Apple Maps, …).
+ */
+export function isAllowedMapUrl(value: string): boolean {
+  if (!value) return true;
+  if (value.startsWith('/')) return !value.startsWith('//');
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  if (url.username || url.password) return false;
+  return true;
+}
+
 const promoVideoUrl = z
   .string()
   .trim()
@@ -579,6 +600,40 @@ export const brandingSchema = z
     timezone: z.string().trim().max(60).optional(),
     primaryColor: hexColor,
     accentColor: hexColor,
+    // Logo framing: how the uploaded logo sits inside its fixed box. `logoFit`
+    // is crop-to-fill vs fit-whole; `logoPosition` is a CSS object-position
+    // anchor (9-point grid). Both default to the legacy "cover + centered".
+    logoFit: z.enum(['cover', 'contain']).optional(),
+    logoPosition: z
+      .enum([
+        '0% 0%', '50% 0%', '100% 0%',
+        '0% 50%', '50% 50%', '100% 50%',
+        '0% 100%', '50% 100%', '100% 100%',
+      ])
+      .optional(),
+    // Map location: lat/lng pin the customer map to the venue's real position;
+    // mapUrl is an optional Google Maps share link the guest can open for
+    // turn-by-turn directions. Both are optional so existing tenants are
+    // unaffected until they fill them in.
+    latitude: z
+      .number()
+      .min(-90, 'خط العرض غير صالح')
+      .max(90, 'خط العرض غير صالح')
+      .optional(),
+    longitude: z
+      .number()
+      .min(-180, 'خط الطول غير صالح')
+      .max(180, 'خط الطول غير صالح')
+      .optional(),
+    mapUrl: z
+      .string()
+      .trim()
+      .max(1000, 'رابط الخريطة طويل جداً')
+      .refine(isAllowedMapUrl, {
+        message: 'رابط الخريطة يجب أن يكون رابط HTTPS صالحاً',
+      })
+      .optional()
+      .or(z.literal('')),
     // Venue kind: drives how the guest QR experience is composed. Kept in the
     // branding payload because that is the screen where a tenant describes
     // itself, and `.strict()` would otherwise reject the new field.

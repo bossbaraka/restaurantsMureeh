@@ -52,6 +52,16 @@ services:
         sync: false
       - key: MANAGER_3_PASSWORD
         sync: false
+      # Object Storage (production images must NOT live on Render's ephemeral
+      # filesystem). Use Supabase Storage; see .env.example.
+      - key: STORAGE_DRIVER
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: restaurant-assets
 
   - type: web
     name: restaurant-frontend

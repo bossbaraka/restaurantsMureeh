@@ -1,8 +1,11 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db/prisma';
+import { config } from '../config';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
 import { logAuditEvent } from '../services/audit';
+import { getStorage } from '../services/storage';
 import { validateBody, tenantStatusSchema, onboardSchema, trialActivationSchema } from '../validation/schemas';
 import {
   FREE_TRIAL_DAYS,
@@ -438,6 +441,53 @@ router.get('/audit-logs', async (req: Request, res: Response) => {
     include: { restaurant: true },
   });
   return res.json({ success: true, data: logs, statusCode: 200 });
+});
+
+// GET /api/admin/storage-status — safe diagnostics (platform admins only).
+// Reports storage configuration reachability WITHOUT exposing any secret or
+// credential value. Never returns keys/tokens — only booleans and names.
+router.get('/storage-status', async (_req: Request, res: Response) => {
+  let storageReachable = false;
+  let storageError: string | null = null;
+  try {
+    const storage = getStorage();
+    // Lightweight probe: local → base dir exists; object storage → list the
+    // bucket root. No secret is ever included in the response.
+    if (storage.driver === 'local') {
+      storageReachable = fs.existsSync(config.uploadDir);
+    } else {
+      await storage.exists('__probe__/health');
+      storageReachable = true;
+    }
+  } catch {
+    storageError = 'storage unreachable';
+  }
+
+  let dbReachable = false;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbReachable = true;
+  } catch {
+    dbReachable = false;
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      storage: {
+        driver: config.storageDriver,
+        persistent: config.storageDriver === 'supabase',
+        bucket: config.storageDriver === 'supabase' ? config.supabaseBucket : null,
+        configured:
+          config.storageDriver === 'local' ||
+          !!(config.supabaseUrl && config.supabaseServiceRoleKey),
+        reachable: storageReachable,
+        error: storageError,
+      },
+      database: { reachable: dbReachable },
+    },
+    statusCode: 200,
+  });
 });
 
 export default router;

@@ -35,6 +35,7 @@ export interface TrialPlanDefinition {
   maxTables: number;
   maxCategories: number;
   maxProducts: number;
+  maxBranches: number;
   entitlements: string[];
   description: string;
   isPopular: boolean;
@@ -51,6 +52,9 @@ export const FREE_TRIAL_PLAN: TrialPlanDefinition = {
   maxTables: 8,
   maxCategories: 3,
   maxProducts: 15,
+  // A trial tenant is a single venue — no branches, so the platform never
+  // absorbs multi-location cost during a free window.
+  maxBranches: 1,
   entitlements: [...TRIAL_ENTITLEMENTS],
   description:
     'تجربة مجانية لمدة 7 أيام بصلاحيات محدودة (8 طاولات، 3 تصنيفات، 15 طبقاً). تُنشَّط حصرياً من قِبل إدارة المنصة.',

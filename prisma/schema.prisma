@@ -77,6 +77,12 @@ model Restaurant {
   nameEn          String            @default("")
   slug            String            @unique
   logoUrl         String
+  // How the uploaded logo is framed inside its fixed box (customer header,
+  // manager sidebar, print menu). `logoFit` chooses crop vs. fit-whole;
+  // `logoPosition` is a CSS object-position anchor so wide/tall logos stay
+  // centered on their focal point instead of being cut awkwardly.
+  logoFit         String            @default("cover")
+  logoPosition    String            @default("50% 50%")
   coverImageUrl   String?
   description     String
   phone           String
@@ -90,6 +96,9 @@ model Restaurant {
   accentColor     String            @default("#C5A880")
   promoVideoUrl   String?
   galleryImages   String[]          @default([])
+  latitude        Float?
+  longitude       Float?
+  mapUrl          String?
   customDomain    String?
   planId          String?
   createdAt       DateTime          @default(now())
@@ -150,6 +159,11 @@ model Plan {
   maxTables       Int               @default(50)
   maxCategories   Int               @default(20)
   maxProducts     Int               @default(150)
+  // Hard ceiling on physical locations (branches). Each branch carries real
+  // hosting/QR/print cost, so even the enterprise plan is finite instead of
+  // "unlimited" — it caps platform spend rather than letting it grow without
+  // bound.
+  maxBranches     Int               @default(3)
   entitlements    String[]          @default([])
   description     String
   status          String            @default("ACTIVE")

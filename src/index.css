@@ -2238,3 +2238,77 @@ input[type='range'].saas-range::-moz-range-thumb {
    when viewport-fit=cover is active. The inline style on CustomerHeader
    applies the same rule more specifically; the selector here is a
    safety net for any other sticky bar in the customer experience. */
+
+/* ==========================================================================
+   CUSTOMER GUIDE TOUR (coach-marks with animated arrows)
+   ========================================================================== */
+@keyframes guide-arrow-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.9; }
+  50% { transform: translateY(7px); opacity: 1; }
+}
+.guide-arrow {
+  animation: guide-arrow-bounce 1.1s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px var(--brand-glow));
+  display: flex;
+  justify-content: center;
+  line-height: 0;
+}
+@keyframes guide-spotlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 9999px rgba(4, 8, 14, 0.72), 0 0 0 2px rgb(var(--brand-primary-strong-rgb) / 0.85); }
+  50% { box-shadow: 0 0 0 9999px rgba(4, 8, 14, 0.72), 0 0 0 4px rgb(var(--brand-primary-strong-rgb) / 1); }
+}
+.guide-spotlight {
+  animation: guide-spotlight-pulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* QR scan sweep line used by the QR-only table entry modal */
+@keyframes qr-scan {
+  0% { top: 8%; }
+  50% { top: 88%; }
+  100% { top: 8%; }
+}
+.animate-qr-scan {
+  animation: qr-scan 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-arrow,
+  .guide-spotlight,
+  .animate-qr-scan {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   CUSTOMER MENU — lock to the phone viewport
+   ==========================================================================
+   The guest menu must always fit exactly inside the device screen width: no
+   horizontal overflow, no scrollbar bleed, and fluid cards at every size.
+*/
+.customer-shell {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+  overflow-x: hidden; /* older browsers */
+}
+@media (max-width: 640px) {
+  .customer-shell {
+    overflow-x: clip;
+    overflow-x: hidden;
+  }
+  .customer-shell main {
+    max-width: 100%;
+    padding-inline: 0.75rem;
+  }
+  .menu-grid,
+  .menu-rail,
+  .menu-cats,
+  .menu-section-head,
+  .menu-card {
+    max-width: 100%;
+  }
+  .menu-grid {
+    width: 100%;
+  }
+}

@@ -145,7 +145,7 @@ app.use(
 
 const uploadsPath = path.resolve(
   process.cwd(),
-  'uploads'
+  config.uploadDir
 );
 
 app.use(
@@ -374,6 +374,27 @@ if (process.env.NODE_ENV !== 'test') {
           void doPing();
           setInterval(() => void doPing(), intervalMs);
         }, 2 * 60 * 1000);
+      }
+
+      // Opt-in scheduled database backups (crash/restart resilience). Off by
+      // default; enable with BACKUP_ENABLED=true and DB_PASSWORD. Backups are
+      // written to ./backups (chmod 600) — mount a persistent volume there or
+      // ship the .sql dumps off-instance, otherwise a disk failure takes the
+      // backups down with the server.
+      if (process.env.BACKUP_ENABLED === 'true') {
+        const backupHours = Math.max(
+          1,
+          Number(process.env.BACKUP_INTERVAL_HOURS) || 24
+        );
+        const backupMs = backupHours * 60 * 60 * 1000;
+        const runBackup = async () => {
+          const { createDatabaseBackup } = await import('./services/backup');
+          await createDatabaseBackup();
+        };
+        console.log(
+          `💾 Scheduled backups enabled: every ${backupHours}h to ./backups (DB_PASSWORD must be set)`
+        );
+        setInterval(() => void runBackup(), backupMs).unref();
       }
     }
   );

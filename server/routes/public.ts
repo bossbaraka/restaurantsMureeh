@@ -15,6 +15,7 @@ import {
   publicOrderLimiter,
   waiterCallLimiter,
   qrSessionLimiter,
+  customerOrdersLimiter,
 } from '../middleware/rateLimit';
 import {
   validateBody,
@@ -260,6 +261,16 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           businessType: restaurant.businessType,
           primaryColor: restaurant.primaryColor,
           accentColor: restaurant.accentColor,
+          // Venue location + media drive the customer map, promo video and
+          // interior gallery. Previously omitted here, so the guest-facing
+          // screen fell back to platform defaults (wrong map pin, no video).
+          latitude: restaurant.latitude,
+          longitude: restaurant.longitude,
+          mapUrl: restaurant.mapUrl,
+          logoFit: restaurant.logoFit,
+          logoPosition: restaurant.logoPosition,
+          promoVideoUrl: restaurant.promoVideoUrl,
+          galleryImages: restaurant.galleryImages,
         },
         categories: restaurant.categories.map((c) => ({
           id: c.id,
@@ -282,6 +293,10 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           badge: o.badge || undefined,
           isActive: o.isActive,
         })),
+        // NOTE: qrToken is deliberately NOT returned here. A QR token is an
+        // opaque capability; publishing every table's token on a public
+        // endpoint would let any guest enumerate and "scan" any table without
+        // the physical card. Guests only ever learn a token by scanning it.
         tables: (restaurant.tables || []).map((t) => ({
           id: t.id,
           restaurantId: t.restaurantId,
@@ -291,7 +306,6 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           capacity: t.capacity,
           zone: t.zone,
           status: t.status,
-          qrToken: t.qrToken,
         })),
       },
       statusCode: 200,
@@ -472,6 +486,77 @@ function legacyAddOnName(entry: unknown): string | null {
   }
   return null;
 }
+
+// GET /api/public/tables/:tableId/orders — the active orders of the caller's
+// own QR session. This is how a guest sees live order status: previously the
+// public catalog never returned orders, so the guest's tracker stayed empty
+// even while the kitchen was updating statuses over SSE.
+router.get(
+  '/tables/:tableId/orders',
+  customerOrdersLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const { tableId } = req.params;
+      const restaurantId = req.query.restaurantId as string;
+      const sessionToken = req.query.sessionToken as string;
+
+      if (!restaurantId || !tableId) {
+        return res.status(400).json({ success: false, error: 'restaurantId و tableId مطلوبان', statusCode: 400 });
+      }
+
+      const session = await getQrSession(sessionToken, restaurantId, tableId);
+      if (!session) {
+        return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
+      }
+
+      const orders = await prisma.order.findMany({
+        where: {
+          restaurantId,
+          tableId,
+          sessionId: session.id,
+          status: { not: 'CANCELLED' },
+        },
+        include: { items: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      const formatted = orders.map((o) => ({
+        id: o.id,
+        numericId: o.numericId,
+        restaurantId: o.restaurantId,
+        tableId: o.tableId,
+        sessionId: o.sessionId || undefined,
+        subtotal: o.subtotal,
+        total: o.total,
+        status: o.status,
+        paymentMethod: o.paymentMethod,
+        paymentStatus: o.paymentStatus,
+        notes: o.notes || undefined,
+        estimatedPrepMinutes: o.estimatedPrepMinutes || 18,
+        createdAt: o.createdAt.toISOString(),
+        updatedAt: o.updatedAt.toISOString(),
+        items: o.items.map((i) => ({
+          id: i.id,
+          productId: i.productId,
+          productName: i.productNameSnapshot,
+          productNameEn: i.productNameEnSnapshot || undefined,
+          unitPrice: i.priceSnapshot,
+          quantity: i.quantity,
+          totalPrice: i.totalPrice,
+          selectedSize: i.selectedSize || undefined,
+          selectedAddOns: i.selectedAddOns,
+          removedIngredients: i.removedIngredients,
+          specialInstructions: i.specialInstructions || undefined,
+        })),
+      }));
+
+      return res.json({ success: true, data: formatted, statusCode: 200 });
+    } catch (err) {
+      console.error('Fetch customer orders error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر استرجاع حالة الطلبات', statusCode: 500 });
+    }
+  }
+);
 
 // POST /api/public/orders (Submit Order from Table)
 // Every unit price, size modifier and add-on price comes from the DB

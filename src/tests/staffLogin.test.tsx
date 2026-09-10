@@ -35,7 +35,10 @@ describe('staff PIN login — server schema parity', () => {
   it('ships a migration that adds the column idempotently', () => {
     const migrationsDir = fileURLToPath(new URL('../../prisma/migrations', import.meta.url));
     const folders = readdirSync(migrationsDir).sort();
-    expect(folders[folders.length - 1]).toBe('20260910143000_add_last_login_at');
+    // Newer migrations (e.g. restaurant geo/media) may land after it, so we
+    // assert presence rather than "latest" — the column migration must still
+    // exist with an idempotent ADD COLUMN IF NOT EXISTS.
+    expect(folders).toContain('20260910143000_add_last_login_at');
 
     const sql = readFileSync(`${migrationsDir}/20260910143000_add_last_login_at/migration.sql`, 'utf8');
     expect(sql).toMatch(/ALTER TABLE "RestaurantUser" ADD COLUMN IF NOT EXISTS "lastLoginAt"/);

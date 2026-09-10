@@ -15,6 +15,7 @@ import { WaiterCallModal } from './WaiterCallModal';
 import { DirectTableEntryModal } from './DirectTableEntryModal';
 import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
 import { CustomerOrderLiveNotifier } from './CustomerOrderLiveNotifier';
+import { CustomerGuideOverlay } from './CustomerGuideOverlay';
 import { OrderCompletedModal } from './OrderCompletedModal';
 import { LuxuryWelcomeScreen } from './LuxuryWelcomeScreen';
 import { DisplayMenu } from './DisplayMenu';
@@ -337,7 +338,7 @@ export const CustomerLayout: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation" dir="rtl">
+    <div className="customer-shell min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation" dir="rtl">
       {/* Luxury Welcome Overlay for initial QR entry */}
       {showWelcome && <LuxuryWelcomeScreen onDismiss={handleDismissWelcome} />}
 
@@ -485,6 +486,9 @@ export const CustomerLayout: React.FC = () => {
       {/* Floating Active Orders Bar & Real-time Live Order Notifier */}
       <CustomerOrderLiveNotifier />
       <ActiveOrdersFloatingBar />
+
+      {/* Interactive customer onboarding tour (coach-marks with arrows) */}
+      <CustomerGuideOverlay />
 
       {/* Modals & Drawers */}
       <ProductDetailModal product={selectedProduct} isOpen={!!selectedProduct} onClose={handleCloseDetail} />
