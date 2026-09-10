@@ -206,11 +206,12 @@ app.use(
 // ============================================================
 
 app.get('/api/health', (_req, res) => {
+  // Minimal fingerprint: version/database details are not exposed to
+  // unauthenticated callers (CWE-200). Internal detailed health should
+  // be behind authentication if ever needed.
   res.status(200).json({
-    status: 'healthy',
+    status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '2.0.0',
-    database: 'PostgreSQL 17',
   });
 });
 

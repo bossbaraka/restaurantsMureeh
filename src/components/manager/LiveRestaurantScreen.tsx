@@ -29,10 +29,10 @@ export const LiveRestaurantScreen: React.FC = () => {
   const [now, setNow] = useState<Date>(() => new Date());
   const [hidden, setHidden] = useState(false);
 
-  // Live clock + gentle data refresh (server deployments also push via SSE)
+  // Live clock + gentle data refresh (M-04: 10s, not 8s — server SSE covers live updates)
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 1000);
-    const poll = window.setInterval(() => refreshTenantData(), 8000);
+    const poll = window.setInterval(() => refreshTenantData(), 10000);
     return () => {
       window.clearInterval(t);
       window.clearInterval(poll);

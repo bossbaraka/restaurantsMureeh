@@ -20,7 +20,9 @@ const envSchema = z.object({
   JWT_SECRET: z
     .string()
     .min(32, 'JWT_SECRET must be at least 32 characters (256-bit recommended)'),
-  JWT_EXPIRES_IN: z.string().min(1).default('7d'),
+  // Short-lived access tokens (12h) — refresh rotation roadmap in H-02.
+  // Previous default was 7d; shortened to limit exposure window after theft (H-01).
+  JWT_EXPIRES_IN: z.string().min(1).default('12h'),
   CORS_ORIGIN: z.string().default(''),
   // Number of trusted reverse proxies in front of Express (Render/Nginx = 1).
   // Keep 0 for direct exposure so client IPs cannot be spoofed via headers.

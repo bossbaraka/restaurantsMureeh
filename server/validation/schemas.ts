@@ -36,13 +36,34 @@ const safeName = (label: string, max = 120) =>
     .max(max, `${label} طويل جداً`);
 
 const BLOCKED_WEAK_PASSWORDS = new Set([
-  'password123',
-  '12345678',
   'password',
-  'qwertyuiop',
-  'admin1234',
+  'password123',
+  'password123!',
+  '123456',
+  '1234567',
+  '12345678',
   '123456789',
+  'qwerty',
+  'qwertyuiop',
+  'abc123',
+  'letmein',
+  'admin123',
+  'admin1234',
   'password1234',
+  'welcome',
+  'welcome123',
+  'iloveyou',
+  'monkey',
+  'dragon',
+  'sunshine',
+  'princess',
+  'football',
+  '123123',
+  '111111',
+  '000000',
+  'demo',
+  'demo123',
+  'mureeh2026',
 ]);
 
 export const safePasswordSchema = (label = 'كلمة المرور', min = 8) =>
@@ -137,6 +158,9 @@ const hexColor = z
   .trim()
   .regex(/^#[0-9a-fA-F]{6}$/, 'اللون يجب أن يكون بصيغة HEX مثل #D4AF37')
   .optional();
+
+export const strongPassword = (_minMsg?: string) =>
+  safePasswordSchema('كلمة المرور', 8);
 
 // Roles a tenant (non-platform) actor may ever assign. Platform roles
 // can never be granted through tenant routes.

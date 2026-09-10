@@ -90,3 +90,26 @@ export const onboardLimiter = rateLimit({
   limit: 10,
   message: limiterError('تجاوزت حد إنشاء مطاعم جديدة. يرجى الانتظار 15 دقيقة.'),
 });
+
+export const adminOnboardLimiter = onboardLimiter;
+
+export const paymentLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  message: limiterError('عمليات دفع كثيرة. يرجى الانتظار قليلاً.'),
+});
+
+export const orderStatusLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  message: limiterError('تحديثات حالة كثيرة. يرجى الانتظار قليلاً.'),
+});
+
+export const staffMutationLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 30,
+  message: limiterError('عمليات موظفين كثيرة. حاول لاحقاً.'),
+});

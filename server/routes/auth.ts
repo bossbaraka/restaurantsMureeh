@@ -40,7 +40,10 @@ function publicUserShape(user: {
   };
 }
 
-// POST /api/auth/login — credential login, real & demo accounts.
+// POST /api/auth/login — credential login for real accounts only.
+// Demo accounts and hard-coded password overrides have been permanently
+// removed (C-01). Every login now requires a real DB user and a correct
+// bcrypt password — no auto-provisioning, no email pattern bypass.
 router.post(
   '/login',
   loginLimiter,
@@ -54,12 +57,13 @@ router.post(
       };
       const normalizedEmail = email.toLowerCase();
 
-      let user = await prisma.restaurantUser.findUnique({
+      const user = await prisma.restaurantUser.findUnique({
         where: { email: normalizedEmail },
         include: { restaurant: true },
       });
 
-      // Password comparison: bcrypt compare against user hash or dummy hash for timing attack prevention
+      // Password comparison: bcrypt compare against user hash or dummy hash (DUMMY_HASH)
+      // for timing attack prevention (uniform work factor).
       const hashToCheck = user ? user.passwordHash : DUMMY_HASH;
       const isMatch = await bcrypt.compare(password, hashToCheck);
 

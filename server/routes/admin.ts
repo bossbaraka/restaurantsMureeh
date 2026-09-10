@@ -13,7 +13,7 @@ import {
   withTrialMeta,
 } from '../services/plans';
 import { onboardLimiter } from '../middleware/rateLimit';
-import { generateQrToken } from '../utils/security';
+import { generateQrToken, parsePagination } from '../utils/security';
 
 const router = Router();
 
@@ -428,10 +428,12 @@ router.post('/onboard-restaurant', onboardLimiter, validateBody(onboardSchema), 
   }
 });
 
-// GET /api/admin/audit-logs
+// GET /api/admin/audit-logs — paginated (capped)
 router.get('/audit-logs', async (req: Request, res: Response) => {
+  const { take, skip } = parsePagination(req.query as Record<string, unknown>);
   const logs = await prisma.auditLog.findMany({
-    take: 100,
+    take: Math.min(take, 100),
+    skip,
     orderBy: { createdAt: 'desc' },
     include: { restaurant: true },
   });
