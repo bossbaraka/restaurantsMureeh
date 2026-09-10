@@ -115,6 +115,52 @@ router.get('/events', async (req: Request, res: Response) => {
   res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', clientId })}\n\n`);
 });
 
+// GET /api/public/restaurants — public active restaurants directory for venue selection & staff login.
+router.get('/restaurants', async (_req: Request, res: Response) => {
+  try {
+    const restaurants = await prisma.restaurant.findMany({
+      where: { status: 'ACTIVE' },
+      select: {
+        id: true,
+        name: true,
+        nameEn: true,
+        slug: true,
+        logoUrl: true,
+        coverImageUrl: true,
+        primaryColor: true,
+        accentColor: true,
+        businessType: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        restaurants: restaurants.map((r) => ({
+          id: r.id,
+          name: r.name,
+          nameEn: r.nameEn || r.name,
+          slug: r.slug,
+          logo: r.logoUrl,
+          coverImage: r.coverImageUrl,
+          primaryColor: r.primaryColor,
+          accentColor: r.accentColor,
+          businessType: r.businessType,
+        })),
+      },
+      statusCode: 200,
+    });
+  } catch (err) {
+    console.error('Fetch public restaurants error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'حدث خطأ في استرجاع قائمة المطاعم',
+      statusCode: 500,
+    });
+  }
+});
+
 // GET /api/public/restaurants/:slug — public menu catalog, exact slug only.
 router.get('/restaurants/:slug', async (req: Request, res: Response) => {
   try {

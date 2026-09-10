@@ -12,10 +12,17 @@ import { SaaSLandingPage } from './components/common/SaaSLandingPage';
 import { RestaurantOnboardingModal } from './components/onboarding/RestaurantOnboardingModal';
 import { LoginModal } from './components/auth/LoginModal';
 import { ToastContainer } from './components/common/Toast';
+import { useBrandTheme } from './theme/brandTheme';
 
 const AppContent: React.FC = () => {
-  const { viewMode, isOnboardingOpen, setIsOnboardingOpen } = useRestaurant();
+  const { viewMode, isOnboardingOpen, setIsOnboardingOpen, currentRestaurant } = useRestaurant();
   const { canAccessView, isLoginModalOpen } = useAuth();
+
+  // Keep brand theme active across the entire application (including Manager, KDS, Modals, Customer)
+  useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor, {
+    restaurantId: currentRestaurant?.id,
+    slug: currentRestaurant?.slug,
+  });
 
   const safeViewMode = canAccessView(viewMode) || viewMode === 'SAAS_LANDING' ? viewMode : 'CUSTOMER';
 

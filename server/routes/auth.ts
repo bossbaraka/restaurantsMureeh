@@ -57,7 +57,7 @@ router.post(
       };
       const normalizedEmail = email.toLowerCase();
 
-      const user = await prisma.restaurantUser.findUnique({
+      let user = await prisma.restaurantUser.findUnique({
         where: { email: normalizedEmail },
         include: { restaurant: true },
       });
@@ -77,29 +77,38 @@ router.post(
 
       // If worker PIN is provided along with account email & password, switch identity to specific staff worker
       if (pin && user.restaurantId) {
-        const candidates = await prisma.restaurantUser.findMany({
-          where: {
-            restaurantId: user.restaurantId,
-            status: 'ACTIVE',
-            pinHash: { not: null },
-          },
-          include: { restaurant: true },
-        });
-        let staffWorker: (typeof candidates)[number] | undefined;
-        for (const candidate of candidates) {
-          if (candidate.pinHash && (await bcrypt.compare(pin, candidate.pinHash))) {
-            staffWorker = candidate;
-            break;
-          }
+        let isSelfPin = false;
+        if (user.pinHash) {
+          isSelfPin = await bcrypt.compare(pin, user.pinHash);
         }
-        if (staffWorker) {
-          user = staffWorker;
-        } else {
-          return res.status(401).json({
-            success: false,
-            error: 'رمز الـ PIN الخاص بالعامل غير صحيح لهذا المطعم',
-            statusCode: 401,
+
+        if (!isSelfPin) {
+          const candidates = await prisma.restaurantUser.findMany({
+            where: {
+              restaurantId: user.restaurantId,
+              status: 'ACTIVE',
+              pinHash: { not: null },
+            },
+            include: { restaurant: true },
           });
+          const matchResults = await Promise.all(
+            candidates.map(async (candidate) => {
+              const matched = candidate.pinHash
+                ? await bcrypt.compare(pin, candidate.pinHash)
+                : false;
+              return matched ? candidate : null;
+            })
+          );
+          const staffWorker = matchResults.find(Boolean);
+          if (staffWorker) {
+            user = staffWorker;
+          } else {
+            return res.status(401).json({
+              success: false,
+              error: 'رمز الـ PIN الخاص بالعامل غير صحيح لهذا المطعم',
+              statusCode: 401,
+            });
+          }
         }
       }
 
@@ -298,18 +307,21 @@ router.post(
         include: { restaurant: true },
       });
 
-      let user: (typeof candidates)[number] | undefined;
-      for (const candidate of candidates) {
-        if (
-          candidate.pinHash &&
-          (await bcrypt.compare(pin, candidate.pinHash))
-        ) {
-          user = candidate;
-          break;
-        }
-      }
+      // Parallel bcrypt comparison across candidates for fast authentication (low latency)
+      const candidateMatches = await Promise.all(
+        candidates.map(async (candidate) => {
+          const match = candidate.pinHash
+            ? await bcrypt.compare(pin, candidate.pinHash)
+            : false;
+          return match ? candidate : null;
+        })
+      );
+
+      const user = candidateMatches.find(Boolean);
 
       if (!user) {
+        // Uniform work factor: timing attack hardening
+        await bcrypt.compare(pin, DUMMY_HASH);
         return res.status(401).json({
           success: false,
           error: 'رمز PIN غير صحيح. يرجى مراجعة مدير المطعم.',

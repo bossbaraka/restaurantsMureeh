@@ -28,10 +28,16 @@ export const LoginModal: React.FC = () => {
   } = useAuth();
   const { showToast, setViewMode, currentRestaurant, tenantsList } = useRestaurant();
 
+  const WORKER_REST_KEY = 'merar_worker_restaurant_id';
+
   const [authTab, setAuthTab] = useState<'MANAGERS' | 'STAFF_PIN'>('MANAGERS');
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(
-    () => currentRestaurant?.id || tenantsList[0]?.id || ''
-  );
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(WORKER_REST_KEY);
+      if (saved) return saved;
+    }
+    return currentRestaurant?.id || tenantsList[0]?.id || '';
+  });
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -42,10 +48,16 @@ export const LoginModal: React.FC = () => {
   const [staffPinInput, setStaffPinInput] = useState('');
 
   React.useEffect(() => {
-    if (currentRestaurant?.id) {
+    if (selectedRestaurantId) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(WORKER_REST_KEY, selectedRestaurantId);
+      }
+    } else if (currentRestaurant?.id) {
       setSelectedRestaurantId(currentRestaurant.id);
-    } else if (tenantsList.length > 0 && !selectedRestaurantId) {
-      setSelectedRestaurantId(tenantsList[0].id);
+    } else if (tenantsList.length > 0) {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem(WORKER_REST_KEY) : null;
+      const found = saved ? tenantsList.find((t) => t.id === saved) : null;
+      setSelectedRestaurantId(found ? found.id : tenantsList[0].id);
     }
   }, [currentRestaurant?.id, tenantsList, selectedRestaurantId]);
 
@@ -178,7 +190,7 @@ export const LoginModal: React.FC = () => {
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>مدير / مشرف</span>
+            <span>البريد وكلمة المرور</span>
           </button>
 
           <button
@@ -194,9 +206,8 @@ export const LoginModal: React.FC = () => {
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>العمال (PIN)</span>
+            <span>دخول العمال السريع (PIN)</span>
           </button>
-
         </div>
 
         {/* Modal Body */}
@@ -311,14 +322,19 @@ export const LoginModal: React.FC = () => {
           {authTab === 'STAFF_PIN' && (
             <div className="space-y-4 text-center">
               {/* Restaurant Selector for PIN login */}
-              {tenantsList.length > 0 && (
+              {tenantsList.length > 0 ? (
                 <div className="text-right bg-luxury-950 p-3 rounded-2xl border border-luxury-800 space-y-1">
                   <label className="block text-[11px] font-semibold text-luxury-300">
                     اختر المطعم للوردية *
                   </label>
                   <select id="loginmodal-f2"
                     value={selectedRestaurantId}
-                    onChange={(e) => setSelectedRestaurantId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedRestaurantId(e.target.value);
+                      if (typeof window !== 'undefined') {
+                        localStorage.setItem(WORKER_REST_KEY, e.target.value);
+                      }
+                    }}
                     className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-gold-500/60 cursor-pointer"
                   >
                     {tenantsList.map((t) => (
@@ -327,6 +343,10 @@ export const LoginModal: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+              ) : (
+                <div className="text-right bg-luxury-950/60 p-2.5 rounded-xl border border-luxury-800 text-[11px] text-luxury-400">
+                  {currentRestaurant?.name ? `المطعم المحدد للوردية: ${currentRestaurant.name}` : 'جاري تحميل قائمة المطاعم...'}
                 </div>
               )}
 

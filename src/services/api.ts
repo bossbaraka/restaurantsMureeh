@@ -482,6 +482,21 @@ class RestaurantApiService {
   // PUBLIC / CUSTOMER ANONYMOUS ENDPOINTS (QR-gated, tenant-scoped)
   // =========================================================================
 
+  // Fetch all public active restaurants (for staff login venue selector and directory)
+  public async getPublicRestaurants(): Promise<ApiResponse<{ restaurants: Restaurant[] }>> {
+    const res = await this.request<any>('GET', '/public/restaurants', { auth: false });
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          restaurants: (res.data.restaurants || []).map(mapRestaurantRow),
+        },
+        statusCode: 200,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
   public async getPublicRestaurantBySlug(slug: string, qrToken?: string): Promise<ApiResponse<{
     restaurant: Restaurant;
     categories: Category[];

@@ -24,6 +24,7 @@ import {
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
+import { applyBrandTheme } from '../theme/brandTheme';
 
 export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
 
@@ -368,10 +369,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [currentRestaurant?.id, currentRestaurant?.slug, currentUser?.id, currentTableSession?.sessionToken, displayMode]);
 
   // Load the platform tenant directory for platform admins (used by the
-  // tenant switcher, admin portal and manager header).
+  // tenant switcher, admin portal and manager header) or public active restaurants for staff login.
   const loadTenantsList = useCallback(async () => {
     if (!currentUser) {
-      setAvailableRestaurants([]);
+      // Unauthenticated: fetch active public restaurants so staff can select their restaurant and login with PIN
+      const res = await api.getPublicRestaurants();
+      if (res.success && res.data) {
+        setAvailableRestaurants(res.data.restaurants);
+      }
       return;
     }
     if (!currentUser.restaurantId) {
@@ -403,6 +408,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentManagerRestaurant?.id]);
+
+  // Keep brand theme synchronized and persistently cached when current restaurant changes
+  useEffect(() => {
+    if (currentRestaurant?.primaryColor || currentRestaurant?.accentColor) {
+      applyBrandTheme(currentRestaurant.primaryColor, currentRestaurant.accentColor, null, {
+        restaurantId: currentRestaurant.id,
+        slug: currentRestaurant.slug,
+      });
+    }
+  }, [currentRestaurant?.primaryColor, currentRestaurant?.accentColor, currentRestaurant?.id, currentRestaurant?.slug]);
 
   // 10-second background polling with in-flight lock — mitigates DoS/vector (M-04).
   // Previous 1.5s × 8 endpoints = 320 req/min per tab exceeded global rate-limit

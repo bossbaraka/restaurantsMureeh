@@ -50,6 +50,36 @@ export const BRAND_FALLBACK = {
   accent: '#C5A880',
 } as const;
 
+export const BRAND_THEME_STORAGE_KEY = 'merar_brand_theme';
+
+export interface CachedBrandTheme {
+  primary: string;
+  accent: string;
+  presetId?: string;
+  restaurantId?: string;
+  slug?: string;
+}
+
+export function getCachedBrandTheme(): CachedBrandTheme | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(BRAND_THEME_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.primary === 'string' && typeof parsed.accent === 'string') {
+      return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+export function setCachedBrandTheme(theme: CachedBrandTheme): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(BRAND_THEME_STORAGE_KEY, JSON.stringify(theme));
+  } catch {}
+}
+
 export const BRAND_VAR_NAMES = [
   '--brand-primary',
   '--brand-accent',
@@ -350,9 +380,14 @@ function tokensToCssVars(tokens: BrandTokens): Record<string, string> {
 export function applyBrandTheme(
   primary?: string | null,
   accent?: string | null,
-  styleTarget?: { setProperty(name: string, value: string): void } | null
+  styleTarget?: { setProperty(name: string, value: string): void } | null,
+  options?: { presetId?: string; restaurantId?: string; slug?: string }
 ): BrandTokens {
-  const tokens = buildBrandTokens(primary, accent);
+  const cached = getCachedBrandTheme();
+  const effectivePrimary = primary || (primary === undefined && cached?.primary) || BRAND_FALLBACK.primary;
+  const effectiveAccent = accent || (accent === undefined && cached?.accent) || BRAND_FALLBACK.accent;
+
+  const tokens = buildBrandTokens(effectivePrimary, effectiveAccent);
   const target =
     styleTarget ?? (typeof document !== 'undefined' ? document.documentElement.style : null);
   if (target && typeof target.setProperty === 'function') {
@@ -361,6 +396,18 @@ export function applyBrandTheme(
       target.setProperty(name, vars[name]);
     }
   }
+
+  // Persist to local storage if non-empty primary or accent was provided
+  if (primary || accent) {
+    setCachedBrandTheme({
+      primary: tokens.primary,
+      accent: tokens.accent,
+      presetId: options?.presetId ?? cached?.presetId,
+      restaurantId: options?.restaurantId ?? cached?.restaurantId,
+      slug: options?.slug ?? cached?.slug,
+    });
+  }
+
   return tokens;
 }
 
@@ -369,16 +416,33 @@ export function applyBrandTheme(
  * Returns the tokens so components that need inline styles (e.g. `ink` on a
  * brand-filled button) can read them without touching the DOM.
  */
-export function useBrandTheme(primary?: string | null, accent?: string | null): BrandTokens {
-  const tokens = useMemo(() => buildBrandTokens(primary, accent), [primary, accent]);
+export function useBrandTheme(
+  primary?: string | null,
+  accent?: string | null,
+  options?: { presetId?: string; restaurantId?: string; slug?: string }
+): BrandTokens {
+  const cached = useMemo(() => getCachedBrandTheme(), []);
+  const resolvedPrimary = primary || (primary === undefined && cached?.primary) || BRAND_FALLBACK.primary;
+  const resolvedAccent = accent || (accent === undefined && cached?.accent) || BRAND_FALLBACK.accent;
+
+  const tokens = useMemo(
+    () => buildBrandTokens(resolvedPrimary, resolvedAccent),
+    [resolvedPrimary, resolvedAccent]
+  );
 
   useEffect(() => {
-    const vars = tokensToCssVars(tokens);
-    if (typeof document === 'undefined') return;
-    for (const name of BRAND_VAR_NAMES) {
-      document.documentElement.style.setProperty(name, vars[name]);
-    }
-  }, [tokens]);
+    applyBrandTheme(resolvedPrimary, resolvedAccent, null, options);
+  }, [resolvedPrimary, resolvedAccent, options?.presetId, options?.restaurantId, options?.slug]);
 
   return tokens;
+}
+
+// Eager initialization: apply cached theme immediately on script evaluation
+if (typeof window !== 'undefined') {
+  try {
+    const cached = getCachedBrandTheme();
+    if (cached?.primary && cached?.accent) {
+      applyBrandTheme(cached.primary, cached.accent, null, cached);
+    }
+  } catch {}
 }
