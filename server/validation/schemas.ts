@@ -84,10 +84,19 @@ const httpsUrl = (label: string) =>
     .string()
     .trim()
     .max(4096, `${label} طويل جداً`)
+    // Embedded base64 images are rejected outright: a single pasted data URL
+    // can be megabytes, trips the 1MB JSON body limit (413), and bloats
+    // every menu payload served to guests. Images must travel through
+    // POST /api/uploads/image; only the returned /uploads/… path is stored.
+    .refine((value) => !value.toLowerCase().startsWith('data:'), {
+      message: `${label}: الصور المضمّنة كنص (base64) غير مسموحة — ارفع الصورة عبر زر الرفع من جهازك ثم احفظ`,
+    })
     .refine(
       (value) => {
         if (!value) return true;
-        if (value.startsWith('/') || value.startsWith('data:image/')) return true;
+        // Same-origin path (e.g. /uploads/…). Protocol-relative `//host`
+        // URLs are rejected — they inherit the scheme and can point anywhere.
+        if (value.startsWith('/')) return !value.startsWith('//');
         try {
           const url = new URL(value);
           return url.protocol === 'https:' || url.protocol === 'http:';

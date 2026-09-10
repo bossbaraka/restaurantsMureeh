@@ -43,6 +43,20 @@ export function absoluteAssetUrl(url: string | null | undefined): string {
 
 export const AUTH_TOKEN_KEY = 'merar_auth_token';
 
+// A pasted/legacy base64 data URL (megabytes of text) must never be sent
+// back inside a JSON save payload — it trips the server's 1MB body limit
+// (413) and bloats every guest menu response. The canonical flow is:
+// upload the file via uploadImage(), then persist the returned /uploads/… path.
+export const EMBEDDED_IMAGE_ERROR =
+  'تم اكتشاف صورة مضمّنة كنص ثقيل (base64) — أعد رفع الصورة عبر زر الرفع من جهازك ثم احفظ مجدداً';
+
+export function isEmbeddedImage(value: unknown): boolean {
+  return (
+    typeof value === 'string' &&
+    value.trim().toLowerCase().startsWith('data:')
+  );
+}
+
 // ============================================================================
 // Helpers — server rows (Prisma/PostgreSQL) -> typed client domain models
 // ============================================================================
@@ -449,9 +463,12 @@ class RestaurantApiService {
     }
   }
 
-  // Uploads an image (logo / cover) to the real server storage and returns its
-  // absolute URL, ready to persist through saveBranding.
-  public async uploadImage(file: File | Blob, fileName = 'image.png'): Promise<ApiResponse<{ url: string }>> {
+  // Uploads an image (logo / cover / dish) to the real server storage and
+  // returns its absolute URL, ready to persist through saveBranding /
+  // saveProduct. The persisted value is ALWAYS the small /uploads/… path —
+  // a base64 data URL is never stored (it would blow up every later save
+  // past the server's 1MB JSON body limit).
+  public async uploadImage(file: File | Blob, fileName = 'image.png'): Promise<ApiResponse<{ url: string; pathUrl?: string }>> {
     try {
       const form = new FormData();
       form.append('image', file, fileName);
@@ -464,8 +481,14 @@ class RestaurantApiService {
         body: form,
       });
       const json: any = await res.json().catch(() => null);
-      if (res.ok && json?.success && json.data?.url) {
-        return { success: true, data: { url: absoluteAssetUrl(json.data.url) }, statusCode: 200 };
+      if (res.ok && json?.success && (json.data?.url || json.data?.pathUrl)) {
+        const rawUrl: string = json.data.url || '';
+        const pathUrl: string | undefined = json.data.pathUrl;
+        // Defensive: if a server ever echoes the file bytes back as base64
+        // (legacy shape), prefer the on-disk path instead of the megabytes.
+        const chosen =
+          rawUrl && !isEmbeddedImage(rawUrl) ? rawUrl : pathUrl || rawUrl;
+        return { success: true, data: { url: absoluteAssetUrl(chosen), pathUrl }, statusCode: 200 };
       }
       if (json && typeof json === 'object' && 'error' in json) {
         return json as ApiResponse<never>;
@@ -806,6 +829,11 @@ class RestaurantApiService {
     restaurantId: string,
     product: Product
   ): Promise<ApiResponse<{ product: Product }>> {
+    // Fail fast before the network: a base64 dish image would 413 the save
+    // and the toast below tells the manager exactly how to fix it.
+    if (isEmbeddedImage(product.image)) {
+      return { success: false, error: EMBEDDED_IMAGE_ERROR, statusCode: 413 };
+    }
     const isNew = product.id.startsWith('prod-') || !product.id || product.id.includes('Date.now');
     const body: Record<string, unknown> = {
       restaurantId,
@@ -963,6 +991,9 @@ class RestaurantApiService {
   }
 
   public async saveOffer(restaurantId: string, offer: Omit<Offer, 'id' | 'restaurantId'>): Promise<ApiResponse<{ offer: Offer }>> {
+    if (isEmbeddedImage(offer.image)) {
+      return { success: false, error: EMBEDDED_IMAGE_ERROR, statusCode: 413 };
+    }
     const res = await this.request<any>('POST', '/manager/offers', { body: { restaurantId, ...offer } });
     if (res.success && res.data?.offer) {
       return { success: true, data: { offer: mapOfferRow({ ...res.data.offer, restaurantId }) }, statusCode: 201 };
@@ -971,6 +1002,9 @@ class RestaurantApiService {
   }
 
   public async updateOffer(restaurantId: string, offer: Offer): Promise<ApiResponse<{ offer: Offer }>> {
+    if (isEmbeddedImage(offer.image)) {
+      return { success: false, error: EMBEDDED_IMAGE_ERROR, statusCode: 413 };
+    }
     const res = await this.request<any>('PUT', `/manager/offers/${encodeURIComponent(offer.id)}`, {
       body: { restaurantId, ...offer },
     });
@@ -1047,6 +1081,19 @@ class RestaurantApiService {
   }
 
   public async saveBranding(restaurantId: string, patch: Partial<Restaurant>): Promise<ApiResponse<{ restaurant: Restaurant }>> {
+    // Fail fast: logo / cover / gallery values that are still base64 data
+    // URLs (uploaded with the old server response, or pasted by hand) would
+    // 413 the save — surface the fix instead of a cryptic server error.
+    const galleryHasEmbedded =
+      Array.isArray(patch.galleryImages) &&
+      patch.galleryImages.some((u) => isEmbeddedImage(u));
+    if (
+      isEmbeddedImage(patch.logo) ||
+      isEmbeddedImage(patch.coverImage) ||
+      galleryHasEmbedded
+    ) {
+      return { success: false, error: EMBEDDED_IMAGE_ERROR, statusCode: 413 };
+    }
     const res = await this.request<any>('PUT', '/manager/branding', {
       body: {
         restaurantId,

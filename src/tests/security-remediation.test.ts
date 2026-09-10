@@ -26,7 +26,9 @@ import {
   isAllowedPromoVideoUrl,
   tableSettleSchema,
   brandingSchema,
+  productCreateSchema,
 } from '../../server/validation/schemas';
+import { isEmbeddedImage } from '../services/api';
 
 const repoRoot = resolve(__dirname, '../..');
 const read = (p: string) => readFileSync(resolve(repoRoot, p), 'utf8');
@@ -303,5 +305,74 @@ describe('H-05: table settlement body is validated', () => {
     const idx = src.indexOf("'/tables/:id/settle'");
     expect(idx).toBeGreaterThan(-1);
     expect(src.slice(idx, idx + 300)).toContain('validateBody(tableSettleSchema)');
+  });
+});
+
+// ---------------------------------------------------------------
+// PayloadTooLarge — branding saves must never carry base64 images
+// ---------------------------------------------------------------
+// Regression: POST /api/uploads/image used to return the full base64 data
+// URL in `url`, the branding/product forms persisted it, and the next save
+// POSTed ~3MB of JSON past the 1MB body limit
+// (`PayloadTooLargeError: request entity too large` on PUT /manager/branding).
+// Images must be referenced by their small /uploads/… path only.
+describe('PayloadTooLarge: base64 images are rejected, /uploads paths accepted', () => {
+  const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA';
+
+  it('brandingSchema rejects embedded data URLs for logo/cover/gallery', () => {
+    expect(brandingSchema.safeParse({ logo: tinyPng }).success).toBe(false);
+    expect(brandingSchema.safeParse({ coverImage: tinyPng }).success).toBe(false);
+    expect(
+      brandingSchema.safeParse({ galleryImages: [tinyPng] }).success
+    ).toBe(false);
+  });
+
+  it('productCreateSchema rejects an embedded dish image', () => {
+    expect(
+      productCreateSchema.safeParse({
+        categoryId: 'cat-1',
+        name: 'طبق',
+        price: 10,
+        image: tinyPng,
+      }).success
+    ).toBe(false);
+  });
+
+  it('still accepts /uploads paths and https URLs', () => {
+    expect(
+      brandingSchema.safeParse({
+        logo: '/uploads/img-123.png',
+        coverImage: 'https://cdn.example.com/cover.jpg',
+        galleryImages: ['/uploads/img-456.jpg'],
+      }).success
+    ).toBe(true);
+  });
+
+  it('rejects protocol-relative image URLs', () => {
+    expect(
+      brandingSchema.safeParse({ logo: '//evil.example.com/x.png' }).success
+    ).toBe(false);
+  });
+
+  it('client guard detects embedded images', () => {
+    expect(isEmbeddedImage(tinyPng)).toBe(true);
+    expect(isEmbeddedImage('  DATA:image/jpeg;base64,/9j/')).toBe(true);
+    expect(isEmbeddedImage('/uploads/img-123.png')).toBe(false);
+    expect(isEmbeddedImage('https://cdn.example.com/x.jpg')).toBe(false);
+    expect(isEmbeddedImage('')).toBe(false);
+    expect(isEmbeddedImage(undefined)).toBe(false);
+  });
+
+  it('the upload route returns a file path, never base64 bytes', () => {
+    const src = read('server/routes/uploads.ts');
+    expect(src).toContain('const fileUrl = `/uploads/${filename}`');
+    expect(src).not.toContain('url: base64Data');
+    expect(src).not.toMatch(/toString\('base64'\)/);
+  });
+
+  it('the error handler maps entity.too.large to an Arabic 413', () => {
+    const src = read('server/index.ts');
+    expect(src).toContain("err?.type === 'entity.too.large'");
+    expect(src).toContain('حجم البيانات المرسلة كبير جداً');
   });
 });

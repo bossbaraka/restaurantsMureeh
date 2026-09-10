@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
-import { api } from '../../services/api';
+import { api, isEmbeddedImage } from '../../services/api';
 import {
+  AlertTriangle,
   Palette,
   Save,
   Image as ImageIcon,
@@ -220,6 +221,17 @@ export const BrandingSettingsView: React.FC = () => {
     e?.preventDefault();
     if (!currentRestaurant || isSaving) return;
 
+    // A base64 data URL in any image field would 413 the save (server JSON
+    // limit is 1MB) — stop here with guidance instead of a failed request.
+    if (
+      isEmbeddedImage(logo) ||
+      isEmbeddedImage(coverImage) ||
+      galleryImages.some((u) => isEmbeddedImage(u))
+    ) {
+      showToast('error', 'تعذر حفظ الهوية البصرية', 'إحدى الصور مخزنة كنص ثقيل (base64) — أعد رفعها عبر أزرار الرفع من جهازك ثم اضغط حفظ مجدداً');
+      return;
+    }
+
     setIsSaving(true);
     const res = await api.saveBranding(currentRestaurant.id, {
       name: name.trim(),
@@ -251,6 +263,13 @@ export const BrandingSettingsView: React.FC = () => {
   const currency = currentRestaurant.currency || '₪';
   const logoPreview = logo || currentRestaurant.logo || '';
 
+  // Images stored with the legacy base64 flow must be re-uploaded before the
+  // next save, otherwise the save is blocked by the guards above.
+  const hasLegacyEmbeddedImages =
+    isEmbeddedImage(logoPreview) ||
+    isEmbeddedImage(coverImage) ||
+    galleryImages.some((u) => isEmbeddedImage(u));
+
   return (
     <div className="space-y-6 text-right max-w-6xl" dir="rtl">
       {/* Header */}
@@ -274,6 +293,16 @@ export const BrandingSettingsView: React.FC = () => {
           <span>{isSaving ? 'جاري الحفظ في قاعدة البيانات...' : 'حفظ ونشر الهوية الجديدة'}</span>
         </button>
       </div>
+
+      {hasLegacyEmbeddedImages && (
+        <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/40 rounded-2xl p-4 text-xs leading-relaxed">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-amber-200">
+            <span className="font-bold">تنبيه: بعض الصور مخزنة بالصيغة القديمة الثقيلة</span> ولن يكتمل الحفظ قبل معالجتها —
+            أعد رفع الشعار / الغلاف / صور الصالة عبر أزرار الرفع من جهازك (ستُحفظ كروابط خفيفة)، ثم اضغط «حفظ ونشر الهوية الجديدة».
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
         {/* ============ Right column: editors ============ */}

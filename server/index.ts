@@ -288,6 +288,22 @@ app.use(
       });
     }
 
+    // Oversized JSON bodies (almost always an image pasted as base64 text
+    // instead of uploaded through POST /api/uploads/image). The 1MB cap
+    // stays — this only turns the cryptic parser error into actionable
+    // Arabic guidance instead of leaking `request entity too large`.
+    if (
+      err?.type === 'entity.too.large' ||
+      Number(err?.status) === 413
+    ) {
+      return res.status(413).json({
+        success: false,
+        error:
+          'حجم البيانات المرسلة كبير جداً — لا تلصق الصور كنص داخل الحقول. ارفع الصورة عبر زر الرفع من جهازك ثم اضغط حفظ.',
+        statusCode: 413,
+      });
+    }
+
     const statusCode =
       Number(err?.status) || 500;
 

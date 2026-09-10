@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Product, ProductSize, ProductAddOn, Category } from '../../types/restaurant';
-import { api } from '../../services/api';
+import { api, isEmbeddedImage } from '../../services/api';
 import { X, Plus, Trash2, Sparkles, Image as ImageIcon, Check, Upload, Loader2 } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
 
@@ -190,6 +190,13 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !price || !categoryId) return;
+
+    // A base64 dish image would 413 the save (server JSON limit is 1MB) —
+    // keep the modal open and point at the upload button instead.
+    if (isEmbeddedImage(image)) {
+      showToast('error', 'تعذر حفظ الطبق', 'صورة الطبق مضمّنة كنص ثقيل (base64) — أعد رفعها عبر زر الرفع من جهازك ثم احفظ');
+      return;
+    }
 
     const productPayload = {
       categoryId,
