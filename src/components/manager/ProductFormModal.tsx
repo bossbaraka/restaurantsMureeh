@@ -77,7 +77,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setIsUploadingImage(true);
     try {
       const { blob, ext } = await fileToResizedBlob(file, 1000);
-      const res = await api.uploadImage(blob, `dish-${Date.now()}.${ext}`);
+      const res = await api.uploadImage(blob, `dish-${Date.now()}.${ext}`, 'product');
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع صورة الطبق', res.error);
         return;

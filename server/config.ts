@@ -29,6 +29,24 @@ const envSchema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   // CSP frame-ancestors value for the API/SPA responses.
   FRAME_ANCESTORS: z.string().min(1).default("'self'"),
+  // Uploaded assets (logo/cover/gallery/dish images).
+  // - `local`  → process filesystem under UPLOAD_DIR (dev/test only; refused
+  //              in production unless explicitly opted-in, see below).
+  // - `supabase` → persistent Supabase Storage bucket (S3-compatible API).
+  // - `object` → alias for `supabase`, to match generic deployment naming.
+  STORAGE_DRIVER: z
+    .enum(['local', 'supabase', 'object'])
+    .default('local'),
+  UPLOAD_DIR: z.string().min(1).default('./uploads'),
+  SUPABASE_URL: z.string().min(1).optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+  SUPABASE_STORAGE_BUCKET: z.string().min(1).default('restaurant-assets'),
+  // Explicit opt-out for SELF-HOSTED deployments with a mounted persistent
+  // volume. Without this, `local` storage is refused in production because
+  // it would otherwise silently store images on an ephemeral filesystem.
+  STORAGE_ALLOW_LOCAL_IN_PROD: z
+    .enum(['true', 'false'])
+    .default('false'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -52,6 +70,10 @@ const env = parsed.data;
 export const isProd = env.NODE_ENV === 'production';
 export const isTest = env.NODE_ENV === 'test';
 
+// `object` is a generic alias; the concrete implemented driver is `supabase`.
+const storageDriver =
+  env.STORAGE_DRIVER === 'object' ? ('supabase' as const) : env.STORAGE_DRIVER;
+
 export const allowedOrigins = env.CORS_ORIGIN.split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -74,6 +96,26 @@ if (isProd && !env.DATABASE_URL) {
   );
 }
 
+// Upload durability guard. Object storage is the production path: refuse to
+// boot with an unconfigured driver instead of silently writing somewhere
+// that won't survive a restart.
+if (storageDriver === 'supabase') {
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    throw new Error(
+      'STORAGE_DRIVER=supabase requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. ' +
+        'Refusing to start with an unconfigured object storage driver.'
+    );
+  }
+} else if (isProd && env.STORAGE_ALLOW_LOCAL_IN_PROD !== 'true') {
+  throw new Error(
+    'STORAGE_DRIVER=local is not allowed in production: uploaded images would be ' +
+      'stored on an ephemeral filesystem and lost on redeploy/restart. Set ' +
+      'STORAGE_DRIVER=supabase with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY, or ' +
+      'STORAGE_ALLOW_LOCAL_IN_PROD=true ONLY for self-hosted deployments with a ' +
+      'mounted persistent volume. Refusing to start.'
+  );
+}
+
 export const config = {
   nodeEnv: env.NODE_ENV,
   port: env.PORT,
@@ -82,6 +124,11 @@ export const config = {
   jwtExpiresIn: env.JWT_EXPIRES_IN,
   trustProxy: env.TRUST_PROXY,
   frameAncestors: env.FRAME_ANCESTORS,
+  storageDriver,
+  uploadDir: env.UPLOAD_DIR,
+  supabaseUrl: env.SUPABASE_URL,
+  supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+  supabaseBucket: env.SUPABASE_STORAGE_BUCKET,
 } as const;
 
 export const JWT_ISSUER = 'mureeh-api';

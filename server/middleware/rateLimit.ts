@@ -77,6 +77,16 @@ export const qrSessionLimiter = rateLimit({
   message: limiterError('طلبات جلسات كثيرة. يرجى الانتظار قليلاً.'),
 });
 
+// Customer order-status polling: the guest menu refreshes every ~10s while a
+// table session is open (and on every SSE status event), so this read budget
+// must stay well above the polling cadence while still bounding abuse.
+export const customerOrdersLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 600,
+  message: limiterError('طلبات كثيرة لمتابعة الحالة. يرجى الانتظار قليلاً.'),
+});
+
 export const uploadLimiter = rateLimit({
   ...base,
   windowMs: 60 * 60 * 1000,

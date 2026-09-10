@@ -1,9 +1,33 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
-import { Search, Sparkles, Flame, ChefHat, Clock, CheckCircle2, ArrowLeft, UtensilsCrossed, Camera, Play, X, Image as ImageIcon, Video, Film, Eye } from 'lucide-react';
+import { Search, Sparkles, Flame, ChefHat, Clock, ArrowLeft, UtensilsCrossed, Camera, Play, X, Eye } from 'lucide-react';
 import { OrderStatus } from '../../types/restaurant';
 import { optimizeImageUrl } from './ProductImage';
+
+/**
+ * Turn a manager-supplied promo-video link into an embeddable player source.
+ * Handles every YouTube shape (`watch?v=`, `youtu.be`, `embed/`, `shorts/`),
+ * Vimeo links, and direct MP4 files. Autoplay is muted so the browser's
+ * autoplay policy actually lets the video start without a tap.
+ */
+function toEmbeddableVideo(url: string): { kind: 'youtube' | 'vimeo' | 'video'; src: string } | null {
+  if (!url) return null;
+  const yt = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/
+  );
+  if (yt) {
+    return {
+      kind: 'youtube',
+      src: `https://www.youtube-nocookie.com/embed/${yt[1]}?autoplay=1&muted=1&rel=0`,
+    };
+  }
+  if (/vimeo\.com/.test(url)) {
+    const id = url.split('/').pop() || '';
+    return { kind: 'vimeo', src: `https://player.vimeo.com/video/${id}?autoplay=1&muted=1` };
+  }
+  return { kind: 'video', src: url };
+}
 
 export const CustomerHero: React.FC = () => {
   const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen } = useRestaurant();
@@ -58,22 +82,27 @@ export const CustomerHero: React.FC = () => {
       <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl border border-luxury-800 shadow-2xl mx-auto group">
         {isPlayingVideo && promoVideo ? (
           <div className="relative w-full h-full bg-black">
-            {promoVideo.includes('youtube.com') || promoVideo.includes('youtu.be') ? (
-              <iframe
-                src={`${promoVideo.replace('watch?v=', 'embed/')}?autoplay=1&muted=0`}
-                title="فيديو صالة المطعم"
-                className="w-full h-full border-0"
-                allow="autoplay; encrypted-media"
-                allowFullScreen
-              />
-            ) : (
-              <video
-                src={promoVideo}
-                controls
-                autoPlay
-                className="w-full h-full object-cover"
-              />
-            )}
+            {(() => {
+              const embed = toEmbeddableVideo(promoVideo);
+              if (!embed) return null;
+              return embed.kind === 'video' ? (
+                <video
+                  src={embed.src}
+                  controls
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <iframe
+                  src={embed.src}
+                  title="فيديو صالة المطعم"
+                  className="w-full h-full border-0"
+                  allow="autoplay; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                />
+              );
+            })()}
             <button
               onClick={() => setIsPlayingVideo(false)}
               className="absolute top-3 left-3 z-20 p-2 rounded-full bg-luxury-950/80 text-white hover:bg-red-500 transition-colors"
@@ -259,6 +288,7 @@ export const CustomerHero: React.FC = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="ابحث عن طبق، مكون، أو صنف..."
             aria-label="ابحث عن طبق، مكون، أو صنف"
+            data-guide="search"
             className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 placeholder-luxury-500 rounded-xl py-3 pr-11 pl-4 text-sm focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] focus:ring-1 focus:ring-[rgb(var(--brand-primary-strong-rgb)/0.3)] transition-all shadow-inner"
           />
           <Search className="w-4 h-4 text-luxury-400 absolute right-4 pointer-events-none" />

@@ -17,6 +17,7 @@ import {
   evaluatePlanChange,
 } from '../services/plans';
 import { logAuditEvent } from '../services/audit';
+import { getStorage, deleteManagedAssets } from '../services/storage';
 import { generateQrToken, csvField, roundMoney, parsePagination } from '../utils/security';
 import { paymentLimiter, orderStatusLimiter, staffMutationLimiter } from '../middleware/rateLimit';
 import {
@@ -98,7 +99,10 @@ function deny(
 
 // ---------- Plan limits + entitlements (server-enforced) ----------
 
-const FREE_LIMITS = { maxTables: 15, maxCategories: 6, maxProducts: 35 };
+// Fallback when a tenant has no usable subscription: the most restrictive
+// (free-trial) limits. Every real tenant gets a subscription at onboarding, so
+// this path only exists to stop an orphaned row from growing without a plan.
+const FREE_LIMITS = { maxTables: 8, maxCategories: 3, maxProducts: 15, maxBranches: 1 };
 
 async function getPlanLimits(restaurantId: string): Promise<typeof FREE_LIMITS> {
   const subscription = await prisma.subscription.findUnique({
@@ -117,6 +121,7 @@ async function getPlanLimits(restaurantId: string): Promise<typeof FREE_LIMITS> 
     maxTables: subscription.plan.maxTables,
     maxCategories: subscription.plan.maxCategories,
     maxProducts: subscription.plan.maxProducts,
+    maxBranches: subscription.plan.maxBranches,
   };
 }
 
@@ -155,6 +160,20 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
 
     // Verify tenant access
     if (!ownTenant(req, restaurantId)) return deny(req, res);
+
+    // Analytics KPIs are a paid entitlement: this endpoint is the one place
+    // that can leak revenue/AOV figures, so it is gated server-side (not just
+    // in the Analytics tab's UI lock screen).
+    if (
+      !isPlatformUser(req) &&
+      !(await restaurantHasEntitlement(restaurantId, 'CAN_USE_ANALYTICS'))
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: 'التحليلات ومؤشرات المبيعات متاحة في باقة المحترفين والمؤسسات. قم بالترقية للمتابعة.',
+        statusCode: 403,
+      });
+    }
 
     const restaurant = await prisma.restaurant.findUnique({
       where: { id: restaurantId },
@@ -968,6 +987,10 @@ router.delete('/menu/categories/:id', requireManager(), async (req: Request, res
     }
 
     await prisma.category.delete({ where: { id } });
+    // Best-effort cleanup of the category image (avoid orphaned files).
+    if (category.image) {
+      void deleteManagedAssets(getStorage(), category.restaurantId, [category.image]);
+    }
     await logAuditEvent({
       restaurantId: category.restaurantId,
       userId: req.user!.id,
@@ -1231,6 +1254,18 @@ router.put(
         },
       });
 
+      // Best-effort cleanup of a replaced dish image — AFTER the DB commit.
+      const newImage = data.image ?? data.imageUrl;
+      if (
+        newImage !== undefined &&
+        existingProduct.imageUrl &&
+        newImage !== existingProduct.imageUrl
+      ) {
+        void deleteManagedAssets(getStorage(), existingProduct.restaurantId, [
+          existingProduct.imageUrl,
+        ]);
+      }
+
       return res.json({ success: true, data: updated, statusCode: 200 });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر تعديل الطبق', statusCode: 500 });
@@ -1256,6 +1291,10 @@ router.delete('/menu/products/:id', requireManager(), async (req: Request, res: 
     }
 
     await prisma.product.delete({ where: { id } });
+    // Best-effort cleanup of the product's image (avoid orphaned files).
+    if (product.imageUrl) {
+      void deleteManagedAssets(getStorage(), product.restaurantId, [product.imageUrl]);
+    }
     await logAuditEvent({
       restaurantId: product.restaurantId,
       userId: req.user!.id,
@@ -1841,6 +1880,10 @@ router.delete('/offers/:id', requireManager(), async (req: Request, res: Respons
     if (!existing) return res.status(404).json({ success: false, error: 'العرض غير موجود', statusCode: 404 });
     if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
     await prisma.offer.delete({ where: { id } });
+    // Best-effort cleanup of the offer image (avoid orphaned files).
+    if (existing.image) {
+      void deleteManagedAssets(getStorage(), existing.restaurantId, [existing.image]);
+    }
     await logAuditEvent({
       restaurantId: existing.restaurantId,
       userId: req.user!.id,
@@ -1920,19 +1963,21 @@ router.put(
         });
       }
       // Guard against exceeding plan limits with existing data
-      const [tablesCount, categoriesCount, productsCount] = await Promise.all([
+      const [tablesCount, categoriesCount, productsCount, branchesCount] = await Promise.all([
         prisma.table.count({ where: { restaurantId } }),
         prisma.category.count({ where: { restaurantId } }),
         prisma.product.count({ where: { restaurantId } }),
+        prisma.branch.count({ where: { restaurantId } }),
       ]);
       if (
         tablesCount > plan.maxTables ||
         categoriesCount > plan.maxCategories ||
-        productsCount > plan.maxProducts
+        productsCount > plan.maxProducts ||
+        branchesCount > plan.maxBranches
       ) {
         return res.status(400).json({
           success: false,
-          error: `لا يمكن الترقية: بياناتك الحالية تتجاوز حدود الباقة (طاولات ${plan.maxTables} / تصنيفات ${plan.maxCategories} / أطباق ${plan.maxProducts})`,
+          error: `لا يمكن الترقية: بياناتك الحالية تتجاوز حدود الباقة (طاولات ${plan.maxTables} / تصنيفات ${plan.maxCategories} / أطباق ${plan.maxProducts} / فروع ${plan.maxBranches})`,
           statusCode: 400,
         });
       }
@@ -1991,9 +2036,14 @@ router.put(
         timezone?: string;
         primaryColor?: string;
         accentColor?: string;
+        logoFit?: 'cover' | 'contain';
+        logoPosition?: string;
         businessType?: 'RESTAURANT' | 'CAFE' | 'BAKERY';
         promoVideoUrl?: string;
         galleryImages?: string[];
+        latitude?: number;
+        longitude?: number;
+        mapUrl?: string | '';
       };
 
       const hasCustomBrandingFields =
@@ -2011,6 +2061,14 @@ router.put(
           statusCode: 403,
         });
       }
+
+      // Capture the pre-update asset URLs so replaced images can be cleaned up
+      // AFTER the database commit succeeds (never before — see rule 7).
+      const existing = await prisma.restaurant.findUnique({
+        where: { id: restaurantId },
+        select: { logoUrl: true, coverImageUrl: true, galleryImages: true },
+      });
+
       const updated = await prisma.restaurant.update({
         where: { id: restaurantId },
         data: {
@@ -2026,11 +2084,21 @@ router.put(
           timezone: b.timezone !== undefined ? b.timezone : undefined,
           primaryColor: b.primaryColor !== undefined ? b.primaryColor : undefined,
           accentColor: b.accentColor !== undefined ? b.accentColor : undefined,
+          logoFit: b.logoFit !== undefined ? b.logoFit : undefined,
+          logoPosition: b.logoPosition !== undefined ? b.logoPosition : undefined,
           // Venue kind is descriptive metadata, not paid visual customisation,
           // so it is deliberately outside `hasCustomBrandingFields` above.
           businessType: b.businessType !== undefined ? b.businessType : undefined,
           promoVideoUrl: b.promoVideoUrl !== undefined ? b.promoVideoUrl : undefined,
           galleryImages: b.galleryImages !== undefined ? b.galleryImages : undefined,
+          latitude: b.latitude !== undefined ? b.latitude : undefined,
+          longitude: b.longitude !== undefined ? b.longitude : undefined,
+          mapUrl:
+            b.mapUrl !== undefined
+              ? b.mapUrl === ''
+                ? null
+                : b.mapUrl
+              : undefined,
         },
       });
       await logAuditEvent({
@@ -2043,6 +2111,33 @@ router.put(
         entityId: restaurantId,
         details: `تم تحديث هوية المطعم البصرية`,
       });
+
+      // Best-effort cleanup of replaced assets — AFTER the DB commit. Only
+      // URLs owned by this tenant are touched; failures are logged, never
+      // thrown, so a storage hiccup cannot roll back the committed branding.
+      if (existing) {
+        const replaced: Array<string | null | undefined> = [];
+        if (b.logo !== undefined && existing.logoUrl && b.logo !== existing.logoUrl) {
+          replaced.push(existing.logoUrl);
+        }
+        if (
+          b.coverImage !== undefined &&
+          existing.coverImageUrl &&
+          b.coverImage !== existing.coverImageUrl
+        ) {
+          replaced.push(existing.coverImageUrl);
+        }
+        if (b.galleryImages !== undefined) {
+          const next = new Set(b.galleryImages);
+          for (const old of existing.galleryImages) {
+            if (!next.has(old)) replaced.push(old);
+          }
+        }
+        if (replaced.length > 0) {
+          void deleteManagedAssets(getStorage(), restaurantId, replaced);
+        }
+      }
+
       return res.json({ success: true, data: { restaurant: updated }, statusCode: 200 });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر تحديث الهوية البصرية', statusCode: 500 });
@@ -2082,6 +2177,18 @@ router.post(
         return res.status(403).json({
           success: false,
           error: 'إدارة الفروع متاحة في باقة المؤسسات. قم بالترقية للمتابعة.',
+          statusCode: 403,
+        });
+      }
+
+      // Hard ceiling on branches: every location carries hosting/QR/print cost,
+      // so the enterprise plan is bounded rather than open-ended.
+      const limits = await getPlanLimits(restaurantId);
+      const branchCount = await prisma.branch.count({ where: { restaurantId } });
+      if (branchCount >= limits.maxBranches) {
+        return res.status(403).json({
+          success: false,
+          error: `وصلت للحد الأقصى لعدد الفروع في باقتك (${limits.maxBranches}). تواصل مع إدارة المنصة لإضافة فروع إضافية.`,
           statusCode: 403,
         });
       }

@@ -102,7 +102,15 @@ export const PrintMenuModal: React.FC<PrintMenuModalProps> = ({ isOpen, onClose 
                       className="w-20 h-20 rounded-2xl overflow-hidden shadow-xl border-2 shrink-0 print:w-16 print:h-16"
                       style={{ borderColor: primaryColor }}
                     >
-                      <img src={currentRestaurant.logo} alt={currentRestaurant.name} className="w-full h-full object-cover" />
+                      <img
+                        src={currentRestaurant.logo}
+                        alt={currentRestaurant.name}
+                        className="w-full h-full"
+                        style={{
+                          objectFit: currentRestaurant.logoFit === 'contain' ? 'contain' : 'cover',
+                          objectPosition: currentRestaurant.logoPosition || '50% 50%',
+                        }}
+                      />
                     </div>
                   )}
                   <div>

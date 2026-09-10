@@ -15,6 +15,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx server/db/seed.ts",
     "db:provision-admins": "tsx server/db/provision-admins.ts",
+    "storage:migrate": "tsx server/scripts/storage-migrate.ts",
     "test": "vitest run",
     "lint": "oxlint"
   },

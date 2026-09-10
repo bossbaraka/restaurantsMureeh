@@ -73,12 +73,16 @@ export function mapRestaurantRow(raw: any): Restaurant {
     nameEn: raw.nameEn || raw.name,
     slug: raw.slug,
     logo: absoluteAssetUrl(raw.logoUrl || raw.logo || ''),
+    logoFit: raw.logoFit === 'contain' ? 'contain' : 'cover',
+    logoPosition: typeof raw.logoPosition === 'string' && raw.logoPosition.trim() ? raw.logoPosition : '50% 50%',
     coverImage: absoluteAssetUrl(raw.coverImageUrl || raw.coverImage || '') || undefined,
     description: raw.description || '',
     phone: raw.phone || '',
     address: raw.address || '',
-    latitude: raw.latitude ? Number(raw.latitude) : 31.9029,
-    longitude: raw.longitude ? Number(raw.longitude) : 35.2062,
+    // Keep geo fields undefined when unset so the map can fall back to the
+    // venue's address instead of silently pinning a platform default.
+    latitude: raw.latitude != null ? Number(raw.latitude) : undefined,
+    longitude: raw.longitude != null ? Number(raw.longitude) : undefined,
     mapUrl: raw.mapUrl || undefined,
     currency: raw.currency || '₪',
     language: (raw.language || 'ar') === 'en' ? 'en' : 'ar',
@@ -123,6 +127,7 @@ export function mapPlanRow(raw: any): Plan {
     maxTables: raw.maxTables ?? 50,
     maxCategories: raw.maxCategories ?? 20,
     maxProducts: raw.maxProducts ?? 150,
+    maxBranches: raw.maxBranches ?? 3,
     entitlements: (raw.entitlements as EntitlementKey[]) || [],
     description: raw.description || '',
     isPopular: raw.isPopular || false,
@@ -466,14 +471,20 @@ class RestaurantApiService {
   }
 
   // Uploads an image (logo / cover / dish) to the real server storage and
-  // returns its absolute URL, ready to persist through saveBranding /
-  // saveProduct. The persisted value is ALWAYS the small /uploads/… path —
-  // a base64 data URL is never stored (it would blow up every later save
-  // past the server's 1MB JSON body limit).
-  public async uploadImage(file: File | Blob, fileName = 'image.png'): Promise<ApiResponse<{ url: string; pathUrl?: string }>> {
+  // returns its permanent URL, ready to persist through saveBranding /
+  // saveProduct. The persisted value is ALWAYS the small storage URL — a
+  // base64 data URL is never stored (it would blow up every later save past
+  // the server's 1MB JSON body limit). `kind` only organizes the object key
+  // server-side (logo/cover/gallery/product); it does not change the API.
+  public async uploadImage(
+    file: File | Blob,
+    fileName = 'image.png',
+    kind?: 'logo' | 'cover' | 'gallery' | 'product' | 'category' | 'offer'
+  ): Promise<ApiResponse<{ url: string; pathUrl?: string; key?: string }>> {
     try {
       const form = new FormData();
       form.append('image', file, fileName);
+      if (kind) form.append('kind', kind);
       const token = this.getAuthToken();
       const res = await fetch(`${API_BASE}/uploads/image`, {
         method: 'POST',
@@ -490,7 +501,7 @@ class RestaurantApiService {
         // (legacy shape), prefer the on-disk path instead of the megabytes.
         const chosen =
           rawUrl && !isEmbeddedImage(rawUrl) ? rawUrl : pathUrl || rawUrl;
-        return { success: true, data: { url: absoluteAssetUrl(chosen), pathUrl }, statusCode: 200 };
+        return { success: true, data: { url: absoluteAssetUrl(chosen), pathUrl, key: json.data.key }, statusCode: 200 };
       }
       if (json && typeof json === 'object' && 'error' in json) {
         return json as ApiResponse<never>;
@@ -498,6 +509,37 @@ class RestaurantApiService {
       return { success: false, error: 'تعذر رفع الصورة إلى الخادم', statusCode: res.status };
     } catch {
       return { success: false, error: 'تعذر الاتصال بالخادم لرفع الصورة', statusCode: 503 };
+    }
+  }
+
+  // Best-effort delete of a previously uploaded image (used to clean up a
+  // replaced logo/cover/dish). The server re-validates tenant ownership, so
+  // a caller can never delete another restaurant's file. Failures are
+  // returned but must be treated as non-fatal by callers.
+  public async deleteImage(url: string): Promise<ApiResponse<{ deleted: boolean; key: string | null }>> {
+    try {
+      const token = this.getAuthToken();
+      const res = await fetch(`${API_BASE}/uploads/delete`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ url }),
+      });
+      const json: any = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        return { success: true, data: json.data, statusCode: res.status };
+      }
+      return {
+        success: false,
+        error: (json && typeof json === 'object' && 'error' in json)
+          ? json.error
+          : 'تعذر حذف الصورة القديمة',
+        statusCode: res.status,
+      };
+    } catch {
+      return { success: false, error: 'تعذر الاتصال بالخادم لحذف الصورة', statusCode: 503 };
     }
   }
 
@@ -615,6 +657,25 @@ class RestaurantApiService {
     const res = await this.submitOrder({ restaurantId, tableId, sessionToken, items, notes });
     if (res.success && res.data) return { success: true, data: res.data.order, statusCode: 201 };
     return { success: false, error: res.error, statusCode: res.statusCode };
+  }
+
+  // Fetch the live orders of the caller's own QR table session — the source
+  // of truth behind the customer's "المطبخ الحي" order-status tracker.
+  public async getTableSessionOrders(
+    restaurantId: string,
+    tableId: string,
+    sessionToken: string
+  ): Promise<ApiResponse<Order[]>> {
+    const query = new URLSearchParams({ restaurantId, sessionToken });
+    const res = await this.request<any>(
+      'GET',
+      `/public/tables/${encodeURIComponent(tableId)}/orders?${query.toString()}`,
+      { auth: false }
+    );
+    if (res.success && Array.isArray(res.data)) {
+      return { success: true, data: res.data.map(mapOrderRow), statusCode: 200 };
+    }
+    return res as ApiResponse<never>;
   }
 
   // Customer cancels own order — only while PENDING and bound to their QR session.
@@ -1148,6 +1209,9 @@ class RestaurantApiService {
         businessType: patch.businessType,
         promoVideoUrl: patch.promoVideoUrl,
         galleryImages: patch.galleryImages,
+        latitude: patch.latitude,
+        longitude: patch.longitude,
+        mapUrl: patch.mapUrl,
       },
     });
     if (res.success && res.data?.restaurant) {

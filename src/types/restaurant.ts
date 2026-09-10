@@ -18,7 +18,6 @@ export type EntitlementKey =
   | 'CAN_CREATE_BRANCH'
   | 'CAN_USE_ADVANCED_FEATURES'
   | 'CAN_EXPORT_REPORTS'
-  | 'CAN_UNLIMITED_TABLES'
   | 'CAN_PRIORITY_SUPPORT'
   | 'CAN_USE_CUSTOM_DOMAIN';
 
@@ -29,6 +28,10 @@ export interface Restaurant {
   nameEn: string;
   slug: string;
   logo: string;
+  /** Logo framing: 'cover' (crop-to-fill) or 'contain' (fit whole logo). */
+  logoFit?: 'cover' | 'contain';
+  /** Logo anchor inside its box, as a CSS object-position value (e.g. '50% 50%'). */
+  logoPosition?: string;
   coverImage?: string;
   description: string;
   phone: string;
@@ -78,6 +81,8 @@ export interface Plan {
   maxTables: number;
   maxCategories: number;
   maxProducts: number;
+  /** Hard ceiling on physical locations (branches) — bounded, never unlimited. */
+  maxBranches: number;
   entitlements: EntitlementKey[];
   description: string;
   isPopular?: boolean;

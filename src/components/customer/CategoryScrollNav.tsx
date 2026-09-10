@@ -50,7 +50,7 @@ export const CategoryScrollNav: React.FC = () => {
   if (categories.length === 0) return null;
 
   return (
-    <div className="menu-cats">
+    <div className="menu-cats" data-guide="categories">
       <div ref={trackRef} className="menu-cats__track" role="tablist" aria-label="أقسام القائمة">
         <button
           type="button"

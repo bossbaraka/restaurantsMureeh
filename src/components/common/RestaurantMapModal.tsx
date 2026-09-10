@@ -8,6 +8,38 @@ interface RestaurantMapModalProps {
   onClose: () => void;
 }
 
+/**
+ * Build the map sources.
+ *
+ * The embed prefers a precise coordinate pin when the venue set one; otherwise
+ * it falls back to a Google-Maps search by the venue's address so the guest
+ * still lands on the right building (previously the map silently defaulted to
+ * a platform pin far from the restaurant).
+ */
+function resolveMapSources(restaurant: Restaurant) {
+  const lat = restaurant.latitude;
+  const lng = restaurant.longitude;
+  const address = restaurant.address?.trim();
+
+  const hasCoords = typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng);
+
+  let query: string;
+  if (hasCoords && lat !== undefined && lng !== undefined) {
+    query = `${lat},${lng}`;
+  } else if (address) {
+    query = encodeURIComponent(`${address}, ${restaurant.name}`);
+  } else {
+    query = encodeURIComponent(restaurant.name || 'مطعم');
+  }
+
+  const embedUrl = `https://www.google.com/maps?q=${query}&z=16&hl=ar&output=embed`;
+  const openUrl =
+    restaurant.mapUrl ||
+    `https://www.google.com/maps/search/?api=1&query=${query}`;
+
+  return { lat, lng, hasCoords, embedUrl, openUrl };
+}
+
 export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
   restaurant,
   isOpen,
@@ -15,15 +47,7 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
 }) => {
   if (!isOpen || !restaurant) return null;
 
-  // Default coordinates (Ramallah / Jerusalem center if not specified)
-  const lat = restaurant.latitude || 31.9029;
-  const lng = restaurant.longitude || 35.2062;
-  const googleMapsUrl =
-    restaurant.mapUrl || `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
-
-  // OpenStreetMap embed URL
-  const mapEmbedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.008},${lat - 0.008},${lng + 0.008},${lat + 0.008}&layer=mapnik&marker=${lat},${lng}`;
-
+  const { lat, lng, hasCoords, embedUrl, openUrl } = resolveMapSources(restaurant);
   const primaryColor = restaurant.primaryColor || '#D4AF37';
 
   return (
@@ -55,6 +79,7 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
           <button
             onClick={onClose}
             className="p-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-300 transition-colors"
+            aria-label="إغلاق الخريطة"
           >
             <X className="w-5 h-5" />
           </button>
@@ -66,16 +91,29 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
           <div className="relative w-full h-72 sm:h-80 rounded-2xl overflow-hidden border border-luxury-800 shadow-inner bg-luxury-900">
             <iframe
               title={`خريطة موقع ${restaurant.name}`}
-              src={mapEmbedUrl}
-              className="w-full h-full border-none filter contrast-105"
+              src={embedUrl}
+              className="w-full h-full border-none"
               loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
             />
             {/* Overlay Navigation Badge */}
-            <div className="absolute top-3 right-3 bg-luxury-950/90 backdrop-blur-md border border-luxury-750 px-3 py-1.5 rounded-xl text-[11px] font-bold text-luxury-100 flex items-center gap-1.5 shadow-lg">
-              <Compass className="w-3.5 h-3.5 text-gold-400 animate-spin-slow" />
-              <span>إحداثيات الموقع: {lat.toFixed(4)}, {lng.toFixed(4)}</span>
+            <div className="absolute top-3 right-3 bg-luxury-950/90 backdrop-blur-md border border-luxury-750 px-3 py-1.5 rounded-xl text-[11px] font-bold text-luxury-100 flex items-center gap-1.5 shadow-lg pointer-events-none">
+              <Compass className="w-3.5 h-3.5 text-gold-400" />
+              <span>
+                {hasCoords && lat !== undefined && lng !== undefined
+                  ? `الإحداثيات: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
+                  : 'الموقع حسب العنوان'}
+              </span>
             </div>
           </div>
+
+          {/* Fallback hint: the embed may be blocked by an ad-blocker or an
+              offline network; the button below always works. */}
+          <p className="text-[11px] text-luxury-400 leading-relaxed flex items-center gap-1.5">
+            <Navigation className="w-3.5 h-3.5 text-gold-400 shrink-0" />
+            إن لم تظهر الخريطة أعلاه، استخدم الزر التالي لفتحها مباشرة في تطبيق الخرائط.
+          </p>
 
           {/* Restaurant Location Details Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -85,7 +123,7 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
                 <span>العنوان التفصيلي:</span>
               </div>
               <p className="text-xs text-luxury-200 leading-relaxed font-medium">
-                {restaurant.address || 'شارع الرئيسي، رام الله، فلسطين'}
+                {restaurant.address || 'العنوان غير محدد — تواصل مع المطعم للاستفسار'}
               </p>
             </div>
 
@@ -95,7 +133,7 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
                 <span>رقم الهاتف والتواصل:</span>
               </div>
               <p className="text-xs text-luxury-200 font-mono" dir="ltr">
-                {restaurant.phone || '+970 599 123 456'}
+                {restaurant.phone || 'غير محدد'}
               </p>
             </div>
           </div>
@@ -108,7 +146,7 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
           </span>
 
           <a
-            href={googleMapsUrl}
+            href={openUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs text-black flex items-center justify-center gap-2 shadow-lg transition-all hover:brightness-110 active:scale-95 cursor-pointer"

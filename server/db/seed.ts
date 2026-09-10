@@ -49,9 +49,10 @@ export async function seedDatabase() {
       priceMonthly: 300,
       priceYearly: 3000,
       billingPeriod: 'monthly',
-      maxTables: 15,
+      maxTables: 20,
       maxCategories: 6,
       maxProducts: 35,
+      maxBranches: 1,
       entitlements: ['CAN_USE_ADVANCED_FEATURES'],
       description: 'مثالية للمطاعم الصغيرة والكافيهات التي تبدأ رحلة المنيو الرقمي والطلب الذكي.',
       isPopular: false,
@@ -66,6 +67,7 @@ export async function seedDatabase() {
       maxTables: 50,
       maxCategories: 20,
       maxProducts: 150,
+      maxBranches: 3,
       entitlements: [
         'CAN_USE_ANALYTICS',
         'CAN_CUSTOM_BRANDING',
@@ -82,20 +84,24 @@ export async function seedDatabase() {
       priceMonthly: 850,
       priceYearly: 8500,
       billingPeriod: 'monthly',
-      maxTables: 999,
-      maxCategories: 999,
-      maxProducts: 999,
+      // Bounded, not "unlimited": each table/branch/category/dish carries real
+      // hosting, QR-print and support cost. These ceilings keep platform spend
+      // predictable for a multi-branch chain without ever blocking a normal
+      // operation.
+      maxTables: 200,
+      maxCategories: 40,
+      maxProducts: 500,
+      maxBranches: 10,
       entitlements: [
         'CAN_USE_ANALYTICS',
         'CAN_CUSTOM_BRANDING',
         'CAN_CREATE_BRANCH',
         'CAN_USE_ADVANCED_FEATURES',
         'CAN_EXPORT_REPORTS',
-        'CAN_UNLIMITED_TABLES',
         'CAN_PRIORITY_SUPPORT',
         'CAN_USE_CUSTOM_DOMAIN',
       ],
-      description: 'تغطية غير محدودة للفنادق والمنتجعات وسلاسل المطاعم الراقية مع نطاق مخصص ودعم فني مخصص 24/7.',
+      description: 'تغطية واسعة للفنادق والمنتجعات وسلاسل المطاعم الراقية (حتى 10 فروع و200 طاولة) مع نطاق مخصص ودعم فني مخصص 24/7.',
       isPopular: false,
     },
   ]) {

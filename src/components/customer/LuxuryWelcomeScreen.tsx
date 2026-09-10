@@ -591,6 +591,8 @@ export interface MenuDeviceProps {
   restaurantNameEn: string;
   monogram: string;
   logoImg: string;
+  /** object-fit/object-position for the mini logo inside its square box. */
+  logoStyle?: React.CSSProperties;
   tableNumStr: string | null;
   currency: string;
   defaultLanguage: 'ar' | 'en';
@@ -607,6 +609,7 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
   restaurantNameEn,
   monogram,
   logoImg,
+  logoStyle,
   tableNumStr,
   currency,
   defaultLanguage,
@@ -704,7 +707,12 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
               <span className="flex items-center gap-2 border-b border-[var(--brand-line)] px-3 py-2.5">
                 <span className="welcome-device__logo flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg">
                   {logoImg ? (
-                    <img src={logoImg} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={logoImg}
+                      alt=""
+                      className="h-full w-full"
+                      style={logoStyle || { objectFit: 'cover', objectPosition: '50% 50%' }}
+                    />
                   ) : (
                     <span className="welcome-monogram font-serif text-sm font-black">
                       {monogram}
@@ -892,6 +900,10 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
     'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
   const coverImg = optimizeImageUrl(rawCoverImg, 1280, 70);
   const logoImg = currentRestaurant?.logo ? optimizeImageUrl(currentRestaurant.logo, 240, 85) : '';
+  const logoStyle: React.CSSProperties = {
+    objectFit: currentRestaurant?.logoFit === 'contain' ? 'contain' : 'cover',
+    objectPosition: currentRestaurant?.logoPosition || '50% 50%',
+  };
   /** Monogram fallback when the tenant has not uploaded a logo yet. */
   const monogram = (restNameEn.charAt(0) || restName.charAt(0) || 'M').toUpperCase();
   const dishCount = products?.length ?? 0;
@@ -1357,7 +1369,8 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                       <img
                         src={logoImg}
                         alt={restName}
-                        className="h-full w-full p-2 object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="h-full w-full p-2 transition-transform duration-500 group-hover:scale-105"
+                        style={logoStyle}
                         loading="eager"
                         decoding="async"
                       />
@@ -1481,7 +1494,8 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                   <img
                     src={logoImg}
                     alt={restName}
-                    className="h-full w-full p-1 object-cover"
+                    className="h-full w-full p-1"
+                    style={logoStyle}
                     loading="eager"
                     decoding="async"
                   />
@@ -1546,6 +1560,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                 restaurantNameEn={restNameEn}
                 monogram={monogram}
                 logoImg={logoImg}
+                logoStyle={logoStyle}
                 tableNumStr={tableNumStr}
                 currency={currentRestaurant?.currency || '₪'}
                 defaultLanguage={currentRestaurant?.language === 'en' ? 'en' : 'ar'}
