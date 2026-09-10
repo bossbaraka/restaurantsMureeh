@@ -1,10 +1,16 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { formatTime, formatRelativeMinutes } from '../../utils/formatting';
+import { formatTime, formatRelativeMinutes, formatTableNumber } from '../../utils/formatting';
 import { Bell, CheckCircle2, Clock, HelpCircle, Receipt, Droplets, Sparkles, Check } from 'lucide-react';
 
 export const WaiterRequestsList: React.FC = () => {
-  const { waiterRequests, resolveWaiterRequest } = useRestaurant();
+  const { waiterRequests, tables, resolveWaiterRequest } = useRestaurant();
+
+  const getTableLabel = (tableId: string) => {
+    const found = tables.find((t) => t.id === tableId);
+    if (found) return `طاولة ${found.tableNumber}`;
+    return `طاولة ${formatTableNumber(tableId)}`;
+  };
 
   const pendingRequests = waiterRequests.filter((w) => w.status === 'PENDING');
   const resolvedRequests = waiterRequests.filter((w) => w.status === 'RESOLVED');
@@ -73,7 +79,7 @@ export const WaiterRequestsList: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-luxury-50">
-                        {req.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
+                        {getTableLabel(req.tableId)}
                       </span>
                       <span className="text-[10px] text-luxury-400">
                         ({formatRelativeMinutes(req.createdAt)})
@@ -111,7 +117,7 @@ export const WaiterRequestsList: React.FC = () => {
               >
                 <div className="flex items-center gap-2.5">
                   <span className="font-bold text-luxury-200">
-                    {req.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
+                    {getTableLabel(req.tableId)}
                   </span>
                   <span>—</span>
                   <span>{req.reasonText}</span>

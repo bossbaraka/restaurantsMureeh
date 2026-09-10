@@ -1,22 +1,47 @@
 import React, { useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { getTableZoneLabel } from '../../utils/formatting';
+import { getTableZoneLabel, formatTableNumber } from '../../utils/formatting';
+import { RestaurantTable } from '../../types/restaurant';
 import { X, QrCode, ArrowRight, Check, Sparkles, MapPin, Search } from 'lucide-react';
 
-/** Extract a zero-padded human-readable table number from any table ID. */
-function formatTableLabel(id: string | null): string {
+/** Format a zero-padded human-readable table label from table state. */
+function formatTableLabel(table: RestaurantTable | null, tableNumber: number | null, id: string | null): string {
+  if (tableNumber != null && tableNumber > 0) {
+    return `طاولة ${tableNumber < 10 ? `0${tableNumber}` : tableNumber}`;
+  }
+  if (table?.tableNumber != null && table.tableNumber > 0) {
+    return `طاولة ${table.tableNumber < 10 ? `0${table.tableNumber}` : table.tableNumber}`;
+  }
   if (!id) return 'غير محددة';
-  const digits = id.replace(/\D+/g, '');
-  if (!digits) return id;
-  const n = parseInt(digits, 10);
-  return `طاولة ${n < 10 ? `0${n}` : n}`;
+  const formatted = formatTableNumber(id);
+  if (formatted && formatted !== 'عميل مباشر' && formatted !== '—') {
+    return `طاولة ${formatted}`;
+  }
+  return 'غير محددة';
 }
 
 export const DirectTableEntryModal: React.FC = () => {
-  const { isTableSelectorOpen, setIsTableSelectorOpen, activeTableId, validateAndSetTable, tables } = useRestaurant();
+  const {
+    isTableSelectorOpen,
+    setIsTableSelectorOpen,
+    activeTableId,
+    activeTableNumber,
+    activeTable,
+    validateAndSetTable,
+    tables,
+  } = useRestaurant();
   const [inputVal, setInputVal] = useState('');
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<'ALL' | 'MAIN_HALL' | 'TERRACE' | 'VIP_LOUNGE' | 'GARDEN'>('ALL');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const sortedTables = useMemo(() => {
+    return [...tables].sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
+  }, [tables]);
+
+  const filteredTables = useMemo(() => {
+    if (selectedZoneFilter === 'ALL') return sortedTables;
+    return sortedTables.filter((t) => t.zone === selectedZoneFilter);
+  }, [sortedTables, selectedZoneFilter]);
 
   if (!isTableSelectorOpen) return null;
 
@@ -43,11 +68,6 @@ export const DirectTableEntryModal: React.FC = () => {
       setIsTableSelectorOpen(false);
     }
   };
-
-  const filteredTables = tables.filter((t) => {
-    if (selectedZoneFilter === 'ALL') return true;
-    return t.zone === selectedZoneFilter;
-  });
 
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto flex items-center justify-center p-3 sm:p-4">
@@ -193,7 +213,7 @@ export const DirectTableEntryModal: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-amber-400 mr-2" />
             <span>مشغولة</span>
           </div>
-          <span>الطاولة الحالية: {formatTableLabel(activeTableId)}</span>
+          <span>الطاولة الحالية: {formatTableLabel(activeTable, activeTableNumber, activeTableId)}</span>
         </div>
       </div>
     </div>

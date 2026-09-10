@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Order, OrderStatus } from '../../types/restaurant';
-import { formatPrice, formatTime, getOrderStatusConfig } from '../../utils/formatting';
+import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { CustomerRatingModal } from './CustomerRatingModal';
 import {
   X,
@@ -28,6 +28,8 @@ export const OrderTrackingDrawer: React.FC = () => {
     setIsOrderTrackingOpen,
     activeTableOrders,
     activeTableId,
+    activeTableNumber,
+    activeTable,
     cancelCustomerOrder,
     editCustomerOrderNotes,
     setIsWaiterModalOpen,
@@ -43,7 +45,14 @@ export const OrderTrackingDrawer: React.FC = () => {
 
   if (!isOrderTrackingOpen) return null;
 
-  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
+  const tableNumStr =
+    activeTableNumber != null
+      ? String(activeTableNumber)
+      : activeTable?.tableNumber != null
+      ? String(activeTable.tableNumber)
+      : activeTableId
+      ? formatTableNumber(activeTableId) || '—'
+      : '—';
 
   const handleStartEditNotes = (order: Order) => {
     setEditingNotesOrderId(order.id);

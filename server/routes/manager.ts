@@ -277,6 +277,8 @@ router.get('/orders', async (req: Request, res: Response) => {
       numericId: o.numericId,
       restaurantId: o.restaurantId,
       tableId: o.tableId,
+      tableNumber: o.table?.number,
+      tableName: o.table?.name || undefined,
       sessionId: o.sessionId || undefined,
       subtotal: o.subtotal,
       total: o.total,

@@ -219,6 +219,8 @@ export function mapOrderRow(raw: any): Order {
     numericId: raw.numericId,
     restaurantId: raw.restaurantId,
     tableId: raw.tableId,
+    tableNumber: raw.tableNumber !== undefined ? Number(raw.tableNumber) : undefined,
+    tableName: raw.tableName || undefined,
     sessionId: raw.sessionId || undefined,
     items,
     subtotal: Number(raw.subtotal) || 0,
@@ -485,6 +487,7 @@ class RestaurantApiService {
     categories: Category[];
     products: Product[];
     offers: Offer[];
+    tables?: RestaurantTable[];
   }>> {
     const cleanQr = (qrToken && qrToken.toLowerCase() !== 'default') ? qrToken : '';
     const query = cleanQr ? `?qrToken=${encodeURIComponent(cleanQr)}` : '';
@@ -501,6 +504,7 @@ class RestaurantApiService {
           categories: (res.data.categories || []).map(mapCategoryRow),
           products: (res.data.products || []).map(mapProductRow),
           offers: (res.data.offers || []).map(mapOfferRow),
+          tables: (res.data.tables || []).map(mapTableRow),
         },
         statusCode: 200,
       };

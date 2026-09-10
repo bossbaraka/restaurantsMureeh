@@ -72,6 +72,9 @@ interface RestaurantContextType {
   // Active Customer Table Session
   activeTableId: string | null;
   setActiveTableId: (tableId: string | null) => void;
+  activeTableNumber: number | null;
+  setActiveTableNumber: (tableNumber: number | null) => void;
+  activeTable: RestaurantTable | null;
   currentTableSession: TableSession | null;
   setTableByNumber: (num: number) => { success: boolean; tableId?: string; error?: string };
   validateAndSetTable: (num: number) => { success: boolean; tableId?: string; error?: string };
@@ -190,6 +193,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
+  const [activeTableNumber, setActiveTableNumber] = useState<number | null>(null);
   const [currentTableSession, setCurrentTableSession] = useState<TableSession | null>(null);
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
@@ -205,6 +209,27 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [products, setProducts] = useState<Product[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [tables, setTables] = useState<RestaurantTable[]>([]);
+
+  const activeTable = useMemo<RestaurantTable | null>(() => {
+    if (activeTableId) {
+      const found = tables.find((t) => t.id === activeTableId);
+      if (found) return found;
+    }
+    if (activeTableNumber) {
+      const found = tables.find((t) => t.tableNumber === activeTableNumber);
+      if (found) return found;
+    }
+    return null;
+  }, [tables, activeTableId, activeTableNumber]);
+
+  useEffect(() => {
+    if (activeTableId && tables.length > 0) {
+      const match = tables.find((t) => t.id === activeTableId);
+      if (match && match.tableNumber !== activeTableNumber) {
+        setActiveTableNumber(match.tableNumber);
+      }
+    }
+  }, [activeTableId, tables, activeTableNumber]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [waiterRequests, setWaiterRequests] = useState<WaiterRequest[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -289,10 +314,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             }
           });
           setTables(
-            tablesRes.data.map((t) => ({
-              ...t,
-              activeOrderIds: openOrderIdsByTable.get(t.id) || [],
-            }))
+            tablesRes.data
+              .slice()
+              .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0))
+              .map((t) => ({
+                ...t,
+                activeOrderIds: openOrderIdsByTable.get(t.id) || [],
+              }))
           );
         }
         if (waitersRes.success && waitersRes.data) setWaiterRequests(waitersRes.data);
@@ -309,6 +337,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setCategories(catalogRes.data.categories);
           setProducts(catalogRes.data.products);
           setOffers(catalogRes.data.offers);
+          if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
+            setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
+          }
           setSelectedCategoryId((prev) =>
             prev && (prev === 'all' || catalogRes.data!.categories.some((c) => c.id === prev))
               ? prev
@@ -433,6 +464,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (sessionRes.success && sessionRes.data) {
           setCurrentRestaurant(sessionRes.data.restaurant);
           setActiveTableId(sessionRes.data.table.id);
+          setActiveTableNumber(sessionRes.data.table.tableNumber);
           setCurrentTableSession(sessionRes.data.session);
           setViewMode('CUSTOMER');
 
@@ -442,6 +474,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               setCategories(catalogRes.data.categories);
               setProducts(catalogRes.data.products);
               setOffers(catalogRes.data.offers);
+              if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
+                setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
+              }
               setCurrentRestaurant(catalogRes.data.restaurant);
               setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
             }
@@ -453,6 +488,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               setCategories(catalogRes.data.categories);
               setProducts(catalogRes.data.products);
               setOffers(catalogRes.data.offers);
+              if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
+                setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
+              }
               setCurrentRestaurant(catalogRes.data.restaurant);
               setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
               setViewMode('CUSTOMER');
@@ -578,6 +616,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setSelectedCategoryId('');
       setCurrentTableSession(null);
       setActiveTableId(null);
+      setActiveTableNumber(null);
       showToast('info', 'تم التبديل إلى مطعم', target.name);
     },
     [availableRestaurants, showToast]
@@ -589,6 +628,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     authLogout();
     setCartItems([]);
     setActiveTableId(null);
+    setActiveTableNumber(null);
     setCurrentTableSession(null);
     setViewMode('SAAS_LANDING');
     showToast('info', 'تم تسجيل الخروج');
@@ -609,6 +649,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
       }
       setActiveTableId(table.id);
+      setActiveTableNumber(table.tableNumber);
       api.createTableSession(table.qrToken).then((res) => {
         if (res.success && res.data) {
           setCurrentTableSession(res.data.session);
@@ -1173,6 +1214,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         refreshTenantData,
         activeTableId,
         setActiveTableId,
+        activeTableNumber,
+        setActiveTableNumber,
+        activeTable,
         currentTableSession,
         setTableByNumber,
         validateAndSetTable,

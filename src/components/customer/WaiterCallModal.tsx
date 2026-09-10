@@ -3,12 +3,15 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { WaiterCallReason } from '../../types/restaurant';
 import { Bell, Check, X, Clock, AlertCircle } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
+import { formatTableNumber } from '../../utils/formatting';
 
 export const WaiterCallModal: React.FC = () => {
   const {
     isWaiterModalOpen,
     setIsWaiterModalOpen,
     activeTableId,
+    activeTableNumber,
+    activeTable,
     callWaiter,
     waiterRequests,
     currentRestaurant,
@@ -88,7 +91,13 @@ export const WaiterCallModal: React.FC = () => {
             <div>
               <h3 className="text-base font-bold text-luxury-50 font-serif">طلب النادل إلى الطاولة</h3>
               <p className="text-xs text-luxury-400 font-mono">
-                {activeTableId ? `طاولة رقم ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : 'طاولة عامة'}
+                {activeTableNumber != null
+                  ? `طاولة رقم ${activeTableNumber}`
+                  : activeTable?.tableNumber != null
+                  ? `طاولة رقم ${activeTable.tableNumber}`
+                  : activeTableId
+                  ? `طاولة رقم ${formatTableNumber(activeTableId) || '—'}`
+                  : 'طاولة عامة'}
               </p>
             </div>
           </div>

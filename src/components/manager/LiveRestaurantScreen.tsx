@@ -146,7 +146,7 @@ export const LiveRestaurantScreen: React.FC = () => {
         {/* Zones / tables */}
         <div className="col-span-8 grid grid-cols-2 xl:grid-cols-4 gap-2 min-h-0 overflow-y-auto no-scrollbar">
           {zones.map((zone) => {
-            const zoneTables = tables.filter((t) => t.zone === zone);
+            const zoneTables = tables.filter((t) => t.zone === zone).slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
             const zoneLive = zoneTables.filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED' || t.activeOrderIds.length > 0);
             return (
               <section key={zone} className="rounded-xl bg-luxury-950/70 border border-luxury-800/60 p-2">

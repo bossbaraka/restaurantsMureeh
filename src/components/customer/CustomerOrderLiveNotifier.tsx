@@ -30,6 +30,8 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
   const {
     activeTableOrders,
     activeTableId,
+    activeTableNumber,
+    activeTable,
     viewMode,
     currentRestaurant,
     setIsOrderTrackingOpen,
@@ -70,7 +72,14 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
   if (viewMode !== 'CUSTOMER' || !activeNotification || isDismissed) return null;
 
   const statusCfg = getOrderStatusConfig(activeNotification.status);
-  const tableNum = activeTableId ? formatTableNumber(activeTableId) : '—';
+  const tableNum =
+    activeTableNumber != null
+      ? String(activeTableNumber)
+      : activeTable?.tableNumber != null
+      ? String(activeTable.tableNumber)
+      : activeTableId
+      ? formatTableNumber(activeTableId) || '—'
+      : '—';
 
   const getStepProgress = (status: OrderStatus) => {
     switch (status) {

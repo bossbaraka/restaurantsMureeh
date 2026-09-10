@@ -138,6 +138,9 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
         offers: {
           where: { isActive: true },
         },
+        tables: {
+          orderBy: { number: 'asc' },
+        },
       },
     });
 
@@ -232,6 +235,17 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           originalPrice: o.originalPrice || undefined,
           badge: o.badge || undefined,
           isActive: o.isActive,
+        })),
+        tables: (restaurant.tables || []).map((t) => ({
+          id: t.id,
+          restaurantId: t.restaurantId,
+          number: t.number,
+          tableNumber: t.number,
+          name: t.name,
+          capacity: t.capacity,
+          zone: t.zone,
+          status: t.status,
+          qrToken: t.qrToken,
         })),
       },
       statusCode: 200,

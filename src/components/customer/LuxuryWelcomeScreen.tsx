@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { optimizeImageUrl } from './ProductImage';
 import { soundFX } from '../../utils/audio';
-import { formatPrice } from '../../utils/formatting';
+import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import type { Category, Product } from '../../types/restaurant';
 import {
   buildSplashPalette,
@@ -836,7 +836,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
   initialStep = 'NETWORKING',
   initialQrMaterialized = false,
 }) => {
-  const { currentRestaurant, activeTableId, products, categories } = useRestaurant();
+  const { currentRestaurant, activeTableId, activeTableNumber, activeTable, products, categories } = useRestaurant();
 
   // Read once: it never changes for the lifetime of a page, and reading it in an
   // effect would cost a second render just to reveal the CTA.
@@ -869,12 +869,21 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
 
   // Extract clean table number
   const tableNumStr = useMemo(() => {
+    if (activeTableNumber) {
+      return activeTableNumber < 10 ? `0${activeTableNumber}` : String(activeTableNumber);
+    }
+    if (activeTable?.tableNumber) {
+      return activeTable.tableNumber < 10 ? `0${activeTable.tableNumber}` : String(activeTable.tableNumber);
+    }
     if (!activeTableId) return null;
-    const digits = activeTableId.replace(/\D+/g, '');
-    if (!digits) return activeTableId;
-    const n = parseInt(digits, 10);
-    return n < 10 ? `0${n}` : String(n);
-  }, [activeTableId]);
+    const formatted = formatTableNumber(activeTableId);
+    if (formatted && formatted !== 'عميل مباشر' && formatted !== '—') {
+      const n = parseInt(formatted, 10);
+      if (!isNaN(n)) return n < 10 ? `0${n}` : String(n);
+      return formatted;
+    }
+    return null;
+  }, [activeTableId, activeTableNumber, activeTable]);
 
   const restName = currentRestaurant?.name || 'مطعم مريح';
   const restNameEn = currentRestaurant?.nameEn || '';

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Order } from '../../types/restaurant';
-import { formatPrice } from '../../utils/formatting';
+import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import { soundFX } from '../../utils/audio';
 import { CustomerRatingModal } from './CustomerRatingModal';
 import {
@@ -15,7 +15,15 @@ import {
 } from 'lucide-react';
 
 export const OrderCompletedModal: React.FC = () => {
-  const { activeTableOrders, activeTableId, currentRestaurant, setIsWaiterModalOpen, showToast } = useRestaurant();
+  const {
+    activeTableOrders,
+    activeTableId,
+    activeTableNumber,
+    activeTable,
+    currentRestaurant,
+    setIsWaiterModalOpen,
+    showToast,
+  } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
 
   const [dismissedOrderIds, setDismissedOrderIds] = useState<string[]>([]);
@@ -36,7 +44,14 @@ export const OrderCompletedModal: React.FC = () => {
     return isRatingModalOpen ? <CustomerRatingModal isOpen={true} onClose={() => setIsRatingModalOpen(false)} /> : null;
   }
 
-  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
+  const tableNumStr =
+    activeTableNumber != null
+      ? String(activeTableNumber)
+      : activeTable?.tableNumber != null
+      ? String(activeTable.tableNumber)
+      : activeTableId
+      ? formatTableNumber(activeTableId) || '—'
+      : '—';
 
   const handleDismiss = () => {
     setDismissedOrderIds((prev) => [...prev, readyOrder.id]);

@@ -10,6 +10,8 @@ export const CustomerHeader: React.FC = () => {
   const {
     currentRestaurant,
     activeTableId,
+    activeTableNumber,
+    activeTable,
     cartTotalCount,
     cartSubtotal,
     setIsCartOpen,
@@ -23,7 +25,14 @@ export const CustomerHeader: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
 
-  const tableNumberStr = activeTableId ? formatTableNumber(activeTableId) : '—';
+  const tableNumberStr =
+    activeTableNumber != null
+      ? String(activeTableNumber)
+      : activeTable?.tableNumber != null
+      ? String(activeTable.tableNumber)
+      : activeTableId
+      ? formatTableNumber(activeTableId) || '—'
+      : '—';
   const hasActiveOrders = activeTableOrders.length > 0;
 
   const restName = currentRestaurant?.name || '';

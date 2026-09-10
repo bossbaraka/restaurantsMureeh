@@ -36,8 +36,10 @@ export const BranchManagementView: React.FC = () => {
   const [pendingSave, setPendingSave] = useState(false);
 
   const tenantId = currentRestaurant?.id || '';
-  const branchTables = (branchId: string | null): RestaurantTable[] =>
-    branchId ? tables.filter((t) => t.branchId === branchId) : tables.filter((t) => !t.branchId);
+  const branchTables = (branchId: string | null): RestaurantTable[] => {
+    const list = branchId ? tables.filter((t) => t.branchId === branchId) : tables.filter((t) => !t.branchId);
+    return list.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
+  };
 
   const startCreate = () => {
     setCreating(true);
@@ -329,7 +331,7 @@ export const BranchManagementView: React.FC = () => {
               </div>
             </div>
             <div className="overflow-y-auto flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5 pb-2">
-              {tables.map((t) => {
+              {tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)).map((t) => {
                 const checked = assignedIds.includes(t.id);
                 return (
                   <label

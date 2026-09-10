@@ -22,7 +22,9 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
   const [qrImages, setQrImages] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  const targetTables = selectedTable ? [selectedTable] : tables.slice(0, 12);
+  const targetTables = selectedTable
+    ? [selectedTable]
+    : tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)).slice(0, 12);
   const slug = currentRestaurant?.slug || 'mureeh';
   const restName = currentRestaurant?.name || '';
   const restNameEn = currentRestaurant?.nameEn || '';
@@ -76,7 +78,7 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-luxury-50 font-serif">
-                {selectedTable ? `معاينة باركود طاولة ${formatTableNumber(selectedTable.tableNumber || selectedTable.id)}` : `معاينة طباعة بطاقات طاولات ${restName}`}
+                {selectedTable ? `معاينة باركود طاولة ${selectedTable.tableNumber != null ? selectedTable.tableNumber : formatTableNumber(selectedTable.id)}` : `معاينة طباعة بطاقات طاولات ${restName}`}
               </h3>
               <p className="text-xs text-luxury-400">
                 تصميم فاخر جاهز للطباعة بدقة عالية ووضعه على الطاولات
@@ -148,7 +150,7 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
                   {/* Table Number & Instructions Bottom */}
                   <div className="relative z-10 mb-1 space-y-1">
                     <div className="text-xl font-extrabold text-gold-400 font-serif">
-                      باركود الطاولة {formatTableNumber(table.tableNumber || table.id)}
+                      باركود الطاولة {table.tableNumber != null ? table.tableNumber : formatTableNumber(table.id)}
                     </div>
                     <p className="text-[11px] text-luxury-300 font-medium">
                       امسح الرمز بكاميرا هاتفك لتصفح المنيو والطلب

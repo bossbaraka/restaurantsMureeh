@@ -222,6 +222,8 @@ export interface Order {
   numericId?: number;
   restaurantId: string;
   tableId: string;
+  tableNumber?: number;
+  tableName?: string;
   sessionId?: string;
   items: OrderItem[];
   subtotal: number;

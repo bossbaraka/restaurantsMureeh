@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Star, Heart, CheckCircle2, MessageSquare, Send, X, Share2 } from 'lucide-react';
+import { formatTableNumber } from '../../utils/formatting';
 import confetti from 'canvas-confetti';
 
 interface CustomerRatingModalProps {
@@ -10,7 +11,7 @@ interface CustomerRatingModalProps {
 }
 
 export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen, onClose, orderId }) => {
-  const { currentRestaurant, showToast, activeTableId } = useRestaurant();
+  const { currentRestaurant, showToast, activeTableId, activeTableNumber, activeTable } = useRestaurant();
   const [rating, setRating] = useState<number>(5);
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [feedback, setFeedback] = useState('');
@@ -68,7 +69,13 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
                 كيف كانت تجربتك معنا اليوم؟
               </h2>
               <p className="text-xs text-luxury-400">
-                {activeTableId ? `طاولة ${activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}` : ''} · رأيك يصنع الفرق
+                {(activeTableNumber != null
+                  ? `طاولة ${activeTableNumber}`
+                  : activeTable?.tableNumber != null
+                  ? `طاولة ${activeTable.tableNumber}`
+                  : activeTableId
+                  ? `طاولة ${formatTableNumber(activeTableId) || '—'}`
+                  : '')} · رأيك يصنع الفرق
               </p>
             </div>
 
