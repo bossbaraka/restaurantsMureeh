@@ -203,16 +203,19 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
               إغلاق
             </button>
 
-            {tableOrders.length > 0 && (
-              <button
-                onClick={handleSettleBill}
-                disabled={settling}
-                className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
-              >
-                <CheckCircle className="w-4 h-4" />
-                <span>{settling ? 'جارٍ تحصيل الحساب...' : 'تحصيل الحساب (POS) وإفراغ الطاولة'}</span>
-              </button>
-            )}
+            {/* Payment collection is the cashier/manager duty — the server's
+                requireCashierOrManager enforces it for other staff roles. */}
+            {tableOrders.length > 0 &&
+              ['RESTAURANT_MANAGER', 'PLATFORM_ADMIN', 'SUPER_ADMIN', 'CASHIER'].includes(currentUser?.role || '') && (
+                <button
+                  onClick={handleSettleBill}
+                  disabled={settling}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-lg"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>{settling ? 'جارٍ تحصيل الحساب...' : 'تحصيل الحساب (POS) وإفراغ الطاولة'}</span>
+                </button>
+              )}
           </div>
         </div>
       </div>

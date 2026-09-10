@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { api } from '../../services/api';
 import { BrandLogo } from '../brand/BrandLogo';
 import {
   X,
@@ -46,6 +47,10 @@ export const LoginModal: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const [staffPinInput, setStaffPinInput] = useState('');
+  // Staff arriving from the public landing page have no tenant directory (it
+  // loads post-auth) and no QR context — they identify their venue by the
+  // exact slug from their menu link instead.
+  const [tenantSlugInput, setTenantSlugInput] = useState('');
 
   React.useEffect(() => {
     if (selectedRestaurantId) {
@@ -100,9 +105,35 @@ export const LoginModal: React.FC = () => {
       return;
     }
 
-    const targetRestaurantId = selectedRestaurantId || currentRestaurant?.id || tenantsList[0]?.id;
+    let targetRestaurantId = selectedRestaurantId || currentRestaurant?.id || tenantsList[0]?.id;
+
+    // Logged-out worker with no tenant context: resolve the restaurant from
+    // its exact public slug (no new endpoint and no tenant enumeration — the
+    // slug must be known, exactly like scanning the venue's QR code).
+    if (!targetRestaurantId && tenantSlugInput.trim()) {
+      setIsLoading(true);
+      setErrorMsg('');
+      try {
+        const resolveRes = await api.getPublicRestaurantBySlug(tenantSlugInput.trim().toLowerCase());
+        if (resolveRes.success && resolveRes.data?.restaurant?.id) {
+          targetRestaurantId = resolveRes.data.restaurant.id;
+        } else {
+          setErrorMsg('تعذر العثور على مطعم بهذا المعرّف. تأكد من الرابط أو امسح رمز QR الخاص بمطعمك.');
+          setPinInput('');
+          setIsLoading(false);
+          return;
+        }
+      } catch {
+        setErrorMsg('تعذر التحقق من معرّف المطعم حالياً. أعد المحاولة بعد لحظات.');
+        setPinInput('');
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(false);
+    }
+
     if (!targetRestaurantId) {
-      setErrorMsg('يرجى اختيار المطعم أولاً قبل إدخال الرمز');
+      setErrorMsg('يرجى اختيار المطعم أو كتابة معرّفه (من رابط المنيو) قبل إدخال الرمز');
       return;
     }
 
@@ -129,11 +160,10 @@ export const LoginModal: React.FC = () => {
 
   const handlePinKeyPress = (num: string) => {
     if (pinInput.length < 6) {
-      const nextPin = pinInput + num;
-      setPinInput(nextPin);
-      if (nextPin.length === 4) {
-        handlePinSubmit(nextPin);
-      }
+      // No auto-submit at 4 digits: PINs may legitimately be 5–6 digits
+      // (schema allows 4–10), and submitting the first four digits early
+      // locked those workers out after repeated 401s.
+      setPinInput(pinInput + num);
     }
   };
 
@@ -345,15 +375,35 @@ export const LoginModal: React.FC = () => {
                   </select>
                 </div>
               ) : (
-                <div className="text-right bg-luxury-950/60 p-2.5 rounded-xl border border-luxury-800 text-[11px] text-luxury-400">
-                  {currentRestaurant?.name ? `المطعم المحدد للوردية: ${currentRestaurant.name}` : 'جاري تحميل قائمة المطاعم...'}
-                </div>
+                // Logged-out worker on the public landing page: no tenant
+                // directory exists before auth, so identify the venue by its
+                // exact slug from the menu link (e.g. /r/mureeh).
+                !currentRestaurant && (
+                  <div className="text-right bg-luxury-950 p-3 rounded-2xl border border-luxury-800 space-y-1">
+                    <label className="block text-[11px] font-semibold text-luxury-300" htmlFor="loginmodal-tenant-slug">
+                      معرّف المطعم (من رابط المنيو) *
+                    </label>
+                    <input
+                      id="loginmodal-tenant-slug"
+                      type="text"
+                      dir="ltr"
+                      placeholder="مثال: mureeh"
+                      value={tenantSlugInput}
+                      onChange={(e) => setTenantSlugInput(e.target.value)}
+                      className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-mono font-bold placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
+                      disabled={lockoutRemainingSeconds > 0 || isLoading}
+                    />
+                    <p className="text-[10px] text-luxury-500">
+                      تجده في رابط قائمة مطعمك: <span dir="ltr">/r/معرّف-المطعم</span>
+                    </p>
+                  </div>
+                )
               )}
 
               <div>
-                <span className="text-xs text-luxury-300 font-medium">أدخل رمز PIN المكون من 4 أرقام للوردية</span>
+                <span className="text-xs text-luxury-300 font-medium">أدخل رمز PIN (4–6 أرقام) ثم اضغط تأكيد</span>
                 <div className="flex justify-center gap-3 my-3">
-                  {[0, 1, 2, 3].map((i) => (
+                  {Array.from({ length: Math.max(4, pinInput.length) }, (_, i) => (
                     <div
                       key={i}
                       className={`w-10 h-12 rounded-xl border flex items-center justify-center font-mono text-lg font-bold transition-all ${

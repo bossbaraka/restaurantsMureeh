@@ -939,6 +939,23 @@ class RestaurantApiService {
     return res as ApiResponse<never>;
   }
 
+  // Availability-only update used by floor staff (cashier/waiter). Sends just
+  // { restaurantId, status } — the server rejects structural table edits from
+  // non-manager roles, which the full updateTable payload would always contain.
+  public async updateTableStatus(
+    restaurantId: string,
+    tableId: string,
+    status: RestaurantTable['status']
+  ): Promise<ApiResponse<{ table: RestaurantTable }>> {
+    const res = await this.request<any>('PUT', `/manager/tables/${encodeURIComponent(tableId)}`, {
+      body: { restaurantId, status },
+    });
+    if (res.success && res.data?.table) {
+      return { success: true, data: { table: mapTableRow({ ...res.data.table, restaurantId }) }, statusCode: 200 };
+    }
+    return res as ApiResponse<never>;
+  }
+
   public async regenerateTableQR(restaurantId: string, tableId: string): Promise<ApiResponse<{ table: RestaurantTable }>> {
     const res = await this.request<any>('POST', `/manager/tables/${encodeURIComponent(tableId)}/regenerate-qr`, {
       body: { restaurantId },

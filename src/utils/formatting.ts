@@ -49,6 +49,35 @@ export function formatTableNumber(tableIdOrNumber: string | number | undefined |
   return str;
 }
 
+/**
+ * Display label for a table referenced by ID.
+ *
+ * Table IDs are opaque (UUIDs, or legacy `{tenant}-T{n}` composites), so a
+ * number must never be scraped out of the ID itself — that is exactly what
+ * made the customer screen show a different number than the one printed on
+ * the table's QR card. When the table registry is known, its real
+ * `tableNumber` (the same value printed on the QR card) wins. Otherwise we
+ * fall back to `formatTableNumber`, which handles special IDs such as
+ * `__WALKIN__` and legacy `-T{n}` IDs.
+ */
+export function resolveTableDisplayNumber(
+  tables: ReadonlyArray<{ id: string; tableNumber?: number | null }> | null | undefined,
+  tableId: string | null | undefined
+): string {
+  if (tableId) {
+    const table = tables?.find((t) => t.id === tableId);
+    if (
+      table &&
+      typeof table.tableNumber === 'number' &&
+      Number.isFinite(table.tableNumber) &&
+      table.tableNumber > 0
+    ) {
+      return String(table.tableNumber);
+    }
+  }
+  return formatTableNumber(tableId);
+}
+
 /** Numeric part of a price, without the currency symbol (e.g. "1,240.50"). */
 export function formatAmount(price: number): string {
   const value = Number(price) || 0;

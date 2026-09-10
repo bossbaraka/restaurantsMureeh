@@ -86,6 +86,14 @@ export default {
         'luxury': '0 10px 30px -10px rgba(0, 0, 0, 0.7)',
         'gold-glow': '0 0 20px -5px rgba(212, 175, 55, 0.25)',
         'inner-glow': 'inset 0 1px 1px 0 rgba(255, 255, 255, 0.05)',
+      },
+      // Overlays across the app are authored as `z-60` (e.g. the customer's
+      // order-completed modal) to sit above the `z-50` drawers/notifiers and
+      // below the `z-[70]`–`z-[100]` full screens. Tailwind's default scale
+      // stops at 50, so `z-60` used to generate no CSS and those overlays
+      // painted UNDER the z-50 layer they were meant to cover.
+      zIndex: {
+        '60': '60',
       }
     },
   },
