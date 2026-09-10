@@ -74,9 +74,10 @@ export const CashierPOSView: React.FC = () => {
 
   // --- Derived data ---
   const branchTables = useMemo(() => {
-    if (branchFilter === '__UNASSIGNED__') return tables.filter((t) => !t.branchId);
-    if (branchFilter) return tables.filter((t) => t.branchId === branchFilter);
-    return tables;
+    let list = tables;
+    if (branchFilter === '__UNASSIGNED__') list = tables.filter((t) => !t.branchId);
+    else if (branchFilter) list = tables.filter((t) => t.branchId === branchFilter);
+    return list.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
   }, [tables, branchFilter]);
 
   const openOrdersFor = (tableId: string): Order[] =>
@@ -369,7 +370,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                           : 'bg-luxury-950 border-luxury-750 text-luxury-300 hover:border-gold-500/40'
                     }`}
                   >
-                    <div className="text-sm font-bold font-mono">{formatTableNumber(t.tableNumber || t.id)}</div>
+                    <div className="text-sm font-bold font-mono">{t.tableNumber != null ? String(t.tableNumber).padStart(2, '0') : formatTableNumber(t.id)}</div>
                     <div className="text-[11px] opacity-80">{t.capacity} مقعد</div>
                     {occupied && openTotal > 0 && (
                       <div className="text-[11px] font-bold text-gold-300">{formatPrice(openTotal)}</div>
@@ -383,7 +384,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
           {/* Open bill summary for selected context */}
           <div className="rounded-2xl bg-luxury-900 border border-luxury-800 p-3">
             <h3 className="text-xs font-bold text-luxury-100 mb-2">
-              {isWalkIn ? 'فاتورة الكاونتر' : activeTable ? `فاتورة طاولة ${formatTableNumber(activeTable.tableNumber || activeTable.id)}` : 'فاتورة جديدة'}
+              {isWalkIn ? 'فاتورة الكاونتر' : activeTable ? `فاتورة طاولة ${activeTable.tableNumber != null ? activeTable.tableNumber : formatTableNumber(activeTable.id)}` : 'فاتورة جديدة'}
             </h3>
             {activeTable && (
               <div className="text-[10px] text-luxury-400 mb-2">

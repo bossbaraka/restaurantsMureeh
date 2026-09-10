@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { Order, OrderStatus } from '../../types/restaurant';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { soundFX } from '../../utils/audio';
+import { getDismissedCompletedOrderIds } from './OrderCompletedModal';
 import {
   ChefHat,
   Bell,
@@ -30,10 +31,16 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
   const {
     activeTableOrders,
     activeTableId,
+    activeTableNumber,
+    activeTable,
     viewMode,
     currentRestaurant,
     setIsOrderTrackingOpen,
     setIsWaiterModalOpen,
+    isCartOpen,
+    isOrderTrackingOpen,
+    isWaiterModalOpen,
+    isTableSelectorOpen,
   } = useRestaurant();
 
   const [activeNotification, setActiveNotification] = useState<NotificationState | null>(null);
@@ -67,10 +74,42 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
     });
   }, [activeTableOrders, viewMode]);
 
-  if (viewMode !== 'CUSTOMER' || !activeNotification || isDismissed) return null;
+  // Auto-dismiss notification after 6 seconds to prevent blocking menu browsing
+  useEffect(() => {
+    if (!activeNotification || isDismissed) return;
+    const timer = setTimeout(() => {
+      setIsDismissed(true);
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [activeNotification, isDismissed]);
+
+  // Prevent overlapping with active drawers, modals, or the completed order modal
+  const isCompletedModalActive = activeTableOrders.some(
+    (o) => o.status === 'READY' && !getDismissedCompletedOrderIds().includes(o.id)
+  );
+
+  if (
+    viewMode !== 'CUSTOMER' ||
+    !activeNotification ||
+    isDismissed ||
+    isCartOpen ||
+    isOrderTrackingOpen ||
+    isWaiterModalOpen ||
+    isTableSelectorOpen ||
+    isCompletedModalActive
+  ) {
+    return null;
+  }
 
   const statusCfg = getOrderStatusConfig(activeNotification.status);
-  const tableNum = activeTableId ? formatTableNumber(activeTableId) : '—';
+  const tableNum =
+    activeTableNumber != null
+      ? String(activeTableNumber)
+      : activeTable?.tableNumber != null
+      ? String(activeTable.tableNumber)
+      : activeTableId
+      ? formatTableNumber(activeTableId) || '—'
+      : '—';
 
   const getStepProgress = (status: OrderStatus) => {
     switch (status) {
@@ -90,7 +129,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
   const currentStep = getStepProgress(activeNotification.status);
 
   return (
-    <div className="fixed top-16 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-50 animate-in fade-in slide-in-from-top-4 duration-300 select-none">
+    <div className="fixed top-28 sm:top-24 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in fade-in slide-in-from-top-3 duration-300 select-none">
       <div className="bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.5)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.8)] space-y-3.5 text-right text-luxury-50 relative overflow-hidden">
         {/* Top glowing ambient line */}
         <div

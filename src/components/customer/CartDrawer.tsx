@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { formatPrice } from '../../utils/formatting';
+import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import { OrderConfirmationModal } from './OrderConfirmationModal';
 import {
   ShoppingBag,
@@ -27,6 +27,8 @@ export const CartDrawer: React.FC = () => {
     removeFromCart,
     clearCart,
     activeTableId,
+    activeTableNumber,
+    activeTable,
     setIsTableSelectorOpen,
     currentRestaurant,
   } = useRestaurant();
@@ -86,7 +88,7 @@ export const CartDrawer: React.FC = () => {
             {activeTableId ? (
               <span className="font-bold text-[var(--brand-primary-strong)] font-mono flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                طاولة رقم {activeTableId.replace(/^(?:TABLE-|.*-T)/, '')}
+                طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? (formatTableNumber(activeTableId) || '—')}
               </span>
             ) : (
               <button

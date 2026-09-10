@@ -34,14 +34,16 @@ export const TableManagement: React.FC = () => {
   const [capacityInput, setCapacityInput] = useState<number>(4);
   const [zoneInput, setZoneInput] = useState<TableZone>('MAIN_HALL');
 
-  const filteredTables = tables.filter((t) => {
-    if (selectedZone !== 'ALL' && t.zone !== selectedZone) return false;
-    if (searchTableNum.trim()) {
-      const q = searchTableNum.trim();
-      return t.tableNumber.toString().includes(q) || t.id.toLowerCase().includes(q.toLowerCase());
-    }
-    return true;
-  });
+  const filteredTables = tables
+    .filter((t) => {
+      if (selectedZone !== 'ALL' && t.zone !== selectedZone) return false;
+      if (searchTableNum.trim()) {
+        const q = searchTableNum.trim();
+        return t.tableNumber.toString().includes(q) || t.id.toLowerCase().includes(q.toLowerCase());
+      }
+      return true;
+    })
+    .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
 
   const counts = {
     TOTAL: tables.length,
@@ -215,7 +217,7 @@ export const TableManagement: React.FC = () => {
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-sm font-bold text-luxury-100 font-mono flex items-center gap-1.5">
-                    <span>طاولة {formatTableNumber(table.tableNumber || table.id)}</span>
+                    <span>طاولة {table.tableNumber != null ? table.tableNumber : formatTableNumber(table.id)}</span>
                   </span>
                   <span className="text-[10px] text-luxury-400 block mt-0.5">
                     {getTableZoneLabel(table.zone)} · {table.capacity} مقاعد

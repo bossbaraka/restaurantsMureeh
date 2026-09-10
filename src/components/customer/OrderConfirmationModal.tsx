@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { formatPrice } from '../../utils/formatting';
+import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import { X, Check, ShoppingBag, Receipt, AlertCircle, Clock } from 'lucide-react';
 
 interface OrderConfirmationModalProps {
@@ -14,7 +14,15 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   onClose,
   orderNotes,
 }) => {
-  const { cartItems, cartSubtotal, createOrder, activeTableId, currentRestaurant } = useRestaurant();
+  const {
+    cartItems,
+    cartSubtotal,
+    createOrder,
+    activeTableId,
+    activeTableNumber,
+    activeTable,
+    currentRestaurant,
+  } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -55,7 +63,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
                 تأكيد إرسال الطلب إلى المطبخ
               </h3>
               <p className="text-xs text-luxury-400">
-                {currentRestaurant?.name} · طاولة رقم {activeTableId?.replace(/^(?:TABLE-|.*-T)/, '')}
+                {currentRestaurant?.name} · طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? (activeTableId ? formatTableNumber(activeTableId) || '—' : '—')}
               </p>
             </div>
           </div>

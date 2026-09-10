@@ -120,7 +120,7 @@ export const KitchenDisplaySystem: React.FC = () => {
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-base font-extrabold font-serif">
-                      طاولة {formatTableNumber(order.tableId)}
+                      طاولة {order.tableNumber ? order.tableNumber : (order.tableName || formatTableNumber(order.tableId))}
                     </span>
                     <span className="text-[10px] bg-black/40 px-2 py-0.5 rounded font-mono font-bold">
                       {order.id}

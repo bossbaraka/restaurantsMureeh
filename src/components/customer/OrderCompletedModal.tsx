@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Order } from '../../types/restaurant';
-import { formatPrice } from '../../utils/formatting';
+import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import { soundFX } from '../../utils/audio';
 import { CustomerRatingModal } from './CustomerRatingModal';
 import {
@@ -14,32 +14,70 @@ import {
   X,
 } from 'lucide-react';
 
+export const COMPLETED_ORDERS_STORAGE_KEY = 'merar_dismissed_completed_orders';
+
+export function getDismissedCompletedOrderIds(): string[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const saved = sessionStorage.getItem(COMPLETED_ORDERS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
 export const OrderCompletedModal: React.FC = () => {
-  const { activeTableOrders, activeTableId, currentRestaurant, setIsWaiterModalOpen, showToast } = useRestaurant();
+  const {
+    activeTableOrders,
+    activeTableId,
+    activeTableNumber,
+    activeTable,
+    currentRestaurant,
+    isOrderTrackingOpen,
+    setIsWaiterModalOpen,
+    showToast,
+  } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
 
-  const [dismissedOrderIds, setDismissedOrderIds] = useState<string[]>([]);
+  const [dismissedOrderIds, setDismissedOrderIds] = useState<string[]>(() => getDismissedCompletedOrderIds());
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
 
-  // Find the first order that just reached READY or SERVED state and hasn't been dismissed
+  // Find newly ready order that hasn't been dismissed yet
   const readyOrder = activeTableOrders.find(
-    (o) => (o.status === 'READY' || o.status === 'SERVED') && !dismissedOrderIds.includes(o.id)
+    (o) => o.status === 'READY' && !dismissedOrderIds.includes(o.id)
   );
 
   useEffect(() => {
-    if (readyOrder) {
+    if (readyOrder && !isOrderTrackingOpen) {
       soundFX.playBell();
     }
-  }, [readyOrder?.id]);
+  }, [readyOrder?.id, isOrderTrackingOpen]);
 
-  if (!readyOrder) {
+  // Suppress modal if order tracking drawer is already open to avoid layout overlap
+  if (!readyOrder || isOrderTrackingOpen) {
     return isRatingModalOpen ? <CustomerRatingModal isOpen={true} onClose={() => setIsRatingModalOpen(false)} /> : null;
   }
 
-  const tableNumStr = activeTableId ? activeTableId.replace(/^(?:TABLE-|.*-T)/, '') : '—';
+  const tableNumStr =
+    activeTableNumber != null
+      ? String(activeTableNumber)
+      : activeTable?.tableNumber != null
+      ? String(activeTable.tableNumber)
+      : activeTableId
+      ? formatTableNumber(activeTableId) || '—'
+      : '—';
 
   const handleDismiss = () => {
-    setDismissedOrderIds((prev) => [...prev, readyOrder.id]);
+    if (!readyOrder) return;
+    setDismissedOrderIds((prev) => {
+      const next = Array.from(new Set([...prev, readyOrder.id]));
+      try {
+        sessionStorage.setItem(COMPLETED_ORDERS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
   };
 
   const handleShareWhatsApp = (order: Order) => {

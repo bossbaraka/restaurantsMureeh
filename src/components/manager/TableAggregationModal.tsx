@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { formatPrice, formatTime, getOrderStatusConfig } from '../../utils/formatting';
+import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { X, CheckCircle, Layers } from 'lucide-react';
 
 interface TableAggregationModalProps {
@@ -16,7 +16,7 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { orders, currentRestaurant, refreshTenantData, showToast, updateOrderStatus } = useRestaurant();
+  const { orders, tables, currentRestaurant, refreshTenantData, showToast, updateOrderStatus } = useRestaurant();
   const { currentUser } = useAuth();
   const [settling, setSettling] = useState(false);
 
@@ -24,6 +24,8 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
 
   const tableOrders = orders.filter((o) => o.tableId === tableId && o.status !== 'CANCELLED');
   const tableTotalRevenue = tableOrders.reduce((sum, o) => sum + o.total, 0);
+  const tableObj = tables.find((t) => t.id === tableId);
+  const tableLabel = tableObj ? `طاولة ${tableObj.tableNumber}` : (tableOrders[0]?.tableNumber ? `طاولة ${tableOrders[0].tableNumber}` : `طاولة ${formatTableNumber(tableId)}`);
 
   // Full cashier settle: closes every unpaid order on the table, records a POS
   // receipt in the ledger and frees the table for the next guests.
@@ -79,7 +81,7 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold text-luxury-50 font-serif">
-                تجميع طلبات {tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ')}
+                تجميع طلبات {tableLabel}
               </h3>
               <p className="text-xs text-luxury-400">
                 إجمالي الطلبات النشطة: <span className="text-gold-400 font-bold">{tableOrders.length}</span>

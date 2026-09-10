@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { useAuth } from '../../context/AuthContext';
 import { api, isEmbeddedImage } from '../../services/api';
+import { applyBrandTheme, getCachedBrandTheme } from '../../theme/brandTheme';
 import {
   AlertTriangle,
   Palette,
@@ -138,8 +138,22 @@ export const BrandingSettingsView: React.FC = () => {
       setMapUrl(currentRestaurant.mapUrl || '');
       setLogo(currentRestaurant.logo);
       setCoverImage(currentRestaurant.coverImage || '');
-      setPrimaryColor(currentRestaurant.primaryColor || '#D4AF37');
-      setAccentColor(currentRestaurant.accentColor || '#C5A880');
+      const prim = currentRestaurant.primaryColor || '#D4AF37';
+      const acc = currentRestaurant.accentColor || '#C5A880';
+      setPrimaryColor(prim);
+      setAccentColor(acc);
+      // Automatically detect and select matching preset
+      const matched = THEME_PRESETS.find(
+        (p) => p.primary.toLowerCase() === prim.toLowerCase() && p.accent.toLowerCase() === acc.toLowerCase()
+      );
+      if (matched) {
+        setActivePreset(matched.id);
+      } else {
+        const cached = getCachedBrandTheme();
+        if (cached?.presetId) {
+          setActivePreset(cached.presetId);
+        }
+      }
       setBusinessType(currentRestaurant.businessType || 'RESTAURANT');
       setPromoVideoUrl(currentRestaurant.promoVideoUrl || '');
       setGalleryImages(currentRestaurant.galleryImages || []);
@@ -155,6 +169,11 @@ export const BrandingSettingsView: React.FC = () => {
     setPrimaryColor(preset.primary);
     setAccentColor(preset.accent);
     setActivePreset(presetId);
+    applyBrandTheme(preset.primary, preset.accent, null, {
+      presetId,
+      restaurantId: currentRestaurant?.id,
+      slug: currentRestaurant?.slug,
+    });
   };
 
   const handleUpload = async (kind: 'logo' | 'cover', file?: File) => {
@@ -256,8 +275,13 @@ export const BrandingSettingsView: React.FC = () => {
       return;
     }
     setCurrentRestaurant(res.data.restaurant);
+    applyBrandTheme(res.data.restaurant.primaryColor, res.data.restaurant.accentColor, null, {
+      presetId: activePreset || undefined,
+      restaurantId: res.data.restaurant.id,
+      slug: res.data.restaurant.slug,
+    });
     refreshTenantData();
-    showToast('success', 'تم حفظ إعدادات الهوية بنجاح', 'سيظهر الشعار، الألوان، والمعرض مباشرة لعملائك عند مسح QR.');
+    showToast('success', 'تم حفظ إعدادات الهوية بنجاح', 'تم تثبيت وتطبيق ألوان الـ Theme والشعار والمعرض مباشرة عبر النظام.');
   };
 
   const currency = currentRestaurant.currency || '₪';
@@ -715,8 +739,10 @@ export const BrandingSettingsView: React.FC = () => {
                     type="color"
                     value={primaryColor}
                     onChange={(e) => {
-                      setPrimaryColor(e.target.value);
+                      const next = e.target.value;
+                      setPrimaryColor(next);
                       setActivePreset(null);
+                      applyBrandTheme(next, accentColor);
                     }}
                     className="w-9 h-9 rounded cursor-pointer bg-transparent border-0"
                   />
@@ -731,8 +757,10 @@ export const BrandingSettingsView: React.FC = () => {
                     type="color"
                     value={accentColor}
                     onChange={(e) => {
-                      setAccentColor(e.target.value);
+                      const next = e.target.value;
+                      setAccentColor(next);
                       setActivePreset(null);
+                      applyBrandTheme(primaryColor, next);
                     }}
                     className="w-9 h-9 rounded cursor-pointer bg-transparent border-0"
                   />

@@ -277,6 +277,8 @@ router.get('/orders', async (req: Request, res: Response) => {
       numericId: o.numericId,
       restaurantId: o.restaurantId,
       tableId: o.tableId,
+      tableNumber: o.table?.number,
+      tableName: o.table?.name || undefined,
       sessionId: o.sessionId || undefined,
       subtotal: o.subtotal,
       total: o.total,
@@ -1976,10 +1978,6 @@ router.put(
       };
 
       const hasCustomBrandingFields =
-        b.logo !== undefined ||
-        b.coverImage !== undefined ||
-        b.primaryColor !== undefined ||
-        b.accentColor !== undefined ||
         b.promoVideoUrl !== undefined ||
         b.galleryImages !== undefined;
 
@@ -1990,7 +1988,7 @@ router.put(
       ) {
         return res.status(403).json({
           success: false,
-          error: 'تخصيص الهوية البصرية وشعار المطعم يتطلب باقة المحترفين الفاخرة أو باقة المؤسسات.',
+          error: 'تخصيص معرض الصور الترويجي وفيديو الأجواء يتطلب باقة المحترفين الفاخرة أو باقة المؤسسات.',
           statusCode: 403,
         });
       }

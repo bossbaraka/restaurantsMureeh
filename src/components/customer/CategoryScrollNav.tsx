@@ -32,6 +32,10 @@ export const CategoryScrollNav: React.FC = () => {
     activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [selectedCategoryId]);
 
+  const totalAvailableCount = useMemo(() => {
+    return products.filter((p) => p.isAvailable !== false).length;
+  }, [products]);
+
   if (searchQuery) {
     return (
       <div className="mb-4 flex items-center gap-1.5 text-xs text-luxury-400 px-1">
@@ -42,10 +46,6 @@ export const CategoryScrollNav: React.FC = () => {
       </div>
     );
   }
-
-  const totalAvailableCount = useMemo(() => {
-    return products.filter((p) => p.isAvailable !== false).length;
-  }, [products]);
 
   if (categories.length === 0) return null;
 

@@ -85,14 +85,16 @@ export const QRManagement: React.FC = () => {
     };
   }, [tables, slug]);
 
-  const filteredTables = tables.filter((t) => {
-    if (selectedZone !== 'ALL' && t.zone !== selectedZone) return false;
-    if (searchTable.trim()) {
-      const q = searchTable.trim();
-      return t.tableNumber.toString().includes(q) || t.id.toLowerCase().includes(q.toLowerCase());
-    }
-    return true;
-  });
+  const filteredTables = tables
+    .filter((t) => {
+      if (selectedZone !== 'ALL' && t.zone !== selectedZone) return false;
+      if (searchTable.trim()) {
+        const q = searchTable.trim();
+        return t.tableNumber.toString().includes(q) || t.id.toLowerCase().includes(q.toLowerCase());
+      }
+      return true;
+    })
+    .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
 
   const handleCopyLink = (tableId: string) => {
     const table = tables.find((item) => item.id === tableId);
@@ -109,11 +111,11 @@ export const QRManagement: React.FC = () => {
 
     const link = document.createElement('a');
     link.href = dataUrl;
-    link.download = `qr-${slug}-${table.id}.png`;
+    link.download = `qr-${slug}-table-${table.tableNumber || table.id}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast('info', 'تم تنزيل رمز QR', `باركود الطاولة ${formatTableNumber(table.tableNumber || table.id)}`);
+    showToast('info', 'تم تنزيل رمز QR', `باركود الطاولة ${table.tableNumber != null ? table.tableNumber : formatTableNumber(table.id)}`);
   };
 
   const handleOpenCustomer = (tableId: string) => {
@@ -251,7 +253,7 @@ export const QRManagement: React.FC = () => {
               {/* Card Top */}
               <div className="flex items-center justify-between pb-2 border-b border-luxury-800 text-xs">
                 <span className="font-bold text-luxury-100 font-serif">
-                  باركود الطاولة {formatTableNumber(table.tableNumber || table.id)}
+                  باركود الطاولة {table.tableNumber != null ? table.tableNumber : formatTableNumber(table.id)}
                 </span>
                 <span className="text-[10px] text-luxury-400 bg-luxury-850 px-2 py-0.5 rounded-full border border-luxury-800">
                   {getTableZoneLabel(table.zone)}

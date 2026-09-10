@@ -233,6 +233,8 @@ export function mapOrderRow(raw: any): Order {
     numericId: raw.numericId,
     restaurantId: raw.restaurantId,
     tableId: raw.tableId,
+    tableNumber: raw.tableNumber !== undefined ? Number(raw.tableNumber) : undefined,
+    tableName: raw.tableName || undefined,
     sessionId: raw.sessionId || undefined,
     items,
     subtotal: Number(raw.subtotal) || 0,
@@ -503,11 +505,27 @@ class RestaurantApiService {
   // PUBLIC / CUSTOMER ANONYMOUS ENDPOINTS (QR-gated, tenant-scoped)
   // =========================================================================
 
+  // Fetch all public active restaurants (for staff login venue selector and directory)
+  public async getPublicRestaurants(): Promise<ApiResponse<{ restaurants: Restaurant[] }>> {
+    const res = await this.request<any>('GET', '/public/restaurants', { auth: false });
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          restaurants: (res.data.restaurants || []).map(mapRestaurantRow),
+        },
+        statusCode: 200,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
   public async getPublicRestaurantBySlug(slug: string, qrToken?: string): Promise<ApiResponse<{
     restaurant: Restaurant;
     categories: Category[];
     products: Product[];
     offers: Offer[];
+    tables?: RestaurantTable[];
   }>> {
     const cleanQr = (qrToken && qrToken.toLowerCase() !== 'default') ? qrToken : '';
     const query = cleanQr ? `?qrToken=${encodeURIComponent(cleanQr)}` : '';
@@ -524,6 +542,7 @@ class RestaurantApiService {
           categories: (res.data.categories || []).map(mapCategoryRow),
           products: (res.data.products || []).map(mapProductRow),
           offers: (res.data.offers || []).map(mapOfferRow),
+          tables: (res.data.tables || []).map(mapTableRow),
         },
         statusCode: 200,
       };

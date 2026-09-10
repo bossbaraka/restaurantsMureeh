@@ -11,10 +11,14 @@ export function escapeHtml(value: unknown): string {
 }
 
 /**
- * Format table ID/number cleanly as numbers only (e.g. "rest-merar-T01" -> "1", "TABLE-05" -> "5").
+ * Format table ID/number cleanly as numbers only (e.g. 1 -> "1", "rest-merar-T01" -> "1", "TABLE-05" -> "5").
+ * Protects against extracting random digits from hexadecimal UUIDs.
  */
 export function formatTableNumber(tableIdOrNumber: string | number | undefined | null): string {
   if (tableIdOrNumber === undefined || tableIdOrNumber === null) return '';
+  if (typeof tableIdOrNumber === 'number' && Number.isFinite(tableIdOrNumber)) {
+    return String(tableIdOrNumber);
+  }
   const str = String(tableIdOrNumber).trim();
   if (!str) return '';
 
@@ -22,11 +26,24 @@ export function formatTableNumber(tableIdOrNumber: string | number | undefined |
     return 'عميل مباشر';
   }
 
-  // Extract clean number, stripping prefixed letters, zeros and symbols
-  const match = str.match(/(?:(?:-T|TABLE-|^T|\bT)\s*0*)(\d+)/i) || str.match(/(\d+)/);
-  if (match) {
-    const num = parseInt(match[1], 10);
-    return isNaN(num) ? match[1] : String(num);
+  // Pure integer string: e.g. "5", "05"
+  if (/^\d+$/.test(str)) {
+    const num = parseInt(str, 10);
+    return isNaN(num) ? str : String(num);
+  }
+
+  // Recognizable table ID formats: e.g. "TABLE-05", "rest-1-T05", "T-12", "T5", "table_5"
+  const prefixedMatch =
+    str.match(/(?:(?:-T|TABLE[-_]|[-_]T|^T)\s*0*)(\d+)\b/i) ||
+    str.match(/^(?:طاولة|table)[-_ ]*0*(\d+)\b/i);
+  if (prefixedMatch) {
+    const num = parseInt(prefixedMatch[1], 10);
+    return isNaN(num) ? prefixedMatch[1] : String(num);
+  }
+
+  // UUID pattern (e.g. 550e8400-e29b-41d4-a716-446655440000): never extract random hex digits!
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)) {
+    return '';
   }
 
   return str;
