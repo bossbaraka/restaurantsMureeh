@@ -546,6 +546,10 @@ export const brandingSchema = z
     timezone: z.string().trim().max(60).optional(),
     primaryColor: hexColor,
     accentColor: hexColor,
+    // Venue kind: drives how the guest QR experience is composed. Kept in the
+    // branding payload because that is the screen where a tenant describes
+    // itself, and `.strict()` would otherwise reject the new field.
+    businessType: z.enum(['RESTAURANT', 'CAFE', 'BAKERY']).optional(),
     promoVideoUrl: promoVideoUrl.optional().or(z.literal('')),
     // Gallery entries are rendered as <img src>; constrain them to the same
     // https/relative-path rules used for logo and cover (audit H-04).

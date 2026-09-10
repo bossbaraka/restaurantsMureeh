@@ -24,6 +24,15 @@ enum RestaurantStatus {
   MAINTENANCE
 }
 
+// Kind of venue. Drives how the guest-facing QR experience is composed
+// (dine-in table flow vs. counter/takeaway flow vs. product discovery),
+// so it is tenant data rather than something inferred at render time.
+enum BusinessType {
+  RESTAURANT
+  CAFE
+  BAKERY
+}
+
 enum SubscriptionStatus {
   ACTIVE
   TRIAL
@@ -76,6 +85,7 @@ model Restaurant {
   language        String            @default("ar")
   timezone        String            @default("Asia/Jerusalem")
   status          RestaurantStatus  @default(ACTIVE)
+  businessType    BusinessType      @default(RESTAURANT)
   primaryColor    String            @default("#D4AF37")
   accentColor     String            @default("#C5A880")
   promoVideoUrl   String?
@@ -100,6 +110,7 @@ model Restaurant {
 
   @@index([slug])
   @@index([status])
+  @@index([businessType])
 }
 
 model RestaurantUser {

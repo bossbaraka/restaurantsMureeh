@@ -236,6 +236,17 @@ export function mixColors(a: Rgb, b: Rgb, t: number): Rgb {
   };
 }
 
+/**
+ * Classic `rgba()` string for imperative painting (canvas 2D, SVG attributes).
+ * CSS custom properties cannot be read mid-frame, so anything drawn on a
+ * <canvas> needs real RGB values — this is the one sanctioned place where the
+ * brand palette leaves CSS.
+ */
+export function rgbaCss({ r, g, b }: Rgb, alpha: number): string {
+  const channel = (v: number) => Math.round(clamp(v, 0, 255));
+  return `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${clamp(alpha, 0, 1)})`;
+}
+
 // ---------------------------------------------------------------------------
 // Token generation
 // ---------------------------------------------------------------------------
@@ -273,6 +284,42 @@ export function buildBrandTokens(primary?: string | null, accent?: string | null
     lineStrong: `rgb(${toRgbTuple(parseColor(primaryStrong) as Rgb)} / 0.45)`,
     glow: `rgb(${toRgbTuple(parseColor(primaryStrong) as Rgb)} / 0.28)`,
     muted: hslToCss(accentHsl.h, clamp(accentHsl.s, 0.14, 0.4), 0.66),
+  };
+}
+
+/**
+ * Particle-field palette for the QR splash.
+ *
+ * The canvas API cannot consume `var(--brand-*)`, so the tenant colours are
+ * mixed here into a small luminance ramp. It is derived from
+ * `primaryStrong`/`accentStrong` — not the raw brand hexes — so a tenant that
+ * picks something as dark as `#111111` still gets a visible particle field
+ * instead of black-on-black.
+ */
+export interface SplashPalette {
+  /** Luminance-varied shades of the tenant brand, one per particle. */
+  shades: Rgb[];
+  /** Base colour of the connection lines drawn between particles. */
+  link: Rgb;
+  /** Canvas `shadowColor` used to bloom the larger particles. */
+  glow: Rgb;
+}
+
+export function buildSplashPalette(tokens: BrandTokens): SplashPalette {
+  const primary = parseColor(tokens.primaryStrong) ?? (parseColor(BRAND_FALLBACK.primary) as Rgb);
+  const accent = parseColor(tokens.accentStrong) ?? primary;
+  const white: Rgb = { r: 255, g: 255, b: 255 };
+  const black: Rgb = { r: 0, g: 0, b: 0 };
+
+  return {
+    shades: [
+      mixColors(primary, white, 0.38),
+      primary,
+      mixColors(accent, white, 0.22),
+      mixColors(primary, black, 0.24),
+    ],
+    link: mixColors(primary, accent, 0.5),
+    glow: primary,
   };
 }
 

@@ -70,6 +70,12 @@ export function mapRestaurantRow(raw: any): Restaurant {
     language: (raw.language || 'ar') === 'en' ? 'en' : 'ar',
     timezone: raw.timezone || 'Asia/Jerusalem',
     status: raw.status,
+    // Older cached rows predate the column; fall back to the venue default
+    // rather than leaving the guest experience without a defined kind.
+    businessType:
+      raw.businessType === 'CAFE' || raw.businessType === 'BAKERY'
+        ? raw.businessType
+        : 'RESTAURANT',
     primaryColor: raw.primaryColor || '#D4AF37',
     accentColor: raw.accentColor || '#C5A880',
     promoVideoUrl: raw.promoVideoUrl || undefined,
@@ -1056,6 +1062,7 @@ class RestaurantApiService {
         timezone: patch.timezone,
         primaryColor: patch.primaryColor,
         accentColor: patch.accentColor,
+        businessType: patch.businessType,
         promoVideoUrl: patch.promoVideoUrl,
         galleryImages: patch.galleryImages,
       },

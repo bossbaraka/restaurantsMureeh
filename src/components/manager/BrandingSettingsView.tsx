@@ -23,7 +23,30 @@ import {
   Camera,
   Trash2,
   Eye,
+  Coffee,
+  Croissant,
 } from 'lucide-react';
+import type { BusinessType } from '../../types/restaurant';
+
+/**
+ * Venue kinds. Selecting one changes how the guest QR experience is composed,
+ * so the manager picks it here next to the rest of the restaurant's identity.
+ */
+const BUSINESS_TYPES: Array<{
+  id: BusinessType;
+  label: string;
+  desc: string;
+  icon: React.ComponentType<{ className?: string }>;
+}> = [
+  {
+    id: 'RESTAURANT',
+    label: 'مطعم',
+    desc: 'طلب من الطاولة + نداء النادل',
+    icon: UtensilsCrossed,
+  },
+  { id: 'CAFE', label: 'كافيه', desc: 'طلب سريع + تيك أواي', icon: Coffee },
+  { id: 'BAKERY', label: 'مخبز / مشروع طعام', desc: 'استعراض منتجات + استلام', icon: Croissant },
+];
 
 /** اقتراحات جاهزة لشكل موقع المطعم (Theme Presets) */
 const THEME_PRESETS: Array<{
@@ -89,6 +112,7 @@ export const BrandingSettingsView: React.FC = () => {
   const [coverImage, setCoverImage] = useState('');
   const [primaryColor, setPrimaryColor] = useState('#D4AF37');
   const [accentColor, setAccentColor] = useState('#C5A880');
+  const [businessType, setBusinessType] = useState<BusinessType>('RESTAURANT');
   const [promoVideoUrl, setPromoVideoUrl] = useState('');
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [newGalleryUrl, setNewGalleryUrl] = useState('');
@@ -115,6 +139,7 @@ export const BrandingSettingsView: React.FC = () => {
       setCoverImage(currentRestaurant.coverImage || '');
       setPrimaryColor(currentRestaurant.primaryColor || '#D4AF37');
       setAccentColor(currentRestaurant.accentColor || '#C5A880');
+      setBusinessType(currentRestaurant.businessType || 'RESTAURANT');
       setPromoVideoUrl(currentRestaurant.promoVideoUrl || '');
       setGalleryImages(currentRestaurant.galleryImages || []);
     }
@@ -209,6 +234,7 @@ export const BrandingSettingsView: React.FC = () => {
       coverImage: coverImage.trim(),
       primaryColor,
       accentColor,
+      businessType,
       promoVideoUrl: promoVideoUrl.trim(),
       galleryImages,
     });
@@ -286,6 +312,48 @@ export const BrandingSettingsView: React.FC = () => {
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 resize-none"
               />
+            </div>
+
+            {/* Venue kind — decides how the guest QR experience is composed */}
+            <div>
+              <span className="block font-bold text-luxury-200 mb-1.5">
+                نوع النشاط (يشكّل شاشة الترحيب التي يراها العميل بعد مسح QR)
+              </span>
+              <div
+                role="radiogroup"
+                aria-label="نوع النشاط"
+                className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"
+              >
+                {BUSINESS_TYPES.map((type) => {
+                  const Icon = type.icon;
+                  const selected = businessType === type.id;
+                  return (
+                    <button
+                      key={type.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setBusinessType(type.id)}
+                      className={`p-3 rounded-xl border text-right transition-all flex items-start gap-2.5 cursor-pointer ${
+                        selected
+                          ? 'bg-luxury-800 border-gold-500/70 shadow-[0_0_22px_-8px_rgba(212,175,55,0.5)]'
+                          : 'bg-luxury-950 border-luxury-800 hover:border-luxury-700'
+                      }`}
+                    >
+                      <Icon
+                        className={`w-5 h-5 mt-0.5 shrink-0 ${selected ? 'text-gold-400' : 'text-luxury-400'}`}
+                      />
+                      <span>
+                        <span className="block text-luxury-100 font-bold text-sm">{type.label}</span>
+                        <span className="block text-[10px] text-luxury-400 leading-relaxed">
+                          {type.desc}
+                        </span>
+                      </span>
+                      {selected && <Check className="w-4 h-4 text-gold-400 mr-auto shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
