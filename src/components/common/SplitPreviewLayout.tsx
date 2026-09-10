@@ -24,7 +24,7 @@ export const SplitPreviewLayout: React.FC = () => {
       <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-0 overflow-hidden">
         {/* Customer Mobile Mockup Column (Left / Right depending on RTL) */}
         <div className="xl:col-span-5 bg-black/60 p-4 sm:p-6 flex flex-col items-center justify-start border-l border-luxury-800 overflow-y-auto max-h-[calc(100vh-100px)]">
-          <div className="w-full max-w-sm bg-luxury-950 rounded-[2.5rem] border-4 border-luxury-750 shadow-2xl overflow-hidden relative flex flex-col min-h-[780px]">
+          <div className="w-full max-w-sm bg-luxury-950 rounded-[2.5rem] border-4 border-luxury-750 shadow-2xl overflow-hidden relative flex flex-col min-h-[780px] [transform:translateZ(0)]">
             {/* Phone Speaker Notch */}
             <div className="w-32 h-4 bg-luxury-850 rounded-b-xl mx-auto absolute top-0 left-1/2 -translate-x-1/2 z-40" />
 

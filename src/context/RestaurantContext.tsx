@@ -752,46 +752,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     );
   }, [orders, activeTableId, currentTableSession]);
 
-  // Real-time notification tracker for customer order updates
+  // Real-time status tracker for customer orders (visual notifications handled by CustomerOrderLiveNotifier and OrderCompletedModal)
   useEffect(() => {
     if (viewMode !== 'CUSTOMER' || activeTableOrders.length === 0) return;
 
     activeTableOrders.forEach((order) => {
-      const prevStatus = prevOrderStatusMapRef.current[order.id];
-      if (prevStatus && prevStatus !== order.status) {
-        const orderNumStr = order.id.slice(-6);
-        if (order.status === 'PREPARING') {
-          soundFX.playChime();
-          showToast(
-            'info',
-            '👨‍🍳 المطبخ الحي — جاري التحضير!',
-            `بدأ الشيف بإعداد طلبك #${orderNumStr} بخصائصه الفاخرة.`
-          );
-        } else if (order.status === 'READY') {
-          soundFX.playBell();
-          showToast(
-            'success',
-            '🎉 تم إنجاز طلبك بالكامل!',
-            `طلبك #${orderNumStr} أصبح جاهزاً وطاقم الخدمة في طريقه لطاولتك.`
-          );
-        } else if (order.status === 'SERVED') {
-          soundFX.playChime();
-          showToast(
-            'success',
-            '🍽️ تم التقديم بالعافية!',
-            `تم تقديم الطلب #${orderNumStr} على طاولتك. نتمنى لك وجبة شهية.`
-          );
-        } else if (order.status === 'CANCELLED') {
-          showToast(
-            'error',
-            'تحديث حالة الطلب',
-            `تم إلغاء الطلب #${orderNumStr}. يرجى التواصل مع طاقم الخدمة.`
-          );
-        }
-      }
       prevOrderStatusMapRef.current[order.id] = order.status;
     });
-  }, [activeTableOrders, viewMode, showToast]);
+  }, [activeTableOrders, viewMode]);
 
   // Create order: POST to the public API bound to the QR session; the server
   // re-prices every item from the tenant's DB menu.
