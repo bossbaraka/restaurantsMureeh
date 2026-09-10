@@ -25,6 +25,7 @@ import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
 import { applyBrandTheme } from '../theme/brandTheme';
+import { resolveTableDisplayNumber } from '../utils/formatting';
 
 export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
 
@@ -483,6 +484,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setCurrentTableSession(sessionRes.data.session);
           setViewMode('CUSTOMER');
 
+          // Keep the session's table in the local registry so every view can
+          // render the real table number printed on its QR card instead of
+          // scraping digits out of the opaque table ID.
+          const sessionTable = sessionRes.data.table;
+          if (sessionTable?.id) {
+            setTables((prev) => (prev.some((t) => t.id === sessionTable.id) ? prev : [...prev, sessionTable]));
+          }
+
           const cleanQr = sessionRes.data.table.qrToken || (targetToken !== 'default' ? targetToken : undefined);
           api.getPublicRestaurantBySlug(slug, cleanQr).then((catalogRes) => {
             if (catalogRes.success && catalogRes.data) {
@@ -904,7 +913,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (!currentRestaurant || !currentUser) return;
       const table = tables.find((t) => t.id === tableId);
       if (!table) return;
-      void api.updateTable(currentRestaurant.id, { ...table, status }).then((res) => {
+      // Status-only payload: service staff (cashier/waiter) may flip table
+      // availability, while structural table edits remain manager-only.
+      void api.updateTableStatus(currentRestaurant.id, tableId, status).then((res) => {
         if (res.success) refreshTenantData();
         else showToast('error', 'تعذر تحديث الطاولة', res.error);
       });
@@ -920,14 +931,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (res.success) {
           refreshTenantData();
           soundFX.playChime();
-          showToast('success', `تمت تصفية ${tableId}`, 'تم دفع الحساب وإعادة الطاولة إلى حالة المتاحة.');
+          // Show the table number printed on the QR card, never the raw ID.
+          const tableLabel = resolveTableDisplayNumber(tables, tableId) || tableId;
+          showToast('success', `تمت تصفية طاولة ${tableLabel}`, 'تم دفع الحساب وإعادة الطاولة إلى حالة المتاحة.');
         } else {
           showToast('error', 'تعذر تصفية الطاولة', res.error);
         }
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, tables, refreshTenantData, showToast]
   );
 
   const callWaiter = useCallback(

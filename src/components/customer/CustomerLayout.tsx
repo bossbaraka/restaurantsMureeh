@@ -146,6 +146,32 @@ export const CustomerLayout: React.FC = () => {
     }
   }, [categories, products, selectedCategoryId, effectiveCategoryId, setSelectedCategoryId]);
 
+  // Fixed-viewport menu (explicit product decision): while the customer menu
+  // is mounted it must stay app-like — no pinch zoom and no double-tap zoom.
+  // Scoped to this screen only: the original viewport meta is restored on
+  // unmount so every other view keeps the accessible (WCAG 2.1 SC 1.4.4)
+  // zoom behaviour documented in index.html. Text inputs still use >=16px
+  // fonts, so iOS never auto-zooms on focus either.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    const originalContent = viewportMeta?.getAttribute('content') || '';
+    viewportMeta?.setAttribute(
+      'content',
+      'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+    );
+    // iOS Safari ignores `user-scalable=no` for pinch — block the gestures too.
+    // Taps/double-taps are covered by `touch-manipulation` on the root below.
+    const preventGestureZoom = (event: Event) => event.preventDefault();
+    document.addEventListener('gesturestart', preventGestureZoom);
+    document.addEventListener('gesturechange', preventGestureZoom);
+    return () => {
+      if (originalContent) viewportMeta?.setAttribute('content', originalContent);
+      document.removeEventListener('gesturestart', preventGestureZoom);
+      document.removeEventListener('gesturechange', preventGestureZoom);
+    };
+  }, []);
+
   // Filter by search query or category, then apply the guest's ordering.
   const scopedProducts = useMemo(() => {
     const query = deferredSearch.trim().toLowerCase();
@@ -311,7 +337,7 @@ export const CustomerLayout: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24" dir="rtl">
+    <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation" dir="rtl">
       {/* Luxury Welcome Overlay for initial QR entry */}
       {showWelcome && <LuxuryWelcomeScreen onDismiss={handleDismissWelcome} />}
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useAuth } from '../../context/AuthContext';
 import { TableZone, RestaurantTable } from '../../types/restaurant';
 import { getTableZoneLabel, formatPrice, formatTableNumber } from '../../utils/formatting';
 import { TableAggregationModal } from './TableAggregationModal';
@@ -22,6 +23,10 @@ import {
 
 export const TableManagement: React.FC = () => {
   const { tables, orders, currentRestaurant, refreshTenantData, setActiveTableId, setViewMode, showToast } = useRestaurant();
+  const { currentUser } = useAuth();
+  // Creating/editing table structure is manager-only (the server enforces the
+  // same rule); floor staff only see availability and the per-table orders.
+  const canManageTables = ['RESTAURANT_MANAGER', 'PLATFORM_ADMIN', 'SUPER_ADMIN'].includes(currentUser?.role || '');
 
   const [selectedZone, setSelectedZone] = useState<'ALL' | TableZone>('ALL');
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
@@ -117,15 +122,17 @@ export const TableManagement: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleOpenAddTable}
-            className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-gold-glow"
-          >
-            <Plus className="w-4 h-4" />
-            <span>إضافة طاولة جديدة</span>
-          </button>
-        </div>
+        {canManageTables && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleOpenAddTable}
+              className="px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-gold-glow"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة طاولة جديدة</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Quick Filter Counters Strip */}
@@ -225,13 +232,15 @@ export const TableManagement: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={(e) => handleOpenEditTable(table, e)}
-                    className="p-1 rounded-md text-luxury-500 hover:text-luxury-200 hover:bg-luxury-800 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="تعديل الطاولة"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                  {canManageTables && (
+                    <button
+                      onClick={(e) => handleOpenEditTable(table, e)}
+                      className="p-1 rounded-md text-luxury-500 hover:text-luxury-200 hover:bg-luxury-800 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="تعديل الطاولة"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   {table.hasWaiterCall && (
                     <span className="p-1 rounded-md bg-red-500 text-white animate-bounce" title="نداء نادل">

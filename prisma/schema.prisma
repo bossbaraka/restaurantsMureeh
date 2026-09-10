@@ -127,6 +127,10 @@ model RestaurantUser {
   role            TenantRole        @default(RESTAURANT_MANAGER)
   status          String            @default("ACTIVE")
   avatar          String?
+  // Last successful sign-in (email+password or staff PIN). Stays null until
+  // the first login. Both auth routes write it — without the column, the
+  // Prisma write throws and the staff PIN login fails with a 500.
+  lastLoginAt     DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 

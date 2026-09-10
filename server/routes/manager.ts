@@ -144,8 +144,9 @@ router.use(requireAuth);
 // Menu reads stay tenant-scoped (defense in depth alongside per-row checks).
 router.use('/menu', requireTenantAccess((req) => getTenantId(req)));
 
-// GET /api/manager/dashboard/stats
-router.get('/dashboard/stats', async (req: Request, res: Response) => {
+// GET /api/manager/dashboard/stats — revenue/subscription analytics: managers
+// only. Staff roles must not read tenant financial KPIs (role matrix).
+router.get('/dashboard/stats', requireManager(), async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
     if (!restaurantId) {
@@ -1400,9 +1401,16 @@ router.get('/export/orders', requireManager(), async (req: Request, res: Respons
 // ============================================================================
 
 // ---------- Table update (capacity/zone/status/branch) ----------
+// Table write roles: managers (and platform admins) can change everything;
+// floor staff may only flip table availability — cashier responsibility
+// "الطاولات المتاحة" — but never renumber/rezone/move tables (priv-esc guard).
+const TABLE_FULL_WRITE_ROLES = new Set(['RESTAURANT_MANAGER', 'PLATFORM_ADMIN', 'SUPER_ADMIN']);
+const TABLE_STATUS_WRITE_ROLES = new Set(['CASHIER', 'WAITER', 'STAFF']);
+const TABLE_STRUCTURAL_KEYS = ['tableNumber', 'capacity', 'zone', 'branchId', 'name'] as const;
+
 router.put(
   '/tables/:id',
-  requireManager(),
+  requireServiceStaff(),
   validateBody(tableUpdateSchema),
   async (req: Request, res: Response) => {
     try {
@@ -1410,6 +1418,17 @@ router.put(
       const table = await prisma.table.findUnique({ where: { id } });
       if (!table) return res.status(404).json({ success: false, error: 'الطاولة غير موجودة', statusCode: 404 });
       if (!ownTenant(req, table.restaurantId)) return deny(req, res);
+
+      if (!TABLE_FULL_WRITE_ROLES.has(req.user!.role)) {
+        const touchesStructural = TABLE_STRUCTURAL_KEYS.some((k) => k in (req.body as object));
+        if (touchesStructural || !TABLE_STATUS_WRITE_ROLES.has(req.user!.role)) {
+          return res.status(403).json({
+            success: false,
+            error: 'غير مصرح بتعديل بيانات الطاولة — يمكنك تغيير حالة الطاولة فقط',
+            statusCode: 403,
+          });
+        }
+      }
 
       const { tableNumber, capacity, zone, status, branchId, name } = req.body as {
         tableNumber?: number;

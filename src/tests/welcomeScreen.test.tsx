@@ -107,6 +107,11 @@ vi.mock(import('../context/RestaurantContext'), async (importOriginal) => {
         ? { ...restaurant, businessType: (globalThis as any).__businessTypeOverride }
         : restaurant,
       activeTableId: 'table_7',
+      // The QR session registers the scanned table, so every view shows the
+      // number printed on its QR card — never digits scraped from the ID.
+      tables: [
+        { id: 'table_7', restaurantId: 'rest-orchid', tableNumber: 7, capacity: 4, zone: 'MAIN_HALL', status: 'AVAILABLE', activeOrderIds: [], hasWaiterCall: false },
+      ],
       products,
       categories,
     }),
@@ -376,6 +381,8 @@ describe('interactive menu device', () => {
 
     expect(html).toContain('كبسة الأوركيد');
     expect(html).toContain('₪68');
+    // The registry table number in the QR-card zero-padded format, never a
+    // re-parse of digits from the opaque table ID.
     expect(html).toContain('طاولة 07');
     // Featured sorts first, then a teaser of three — so expanding reveals more.
     expect(html.match(/welcome-device__row/g)?.length).toBe(3);

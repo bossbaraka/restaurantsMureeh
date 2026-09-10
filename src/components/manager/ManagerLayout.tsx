@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
+import { useDialog } from '../../hooks/useDialog';
 import { DashboardOverview } from './DashboardOverview';
 import { OrderManagement } from './OrderManagement';
 import { TableManagement } from './TableManagement';
@@ -31,6 +32,9 @@ import {
   Building2,
   Calculator,
   ChevronDown,
+  ChevronLeft,
+  Menu,
+  X,
   Plus,
   Users,
 } from 'lucide-react';
@@ -58,9 +62,14 @@ export const ManagerLayout: React.FC = () => {
   const isPlatformManager = isSuperAdmin;
   const [activeTab, setActiveTab] = useState<ManagerTab>('OVERVIEW');
   const [isTenantDropdownOpen, setIsTenantDropdownOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const pendingWaiters = waiterRequests.filter((w) => w.status === 'PENDING').length;
   const activeOrdersCount = orders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING').length;
+  const totalAlerts = pendingWaiters + activeOrdersCount;
+
+  // Mobile nav sheet: Escape-to-close + body scroll lock (see hooks/useDialog).
+  useDialog({ isOpen: isMobileNavOpen, onClose: () => setIsMobileNavOpen(false) });
 
   const navConfig: Array<{ id: ManagerTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string; section?: string }> = [
     { id: 'OVERVIEW', label: 'لوحة العمليات', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -91,6 +100,7 @@ export const ManagerLayout: React.FC = () => {
   ];
 
   const navItems = navConfig.filter((item) => canAccessManagerTab(item.id));
+  const activeNavItem = navItems.find((item) => item.id === activeTab);
 
   React.useEffect(() => {
     if (navItems.length > 0 && !navItems.some((item) => item.id === activeTab)) {
@@ -186,8 +196,35 @@ export const ManagerLayout: React.FC = () => {
             )}
           </div>
 
-          {/* Navigation Items */}
-          <nav className="flex md:flex-col gap-1 overflow-x-auto no-scrollbar py-1 md:py-0">
+          {/* Mobile trigger for the creative button-list sheet (phones only) */}
+          <button
+            onClick={() => setIsMobileNavOpen(true)}
+            aria-label="فتح قائمة أقسام لوحة التحكم"
+            className="md:hidden w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl bg-gradient-to-l from-gold-500/15 via-luxury-900 to-luxury-900 border border-gold-500/30 hover:border-gold-500/60 text-luxury-100 transition-all active:scale-[0.98] cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-9 h-9 rounded-xl bg-gold-500 text-luxury-950 flex items-center justify-center shadow-gold-glow shrink-0">
+                {activeNavItem?.icon || <LayoutDashboard className="w-4 h-4" />}
+              </span>
+              <div className="text-right min-w-0">
+                <span className="text-[10px] text-gold-400/90 font-bold block">قائمة لوحة التحكم</span>
+                <span className="text-xs font-bold text-luxury-50 truncate block">{activeNavItem?.label || 'اختر القسم'}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {totalAlerts > 0 && (
+                <span className="min-w-[1.35rem] px-1.5 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold animate-pulse text-center">
+                  {totalAlerts}
+                </span>
+              )}
+              <span className="w-8 h-8 rounded-lg bg-luxury-850 border border-luxury-750 flex items-center justify-center text-gold-400">
+                <Menu className="w-4 h-4" />
+              </span>
+            </div>
+          </button>
+
+          {/* Navigation Items — desktop sidebar (phones use the sheet above) */}
+          <nav className="hidden md:flex md:flex-col gap-1 overflow-x-auto no-scrollbar py-1 md:py-0">
             {navItems.length === 0 ? (
               <div className="text-xs text-luxury-400 px-2 py-4">لا توجد صلاحيات متاحة لهذا الدور.</div>
             ) : (
@@ -268,6 +305,145 @@ export const ManagerLayout: React.FC = () => {
         {activeTab === 'BRANDING' && <BrandingSettingsView />}
         {activeTab === 'SUBSCRIPTION' && <SubscriptionView />}
       </main>
+
+      {/* Mobile Navigation Sheet — creative button list (phones only) */}
+      {isMobileNavOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex flex-col justify-end">
+          <div
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setIsMobileNavOpen(false)}
+          />
+
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="أقسام لوحة التحكم"
+            dir="rtl"
+            className="relative bg-luxury-900 border-t border-gold-500/30 rounded-t-3xl z-10 animate-in slide-in-from-bottom duration-300 max-h-[85vh] overflow-y-auto no-scrollbar"
+            style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))' }}
+          >
+            {/* Gold ambient top line */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-gold-500 to-transparent" />
+
+            <div className="p-5 space-y-4">
+              {/* Sheet Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-luxury-800">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="w-9 h-9 rounded-xl bg-gradient-to-br from-gold-400 to-gold-700 text-luxury-950 flex items-center justify-center shadow-gold-glow shrink-0">
+                    <LayoutDashboard className="w-4 h-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-sm font-bold text-luxury-50 font-serif truncate">أقسام لوحة التحكم</h2>
+                    <span className="text-[10px] text-luxury-400 block truncate">
+                      {currentRestaurant?.name || ''} · {navItems.length} قسماً
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className="p-2 rounded-xl bg-luxury-850 border border-luxury-800 text-luxury-400 hover:text-white shrink-0"
+                  aria-label="إغلاق القائمة"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Creative button list of sections */}
+              <nav className="space-y-2">
+                {navItems.map((item, index) => {
+                  const isSelected = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setIsMobileNavOpen(false);
+                      }}
+                      className={`w-full p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
+                        isSelected
+                          ? 'bg-gradient-to-l from-gold-500 to-gold-600 border-gold-400 text-luxury-950 shadow-gold-glow'
+                          : 'bg-luxury-850/70 border-luxury-800 text-luxury-100 hover:border-gold-500/40 hover:bg-luxury-850'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            isSelected
+                              ? 'bg-luxury-950/15 text-luxury-950'
+                              : 'bg-luxury-900 text-gold-400 border border-luxury-750'
+                          }`}
+                        >
+                          {item.icon}
+                        </span>
+                        <div className="text-right min-w-0">
+                          <span className={`text-sm block truncate ${isSelected ? 'font-bold' : 'font-semibold'}`}>
+                            {item.label}
+                          </span>
+                          <span className={`text-[10px] block font-mono ${isSelected ? 'text-luxury-900/70' : 'text-luxury-500'}`}>
+                            قسم {String(index + 1).padStart(2, '0')}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {item.badge !== undefined && (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                              item.badgeColor || 'bg-luxury-800 text-luxury-200'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                        <ChevronLeft className={`w-4 h-4 ${isSelected ? 'text-luxury-950' : 'text-luxury-500'}`} />
+                      </div>
+                    </button>
+                  );
+                })}
+              </nav>
+
+              {/* Quick links — the same shortcuts the desktop sidebar footer has,
+                  reachable on phones too (it is hidden there). */}
+              <div className="pt-2 space-y-2 border-t border-luxury-800">
+                <span className="text-[10px] text-luxury-400 font-bold block px-1">روابط سريعة</span>
+
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => {
+                      setIsMobileNavOpen(false);
+                      setViewMode('PLATFORM_ADMIN');
+                    }}
+                    className="w-full py-3 px-3.5 rounded-2xl bg-purple-950/60 hover:bg-purple-900/60 text-purple-200 border border-purple-500/30 text-xs font-bold flex items-center justify-between transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-9 h-9 rounded-xl bg-purple-900/60 border border-purple-500/40 flex items-center justify-center text-purple-300">
+                        <ShieldCheck className="w-4 h-4" />
+                      </span>
+                      <span>بوابة مدير المنصة العام</span>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-purple-400" />
+                  </button>
+                )}
+
+                <button
+                  onClick={() => {
+                    setIsMobileNavOpen(false);
+                    setViewMode('CUSTOMER');
+                  }}
+                  className="w-full py-3 px-3.5 rounded-2xl bg-gold-500/10 hover:bg-gold-500/20 text-gold-200 border border-gold-500/30 text-xs font-bold flex items-center justify-between transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-9 h-9 rounded-xl bg-gold-500 text-luxury-950 flex items-center justify-center shadow-gold-glow">
+                      <Smartphone className="w-4 h-4" />
+                    </span>
+                    <span>معاينة منيو العميل</span>
+                  </div>
+                  <ExternalLink className="w-3.5 h-3.5 text-gold-400" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
