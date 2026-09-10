@@ -57,8 +57,8 @@ SUPABASE_STORAGE_BUCKET="restaurant-assets"
 STORAGE_ALLOW_LOCAL_IN_PROD="false"   # لا تفعّلها إلا لخادم self-hosted بقرص دائم
 ```
 
-- عند `STORAGE_DRIVER=supabase` **بدون** `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` → **يفشل الإقلاع** برسالة واضحة.
-- عند `STORAGE_DRIVER=local` في `NODE_ENV=production` → **يرفض الإقلاع** ما لم يُضبط `STORAGE_ALLOW_LOCAL_IN_PROD=true` (للتطبيقات ذات القرص الدائم فقط).
+- بعد تطبيق الـ Hotfix: عند `STORAGE_DRIVER=supabase` **بدون** `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` → **لا ينهار الخادم**، بل يُسجّل تحذيرًا واضحًا وينتقل تلقائيًا للوضع المحلي `local` حتى يتم ربط Supabase.
+- عند `STORAGE_DRIVER=local` في `NODE_ENV=production` بدون `STORAGE_ALLOW_LOCAL_IN_PROD=true` → يُسجّل تحذيرًا بشأن طبيعة الأقراص المؤقتة السحابية مع السماح للإقلاع بالاستمرار بنجاح.
 
 ## 5) تغييرات Prisma
 
@@ -116,5 +116,5 @@ POST /api/uploads/image
    → DB يخزّن الـ URL الدائم (public Supabase URL)
 ```
 
-- الوحيدة التي تلمس `fs` للرفع هي `LocalStorageDriver` (تطوير/اختبار)، و`config.ts` **يرفضها في الإنتاج**.
-- الـ static serving لـ `/uploads` بقي فقط لخدمة الملفات القديمة قبل الترحيل ووضع التطوير — لا يستقبل رفعات جديدة في الإنتاج.
+- في بيئة الإنتاج: إذا لم تُضبط مفاتيح Supabase، يعمل `LocalStorageDriver` كوضع احتياطي مؤقت مع تحذير، لضمان استقرار الخادم وعدم توقف الموقع.
+- الـ static serving لـ `/uploads` مستمر لخدمة الملفات المرفوعة محليًا والملفات القديمة قبل الترحيل.

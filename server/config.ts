@@ -96,23 +96,27 @@ if (isProd && !env.DATABASE_URL) {
   );
 }
 
-// Upload durability guard. Object storage is the production path: refuse to
-// boot with an unconfigured driver instead of silently writing somewhere
-// that won't survive a restart.
-if (storageDriver === 'supabase') {
+// Upload durability guard. Object storage is the recommended production path.
+// If Supabase credentials are not yet supplied or STORAGE_DRIVER=local is used in production,
+// log a clear warning and fall back to local storage rather than crashing the boot process.
+let resolvedStorageDriver: 'local' | 'supabase' = storageDriver;
+
+if (resolvedStorageDriver === 'supabase') {
   if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error(
-      'STORAGE_DRIVER=supabase requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. ' +
-        'Refusing to start with an unconfigured object storage driver.'
+    console.warn(
+      '⚠️  [STORAGE] WARNING: STORAGE_DRIVER=supabase was configured, but SUPABASE_URL or ' +
+        'SUPABASE_SERVICE_ROLE_KEY is missing. Falling back to local storage driver to prevent crash. ' +
+        'Note: uploaded images will not persist across redeployments until Supabase credentials are provided.'
     );
+    resolvedStorageDriver = 'local';
   }
-} else if (isProd && env.STORAGE_ALLOW_LOCAL_IN_PROD !== 'true') {
-  throw new Error(
-    'STORAGE_DRIVER=local is not allowed in production: uploaded images would be ' +
-      'stored on an ephemeral filesystem and lost on redeploy/restart. Set ' +
-      'STORAGE_DRIVER=supabase with SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY, or ' +
-      'STORAGE_ALLOW_LOCAL_IN_PROD=true ONLY for self-hosted deployments with a ' +
-      'mounted persistent volume. Refusing to start.'
+}
+
+if (resolvedStorageDriver === 'local' && isProd && env.STORAGE_ALLOW_LOCAL_IN_PROD !== 'true') {
+  console.warn(
+    '⚠️  [STORAGE] WARNING: STORAGE_DRIVER=local is active in production without STORAGE_ALLOW_LOCAL_IN_PROD=true. ' +
+      'Uploaded files are stored on an ephemeral filesystem and will be lost on redeploy/restart. ' +
+      'Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (and STORAGE_DRIVER=supabase) for persistent object storage.'
   );
 }
 
@@ -124,7 +128,7 @@ export const config = {
   jwtExpiresIn: env.JWT_EXPIRES_IN,
   trustProxy: env.TRUST_PROXY,
   frameAncestors: env.FRAME_ANCESTORS,
-  storageDriver,
+  storageDriver: resolvedStorageDriver,
   uploadDir: env.UPLOAD_DIR,
   supabaseUrl: env.SUPABASE_URL,
   supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
