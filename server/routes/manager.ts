@@ -1960,6 +1960,7 @@ router.put(
         timezone?: string;
         primaryColor?: string;
         accentColor?: string;
+        businessType?: 'RESTAURANT' | 'CAFE' | 'BAKERY';
         promoVideoUrl?: string;
         galleryImages?: string[];
       };
@@ -1998,6 +1999,9 @@ router.put(
           timezone: b.timezone !== undefined ? b.timezone : undefined,
           primaryColor: b.primaryColor !== undefined ? b.primaryColor : undefined,
           accentColor: b.accentColor !== undefined ? b.accentColor : undefined,
+          // Venue kind is descriptive metadata, not paid visual customisation,
+          // so it is deliberately outside `hasCustomBrandingFields` above.
+          businessType: b.businessType !== undefined ? b.businessType : undefined,
           promoVideoUrl: b.promoVideoUrl !== undefined ? b.promoVideoUrl : undefined,
           galleryImages: b.galleryImages !== undefined ? b.galleryImages : undefined,
         },

@@ -2,6 +2,8 @@
 
 export type TenantRole = 'PLATFORM_ADMIN' | 'SUPER_ADMIN' | 'RESTAURANT_MANAGER' | 'STAFF' | 'GUEST' | 'WAITER' | 'CASHIER' | 'KITCHEN';
 export type RestaurantStatus = 'ACTIVE' | 'SUSPENDED' | 'ONBOARDING' | 'MAINTENANCE';
+/** Kind of venue. Decides how the guest QR experience is composed. */
+export type BusinessType = 'RESTAURANT' | 'CAFE' | 'BAKERY';
 export type SubscriptionStatus = 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED' | 'SUSPENDED';
 export type OrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
 export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'BILL_REQUESTED' | 'RESERVED' | 'MAINTENANCE';
@@ -38,6 +40,12 @@ export interface Restaurant {
   language: 'ar' | 'en';
   timezone: string;
   status: RestaurantStatus;
+  /**
+   * Kind of venue. Optional in the client type because cached/older API
+   * payloads predate the column; the DB column itself is NOT NULL with a
+   * RESTAURANT default, so consumers may rely on a value being present.
+   */
+  businessType?: BusinessType;
   primaryColor: string;
   accentColor: string;
   promoVideoUrl?: string;

@@ -208,6 +208,7 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           language: restaurant.language,
           timezone: restaurant.timezone,
           status: restaurant.status,
+          businessType: restaurant.businessType,
           primaryColor: restaurant.primaryColor,
           accentColor: restaurant.accentColor,
         },
@@ -283,6 +284,10 @@ router.get('/tables/qr/:qrToken', qrSessionLimiter, async (req: Request, res: Re
           name: table.restaurant.name,
           nameEn: table.restaurant.nameEn,
           logo: table.restaurant.logoUrl,
+          // The guest splash frames the venue by kind. It renders before the
+          // full catalog fetch resolves, so the kind must ride along here too —
+          // otherwise a café or bakery shows restaurant copy in that window.
+          businessType: table.restaurant.businessType,
         },
       },
       statusCode: 200,
@@ -368,6 +373,9 @@ router.post(
             id: restaurant.id,
             name: restaurant.name,
             slug: restaurant.slug,
+            // Same reason as the QR-verify payload: this object becomes
+            // `currentRestaurant` before the catalog fetch overwrites it.
+            businessType: restaurant.businessType,
           },
         },
         statusCode: 200,
