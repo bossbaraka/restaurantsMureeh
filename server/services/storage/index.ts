@@ -1,4 +1,4 @@
-import { config } from '../config';
+import { config } from '../../config';
 import { LocalStorageDriver } from './local';
 import { SupabaseStorageDriver } from './supabase';
 import type { StorageKind } from './helpers';
