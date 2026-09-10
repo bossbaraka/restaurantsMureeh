@@ -20,6 +20,8 @@ services:
         value: "1"
       - key: FRAME_ANCESTORS
         value: "'self'"
+      - key: KEEP_ALIVE
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

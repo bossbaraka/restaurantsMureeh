@@ -327,15 +327,52 @@ if (process.env.NODE_ENV !== 'test') {
     );
   }
 
-  app.listen(
+  const server = app.listen(
     PORT,
     '0.0.0.0',
     () => {
       console.log(
         `🚀 MÉRAR SaaS Server listening on port ${PORT}`
       );
+
+      // Keep-Alive for Render free tier (prevents 15-minute inactivity spin-down)
+      const keepAliveUrl = process.env.KEEP_ALIVE_URL || process.env.RENDER_EXTERNAL_URL || process.env.APP_URL;
+      if (process.env.KEEP_ALIVE !== 'false' && keepAliveUrl) {
+        const pingTarget = `${keepAliveUrl.replace(/\/+$/, '')}/api/health`;
+        const intervalMins = Number(process.env.KEEP_ALIVE_INTERVAL_MINUTES) || 10;
+        const intervalMs = Math.max(2, Math.min(14, intervalMins)) * 60 * 1000;
+        console.log(`🔄 Keep-Alive enabled: pinging ${pingTarget} every ${intervalMins}m to prevent Render 15-min idle sleep`);
+        
+        // First ping after 2 minutes, then every intervalMs
+        setTimeout(() => {
+          const doPing = async () => {
+            try {
+              const res = await fetch(pingTarget, { signal: AbortSignal.timeout(15_000) });
+              if (res.ok) {
+                console.log(`💓 Keep-Alive ping ok (${res.status})`);
+              }
+            } catch (err: any) {
+              console.warn(`⚠️ Keep-Alive ping failed: ${err?.message}`);
+            }
+          };
+          void doPing();
+          setInterval(() => void doPing(), intervalMs);
+        }, 2 * 60 * 1000);
+      }
     }
   );
+
+  // Prevent 502 race conditions behind Render/reverse proxy
+  server.keepAliveTimeout = 65000;
+  server.headersTimeout = 66000;
 }
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
 
 export default app;
