@@ -88,27 +88,23 @@ router.post(
       });
     }
 
-    const mimeType =
-      sniffed.ext === '.png'
-        ? 'image/png'
-        : sniffed.ext === '.jpg'
-        ? 'image/jpeg'
-        : sniffed.ext === '.webp'
-        ? 'image/webp'
-        : 'image/gif';
-
-    const base64Data = `data:${mimeType};base64,${req.file.buffer.toString('base64')}`;
-
     // Server-generated filename + server-verified extension
     const filename = `img-${Date.now()}-${randomUUID().slice(0, 8)}${sniffed.ext}`;
     const filePath = path.join(uploadDir, filename);
     fs.writeFileSync(filePath, req.file.buffer);
 
+    // The client persists `url` in the database (logo / cover / dish image),
+    // so it MUST be the small on-disk path. Returning the full base64 data
+    // URL here (the old behaviour) made every subsequent branding/product
+    // save POST megabytes of JSON and trip the 1MB body limit with
+    // `PayloadTooLargeError: request entity too large`.
+    const fileUrl = `/uploads/${filename}`;
+
     return res.json({
       success: true,
       data: {
-        url: base64Data,
-        pathUrl: `/uploads/${filename}`,
+        url: fileUrl,
+        pathUrl: fileUrl,
         filename,
         size: req.file.size,
       },
