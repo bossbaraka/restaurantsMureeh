@@ -89,6 +89,18 @@ export const SubscriptionView: React.FC = () => {
     setIsChanging(true);
     const res = await api.changeSubscriptionPlan(currentRestaurant.id, planId);
     setIsChanging(false);
+    // Paid upgrade requests are not self-serve: the server records the request
+    // for platform-admin approval (202) and does NOT change the subscription.
+    if ('pending' in res && res.pending) {
+      setIsUpgradeModalOpen(false);
+      setPendingDowngradePlan(null);
+      showToast(
+        'info',
+        'تم استلام طلب الترقية',
+        'سجّلنا طلبك وسيتواصل معك فريق منصة مريح لإتمام الدفع وتفعيل الباقة. لن تتغير باقتك الحالية قبل الموافقة.'
+      );
+      return;
+    }
     if (!res.success || !res.data) {
       showToast('error', 'تعذر تغيير الباقة', res.error || 'يرجى المحاولة لاحقاً');
       return;

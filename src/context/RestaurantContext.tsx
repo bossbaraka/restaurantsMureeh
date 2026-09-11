@@ -26,6 +26,7 @@ import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
 import { applyBrandTheme } from '../theme/brandTheme';
 import { resolveTableDisplayNumber } from '../utils/formatting';
+import { openEventSourceWithBackoff } from '../utils/sse';
 
 export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
 
@@ -656,31 +657,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!currentRestaurant || typeof window === 'undefined') return;
     if (viewMode !== 'CUSTOMER' || !activeTableId || !currentTableSession?.sessionToken) return;
 
-    let eventSource: EventSource | null = null;
+    let conn: { close: () => void } | null = null;
     try {
       // Customer streams authenticate with the QR session capability only —
       // the staff JWT must never travel in a URL (logs/history/referrer).
-      eventSource = new EventSource(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`
-      );
-      eventSource.addEventListener('ORDER_STATUS_UPDATED', (e: any) => {
-        refreshTenantData();
-        try {
-          const data = JSON.parse(e.data);
-          if (data.status === 'READY') soundFX.playBell();
-          else soundFX.playTap();
-        } catch {
-          /* noop */
+      conn = openEventSourceWithBackoff(
+        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`,
+        {
+          ORDER_STATUS_UPDATED: (e: MessageEvent) => {
+            refreshTenantData();
+            try {
+              const data = JSON.parse((e as MessageEvent).data as string);
+              if (data.status === 'READY') soundFX.playBell();
+              else soundFX.playTap();
+            } catch {
+              /* noop */
+            }
+          },
+          ORDER_CREATED: () => refreshTenantData(),
+          ORDER_CANCELLED: () => refreshTenantData(),
+          TABLE_SETTLED: () => refreshTenantData(),
         }
-      });
-      eventSource.addEventListener('ORDER_CREATED', () => refreshTenantData());
-      eventSource.addEventListener('ORDER_CANCELLED', () => refreshTenantData());
-      eventSource.addEventListener('TABLE_SETTLED', () => refreshTenantData());
+      );
     } catch {
       /* polling fallback */
     }
     return () => {
-      if (eventSource) eventSource.close();
+      conn?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, viewMode]);
@@ -691,24 +694,26 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const token = localStorage.getItem('merar_auth_token');
     if (!token) return;
 
-    let eventSource: EventSource | null = null;
+    let conn: { close: () => void } | null = null;
     try {
-      eventSource = new EventSource(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&token=${encodeURIComponent(token)}`
+      conn = openEventSourceWithBackoff(
+        `/api/public/events?restaurantId=${currentRestaurant.id}&token=${encodeURIComponent(token)}`,
+        {
+          ORDER_CREATED: () => {
+            refreshTenantData();
+            soundFX.playChime();
+          },
+          ORDER_STATUS_UPDATED: () => refreshTenantData(),
+          ORDER_CANCELLED: () => refreshTenantData(),
+          TABLE_SETTLED: () => refreshTenantData(),
+          PAYMENT_RECORDED: () => refreshTenantData(),
+        }
       );
-      eventSource.addEventListener('ORDER_CREATED', () => {
-        refreshTenantData();
-        soundFX.playChime();
-      });
-      eventSource.addEventListener('ORDER_STATUS_UPDATED', () => refreshTenantData());
-      eventSource.addEventListener('ORDER_CANCELLED', () => refreshTenantData());
-      eventSource.addEventListener('TABLE_SETTLED', () => refreshTenantData());
-      eventSource.addEventListener('PAYMENT_RECORDED', () => refreshTenantData());
     } catch {
       /* fallback to background polling */
     }
     return () => {
-      if (eventSource) eventSource.close();
+      conn?.close();
     };
   }, [currentRestaurant?.id, currentUser?.id, refreshTenantData]);
 

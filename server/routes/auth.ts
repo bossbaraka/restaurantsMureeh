@@ -161,6 +161,7 @@ router.post(
         actorRole: user.role,
         action: 'LOGIN',
         details: `تسجيل دخول ناجح للمستخدم ${user.name} (${user.email})`,
+        ipAddress: req.ip,
       }).catch(() => {});
 
       return res.json({
@@ -252,6 +253,7 @@ router.post('/logout', requireAuth, async (req: Request, res: Response) => {
         actorRole: req.user.role,
         action: 'LOGOUT',
         details: `تسجيل خروج للمستخدم ${req.user.name}`,
+        ipAddress: req.ip,
       });
     }
     return res.json({
@@ -351,6 +353,7 @@ router.post(
         actorRole: user.role,
         action: 'STAFF_PIN_LOGIN',
         details: `تسجيل دخول ناجح برمز PIN للمستخدم ${user.name} (${user.email})`,
+        ipAddress: req.ip,
       });
 
       return res.json({

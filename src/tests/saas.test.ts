@@ -315,6 +315,9 @@ describe('Multi-Tenant SaaS — Live API Client Contract Suite', () => {
       expect(res.success).toBe(true);
       expect(lastCall().url).toContain('/api/manager/tables/rest-merar-T01/settle');
       expect(parsedBody(lastCall()).restaurantId).toBe('rest-merar');
+      // The quick-settle default MUST be a ledger enum value (CASH). The
+      // legacy placeholder 'PAY AT CASHIER' is rejected by the server enum.
+      expect(parsedBody(lastCall()).paymentMethod).toBe('CASH');
     });
   });
 });

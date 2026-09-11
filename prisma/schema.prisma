@@ -426,6 +426,9 @@ model AuditLog {
   entityId      String?
   details       String
   metadata      Json?
+  // Client IP resolved behind TRUST_PROXY (req.ip). Populated for
+  // security-relevant events; nullable to keep older audit rows valid.
+  ipAddress     String?
   createdAt     DateTime        @default(now())
 
   @@index([restaurantId])

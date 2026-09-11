@@ -52,17 +52,26 @@ services:
         sync: false
       - key: MANAGER_3_PASSWORD
         sync: false
-      # Object Storage (Supabase Storage recommended in production).
-      # If SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are unset, the server will
-      # warn and fall back to local storage without crashing.
+      # Object Storage — REQUIRED in production. Supabase Storage (S3-compatible)
+      # is the persistent backing store for all uploaded images. Render's
+      # filesystem is ephemeral, so local storage would lose every image on
+      # restart/redeploy/scale-out. The server FAILS CLOSED and refuses to boot
+      # when STORAGE_DRIVER=supabase but SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+      # are missing (there is intentionally no local-storage fallback).
+      #
+      # One-time Supabase setup: create a PUBLIC-read bucket named
+      # "restaurant-assets"; writes require the service_role key (server-side
+      # only, never exposed to the browser).
       - key: STORAGE_DRIVER
-        sync: false
+        value: supabase
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: restaurant-assets
+      # Self-hosted persistent-volume escape hatch only. Leave unset on Render
+      # (STORAGE_DRIVER=supabase is the supported production configuration).
       - key: STORAGE_ALLOW_LOCAL_IN_PROD
         sync: false
 

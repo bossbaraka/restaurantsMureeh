@@ -123,3 +123,14 @@ export const staffMutationLimiter = rateLimit({
   limit: 30,
   message: limiterError('عمليات موظفين كثيرة. حاول لاحقاً.'),
 });
+
+// SSE streams are long-lived and cheap to open, so the connection-count caps
+// in realtime.ts (global / per-tenant / per-session) are the primary defence;
+// this IP limiter additionally bounds the *rate* of NEW streams (reconnect
+// storms / slow-loris fan-out) before one is registered.
+export const sseConnectionLimiter = rateLimit({
+  ...base,
+  windowMs: 5 * 60 * 1000,
+  limit: 100,
+  message: limiterError('اتصالات بث مباشر كثيرة من هذا الجهاز. أعد المحاولة لاحقاً.'),
+});

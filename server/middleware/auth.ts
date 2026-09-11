@@ -119,11 +119,28 @@ export async function authenticateToken(
         role: true,
         status: true,
         tokenVersion: true,
+        // Fresh restaurant status: a tenant suspended AFTER login must lose
+        // access on the very next request, rather than keeping a valid 12h
+        // token until it naturally expires. Platform staff are exempt below.
+        restaurant: { select: { status: true } },
       },
     });
     if (!dbUser) return unauthorized(res, 'الحساب غير موجود');
     if (dbUser.status !== 'ACTIVE') {
       return unauthorized(res, 'تم إيقاف هذا الحساب');
+    }
+    const isPlatformRole =
+      dbUser.role === 'PLATFORM_ADMIN' || dbUser.role === 'SUPER_ADMIN';
+    if (
+      dbUser.restaurantId &&
+      !isPlatformRole &&
+      dbUser.restaurant &&
+      dbUser.restaurant.status !== 'ACTIVE'
+    ) {
+      return res.status(403).json({
+        success: false,
+        error: 'حساب المطعم موقوف حالياً من قبل إدارة المنصة.',
+      });
     }
     if ((decoded.tv ?? 0) !== dbUser.tokenVersion) {
       return unauthorized(res, 'انتهت صلاحية الجلسة، سجّل دخولك مجدداً');

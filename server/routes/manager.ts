@@ -15,10 +15,12 @@ import {
   isTrialPlan,
   withTrialMeta,
   evaluatePlanChange,
+  effectiveSubscriptionState,
 } from '../services/plans';
 import { logAuditEvent } from '../services/audit';
 import { getStorage, deleteManagedAssets } from '../services/storage';
-import { generateQrToken, csvField, roundMoney, parsePagination } from '../utils/security';
+import { generateQrToken, csvField, roundMoney, parsePagination, reconcileCashPayment } from '../utils/security';
+import { startOfDayInTimezone } from '../utils/datetime';
 import { paymentLimiter, orderStatusLimiter, staffMutationLimiter } from '../middleware/rateLimit';
 import {
   validateBody,
@@ -92,6 +94,7 @@ function deny(
       actorRole: req.user.role,
       action: 'TENANT_ACCESS_DENIED',
       details: `محاولة وصول مرفوضة عبر ${req.method} ${req.path}: ${msg}`,
+      ipAddress: req.ip,
     }).catch(() => undefined);
   }
   return res.status(403).json({ success: false, error: msg, statusCode: 403 });
@@ -109,9 +112,12 @@ async function getPlanLimits(restaurantId: string): Promise<typeof FREE_LIMITS> 
     where: { restaurantId },
     include: { plan: true },
   });
+  // Effective period state: a row still marked ACTIVE/TRIAL after its period
+  // end (e.g. scheduler never ran) must not keep unlocking paid quotas.
+  const state = effectiveSubscriptionState(subscription);
   if (
     !subscription ||
-    (subscription.status !== 'ACTIVE' && subscription.status !== 'TRIAL') ||
+    !state.entitled ||
     !subscription.plan ||
     subscription.plan.status !== 'ACTIVE'
   ) {
@@ -133,9 +139,10 @@ async function restaurantHasEntitlement(
     where: { restaurantId },
     include: { plan: true },
   });
+  const state = effectiveSubscriptionState(subscription);
   return (
     !!subscription &&
-    (subscription.status === 'ACTIVE' || subscription.status === 'TRIAL') &&
+    state.entitled &&
     !!subscription.plan &&
     subscription.plan.status === 'ACTIVE' &&
     subscription.plan.entitlements.includes(key)
@@ -188,54 +195,70 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
       return res.status(404).json({ success: false, error: 'المطعم غير موجود', statusCode: 404 });
     }
 
-    // Aggregate orders stats from PostgreSQL
-    const validOrders = await prisma.order.findMany({
-      where: {
-        restaurantId,
-        status: { not: 'CANCELLED' },
-      },
-      include: { items: true },
+    // All-time revenue / order KPIs are aggregated INSIDE PostgreSQL (the
+    // previous implementation pulled every order + order-item row into Node
+    // and reduced in process — unbounded memory/latency growth as the tenant
+    // traded). Cancelled orders never count as revenue.
+    const settledOrderWhere = {
+      restaurantId,
+      status: { not: 'CANCELLED' as const },
+    };
+
+    const [allTimeAgg, todayAgg] = await Promise.all([
+      prisma.order.aggregate({
+        where: settledOrderWhere,
+        _sum: { total: true },
+        _avg: { total: true },
+        _count: { _all: true },
+      }),
+      // todayOrdersCount must mean orders created during the restaurant's
+      // CURRENT local day — not the lifetime order total it previously held.
+      prisma.order.aggregate({
+        where: {
+          ...settledOrderWhere,
+          createdAt: { gte: startOfDayInTimezone(new Date(), restaurant.timezone) },
+        },
+        _sum: { total: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const totalRevenue = roundMoney(allTimeAgg._sum.total ?? 0);
+    const allTimeOrdersCount = allTimeAgg._count._all;
+    const todayOrdersCount = todayAgg._count._all;
+    const todayRevenue = roundMoney(todayAgg._sum.total ?? 0);
+    const averageOrderValue = allTimeOrdersCount > 0
+      ? Math.round(totalRevenue / allTimeOrdersCount)
+      : 0;
+
+    const [pendingOrdersCount, preparingOrdersCount, readyOrdersCount,
+      totalTablesCount, activeTablesCount, pendingWaitersCount] = await Promise.all([
+      prisma.order.count({ where: { restaurantId, status: 'PENDING' } }),
+      prisma.order.count({ where: { restaurantId, status: 'PREPARING' } }),
+      prisma.order.count({ where: { restaurantId, status: 'READY' } }),
+      prisma.table.count({ where: { restaurantId } }),
+      prisma.table.count({
+        where: { restaurantId, status: { in: ['OCCUPIED', 'BILL_REQUESTED'] } },
+      }),
+      prisma.waiterRequest.count({ where: { restaurantId, status: 'PENDING' } }),
+    ]);
+
+    // Popular products: GROUP BY the snapshot name inside the database and
+    // return only the top 5 — no full order-item scan into Node.
+    const popularRows = await prisma.orderItem.groupBy({
+      by: ['productNameSnapshot'],
+      where: { order: { restaurantId, status: { not: 'CANCELLED' } } },
+      _sum: { quantity: true, totalPrice: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: 5,
     });
-
-    const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
-    const todayOrdersCount = validOrders.length;
-    const averageOrderValue = todayOrdersCount > 0 ? Math.round(totalRevenue / todayOrdersCount) : 0;
-
-    const pendingOrdersCount = await prisma.order.count({ where: { restaurantId, status: 'PENDING' } });
-    const preparingOrdersCount = await prisma.order.count({ where: { restaurantId, status: 'PREPARING' } });
-    const readyOrdersCount = await prisma.order.count({ where: { restaurantId, status: 'READY' } });
-
-    const totalTablesCount = await prisma.table.count({ where: { restaurantId } });
-    const activeTablesCount = await prisma.table.count({
-      where: {
-        restaurantId,
-        status: { in: ['OCCUPIED', 'BILL_REQUESTED'] },
-      },
-    });
-
-    const pendingWaitersCount = await prisma.waiterRequest.count({
-      where: { restaurantId, status: 'PENDING' },
-    });
-
-    // Compute popular products from OrderItem snapshots
-    const orderItems = await prisma.orderItem.findMany({
-      where: {
-        order: { restaurantId, status: { not: 'CANCELLED' } },
-      },
-    });
-
-    const productMap = new Map<string, { name: string; count: number; revenue: number }>();
-    orderItems.forEach((item) => {
-      const name = item.productNameSnapshot;
-      const curr = productMap.get(name) || { name, count: 0, revenue: 0 };
-      curr.count += item.quantity;
-      curr.revenue += item.totalPrice;
-      productMap.set(name, curr);
-    });
-
-    const popularProducts = Array.from(productMap.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+    const popularProducts = popularRows
+      .filter((r) => r.productNameSnapshot)
+      .map((r) => ({
+        name: r.productNameSnapshot,
+        count: r._sum.quantity ?? 0,
+        revenue: roundMoney(r._sum.totalPrice ?? 0),
+      }));
 
     return res.json({
       success: true,
@@ -254,6 +277,7 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
         subscription: restaurant.subscription,
         plan: restaurant.subscription?.plan,
         totalRevenue,
+        todayRevenue,
         todayOrdersCount,
         activeTablesCount,
         totalTablesCount,
@@ -693,6 +717,7 @@ router.post(
 router.post(
   '/tables/:id/settle',
   requireCashierOrManager(),
+  paymentLimiter,
   validateBody(tableSettleSchema),
   async (req: Request, res: Response) => {
   try {
@@ -703,7 +728,17 @@ router.post(
     if (!ownTenant(req, table.restaurantId)) return deny(req, res);
 
     const now = new Date();
-    const { paymentMethod, note } = req.body as { paymentMethod?: string; note?: string };
+    const {
+      paymentMethod,
+      note,
+      cashReceived,
+      tip,
+    } = req.body as {
+      paymentMethod?: string;
+      note?: string;
+      cashReceived?: number;
+      tip?: number;
+    };
     const paidMethod = paymentMethod || 'CASH';
 
     // Find active/unpaid orders on this table
@@ -723,100 +758,141 @@ router.post(
       const total = roundMoney(unpaidOrders.reduce((sum, o) => sum + o.total, 0));
       const subtotal = roundMoney(unpaidOrders.reduce((sum, o) => sum + o.subtotal, 0));
 
-      const seq = (await prisma.payment.count({ where: { restaurantId: table.restaurantId } })) + 1;
-      const receiptNumber = `RC-${now.getFullYear()}-${String(seq).padStart(4, '0')}`;
+      // Cash reconciliation: CASH requires sufficient tendered cash and the
+      // change is computed server-side, never supplied/trusted from the client.
+      // Legacy callers that omit cashReceived keep the exact-cash behaviour.
+      const reconciliation = reconcileCashPayment({
+        method: paidMethod,
+        total,
+        tip: tip ?? 0,
+        cashReceived:
+          paidMethod === 'CASH'
+            ? cashReceived === undefined
+              ? total // legacy quick-settle: assume exact cash
+              : cashReceived
+            : undefined,
+      });
+      if (!reconciliation.ok) {
+        return res.status(400).json({ success: false, error: reconciliation.error, statusCode: 400 });
+      }
 
-      // Mark orders as PAID, SERVED and record official Payment receipt in ledger
-      paymentRecord = await prisma.$transaction(async (tx) => {
-        await tx.order.updateMany({
-          where: {
-            id: { in: unpaidOrders.map((o) => o.id) },
-            restaurantId: table.restaurantId,
-          },
-          data: {
-            status: 'SERVED',
-            paymentStatus: 'PAID',
-            paymentMethod: paidMethod,
-            settledAt: now,
-            cashierId: req.user!.id,
-          },
+      // Receipt allocation retries on unique receipt-number collisions (concurrent POS).
+      let receiptError: unknown = null;
+      let settled = false;
+      for (let attempt = 0; attempt < 5 && !settled; attempt++) {
+        try {
+          const seq =
+            (await prisma.payment.count({ where: { restaurantId: table.restaurantId } })) +
+            1 +
+            attempt;
+          const receiptNumber = `RC-${now.getFullYear()}-${String(seq).padStart(4, '0')}`;
+
+          paymentRecord = await prisma.$transaction(async (tx) => {
+            // Conditional claim: only rows that are STILL UNPAID flip. A
+            // concurrent settle/payment (double click, two cashiers) claims
+            // zero rows here and gets a 409 instead of producing a duplicate
+            // receipt and a double-posted ledger entry.
+            const claimed = await tx.order.updateMany({
+              where: {
+                id: { in: unpaidOrders.map((o) => o.id) },
+                restaurantId: table.restaurantId,
+                status: { not: 'CANCELLED' },
+                paymentStatus: 'UNPAID',
+              },
+              data: {
+                status: 'SERVED',
+                paymentStatus: 'PAID',
+                paymentMethod: paidMethod,
+                settledAt: now,
+                cashierId: req.user!.id,
+              },
+            });
+            if (claimed.count !== unpaidOrders.length) {
+              throw Object.assign(new Error('SETTLE_RACE'), { code: 'SETTLE_RACE' });
+            }
+
+            const receipt = await tx.payment.create({
+              data: {
+                id: `pay-${randomUUID()}`,
+                receiptNumber,
+                restaurantId: table.restaurantId,
+                branchId: table.branchId || undefined,
+                tableId: id,
+                tableLabel: `طاولة ${table.number}`,
+                orderIds: unpaidOrders.map((o) => o.id),
+                itemsSummary: unpaidOrders
+                  .flatMap((o) => o.items.map((i) => i.productNameSnapshot))
+                  .slice(0, 4)
+                  .join('، '),
+                method: paidMethod,
+                subtotal,
+                total,
+                cashReceived:
+                  paidMethod === 'CASH' && reconciliation.cashReceived !== null
+                    ? reconciliation.cashReceived
+                    : undefined,
+                changeDue: reconciliation.changeDue > 0 ? reconciliation.changeDue : 0,
+                tip: reconciliation.tip > 0 ? reconciliation.tip : undefined,
+                cashierId: req.user!.id,
+                cashierName: req.user!.name,
+                note: note || 'تسوية إغلاق الطاولة وإثبات الدفع',
+              },
+            });
+
+            // Reset table status and resolve waiter calls inside the SAME
+            // transaction so a receipt can never exist without the table closing.
+            await tx.table.update({
+              where: { id },
+              data: { status: 'AVAILABLE', hasWaiterCall: false, lastActivityAt: now },
+            });
+            await tx.tableSession.updateMany({
+              where: { tableId: id, restaurantId: table.restaurantId, status: 'ACTIVE' },
+              data: { status: 'CLOSED', endedAt: now },
+            });
+            await tx.waiterRequest.updateMany({
+              where: { tableId: id, restaurantId: table.restaurantId, status: 'PENDING' },
+              data: { status: 'RESOLVED', resolvedAt: now },
+            });
+
+            return receipt;
+          });
+          settled = true;
+        } catch (txErr: unknown) {
+          const code = (txErr as { code?: string })?.code;
+          if (code === 'SETTLE_RACE') {
+            return res.status(409).json({
+              success: false,
+              error: 'تمت تسوية هذا الحساب للتو من جهاز آخر. حدّث الصفحة وحاول مجدداً.',
+              statusCode: 409,
+            });
+          }
+          receiptError = txErr;
+          if (code !== 'P2002') throw txErr;
+        }
+      }
+      if (!settled || !paymentRecord) {
+        console.error('Table settle receipt allocation failed:', receiptError);
+        return res.status(500).json({ success: false, error: 'تعذر إتمام التسوية، حاول مجدداً', statusCode: 500 });
+      }
+    } else {
+      // Nothing unpaid on the table — still perform the idempotent close
+      // (free table / close session / resolve calls), but never create a
+      // duplicate payment receipt for an already-paid bill.
+      await prisma.$transaction(async (tx) => {
+        await tx.table.update({
+          where: { id },
+          data: { status: 'AVAILABLE', hasWaiterCall: false, lastActivityAt: now },
         });
-
-        return tx.payment.create({
-          data: {
-            id: `pay-${randomUUID()}`,
-            receiptNumber,
-            restaurantId: table.restaurantId,
-            branchId: table.branchId || undefined,
-            tableId: id,
-            tableLabel: `طاولة ${table.number}`,
-            orderIds: unpaidOrders.map((o) => o.id),
-            itemsSummary: unpaidOrders
-              .flatMap((o) => o.items.map((i) => i.productNameSnapshot))
-              .slice(0, 4)
-              .join('، '),
-            method: paidMethod,
-            subtotal,
-            total,
-            cashReceived: paidMethod === 'CASH' ? total : undefined,
-            changeDue: 0,
-            cashierId: req.user!.id,
-            cashierName: req.user!.name,
-            note: note || 'تسوية إغلاق الطاولة وإثبات الدفع',
-          },
+        await tx.tableSession.updateMany({
+          where: { tableId: id, restaurantId: table.restaurantId, status: 'ACTIVE' },
+          data: { status: 'CLOSED', endedAt: now },
+        });
+        await tx.waiterRequest.updateMany({
+          where: { tableId: id, restaurantId: table.restaurantId, status: 'PENDING' },
+          data: { status: 'RESOLVED', resolvedAt: now },
         });
       });
     }
-
-    // Mark remaining non-cancelled active orders as SERVED and PAID
-    await prisma.order.updateMany({
-      where: {
-        tableId: id,
-        restaurantId: table.restaurantId,
-        status: { in: ['PENDING', 'PREPARING', 'READY'] },
-      },
-      data: {
-        status: 'SERVED',
-        paymentStatus: 'PAID',
-        settledAt: now,
-        cashierId: req.user!.id,
-      },
-    });
-
-    // Reset table status and resolve waiter calls
-    await prisma.table.update({
-      where: { id },
-      data: {
-        status: 'AVAILABLE',
-        hasWaiterCall: false,
-        lastActivityAt: now,
-      },
-    });
-
-    // Close the active anonymous table session
-    await prisma.tableSession.updateMany({
-      where: {
-        tableId: id,
-        restaurantId: table.restaurantId,
-        status: 'ACTIVE',
-      },
-      data: {
-        status: 'CLOSED',
-        endedAt: now,
-      },
-    });
-
-    await prisma.waiterRequest.updateMany({
-      where: {
-        tableId: id,
-        restaurantId: table.restaurantId,
-        status: 'PENDING',
-      },
-      data: {
-        status: 'RESOLVED',
-        resolvedAt: now,
-      },
-    });
 
     await logAuditEvent({
       restaurantId: table.restaurantId,
@@ -827,6 +903,7 @@ router.post(
       entity: 'Table',
       entityId: id,
       details: `تمت تسوية ودفع طلبات الطاولة ${table.number} ${paymentRecord ? `(إيصال ${paymentRecord.receiptNumber})` : ''}`,
+      ipAddress: req.ip,
     });
 
     realtimeService.broadcastToTable(table.restaurantId, id, 'TABLE_SETTLED', { tableId: id });
@@ -1410,10 +1487,41 @@ router.get('/export/orders', requireManager(), async (req: Request, res: Respons
       });
     }
 
+    // Optional explicit range (ISO timestamps). Exports must never dump an
+    // unbounded result set into memory; a hard cap bounds the response.
+    const EXPORT_CAP = 10_000;
+    const dateWhere: { createdAt?: { gte?: Date; lte?: Date } } = {};
+    const from = typeof req.query.from === 'string' ? req.query.from : undefined;
+    const to = typeof req.query.to === 'string' ? req.query.to : undefined;
+    if (from) {
+      const d = new Date(from);
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ success: false, error: '\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0628\u062f\u0627\u064a\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d', statusCode: 400 });
+      }
+      dateWhere.createdAt = { ...dateWhere.createdAt, gte: d };
+    }
+    if (to) {
+      const d = new Date(to);
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ success: false, error: '\u062a\u0627\u0631\u064a\u062e \u0627\u0644\u0646\u0647\u0627\u064a\u0629 \u063a\u064a\u0631 \u0635\u0627\u0644\u062d', statusCode: 400 });
+      }
+      dateWhere.createdAt = { ...dateWhere.createdAt, lte: d };
+    }
+
+    const matchingCount = await prisma.order.count({
+      where: { restaurantId, ...dateWhere },
+    });
+    if (matchingCount > EXPORT_CAP) {
+      // Signals to operators the report is not exhaustive; narrow the range.
+      res.setHeader('X-Export-Truncated', '1');
+      res.setHeader('X-Export-Total-Matching', String(matchingCount));
+    }
+
     const orders = await prisma.order.findMany({
-      where: { restaurantId },
+      where: { restaurantId, ...dateWhere },
       include: { items: true },
       orderBy: { createdAt: 'desc' },
+      take: EXPORT_CAP,
     });
 
     // \uFEFF BOM keeps Arabic text readable in Excel; every cell is
@@ -1875,6 +1983,14 @@ router.put(
           code: b.code !== undefined ? b.code : undefined,
         },
       });
+      // Best-effort cleanup of a replaced offer image, AFTER the DB commit.
+      if (
+        b.image !== undefined &&
+        existing.image &&
+        b.image !== existing.image
+      ) {
+        void deleteManagedAssets(getStorage(), existing.restaurantId, [existing.image]);
+      }
       return res.json({ success: true, data: { offer: updated }, statusCode: 200 });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر تعديل العرض', statusCode: 500 });
@@ -1922,8 +2038,20 @@ router.get('/subscription', requireManager(), async (req: Request, res: Response
       where: { status: 'ACTIVE' },
       orderBy: [{ priceMonthly: 'asc' }, { id: 'asc' }],
     });
+    // Additive computed fields: effectiveStatus applies period-end / grace
+    // rules without mutating the stored row; clients may ignore these safely.
+    const effective = effectiveSubscriptionState(subscription);
+    const subscriptionWithState = subscription
+      ? {
+          ...subscription,
+          effectiveStatus: effective.effectiveStatus,
+          entitlementActive: effective.entitled,
+          daysRemaining: effective.daysRemaining,
+          daysPastDue: effective.daysPastDue,
+        }
+      : subscription;
     // trialDays is derived server-side so no client hardcodes the trial length.
-    return res.json({ success: true, data: { subscription, plans: plans.map(withTrialMeta) }, statusCode: 200 });
+    return res.json({ success: true, data: { subscription: subscriptionWithState, plans: plans.map(withTrialMeta) }, statusCode: 200 });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'تعذر استرجاع الاشتراك', statusCode: 500 });
   }
@@ -1955,6 +2083,42 @@ router.put(
         isPlatformActor: isPlatformUser(req),
       });
       if (!verdict.allowed) {
+        // 402 = a paid UPGRADE. There is no payment gateway, so the manager
+        // never receives the paid plan: the request is recorded as an audit
+        // event platform staff see in their overview/audit feed, and we
+        // answer 202 Accepted ("request received, pending approval"). Payment
+        // is settled out-of-band and a platform admin then activates the
+        // target plan (platform override below). 403 (free-trial self-grant)
+        // remains a hard rejection.
+        if (verdict.statusCode === 402) {
+          await logAuditEvent({
+            restaurantId,
+            userId: req.user!.id,
+            actor: req.user!.name,
+            actorRole: req.user!.role,
+            action: 'SUBSCRIPTION_UPGRADE_REQUESTED',
+            entity: 'Subscription',
+            entityId: restaurantId,
+            details: `طلب ترقية مدفوع إلى ${plan.name} (${planId}) بانتظار موافقة إدارة المنصة بعد التحقق من الدفع.`,
+            metadata: {
+              targetPlanId: plan.id,
+              targetPlanName: plan.name,
+              targetPriceMonthly: plan.priceMonthly,
+              requestedAt: new Date().toISOString(),
+            },
+            ipAddress: req.ip,
+          });
+          return res.status(202).json({
+            success: true,
+            data: {
+              pending: true,
+              requestStatus: 'PENDING_PLATFORM_APPROVAL',
+              requestedPlanId: plan.id,
+            },
+            message: verdict.reason,
+            statusCode: 202,
+          });
+        }
         await logAuditEvent({
           restaurantId,
           userId: req.user!.id,
@@ -1964,6 +2128,7 @@ router.put(
           entity: 'Subscription',
           entityId: restaurantId,
           details: `محاولة تغيير الباقة إلى ${plan.name} رُفضت: ${verdict.reason}`,
+          ipAddress: req.ip,
         });
         return res.status(verdict.statusCode).json({
           success: false,
@@ -1978,16 +2143,31 @@ router.put(
       // and entitlement gates take effect going forward. Blocking the change
       // here (or pruning data) would destroy a paying tenant's history, so we
       // intentionally allow it to proceed.
+      const platformActivation = isPlatformUser(req);
+      const now = new Date();
+      const freshPeriod = {
+        currentPeriodStart: now,
+        currentPeriodEnd: new Date(now.getTime() + 30 * 86400 * 1000),
+      };
       const subscription = await prisma.subscription.upsert({
         where: { restaurantId },
         create: {
           restaurantId,
           planId,
           status: 'ACTIVE',
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 86400 * 1000),
+          ...freshPeriod,
         },
-        update: { planId },
+        update: platformActivation
+          ? {
+              // Admin approval of an upgrade (out-of-band payment confirmed):
+              // open a fresh ACTIVE period and clear a PAST_DUE/CANCELLED
+              // state. Tenant self-downgrades never touch period or status.
+              planId,
+              status: 'ACTIVE',
+              cancelAtPeriodEnd: false,
+              ...freshPeriod,
+            }
+          : { planId },
       });
       await prisma.restaurant.update({
         where: { id: restaurantId },
@@ -2001,7 +2181,9 @@ router.put(
         action: 'PLAN_CHANGED',
         entity: 'Subscription',
         entityId: subscription.id,
-        details: `تم تغيير باقة الاشتراك إلى ${plan.name}`,
+        details: `تم تغيير باقة الاشتراك إلى ${plan.name}${platformActivation ? ' (تفعيل من إدارة المنصة)' : ''}`,
+        metadata: { targetPlanId: planId, platformActivation },
+        ipAddress: req.ip,
       });
       return res.json({ success: true, data: { subscription }, statusCode: 200 });
     } catch (err) {
@@ -2431,20 +2613,21 @@ router.post(
       if (total <= 0) return res.status(400).json({ success: false, error: 'قيمة الفاتورة صفرية', statusCode: 400 });
 
       const paidMethod = method;
-      const tipValue = roundMoney(Math.max(0, tip ?? 0));
-      // Cash payments must record sufficient tendered cash — a CASH payment
-      // with missing or short cash is rejected, never silently marked PAID.
-      if (paidMethod === 'CASH') {
-        if (cashReceived === undefined || !Number.isFinite(cashReceived)) {
-          return res.status(400).json({ success: false, error: 'مبلغ المقبوض النقدي مطلوب للدفع النقدي', statusCode: 400 });
-        }
-        if (cashReceived < total + tipValue) {
-          return res.status(400).json({ success: false, error: 'المبلغ المقبوض أقل من قيمة الفاتورة', statusCode: 400 });
-        }
+      // Shared cash reconciliation: CASH requires sufficient tendered cash
+      // (missing/short payment is rejected, never silently marked PAID) and the
+      // change due is computed server-side. Identical rules to table settle.
+      const reconciliation = reconcileCashPayment({
+        method: paidMethod,
+        total,
+        tip: tip ?? 0,
+        cashReceived,
+      });
+      if (!reconciliation.ok) {
+        return res.status(400).json({ success: false, error: reconciliation.error, statusCode: 400 });
       }
-      const cashValue = paidMethod === 'CASH' ? roundMoney(cashReceived as number) : 0;
-      const changeValue =
-        paidMethod === 'CASH' ? roundMoney(cashValue - total - tipValue) : 0;
+      const tipValue = reconciliation.tip;
+      const cashValue = reconciliation.cashReceived ?? 0;
+      const changeValue = reconciliation.changeDue;
 
       const now = new Date();
 
@@ -2545,6 +2728,7 @@ router.post(
         entity: 'Payment',
         entityId: payment.id,
         details: `إيصال ${payment.receiptNumber} — ${payment.tableLabel} — ${total} (${paidMethod})`,
+        ipAddress: req.ip,
       });
 
       realtimeService.broadcastToTable(restaurantId, tableId, 'PAYMENT_RECORDED', {

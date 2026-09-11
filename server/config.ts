@@ -96,28 +96,48 @@ if (isProd && !env.DATABASE_URL) {
   );
 }
 
-// Upload durability guard. Object storage is the recommended production path.
-// If Supabase credentials are not yet supplied or STORAGE_DRIVER=local is used in production,
-// log a clear warning and fall back to local storage rather than crashing the boot process.
+// Upload durability guard — FAIL CLOSED in production.
+//
+// The previous implementation logged a warning and silently fell back from
+// `supabase` to local filesystem storage when credentials were missing. On
+// Render/Heroku-style hosts the local filesystem is EPHEMERAL, so that
+// "graceful" fallback silently destroyed every uploaded logo/cover/dish image
+// on the next restart/redeploy/instance replacement. A production boot with
+// non-durable storage is a data-loss bug waiting to happen, so it is refused:
+//
+//   STORAGE_DRIVER=supabase + missing SUPABASE_URL / SERVICE_ROLE_KEY -> throw
+//   STORAGE_DRIVER=local in production without an explicit persistent-volume
+//   opt-in (STORAGE_ALLOW_LOCAL_IN_PROD=true)                       -> throw
+//
+// Development and test keep defaulting to local storage with no warnings.
 let resolvedStorageDriver: 'local' | 'supabase' = storageDriver;
 
-if (resolvedStorageDriver === 'supabase') {
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.warn(
-      '⚠️  [STORAGE] WARNING: STORAGE_DRIVER=supabase was configured, but SUPABASE_URL or ' +
-        'SUPABASE_SERVICE_ROLE_KEY is missing. Falling back to local storage driver to prevent crash. ' +
-        'Note: uploaded images will not persist across redeployments until Supabase credentials are provided.'
-    );
-    resolvedStorageDriver = 'local';
+if (isProd) {
+  if (resolvedStorageDriver === 'supabase') {
+    const missing: string[] = [];
+    if (!env.SUPABASE_URL) missing.push('SUPABASE_URL');
+    if (!env.SUPABASE_SERVICE_ROLE_KEY) missing.push('SUPABASE_SERVICE_ROLE_KEY');
+    if (missing.length > 0) {
+      throw new Error(
+        `[STORAGE] STORAGE_DRIVER=supabase is selected but ${missing.join(' and ')} ` +
+          'is missing. Refusing to start in production: falling back to local/ephemeral storage ' +
+          'would silently lose uploaded images on restart or redeploy. Configure the Supabase ' +
+          'credentials (and public bucket "restaurant-assets"), or set STORAGE_DRIVER=local with ' +
+          'STORAGE_ALLOW_LOCAL_IN_PROD=true ONLY for a self-hosted deployment with a mounted ' +
+          'persistent volume.'
+      );
+    }
   }
-}
 
-if (resolvedStorageDriver === 'local' && isProd && env.STORAGE_ALLOW_LOCAL_IN_PROD !== 'true') {
-  console.warn(
-    '⚠️  [STORAGE] WARNING: STORAGE_DRIVER=local is active in production without STORAGE_ALLOW_LOCAL_IN_PROD=true. ' +
-      'Uploaded files are stored on an ephemeral filesystem and will be lost on redeploy/restart. ' +
-      'Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (and STORAGE_DRIVER=supabase) for persistent object storage.'
-  );
+  if (resolvedStorageDriver === 'local' && env.STORAGE_ALLOW_LOCAL_IN_PROD !== 'true') {
+    throw new Error(
+      '[STORAGE] STORAGE_DRIVER=local is selected in production. Local filesystem storage is ' +
+        'ephemeral on most hosts (images are lost on restart/redeploy/scale-out). Refusing to ' +
+        'start. Set STORAGE_DRIVER=supabase with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or ' +
+        'explicitly set STORAGE_ALLOW_LOCAL_IN_PROD=true for a self-hosted deployment that mounts ' +
+        'a persistent volume at UPLOAD_DIR.'
+    );
+  }
 }
 
 export const config = {
@@ -133,6 +153,7 @@ export const config = {
   supabaseUrl: env.SUPABASE_URL,
   supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   supabaseBucket: env.SUPABASE_STORAGE_BUCKET,
+  storageAllowLocalInProd: env.STORAGE_ALLOW_LOCAL_IN_PROD === 'true',
 } as const;
 
 export const JWT_ISSUER = 'mureeh-api';

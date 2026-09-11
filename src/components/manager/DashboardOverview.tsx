@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { api } from '../../services/api';
 import { formatPrice, formatRelativeMinutes, getOrderStatusConfig } from '../../utils/formatting';
 import {
   TrendingUp,
@@ -20,19 +21,58 @@ interface DashboardOverviewProps {
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigateTab }) => {
-  const { orders, tables, waiterRequests, updateOrderStatus, resolveWaiterRequest } = useRestaurant();
+  const { orders, tables, waiterRequests, updateOrderStatus, resolveWaiterRequest, currentUser, currentRestaurant } =
+    useRestaurant();
+
+  // Authoritative, SQL-aggregated metrics from the server. The in-memory
+  // orders list is paginated/capped, so totals computed from it under-report;
+  // server values replace the local sums whenever they load, and the local
+  // computation remains only as a graceful fallback (e.g. transient errors).
+  const [serverStats, setServerStats] = useState<{
+    todayRevenue: number | null;
+    todayOrdersCount: number | null;
+    activeTablesCount: number | null;
+    totalTablesCount: number | null;
+  } | null>(null);
+
+  const isManager = currentUser?.role === 'RESTAURANT_MANAGER' || currentUser?.role === 'PLATFORM_ADMIN';
+
+  useEffect(() => {
+    if (!currentUser || !currentRestaurant?.id || !isManager) return;
+    let cancelled = false;
+    api.getManagerDashboardStats(currentUser, currentRestaurant.id).then((res) => {
+      if (!cancelled && res.success && res.data) {
+        setServerStats({
+          todayRevenue: res.data.todayRevenue,
+          todayOrdersCount: res.data.todayOrdersCount,
+          activeTablesCount: res.data.activeTablesCount,
+          totalTablesCount: res.data.totalTablesCount,
+        });
+      }
+    }).catch(() => {
+      /* fallback metrics remain in place */
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Fetch once per tenant view; the 10s background sync refreshes live lists.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentRestaurant?.id]);
 
   // Metrics
-  const totalRevenue = orders
+  const localRevenue = orders
     .filter((o) => o.status !== 'CANCELLED')
     .reduce((sum, o) => sum + o.total, 0);
+  const totalRevenue = serverStats?.todayRevenue ?? localRevenue;
 
   const pendingOrders = orders.filter((o) => o.status === 'PENDING');
   const preparingOrders = orders.filter((o) => o.status === 'PREPARING');
   const readyOrders = orders.filter((o) => o.status === 'READY');
   const servedOrders = orders.filter((o) => o.status === 'SERVED');
 
-  const occupiedTables = tables.filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED');
+  const occupiedTablesLocal = tables.filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED');
+  const occupiedTablesCount = serverStats?.activeTablesCount ?? occupiedTablesLocal.length;
+  const totalTablesCount = serverStats?.totalTablesCount ?? 50;
   const pendingWaiters = waiterRequests.filter((w) => w.status === 'PENDING');
 
   // Recent activity feed combining orders & waiter calls
@@ -102,7 +142,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
               {formatPrice(totalRevenue)}
             </div>
             <div className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
-              <span>{orders.length} طلبات مسجلة</span>
+              <span>{serverStats?.todayOrdersCount ?? orders.length} طلبات اليوم</span>
             </div>
           </div>
         </div>
@@ -120,8 +160,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-luxury-50 font-sans flex items-baseline gap-1.5">
-              <span>{occupiedTables.length}</span>
-              <span className="text-xs text-luxury-400 font-normal">/ 50 طاولة</span>
+              <span>{occupiedTablesCount}</span>
+              <span className="text-xs text-luxury-400 font-normal">/ {totalTablesCount} طاولة</span>
             </div>
             <div className="text-[11px] text-luxury-400 mt-1 group-hover:text-gold-400 transition-colors flex items-center gap-1">
               <span>عرض الخريطة الكاملة</span>
