@@ -206,7 +206,7 @@ export const requireCashierOrManager = () =>
   requireRole('RESTAURANT_MANAGER', 'CASHIER');
 // KDS / service operations: order + waiter-request status updates.
 export const requireServiceStaff = () =>
-  requireRole('RESTAURANT_MANAGER', 'CASHIER', 'WAITER', 'KITCHEN');
+  requireRole('RESTAURANT_MANAGER', 'CASHIER', 'WAITER', 'KITCHEN', 'STAFF');
 
 /**
  * Tenant-access guard for routes that resolve their target tenant from the
