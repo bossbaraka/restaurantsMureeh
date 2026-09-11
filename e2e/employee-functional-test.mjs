@@ -14,10 +14,14 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 const require = createRequire(import.meta.url);
-const { PrismaClient } = require('/home/user/restaurantsMureeh/node_modules/.prisma/client/index.js');
+const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
 const { seed, PASSWORD, PINS } = await import('./seed-test-data.mjs');
 
-const prisma = new PrismaClient({ log: ['error'] });
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+  log: ['error'],
+});
 const BASE = process.env.API_BASE || 'http://127.0.0.1:3001';
 const JWT_SECRET = process.env.JWT_SECRET || 'employee-functional-test-secret-key-32chars-min-0001';
 
@@ -105,6 +109,50 @@ const FIX = { created: {} };
 
 let orderSeq = 100000;
 let tableSeq = 0;
+// ===========================================================================
+// Strict state-machine helpers
+// ---------------------------------------------------------------------------
+// The product enforces a strict state machine at the API boundary:
+//   orders:        PENDING → PREPARING → READY → SERVED
+//   waiter calls:  PENDING → ACKNOWLEDGED → RESOLVED
+// Same-status repeats are idempotent; skips/reversals are rejected with 409 by
+// design. These helpers walk fixtures through VALID transitions so permission
+// checks never collide with transition rules.
+// ===========================================================================
+const ORDER_NEXT = { PENDING: 'PREPARING', PREPARING: 'READY', READY: 'SERVED', SERVED: 'SERVED', CANCELLED: 'CANCELLED' };
+const WAITER_NEXT = { PENDING: 'ACKNOWLEDGED', ACKNOWLEDGED: 'RESOLVED', RESOLVED: 'RESOLVED', CANCELLED: 'CANCELLED' };
+
+async function nextOrderStatus(id) {
+  const o = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+  return { status: (o && ORDER_NEXT[o.status]) || 'PREPARING' };
+}
+async function nextWaiterRequestStatus(id) {
+  const w = await prisma.waiterRequest.findUnique({ where: { id }, select: { status: true } });
+  return { status: (w && WAITER_NEXT[w.status]) || 'ACKNOWLEDGED' };
+}
+async function walkOrderTo(id, target, token) {
+  for (let guard = 0; guard < 4; guard++) {
+    const o = await prisma.order.findUnique({ where: { id }, select: { status: true } });
+    if (!o || o.status === target || !ORDER_NEXT[o.status] || ORDER_NEXT[o.status] === o.status) return o?.status;
+    const res = await call('PUT', `/api/manager/orders/${encodeURIComponent(id)}/status`, {
+      token, body: { status: ORDER_NEXT[o.status] },
+    });
+    if (res.status !== 200) return o.status;
+  }
+  return (await prisma.order.findUnique({ where: { id }, select: { status: true } }))?.status;
+}
+async function walkWaiterRequestTo(id, target, token) {
+  for (let guard = 0; guard < 3; guard++) {
+    const w = await prisma.waiterRequest.findUnique({ where: { id }, select: { status: true } });
+    if (!w || w.status === target || !WAITER_NEXT[w.status] || WAITER_NEXT[w.status] === w.status) return w?.status;
+    const res = await call('PUT', `/api/manager/waiter-requests/${id}/status`, {
+      token, body: { status: WAITER_NEXT[w.status] },
+    });
+    if (res.status !== 200) return w.status;
+  }
+  return (await prisma.waiterRequest.findUnique({ where: { id }, select: { status: true } }))?.status;
+}
+
 async function makeFixtures(tag) {
   const a = ctx.restaurantA.id;
   const nextNum = () => (orderSeq += 1);
@@ -179,7 +227,7 @@ function matrixEndpoints(f) {
     },
     {
       id: 'PUT /orders/:id/status', cat: 'Orders', method: 'PUT', path: () => `/api/manager/orders/${encodeURIComponent(f.order.id)}/status`,
-      allow: SERVICE_ROLES_WITH_STAFF, body: () => ({ status: 'PREPARING' }), platformTenantInBody: true,
+      allow: SERVICE_ROLES_WITH_STAFF, body: () => nextOrderStatus(f.order.id), platformTenantInBody: true,
     },
     // --- tables ----------------------------------------------------------------
     { id: 'GET /tables', cat: 'Tables', method: 'GET', path: '/api/manager/tables', allow: ALL_TENANT_ROLES },
@@ -242,7 +290,7 @@ function matrixEndpoints(f) {
     {
       id: 'PUT /waiter-requests/:id/status', cat: 'Waiter Requests', method: 'PUT',
       path: () => `/api/manager/waiter-requests/${f.waiterReq.id}/status`, allow: SERVICE_ROLES_WITH_STAFF,
-      body: () => ({ status: 'ACKNOWLEDGED' }),
+      body: () => nextWaiterRequestStatus(f.waiterReq.id),
     },
     // --- reports / export ------------------------------------------------------
     { id: 'GET /export/orders', cat: 'Reports', method: 'GET', path: '/api/manager/export/orders', allow: MANAGER_ONLY },
@@ -345,7 +393,7 @@ function tinyPngBytes() {
 
 async function runMatrixEndpointForRole(ep, role, token) {
   let path = typeof ep.path === 'function' ? ep.path() : ep.path;
-  let body = ep.body ? ep.body() : undefined;
+  let body = ep.body ? await ep.body() : undefined;
 
   // DELETE /uploads/delete is a real deletion: only a tenant-owned URL can be
   // removed (a foreign/unknown path is 403 by design). Upload a fresh asset
@@ -581,7 +629,7 @@ async function phaseMatrix(tokens) {
     const sep = path.includes('?') ? '&' : '?';
     path = `${path}${sep}restaurantId=${ctx.restaurantA.id}`;
     let body = ep.body
-      ? (ep.platformTenantInBody ? { restaurantId: ctx.restaurantA.id, ...ep.body() } : ep.body())
+      ? (ep.platformTenantInBody ? { restaurantId: ctx.restaurantA.id, ...(await ep.body()) } : await ep.body())
       : undefined;
     let options = { token: tokens.PLATFORM_ADMIN };
     if (ep.id === 'POST /uploads/delete') {
@@ -769,6 +817,12 @@ async function phaseStaff(tokens) {
 
   // STAFF scope (AuthContext.tsx:42 + TABLE_STATUS_WRITE_ROLES): order status,
   // table status and waiter calls are exactly the three allowed writes.
+  // The product state machine is strict (PENDING→PREPARING→READY→SERVED,
+  // PENDING→ACKNOWLEDGED→RESOLVED), so walk fixtures through the valid
+  // transitions first; the assertions below then prove the idempotent repeat
+  // and the table-status write both succeed for STAFF.
+  await walkOrderTo(f.order.id, 'READY', staff);
+  await walkWaiterRequestTo(f.waiterReq.id, 'RESOLVED', staff);
   const serviceWrites = await Promise.all([
     call('PUT', `/api/manager/orders/${encodeURIComponent(f.order.id)}/status`, { token: staff, body: { status: 'READY' } }),
     call('PUT', `/api/manager/waiter-requests/${f.waiterReq.id}/status`, { token: staff, body: { status: 'RESOLVED' } }),
@@ -835,6 +889,7 @@ async function phaseCashier(tokens) {
   check('CASHIER', 'No duplicate order created by a single POST',
     new Set(dbOrders.map((o) => o.id)).size === dbOrders.length);
 
+  await walkOrderTo(dbOrders[0].id, 'SERVED', cashier); // PENDING→PREPARING→READY→SERVED
   const statusUpd = await call('PUT', `/api/manager/orders/${encodeURIComponent(dbOrders[0].id)}/status`, { token: cashier, body: { status: 'SERVED' } });
   check('CASHIER', 'Can update order status (cashier serves orders)', statusUpd.status === 200, `status=${statusUpd.status}`);
 

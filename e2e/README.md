@@ -46,50 +46,28 @@ npm test && npm run lint && npm run build           # repository regression
 **Restart the API server between harness runs.** The login/PIN rate limiters are
 in-process, so accumulated 429s would otherwise look like product failures.
 
-## 4. Sandbox-only: generating the Prisma client
+## 4. Restricted-network environments (no access to binaries.prisma.sh)
 
 On a normal machine `npx prisma generate` is enough and nothing below applies.
-Two sandbox limitations need a workaround:
 
-1. `binaries.prisma.sh` is unreachable, so the native query/schema engines cannot
-   be downloaded.
-2. The product schema does not enable the `driverAdapters` preview feature, so a
-   WASM-only client (which requires a driver adapter) must be generated from a
-   copy of the schema that does.
+The project runs Prisma 6 with `engineType = "client"` (WASM engine bundled in
+`@prisma/client`) and the official `@prisma/adapter-pg` driver adapter, so the
+**runtime never needs a native Prisma engine**. `prisma generate` still verifies
+the native engines are present in its cache, though — on restricted networks it
+fails and the project `postinstall` falls back automatically:
 
-```bash
-# a) add the preview feature to a throwaway copy of the schema
-node -e "const fs=require('fs');fs.mkdirSync('e2e/prisma',{recursive:true});\
-fs.writeFileSync('e2e/prisma/schema.prisma',fs.readFileSync('prisma/schema.prisma','utf8')\
-.replace('provider = \"prisma-client-js\"','provider = \"prisma-client-js\"\n  previewFeatures = [\"driverAdapters\"]\n  output = \"./../../node_modules/.prisma/client\"'))"
+    prisma generate || node scripts/prisma-engine-cache-seed.mjs && prisma generate
 
-# b) point Prisma at dummy engine files so it never downloads
-mkdir -p /tmp/dummy-engine
-head -c 4096 /dev/urandom > /tmp/dummy-engine/libquery_engine-debian-openssl-3.0.x.so.node
-head -c 4096 /dev/urandom > /tmp/dummy-engine/schema-engine
-head -c 4096 /dev/urandom > /tmp/dummy-engine/query-engine
-chmod +x /tmp/dummy-engine/*
-
-PRISMA_QUERY_ENGINE_LIBRARY=/tmp/dummy-engine/libquery_engine-debian-openssl-3.0.x.so.node \
-PRISMA_SCHEMA_ENGINE_BINARY=/tmp/dummy-engine/schema-engine \
-PRISMA_MIGRATION_ENGINE_BINARY=/tmp/dummy-engine/schema-engine \
-PRISMA_QUERY_ENGINE_BINARY=/tmp/dummy-engine/query-engine \
-PRISMA_CLIENT_FORCE_WASM=1 npx prisma generate --schema e2e/prisma/schema.prisma
-
-# c) inject the pg driver adapter into the generated client
-npm i --no-save --ignore-scripts @prisma/adapter-pg@5.22.0 pg@8.11.3
-node e2e/patch-prisma-client.cjs
-```
-
-Always install with `--ignore-scripts` in the sandbox: the project's
-`postinstall` runs `prisma generate` (without the overrides above) and would
-overwrite the working client. Re-run step (c) after any install — `--no-save`
-installs are pruned by the next `npm install`.
+`scripts/prisma-engine-cache-seed.mjs` pre-seeds the fetch-engine cache with
+placeholder binaries (never executed, since the client uses the WASM engine),
+so generation and `npm install` succeed with no network access. Database
+migrations use `server/db/deploy-migrations.ts`, which replicates
+`prisma migrate deploy` with a direct SQL runner when the Prisma CLI cannot
+download its schema engine — identical tracking table, checksums, transactions
+and P3005 baselining.
 
 ## Caveats
 
-- `patch-prisma-client.cjs` only touches the **generated** artifact
-  (`node_modules/.prisma/client/index.js`); it never changes `src/` or `server/`.
 - Fixture credentials (`Mureeh#Test2026`, the PINs, the test JWT secret) are
   throwaway test values. Never reuse them in a real deployment.
 - Finding recorded by the suite: with a production build present in `dist/`, an

@@ -12,9 +12,13 @@ import { createRequire } from 'module';
 import bcrypt from 'bcryptjs';
 
 const require = createRequire(import.meta.url);
-const { PrismaClient } = require('/home/user/restaurantsMureeh/node_modules/.prisma/client/index.js');
+const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
 
-const prisma = new PrismaClient({ log: ['error'] });
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+  log: ['error'],
+});
 
 export const PASSWORD = 'Mureeh#Test2026';
 export const PINS = { waiter: '1111', staff: '2222', cashier: '3333', kitchen: '4444' };
