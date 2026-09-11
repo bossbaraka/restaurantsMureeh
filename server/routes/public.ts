@@ -665,7 +665,7 @@ router.post(
       // A retry after a lost response returns the authoritative original order
       // instead of opening a second kitchen ticket.
       const replayedOrder = await prisma.order.findUnique({
-        where: { clientRequestId: effectiveClientRequestId },
+        where: { restaurantId_clientRequestId: { restaurantId, clientRequestId: effectiveClientRequestId } },
         include: { items: true },
       });
       if (replayedOrder) {
@@ -880,7 +880,7 @@ router.post(
           lastError = createErr;
           if ((createErr as { code?: string })?.code !== 'P2002') throw createErr;
           const replay = await prisma.order.findUnique({
-            where: { clientRequestId: effectiveClientRequestId },
+            where: { restaurantId_clientRequestId: { restaurantId, clientRequestId: effectiveClientRequestId } },
             include: { items: true },
           });
           if (replay) {

@@ -859,10 +859,11 @@ class RestaurantApiService {
     restaurantId: string,
     tableId: string,
     items: Order['items'],
+    clientRequestId: string,
     notes?: string
   ): Promise<ApiResponse<{ order: Order }>> {
     const res = await this.request<any>('POST', '/manager/orders', {
-      body: { restaurantId, tableId, items, notes },
+      body: { restaurantId, tableId, items, clientRequestId, notes },
     });
     if (res.success && res.data?.order) {
       return { success: true, data: { order: mapOrderRow(res.data.order) }, statusCode: 201 };

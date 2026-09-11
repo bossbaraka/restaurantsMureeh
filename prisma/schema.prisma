@@ -330,7 +330,7 @@ model Order {
   session               TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   // Client-generated UUID makes customer order submission safely replayable
   // after a timeout/response loss without creating a second kitchen ticket.
-  clientRequestId       String?            @unique
+  clientRequestId       String             @default(dbgenerated("gen_random_uuid()"))
   status                OrderStatus       @default(PENDING)
   paymentMethod         String            @default("PAY AT CASHIER")
   paymentStatus         String            @default("UNPAID") // UNPAID | PAID
@@ -347,6 +347,7 @@ model Order {
 
   items                 OrderItem[]
 
+  @@unique([restaurantId, clientRequestId])
   @@index([restaurantId])
   @@index([tableId])
   @@index([status])

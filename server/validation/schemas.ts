@@ -490,6 +490,7 @@ export const posOrderSchema = z
   .object({
     restaurantId: idSchema.optional(),
     tableId: idSchema,
+    clientRequestId: z.string().uuid('معرّف إرسال طلب الكاشير غير صالح').optional(),
     items: z
       .array(
         z

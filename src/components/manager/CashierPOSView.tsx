@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
-import { api } from '../../services/api';
+import { api, newClientRequestId } from '../../services/api';
 import { escapeHtml, formatPrice, formatTableNumber } from '../../utils/formatting';
 import {
   PaymentRecord,
@@ -71,6 +71,7 @@ export const CashierPOSView: React.FC = () => {
   const [note, setNote] = useState('');
   const [receipt, setReceipt] = useState<PaymentRecord | null>(null);
   const [processing, setProcessing] = useState(false);
+  const checkoutRequestRef = useRef<{ fingerprint: string; id: string } | null>(null);
 
   // --- Derived data ---
   const branchTables = useMemo(() => {
@@ -204,7 +205,18 @@ export const CashierPOSView: React.FC = () => {
       const cartItems = buildOrderItems();
       let createdOrderId: string | null = null;
       if (cartItems.length > 0) {
-        const orderRes = await api.createManagerOrder(currentUser, tenantId, tableId, cartItems, note || undefined);
+        const fingerprint = JSON.stringify({ tenantId, tableId, items: cartItems, notes: note || '' });
+        if (checkoutRequestRef.current?.fingerprint !== fingerprint) {
+          checkoutRequestRef.current = { fingerprint, id: newClientRequestId() };
+        }
+        const orderRes = await api.createManagerOrder(
+          currentUser,
+          tenantId,
+          tableId,
+          cartItems,
+          checkoutRequestRef.current.id,
+          note || undefined
+        );
         if (!orderRes.success || !orderRes.data) {
           showToast('error', 'تعذر إنشاء فاتورة الكاشير', orderRes.error);
           setProcessing(false);
@@ -237,6 +249,7 @@ export const CashierPOSView: React.FC = () => {
         showToast('error', 'فشل إتمام الدفع', payRes.error);
         return;
       }
+      checkoutRequestRef.current = null;
       setCart([]);
       setCheckoutOpen(false);
       setReceipt(payRes.data.payment);

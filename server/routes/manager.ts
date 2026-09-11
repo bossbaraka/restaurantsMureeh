@@ -364,7 +364,7 @@ router.post(
       const restaurantId = getTenantId(req);
       if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
 
-      const { tableId, items, notes } = req.body as {
+      const { tableId, items, notes, clientRequestId } = req.body as {
         tableId: string;
         items: Array<{
           productId: string;
@@ -374,7 +374,11 @@ router.post(
           notes?: string;
         }>;
         notes?: string;
+        clientRequestId?: string;
       };
+      // Optional only for rolling compatibility with already-open POS clients.
+      // Current clients always supply one stable UUID per logical checkout.
+      const effectiveClientRequestId = clientRequestId || randomUUID();
 
       const isWalkIn = tableId === '__WALKIN__';
       if (!isWalkIn) {
@@ -418,7 +422,47 @@ router.post(
       });
       const subtotal = roundMoney(pricedItems.reduce((sum, item) => sum + item.totalPrice, 0));
 
-      // Order-number allocation retries on unique collisions (concurrent POS).
+      const isSameLogicalRequest = (order: {
+        tableId: string;
+        notes: string | null;
+        items: Array<{
+          productId: string | null;
+          quantity: number;
+          removedIngredients: string[];
+          specialInstructions: string | null;
+        }>;
+      }) =>
+        order.tableId === tableId &&
+        (order.notes || '') === (notes || '') &&
+        order.items.length === pricedItems.length &&
+        order.items.every((saved, index) => {
+          const requested = pricedItems[index];
+          return saved.productId === requested.productId &&
+            saved.quantity === requested.quantity &&
+            JSON.stringify(saved.removedIngredients) === JSON.stringify(requested.removedIngredients) &&
+            (saved.specialInstructions || '') === (requested.specialInstructions || '');
+        });
+
+      const findReplay = () => prisma.order.findUnique({
+        where: {
+          restaurantId_clientRequestId: {
+            restaurantId,
+            clientRequestId: effectiveClientRequestId,
+          },
+        },
+        include: { items: true },
+      });
+
+      const existingRequest = await findReplay();
+      if (existingRequest) {
+        if (!isSameLogicalRequest(existingRequest)) {
+          return res.status(409).json({ success: false, error: 'معرّف الإرسال مستخدم لطلب مختلف', statusCode: 409 });
+        }
+        return res.status(200).json({ success: true, data: { order: existingRequest }, statusCode: 200 });
+      }
+
+      // Order-number allocation retries only genuine number collisions. The
+      // restaurant/request UUID constraint is resolved as an authoritative replay.
       const existingOrders = await prisma.order.findMany({
         where: { restaurantId },
         select: { id: true, numericId: true },
@@ -427,94 +471,90 @@ router.post(
       });
       const orderCount = await prisma.order.count({ where: { restaurantId } });
 
-      // Allocation only trusts the app's own "#<n>" id shape: legacy/imported
-      // rows (e.g. "order-A-<timestamp>") and out-of-range numericIds must
-      // never push the sequence past the Int4 ceiling of Order.numericId —
-      // that overflow used to 500 every order creation for the tenant.
       const MAX_ALLOCATABLE_NUM = 2_000_000_000;
       let maxNum = 1000;
       for (const ord of existingOrders) {
-        if (ord.numericId && ord.numericId > maxNum) {
-          maxNum = Math.min(ord.numericId, MAX_ALLOCATABLE_NUM);
-        }
+        if (ord.numericId && ord.numericId > maxNum) maxNum = Math.min(ord.numericId, MAX_ALLOCATABLE_NUM);
         const match = ord.id.match(/^#(\d+)$/);
         if (match) {
           const num = parseInt(match[1], 10);
-          if (!isNaN(num) && num > maxNum) {
-            maxNum = Math.min(num, MAX_ALLOCATABLE_NUM);
+          if (!isNaN(num) && num > maxNum) maxNum = Math.min(num, MAX_ALLOCATABLE_NUM);
+        }
+      }
+
+      const startNum = Math.max(1001, maxNum + 1, Math.min(orderCount + 1001, MAX_ALLOCATABLE_NUM));
+      const createOrder = (nextNum: number) => prisma.$transaction(async (tx) => {
+        const created = await tx.order.create({
+          data: {
+            id: `#${nextNum}`,
+            numericId: nextNum,
+            restaurantId,
+            tableId,
+            sessionId: null,
+            clientRequestId: effectiveClientRequestId,
+            status: 'PENDING',
+            paymentMethod: 'PAY AT CASHIER',
+            subtotal,
+            total: subtotal,
+            notes: notes || undefined,
+            items: { create: pricedItems },
+          },
+          include: { items: true },
+        });
+        if (!isWalkIn) {
+          await tx.table.update({
+            where: { id: tableId },
+            data: { status: 'OCCUPIED', lastActivityAt: new Date() },
+          });
+        }
+        return created;
+      });
+
+      let newOrder: Awaited<ReturnType<typeof createOrder>> | null = null;
+      let replayed = false;
+      let conflictingReplay = false;
+      let lastError: unknown = null;
+      for (let attempt = 0; attempt < 25 && !newOrder; attempt += 1) {
+        try {
+          newOrder = await createOrder(startNum + attempt);
+        } catch (createErr: unknown) {
+          lastError = createErr;
+          if ((createErr as { code?: string })?.code !== 'P2002') throw createErr;
+          const concurrentRequest = await findReplay();
+          if (concurrentRequest) {
+            conflictingReplay = !isSameLogicalRequest(concurrentRequest);
+            newOrder = concurrentRequest;
+            replayed = true;
+          }
+          // Otherwise this was an order-number collision; allocate the next number.
+        }
+      }
+
+      if (!newOrder) {
+        try {
+          newOrder = await createOrder(startNum + Math.floor(Math.random() * 90000) + 100);
+        } catch (fallbackErr) {
+          lastError = fallbackErr;
+          if ((fallbackErr as { code?: string })?.code === 'P2002') {
+            const concurrentRequest = await findReplay();
+            if (concurrentRequest) {
+              conflictingReplay = !isSameLogicalRequest(concurrentRequest);
+              newOrder = concurrentRequest;
+              replayed = true;
+            }
           }
         }
       }
 
-      const startNum = Math.max(
-        1001,
-        maxNum + 1,
-        Math.min(orderCount + 1001, MAX_ALLOCATABLE_NUM)
-      );
-
-      let newOrder: Awaited<ReturnType<typeof prisma.order.create>> | null = null;
-      let lastError: unknown = null;
-      for (let attempt = 0; attempt < 25 && !newOrder; attempt += 1) {
-        const nextNum = startNum + attempt;
-        const orderId = `#${nextNum}`;
-        try {
-          newOrder = await prisma.order.create({
-            data: {
-              id: orderId,
-              numericId: nextNum,
-              restaurantId,
-              tableId,
-              sessionId: null,
-              status: 'PENDING',
-              paymentMethod: 'PAY AT CASHIER',
-              subtotal,
-              total: subtotal,
-              notes: notes || undefined,
-              items: { create: pricedItems },
-            },
-            include: { items: true },
-          });
-        } catch (createErr: unknown) {
-          lastError = createErr;
-          if ((createErr as { code?: string })?.code !== 'P2002') throw createErr;
-        }
+      if (conflictingReplay) {
+        return res.status(409).json({ success: false, error: 'معرّف الإرسال مستخدم لطلب مختلف', statusCode: 409 });
       }
-
-      if (!newOrder) {
-        try {
-          const fallbackNum = startNum + Math.floor(Math.random() * 90000) + 100;
-          const fallbackOrderId = `#${fallbackNum}`;
-          newOrder = await prisma.order.create({
-            data: {
-              id: fallbackOrderId,
-              numericId: fallbackNum,
-              restaurantId,
-              tableId,
-              sessionId: null,
-              status: 'PENDING',
-              paymentMethod: 'PAY AT CASHIER',
-              subtotal,
-              total: subtotal,
-              notes: notes || undefined,
-              items: { create: pricedItems },
-            },
-            include: { items: true },
-          });
-        } catch (fallbackErr) {
-          lastError = fallbackErr;
-        }
-      }
-
       if (!newOrder) {
         console.error('POS order id allocation failed:', lastError);
         return res.status(500).json({ success: false, error: 'تعذر إنشاء فاتورة الكاشير، حاول مجدداً', statusCode: 500 });
       }
-
-      if (!isWalkIn) {
-        await prisma.table.update({
-          where: { id: tableId },
-          data: { status: 'OCCUPIED', lastActivityAt: new Date() },
-        });
+      if (replayed) {
+        return res.status(200).json({ success: true, data: { order: newOrder }, statusCode: 200 });
       }
 
       await logAuditEvent({

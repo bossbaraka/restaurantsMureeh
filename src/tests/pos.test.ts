@@ -93,7 +93,7 @@ describe('Cashier / POS & Payment — Live API Contract', () => {
     const res = await api.createManagerOrder(manager, 'rest-merar', 'rest-merar-T02', [
       { id: 'i1', productId: 'prod-sig-1', productName: 'تندرلوين بلاك أنغوس', quantity: 1, unitPrice: 135, totalPrice: 135 } as any,
       { id: 'i2', productId: 'prod-app-1', productName: 'مقبلات ملكية', quantity: 1, unitPrice: 85, totalPrice: 85 } as any,
-    ], 'ملاحظة كاشير');
+    ], '11111111-1111-4111-8111-111111111111', 'ملاحظة كاشير');
 
     expect(res.success).toBe(true);
     expect(res.data?.order.id).toBe('#2050');
@@ -107,6 +107,7 @@ describe('Cashier / POS & Payment — Live API Contract', () => {
     expect(body.restaurantId).toBe('rest-merar');
     expect(body.tableId).toBe('rest-merar-T02');
     expect(body.items).toHaveLength(2);
+    expect(body.clientRequestId).toBe('11111111-1111-4111-8111-111111111111');
     expect(body.notes).toBe('ملاحظة كاشير');
   });
 
@@ -117,7 +118,7 @@ describe('Cashier / POS & Payment — Live API Contract', () => {
 
     const res = await api.createManagerOrder(manager, 'rest-merar', '__WALKIN__', [
       { id: 'i3', productId: 'prod-sig-1', productName: 'تندرلوين', quantity: 2, unitPrice: 135, totalPrice: 270 } as any,
-    ]);
+    ], '22222222-2222-4222-8222-222222222222');
 
     expect(res.success).toBe(true);
     const body = parsedBody(lastCall());
