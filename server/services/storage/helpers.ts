@@ -20,6 +20,7 @@ export type StorageKind =
   | 'product'
   | 'category'
   | 'offer'
+  | 'map'
   | 'general';
 
 export const STORAGE_KINDS: readonly StorageKind[] = [
@@ -29,6 +30,7 @@ export const STORAGE_KINDS: readonly StorageKind[] = [
   'product',
   'category',
   'offer',
+  'map',
   'general',
 ];
 
@@ -39,6 +41,7 @@ const KIND_FOLDER: Record<StorageKind, string> = {
   product: 'products',
   category: 'categories',
   offer: 'offers',
+  map: 'map',
   general: 'misc',
 };
 

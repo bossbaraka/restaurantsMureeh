@@ -6,27 +6,25 @@ import { OrderStatus } from '../../types/restaurant';
 import { optimizeImageUrl } from './ProductImage';
 
 /**
- * Turn a manager-supplied promo-video link into an embeddable player source.
- * Handles every YouTube shape (`watch?v=`, `youtu.be`, `embed/`, `shorts/`),
- * Vimeo links, and direct MP4 files. Autoplay is muted so the browser's
- * autoplay policy actually lets the video start without a tap.
+ * Turn a manager-supplied promo-video link into an embeddable YouTube player
+ * source. Only well-formed YouTube links are accepted (watch?v=, youtu.be,
+ * embed/, shorts/, live/); anything else returns null so no arbitrary frame is
+ * ever rendered. Autoplay is muted so the browser's autoplay policy actually
+ * lets the video start without a tap.
  */
-function toEmbeddableVideo(url: string): { kind: 'youtube' | 'vimeo' | 'video'; src: string } | null {
+function toEmbeddableVideo(url: string): { kind: 'youtube'; src: string } | null {
   if (!url) return null;
   const yt = url.match(
-    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/
+    /(?:youtube\.com|youtube-nocookie\.com)\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)([A-Za-z0-9_-]{11})|youtu\.be\/([A-Za-z0-9_-]{11})/
   );
   if (yt) {
+    const id = yt[1] || yt[2];
     return {
       kind: 'youtube',
-      src: `https://www.youtube-nocookie.com/embed/${yt[1]}?autoplay=1&muted=1&rel=0`,
+      src: `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&muted=1&rel=0`,
     };
   }
-  if (/vimeo\.com/.test(url)) {
-    const id = url.split('/').pop() || '';
-    return { kind: 'vimeo', src: `https://player.vimeo.com/video/${id}?autoplay=1&muted=1` };
-  }
-  return { kind: 'video', src: url };
+  return null;
 }
 
 export const CustomerHero: React.FC = () => {
@@ -85,15 +83,7 @@ export const CustomerHero: React.FC = () => {
             {(() => {
               const embed = toEmbeddableVideo(promoVideo);
               if (!embed) return null;
-              return embed.kind === 'video' ? (
-                <video
-                  src={embed.src}
-                  controls
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-              ) : (
+              return (
                 <iframe
                   src={embed.src}
                   title="فيديو صالة المطعم"
@@ -137,7 +127,7 @@ export const CustomerHero: React.FC = () => {
                   <span>قائمة الطعام الرقمية — {restName}</span>
                 </div>
 
-                {promoVideo && (
+                {promoVideo && toEmbeddableVideo(promoVideo) && (
                   <button
                     onClick={() => setIsPlayingVideo(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600/90 hover:bg-red-500 text-white text-xs font-bold backdrop-blur-md shadow-lg transition-transform active:scale-95 cursor-pointer"

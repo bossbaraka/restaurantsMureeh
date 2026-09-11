@@ -98,10 +98,13 @@ describe('features are server-enforced by the plan', () => {
     expect(stats).toContain("restaurantHasEntitlement(restaurantId, 'CAN_USE_ANALYTICS')");
   });
 
-  it('blocks a plan downgrade/change that exceeds the target plan limits (incl. branches)', () => {
+  it('lets a downgrade proceed without deleting data (entitlements-only)', () => {
     const changePlan = managerRoutes.match(/router\.put\(\s*'\/subscription\/plan'[\s\S]*?\n\);/)?.[0] || '';
-    expect(changePlan).toContain('branchesCount > plan.maxBranches');
-    expect(changePlan).toContain('prisma.branch.count');
+    // The old hard rejection (blocking the change when existing rows exceed
+    // the target plan ceilings) is gone: a downgrade must change the plan
+    // binding only and never prune tenant history.
+    expect(changePlan).not.toContain('لا يمكن الترقية: بياناتك الحالية');
+    expect(changePlan).not.toContain('deleteMany');
   });
 
   it('surfaces the branch ceiling in the subscription usage meters', () => {

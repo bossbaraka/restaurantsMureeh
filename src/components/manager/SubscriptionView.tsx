@@ -18,6 +18,7 @@ import {
   Gift,
   Lock,
   Hourglass,
+  AlertTriangle,
 } from 'lucide-react';
 
 const PLAN_DETAIL_LINES: Record<string, string[]> = {
@@ -61,6 +62,8 @@ export const SubscriptionView: React.FC = () => {
   const [isChanging, setIsChanging] = useState(false);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [allPlans, setAllPlans] = useState<Plan[]>([]);
+  /** Lower-cost plan the owner picked but hasn't confirmed yet. */
+  const [pendingDowngradePlan, setPendingDowngradePlan] = useState<Plan | null>(null);
 
   const loadSubscription = () => {
     if (!currentRestaurant) return;
@@ -81,7 +84,24 @@ export const SubscriptionView: React.FC = () => {
 
   const currentPlan = subscription ? allPlans.find((p) => p.id === subscription?.planId) || null : null;
 
-  const handleSelectPlan = async (planId: string) => {
+  const performPlanChange = async (planId: string) => {
+    if (!currentRestaurant || isChanging) return;
+    setIsChanging(true);
+    const res = await api.changeSubscriptionPlan(currentRestaurant.id, planId);
+    setIsChanging(false);
+    if (!res.success || !res.data) {
+      showToast('error', 'تعذر تغيير الباقة', res.error || 'يرجى المحاولة لاحقاً');
+      return;
+    }
+    setSubscription(res.data.subscription);
+    refreshTenantData();
+    setIsUpgradeModalOpen(false);
+    setPendingDowngradePlan(null);
+    const nextPlan = allPlans.find((p) => p.id === planId);
+    showToast('success', 'تمت ترقية باقة الاشتراك بنجاح!', `أنت الآن على ${nextPlan?.name || 'الباقة الجديدة'}`);
+  };
+
+  const handleSelectPlan = (planId: string) => {
     if (!currentRestaurant || isChanging) return;
     // The free trial is a platform-admin grant — the server rejects it too.
     const target = allPlans.find((p) => p.id === planId);
@@ -97,18 +117,14 @@ export const SubscriptionView: React.FC = () => {
       showToast('error', '🔒 تنبيه النسخة التجريبية', 'لا يمكن تغيير الاشتراك في النسخة التجريبية. هذا الحساب مخصص فقط لاستعراض ميزات منصة مريح.');
       return;
     }
-    setIsChanging(true);
-    const res = await api.changeSubscriptionPlan(currentRestaurant.id, planId);
-    setIsChanging(false);
-    if (!res.success || !res.data) {
-      showToast('error', 'تعذر تغيير الباقة', res.error || 'يرجى المحاولة لاحقاً');
+    // Moving to a cheaper plan is a downgrade: warn the owner first so they
+    // understand they're losing the higher-tier features before we change.
+    const currentPrice = currentPlan?.priceMonthly ?? 0;
+    if (target && target.priceMonthly < currentPrice) {
+      setPendingDowngradePlan(target);
       return;
     }
-    setSubscription(res.data.subscription);
-    refreshTenantData();
-    setIsUpgradeModalOpen(false);
-    const nextPlan = allPlans.find((p) => p.id === planId);
-    showToast('success', 'تمت ترقية باقة الاشتراك بنجاح!', `أنت الآن على ${nextPlan?.name || 'الباقة الجديدة'}`);
+    void performPlanChange(planId);
   };
 
   const getStatusBadge = (status?: string) => {
@@ -471,6 +487,57 @@ export const SubscriptionView: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Downgrade warning — confirm before losing higher-tier features */}
+      {pendingDowngradePlan && (
+        <div className="fixed inset-0 z-[90] overflow-y-auto flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={() => setPendingDowngradePlan(null)} />
+
+          <div className="relative w-full max-w-md bg-luxury-900 border border-amber-500/50 rounded-2xl p-6 z-10 space-y-4" dir="rtl">
+            <div className="flex items-start gap-3">
+              <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-luxury-50 font-serif">تأكيد التخفيض إلى باقة أقل</h3>
+                <p className="text-xs text-luxury-400 mt-1 leading-relaxed">
+                  أنت على وشك التخفيض من{' '}
+                  <span className="font-bold text-luxury-200">{currentPlan?.name}</span> إلى{' '}
+                  <span className="font-bold text-amber-300">{pendingDowngradePlan.name}</span>.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-luxury-950/70 border border-luxury-800 p-4 space-y-2 text-[11px] text-luxury-300 leading-relaxed">
+              <p>
+                ⚠️ عند التأكيد ستفقد الميزات والصلاحيات المرتبطة بالباقة الأعلى (التحليلات، الفروع المتعددة،
+                تخصيص الهوية، تصدير التقارير، وغيرها).
+              </p>
+              <p className="text-emerald-300">
+                ✓ لن يتم حذف أي بيانات من مطعمك — ستبقى جميع طاولاتك وأطباقك وتصنيفاتك وفواتيرك محفوظة،
+                وستُخفى فقط العناصر التي تتجاوز حدود الباقة الجديدة.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <button
+                onClick={() => setPendingDowngradePlan(null)}
+                disabled={isChanging}
+                className="px-4 py-2.5 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-200 text-xs font-bold transition-colors cursor-pointer disabled:opacity-60"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={() => void performPlanChange(pendingDowngradePlan.id)}
+                disabled={isChanging}
+                className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-luxury-950 text-xs font-bold transition-colors cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
+              >
+                {isChanging ? 'جاري التأكيد...' : 'تأكيد التخفيض'}
+              </button>
             </div>
           </div>
         </div>

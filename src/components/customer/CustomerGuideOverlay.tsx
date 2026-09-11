@@ -1,34 +1,36 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   X,
   ArrowDown,
   ArrowRight,
   ArrowLeft,
   Search,
-  LayoutGrid,
   ShoppingBag,
   ChefHat,
-  Bell,
-  MapPin,
   Check,
   Sparkles,
 } from 'lucide-react';
 import { GUIDE_OPEN_EVENT } from './guideBus';
+import { useRestaurant } from '../../context/RestaurantContext';
 
 /**
  * Interactive customer onboarding tour.
  *
- * A first-run coach-mark walkthrough that points animated arrows at the real
- * controls of the menu screen (search, categories, cart, live-kitchen tracker,
- * waiter call, map) and explains each one in a tooltip. It is opened
- * automatically once per tab and can be re-opened at any time through
- * `openCustomerGuide()` (bound to the "دليل الاستخدام" button in the header).
+ * A coach-mark walkthrough that actually navigates the guest through the three
+ * screens of the ordering flow — menu → cart → order tracking — instead of
+ * merely pointing at controls on the first screen. Each step opens the right
+ * drawer (or returns to the menu), then highlights its target so the guest
+ * learns by seeing the real screen. It is opened automatically once per tab
+ * and can be re-opened at any time through `openCustomerGuide()` (bound to the
+ * "دليل الاستخدام" button in the header, on both desktop and mobile).
  */
 
 const GUIDE_SEEN_KEY = 'merar_customer_guide_seen';
 
 interface GuideStep {
   id: string;
+  /** Which customer screen this step belongs to (drives drawer open/close). */
+  screen: 'menu' | 'cart' | 'tracking';
   target: string; // CSS selector for the target element
   placement: 'top' | 'bottom' | 'left' | 'right';
   title: string;
@@ -38,52 +40,31 @@ interface GuideStep {
 
 const GUIDE_STEPS: GuideStep[] = [
   {
-    id: 'search',
+    id: 'menu',
+    screen: 'menu',
     target: '[data-guide="search"]',
     placement: 'bottom',
-    title: 'ابحث عن طبقك المفضل',
-    description: 'اكتب اسم الطبق أو مكوّناته هنا لتجده فوراً دون التنقل في القائمة كلها.',
+    title: 'تصفح القائمة وأضف أطباقك',
+    description: 'ابحث عن طبقك أو تصفّح الأقسام، ثم اضغط على أي طبق لإضافته إلى سلتك.',
     icon: Search,
   },
   {
-    id: 'categories',
-    target: '[data-guide="categories"]',
-    placement: 'bottom',
-    title: 'تصفّح أقسام القائمة',
-    description: 'تنقّل بين المقبلات والأطباق الرئيسية والمشروبات بضغطة واحدة.',
-    icon: LayoutGrid,
-  },
-  {
     id: 'cart',
-    target: '[data-guide="cart"]',
+    screen: 'cart',
+    target: '[data-guide="cart-panel"]',
     placement: 'bottom',
-    title: 'سلتك ثم تأكيد الطلب',
-    description: 'كل ما تضيفه يظهر هنا. راجع طلبك واضغط «مراجعة وتأكيد الطلب» لإرساله للمطبخ.',
+    title: 'راجع سلتك وأكّد الطلب',
+    description: 'كل ما أضفته يظهر هنا. عدّل الكميات ثم اضغط «تأكيد الطلب» لإرساله للمطبخ.',
     icon: ShoppingBag,
   },
   {
-    id: 'kitchen',
-    target: '[data-guide="kitchen"]',
+    id: 'tracking',
+    screen: 'tracking',
+    target: '[data-guide="tracking-panel"]',
     placement: 'bottom',
-    title: 'المطبخ الحي — حالة طلبك',
-    description: 'بعد إرسال الطلب، تابع مراحله (استلام ← تحضير ← جاهز ← تقديم) لحظة بلحظة من هنا.',
+    title: 'تابع طلبك لحظة بلحظة',
+    description: 'بعد الإرسال تابع مراحل طلبك هنا (استلام ← تحضير ← جاهز ← تقديم).',
     icon: ChefHat,
-  },
-  {
-    id: 'waiter',
-    target: '[data-guide="waiter"]',
-    placement: 'bottom',
-    title: 'استدعِ النادل متى شئت',
-    description: 'طلب الماء، المناديل، الحساب أو أي مساعدة — يصل نداؤك لطاقم الضيافة مباشرة.',
-    icon: Bell,
-  },
-  {
-    id: 'map',
-    target: '[data-guide="map"]',
-    placement: 'bottom',
-    title: 'موقع المطعم وخريطة الوصول',
-    description: 'افتح الخريطة للاطلاع على عنوان المطعم وفتح الاتجاهات في خرائط جوجل.',
-    icon: MapPin,
   },
 ];
 
@@ -108,23 +89,21 @@ function getRect(selector: string): Rect | null {
 }
 
 const ARROW_PAD = 14;
-const TOOLTIP_W = 320;
 
 export const CustomerGuideOverlay: React.FC = () => {
+  const { setIsCartOpen, setIsOrderTrackingOpen } = useRestaurant();
+
   const [isOpen, setIsOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const [tooltipPos, setTooltipPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 320,
+  });
 
-  // Resolve only the steps whose target actually exists right now (the
-  // kitchen tracker pill only appears once an order is placed).
-  const visibleSteps = useMemo(() => {
-    if (!isOpen) return GUIDE_STEPS;
-    return GUIDE_STEPS.filter((s) => getRect(s.target) !== null);
-  }, [isOpen]);
-
-  const activeStep = visibleSteps[stepIndex] ?? visibleSteps[visibleSteps.length - 1];
+  const activeStep = GUIDE_STEPS[stepIndex] ?? GUIDE_STEPS[GUIDE_STEPS.length - 1];
 
   const measure = useCallback(() => {
     if (!activeStep) return;
@@ -133,11 +112,13 @@ export const CustomerGuideOverlay: React.FC = () => {
     if (rect) {
       const vw = window.innerWidth;
       const vh = window.innerHeight;
+      // Keep the tooltip within the viewport on narrow phones.
+      const width = Math.min(320, vw - 16);
       let top = rect.top;
       let left = rect.left;
 
-      const desiredLeft = rect.left + rect.width / 2 - TOOLTIP_W / 2;
-      left = Math.max(8, Math.min(vw - TOOLTIP_W - 8, desiredLeft));
+      const desiredLeft = rect.left + rect.width / 2 - width / 2;
+      left = Math.max(8, Math.min(vw - width - 8, desiredLeft));
 
       if (activeStep.placement === 'bottom') {
         top = rect.top + rect.height + ARROW_PAD;
@@ -150,14 +131,25 @@ export const CustomerGuideOverlay: React.FC = () => {
         if (top < 8) top = 8;
         if (top + 190 > vh) top = vh - 198;
       }
-      setTooltipPos({ top, left });
+      setTooltipPos({ top, left, width });
     }
   }, [activeStep]);
 
+  // Open/close the right customer screen for the active step, then measure its
+  // target once the drawer has mounted (the slide-in animation needs a beat).
   useLayoutEffect(() => {
     if (!isOpen) return;
-    // Wait a tick for layout/shift before measuring the target.
-    const t = window.setTimeout(measure, 60);
+    if (activeStep.screen === 'cart') {
+      setIsCartOpen(true);
+      setIsOrderTrackingOpen(false);
+    } else if (activeStep.screen === 'tracking') {
+      setIsCartOpen(false);
+      setIsOrderTrackingOpen(true);
+    } else {
+      setIsCartOpen(false);
+      setIsOrderTrackingOpen(false);
+    }
+    const t = window.setTimeout(measure, 260);
     const onResize = () => measure();
     window.addEventListener('resize', onResize);
     window.addEventListener('scroll', onResize, true);
@@ -166,7 +158,7 @@ export const CustomerGuideOverlay: React.FC = () => {
       window.removeEventListener('resize', onResize);
       window.removeEventListener('scroll', onResize, true);
     };
-  }, [isOpen, stepIndex, measure]);
+  }, [isOpen, stepIndex, activeStep, measure, setIsCartOpen, setIsOrderTrackingOpen]);
 
   const open = useCallback(() => {
     setStepIndex(0);
@@ -175,6 +167,9 @@ export const CustomerGuideOverlay: React.FC = () => {
 
   const close = useCallback(() => {
     setIsOpen(false);
+    // Return the guest to the menu screen rather than leaving a drawer open.
+    setIsCartOpen(false);
+    setIsOrderTrackingOpen(false);
     if (typeof window !== 'undefined') {
       try {
         sessionStorage.setItem(GUIDE_SEEN_KEY, 'true');
@@ -182,17 +177,17 @@ export const CustomerGuideOverlay: React.FC = () => {
         /* noop */
       }
     }
-  }, []);
+  }, [setIsCartOpen, setIsOrderTrackingOpen]);
 
   const next = useCallback(() => {
     setStepIndex((i) => {
-      if (i >= visibleSteps.length - 1) {
+      if (i >= GUIDE_STEPS.length - 1) {
         close();
         return i;
       }
       return i + 1;
     });
-  }, [visibleSteps.length, close]);
+  }, [close]);
 
   const prev = useCallback(() => {
     setStepIndex((i) => Math.max(0, i - 1));
@@ -260,8 +255,8 @@ export const CustomerGuideOverlay: React.FC = () => {
       {showTooltip && (
         <div
           ref={tooltipRef}
-          className="absolute z-10 w-[320px]"
-          style={{ top: tooltipPos.top, left: tooltipPos.left }}
+          className="absolute z-10"
+          style={{ top: tooltipPos.top, left: tooltipPos.left, width: tooltipPos.width }}
         >
           {/* Arrow pointing at the target */}
           <div
@@ -285,7 +280,7 @@ export const CustomerGuideOverlay: React.FC = () => {
             {/* Controls */}
             <div className="flex items-center justify-between pt-1 border-t border-luxury-800/80">
               <div className="flex items-center gap-1">
-                {visibleSteps.map((s, i) => (
+                {GUIDE_STEPS.map((s, i) => (
                   <button
                     key={s.id}
                     onClick={() => setStepIndex(i)}
@@ -315,7 +310,7 @@ export const CustomerGuideOverlay: React.FC = () => {
                   onClick={next}
                   className="px-3 py-1.5 rounded-lg brand-cta font-bold text-[11px] flex items-center gap-1 cursor-pointer"
                 >
-                  {stepIndex >= visibleSteps.length - 1 ? (
+                  {stepIndex >= GUIDE_STEPS.length - 1 ? (
                     <>
                       <Check className="w-3.5 h-3.5" />
                       فهمت
@@ -337,7 +332,7 @@ export const CustomerGuideOverlay: React.FC = () => {
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
         <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-luxury-950/80 border border-luxury-750 text-luxury-300 text-[11px] font-bold">
           <Sparkles className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
-          جولة تعريفية — الخطوة {stepIndex + 1} من {visibleSteps.length}
+          جولة تعريفية — الخطوة {stepIndex + 1} من {GUIDE_STEPS.length}
         </span>
         <button
           onClick={close}

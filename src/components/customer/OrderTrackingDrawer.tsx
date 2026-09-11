@@ -88,7 +88,7 @@ export const OrderTrackingDrawer: React.FC = () => {
         dir="rtl"
       >
         {/* Header */}
-        <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-850/60">
+        <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-850/60" data-guide="tracking-panel">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
               <ChefHat className="w-5 h-5" />

@@ -130,17 +130,25 @@ const VIDEO_HOST_ALLOWLIST = new Set([
   'youtu.be',
   'youtube-nocookie.com',
   'www.youtube-nocookie.com',
-  'player.vimeo.com',
-  'vimeo.com',
-  'www.vimeo.com',
 ]);
+
+/**
+ * Extract an 11-character YouTube video id from any supported YouTube shape:
+ * `watch?v=`, `embed/`, `shorts/`, `live/`, `v/` and `youtu.be/<id>`.
+ * Returns null when the URL is not a well-formed YouTube video link.
+ */
+export function extractYoutubeVideoId(value: string): string | null {
+  const match = value.match(
+    /(?:youtube\.com|youtube-nocookie\.com)\/(?:watch\?v=|embed\/|shorts\/|live\/|v\/)([A-Za-z0-9_-]{11})|youtu\.be\/([A-Za-z0-9_-]{11})/
+  );
+  return match ? (match[1] || match[2]) : null;
+}
 
 export function isAllowedPromoVideoUrl(value: string): boolean {
   if (!value) return true;
-  // Relative path served by this app (e.g. an uploaded MP4).
-  if (value.startsWith('/uploads/') || value.startsWith('/')) {
-    return !value.startsWith('//');
-  }
+  // Only YouTube links are accepted for the promo/ambience video. Anything
+  // else — Vimeo, raw file paths, arbitrary HTML — is rejected so a
+  // malicious/typo'd value can never be rendered as an active frame.
   let url: URL;
   try {
     url = new URL(value);
@@ -150,7 +158,9 @@ export function isAllowedPromoVideoUrl(value: string): boolean {
   // Blocks javascript:, data:, vbscript:, file: and plaintext http.
   if (url.protocol !== 'https:') return false;
   if (url.username || url.password) return false;
-  return VIDEO_HOST_ALLOWLIST.has(url.hostname.toLowerCase());
+  if (!VIDEO_HOST_ALLOWLIST.has(url.hostname.toLowerCase())) return false;
+  // Require a valid 11-character YouTube video id so the link is playable.
+  return extractYoutubeVideoId(value) !== null;
 }
 
 /**
@@ -180,7 +190,7 @@ const promoVideoUrl = z
   .max(1000, 'رابط الفيديو طويل جداً')
   .refine(isAllowedPromoVideoUrl, {
     message:
-      'رابط الفيديو يجب أن يكون رابط HTTPS من YouTube أو Vimeo، أو ملفاً مرفوعاً على المنصة',
+      'رابط الفيديو يجب أن يكون رابط يوتيوب صحيحاً (مثل https://www.youtube.com/watch?v=...)',
   });
 
 const hexColor = z
@@ -634,6 +644,9 @@ export const brandingSchema = z
       })
       .optional()
       .or(z.literal('')),
+    // Static map/location image (uploaded via POST /api/uploads/image). Shows
+    // guests the venue's location without an external map embed.
+    mapImage: httpsUrl('رابط صورة الخريطة'),
     // Venue kind: drives how the guest QR experience is composed. Kept in the
     // branding payload because that is the screen where a tenant describes
     // itself, and `.strict()` would otherwise reject the new field.
