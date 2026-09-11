@@ -61,15 +61,15 @@ export const StaffManagement: React.FC = () => {
   const [editZone, setEditZone] = useState('');
 
   // Load the real staff directory of this tenant from the API.
-  const loadStaff = () => {
+  const loadStaff = async () => {
     if (!currentRestaurant) return;
-    api.getStaff(currentRestaurant.id).then((res) => {
-      setIsLoading(false);
-      if (!res.success || !res.data) {
-        showToast('error', 'تعذر تحميل طاقم العمل', res.error);
-        return;
-      }
-      const list: StaffUser[] = res.data.map((u) => ({
+    const res = await api.getStaff(currentRestaurant.id);
+    setIsLoading(false);
+    if (!res.success || !res.data) {
+      showToast('error', 'تعذر تحميل طاقم العمل', res.error);
+      return;
+    }
+    const list: StaffUser[] = res.data.map((u) => ({
         id: u.id,
         restaurantId: u.restaurantId || currentRestaurant.id,
         name: u.name,
@@ -80,8 +80,7 @@ export const StaffManagement: React.FC = () => {
         lastActive: 'مسجل بالنظام',
         assignedZone: 'الصالة الرئيسية',
       }));
-      setStaffList(list);
-    });
+    setStaffList(list);
   };
 
   useEffect(() => {
@@ -204,22 +203,17 @@ export const StaffManagement: React.FC = () => {
     }
 
     setIsSaving(true);
-    // Real DB edit
-    setStaffList((prev) =>
-      prev.map((s) =>
-        s.id === editingStaff.id
-          ? {
-              ...s,
-              name: editName.trim(),
-              email: editEmail.trim(),
-              role: editRole,
-              assignedZone: editZone,
-              pin: editPin || s.pin,
-            }
-          : s
-      )
-    );
+    const res = await api.updateStaff(currentRestaurant.id, editingStaff.id, {
+      name: editName.trim(),
+      role: editRole,
+      ...(editPin.trim() ? { pin: editPin.trim() } : {}),
+    });
     setIsSaving(false);
+    if (!res.success) {
+      showToast('error', 'تعذر تعديل بيانات الموظف', `${res.error || 'لم يتم الحفظ'}. بقيت بياناتك في النموذج.`);
+      return;
+    }
+    await loadStaff();
     setEditingStaff(null);
     showToast('success', 'تم تعديل بيانات الموظف بنجاح', editName.trim());
   };
@@ -580,7 +574,9 @@ export const StaffManagement: React.FC = () => {
                   type="email"
                   value={editEmail}
                   onChange={(e) => setEditEmail(e.target.value)}
-                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60 font-mono"
+                  disabled={!isDemo}
+                  title={!isDemo ? 'تغيير البريد غير مدعوم من واجهة تعديل الموظف الحالية' : undefined}
+                  className="w-full bg-luxury-950 disabled:opacity-60 disabled:cursor-not-allowed border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60 font-mono"
                 />
               </div>
 
@@ -604,7 +600,9 @@ export const StaffManagement: React.FC = () => {
                   type="text"
                   value={editZone}
                   onChange={(e) => setEditZone(e.target.value)}
-                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
+                  disabled={!isDemo}
+                  title={!isDemo ? 'توزيع الصالات غير محفوظ في نموذج بيانات الموظف الحالي' : undefined}
+                  className="w-full bg-luxury-950 disabled:opacity-60 disabled:cursor-not-allowed border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
                 />
               </div>
 

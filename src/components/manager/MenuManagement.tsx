@@ -65,10 +65,11 @@ export const MenuManagement: React.FC = () => {
       ? updateProduct({ ...prodData, id: editId, restaurantId: currentRestaurant?.id || 'rest-merar' })
       : addProduct(prodData);
 
-  const handleCreateCategory = (e: React.FormEvent) => {
+  const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
-    addCategory(newCatName.trim(), newCatNameEn.trim());
+    const saved = await addCategory(newCatName.trim(), newCatNameEn.trim());
+    if (!saved) return;
     setNewCatName('');
     setNewCatNameEn('');
     setIsAddingCat(false);
@@ -136,9 +137,11 @@ export const MenuManagement: React.FC = () => {
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="submit"
-              className="px-4 py-2 bg-gold-500 text-luxury-950 font-bold text-xs rounded-xl shadow-gold-glow"
+              disabled={isMutationPending('category:new')}
+              aria-busy={isMutationPending('category:new')}
+              className="px-4 py-2 bg-gold-500 text-luxury-950 font-bold text-xs rounded-xl shadow-gold-glow disabled:opacity-60 disabled:cursor-wait"
             >
-              حفظ الفئة
+              {isMutationPending('category:new') ? 'جاري الحفظ...' : 'حفظ الفئة'}
             </button>
             <button
               type="button"

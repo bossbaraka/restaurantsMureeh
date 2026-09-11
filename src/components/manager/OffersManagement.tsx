@@ -4,7 +4,7 @@ import { formatPrice } from '../../utils/formatting';
 import { Tag, Plus, Trash2, CheckCircle2, X, Sparkles, Image as ImageIcon } from 'lucide-react';
 
 export const OffersManagement: React.FC = () => {
-  const { offers, addOffer, deleteOffer, currentRestaurant } = useRestaurant();
+  const { offers, addOffer, deleteOffer, isMutationPending, currentRestaurant } = useRestaurant();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -14,11 +14,11 @@ export const OffersManagement: React.FC = () => {
   const [badge, setBadge] = useState('عرض نهاية الأسبوع');
   const [image, setImage] = useState('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80');
 
-  const handleCreateOffer = (e: React.FormEvent) => {
+  const handleCreateOffer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
 
-    addOffer({
+    const saved = await addOffer({
       title: title.trim(),
       subtitle: subtitle.trim(),
       description: subtitle.trim() || title.trim(),
@@ -28,6 +28,7 @@ export const OffersManagement: React.FC = () => {
       image: image.trim() || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
       isActive: true,
     });
+    if (!saved) return;
 
     setTitle('');
     setSubtitle('');
@@ -59,7 +60,9 @@ export const OffersManagement: React.FC = () => {
 
       {/* Offers Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {offers.map((offer) => (
+        {offers.map((offer) => {
+          const isDeleting = isMutationPending(`offer:${offer.id}`);
+          return (
           <div
             key={offer.id}
             className="group relative overflow-hidden rounded-2xl bg-luxury-900 border border-luxury-800 p-5 flex gap-4 transition-all hover:border-gold-500/40"
@@ -102,7 +105,9 @@ export const OffersManagement: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => deleteOffer(offer.id)}
+                  onClick={() => { if (window.confirm(`حذف العرض «${offer.title}»؟`)) void deleteOffer(offer.id); }}
+                  disabled={isDeleting}
+                  aria-busy={isDeleting}
                   className="p-1.5 rounded-lg text-luxury-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                   title="حذف العرض"
                 >
@@ -111,7 +116,8 @@ export const OffersManagement: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Add Offer Modal */}
@@ -212,9 +218,11 @@ export const OffersManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold shadow-gold-glow"
+                  disabled={isMutationPending('offer:new')}
+                  aria-busy={isMutationPending('offer:new')}
+                  className="px-6 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold shadow-gold-glow disabled:opacity-60 disabled:cursor-wait"
                 >
-                  حفظ ونشر العرض
+                  {isMutationPending('offer:new') ? 'جاري الحفظ...' : 'حفظ ونشر العرض'}
                 </button>
               </div>
             </form>

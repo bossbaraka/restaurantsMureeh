@@ -21,7 +21,7 @@ import {
   Plan,
   Subscription,
 } from '../types/restaurant';
-import { api } from '../services/api';
+import { api, apiConnectionUrl, newClientRequestId } from '../services/api';
 import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
 import { applyBrandTheme } from '../theme/brandTheme';
@@ -130,11 +130,11 @@ interface RestaurantContextType {
   addProduct: (product: Omit<Product, 'id' | 'restaurantId'>) => Promise<boolean>;
   updateProduct: (product: Product) => Promise<boolean>;
   deleteProduct: (productId: string) => Promise<boolean>;
-  addCategory: (name: string, nameEn?: string) => void;
+  addCategory: (name: string, nameEn?: string) => Promise<boolean>;
   updateCategory: (category: Category) => void;
   deleteCategory: (categoryId: string) => void;
-  addOffer: (offer: Omit<Offer, 'id' | 'restaurantId'>) => void;
-  deleteOffer: (offerId: string) => void;
+  addOffer: (offer: Omit<Offer, 'id' | 'restaurantId'>) => Promise<boolean>;
+  deleteOffer: (offerId: string) => Promise<boolean>;
 
   // Platform Admin Super Controls
   switchTenantBySlug: (slug: string) => void;
@@ -665,6 +665,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Ref to track previous status of customer orders for instant live notifications
   const prevOrderStatusMapRef = useRef<Record<string, string>>({});
+  const orderSubmissionRef = useRef<{ fingerprint: string; clientRequestId: string } | null>(null);
 
   // SSE real-time listener for customers with an active table session.
   useEffect(() => {
@@ -676,7 +677,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Customer streams authenticate with the QR session capability only —
       // the staff JWT must never travel in a URL (logs/history/referrer).
       conn = openEventSourceWithBackoff(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`,
+        apiConnectionUrl(`/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`),
         {
           ORDER_STATUS_UPDATED: (e: MessageEvent) => {
             refreshTenantData();
@@ -694,11 +695,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             try {
               const data = JSON.parse(event.data as string) as { id?: string; status?: WaiterRequest['status'] };
               if (!data.id || !data.status) return;
-              setWaiterRequests((current) => current.map((request) =>
-                request.id === data.id
-                  ? { ...request, status: data.status! }
-                  : request
-              ));
+              setWaiterRequests((current) => current.map((request) => {
+                if (request.id !== data.id) return request;
+                const allowed =
+                  (request.status === 'PENDING' && data.status === 'ACKNOWLEDGED') ||
+                  (request.status === 'ACKNOWLEDGED' && data.status === 'RESOLVED') ||
+                  request.status === data.status;
+                return allowed ? { ...request, status: data.status! } : request;
+              }));
               if (data.status === 'ACKNOWLEDGED') showToast('info', 'تم استلام ندائك', 'النادل في طريقه إلى طاولتك.');
               if (data.status === 'RESOLVED') showToast('success', 'تم إنجاز طلب المساعدة');
             } catch {
@@ -726,7 +730,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     let conn: { close: () => void } | null = null;
     try {
       conn = openEventSourceWithBackoff(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&token=${encodeURIComponent(token)}`,
+        apiConnectionUrl(`/api/public/events?restaurantId=${currentRestaurant.id}&token=${encodeURIComponent(token)}`),
         {
           ORDER_CREATED: () => {
             refreshTenantData();
@@ -972,15 +976,28 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
       });
 
+      const fingerprint = JSON.stringify({
+        restaurantId: currentRestaurant.id,
+        tableId: activeTableId,
+        sessionId: currentTableSession.id,
+        items: orderItems,
+        notes: notes || '',
+      });
+      if (orderSubmissionRef.current?.fingerprint !== fingerprint) {
+        orderSubmissionRef.current = { fingerprint, clientRequestId: newClientRequestId() };
+      }
+
       const res = await api.submitOrder({
         restaurantId: currentRestaurant.id,
         tableId: activeTableId,
         sessionToken: currentTableSession.sessionToken,
+        clientRequestId: orderSubmissionRef.current.clientRequestId,
         items: orderItems,
         notes,
       });
 
       if (res.success && res.data) {
+        orderSubmissionRef.current = null;
         clearCart();
         refreshTenantData();
         soundFX.playChime();
@@ -1255,8 +1272,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const addCategory = useCallback(
-    (name: string, nameEn?: string) => {
-      if (!currentRestaurant || !currentUser) return;
+    async (name: string, nameEn?: string): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const key = 'category:new';
+      if (!beginMutation(key)) return false;
       const newCat: Category = {
         id: `cat-${Date.now()}`,
         restaurantId: currentRestaurant.id,
@@ -1264,17 +1283,18 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         nameEn,
         sortOrder: categories.length + 1,
       };
-      void api.saveCategory(currentUser, currentRestaurant.id, newCat).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('success', 'تمت إضافة تصنيف جديد', name);
-        } else {
-          showToast('error', 'تعذر إضافة التصنيف', res.error);
+      try {
+        const res = await api.saveCategory(currentUser, currentRestaurant.id, newCat);
+        if (!res.success) {
+          showToast('error', 'تعذر إضافة التصنيف', `${res.error || 'لم يتم الحفظ'}. بقي الاسم في النموذج.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('success', 'تمت إضافة تصنيف جديد', name);
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, categories, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, categories, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const updateCategory = useCallback(
@@ -1311,35 +1331,41 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const addOffer = useCallback(
-    (offer: Omit<Offer, 'id' | 'restaurantId'>) => {
-      if (!currentRestaurant) return;
-      void api.saveOffer(currentRestaurant.id, offer).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('success', 'تم نشر العرض الترويجي', offer.title);
-        } else {
-          showToast('error', 'تعذر نشر العرض', res.error);
+    async (offer: Omit<Offer, 'id' | 'restaurantId'>): Promise<boolean> => {
+      if (!currentRestaurant) return false;
+      const key = 'offer:new';
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.saveOffer(currentRestaurant.id, offer);
+        if (!res.success) {
+          showToast('error', 'تعذر نشر العرض', `${res.error || 'لم يتم الحفظ'}. بقيت بياناتك في النموذج.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('success', 'تم نشر العرض الترويجي', offer.title);
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, refreshTenantData, showToast]
+    [currentRestaurant, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const deleteOffer = useCallback(
-    (offerId: string) => {
-      if (!currentRestaurant) return;
-      void api.deleteOffer(currentRestaurant.id, offerId).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('info', 'تم حذف العرض الترويجي');
-        } else {
+    async (offerId: string): Promise<boolean> => {
+      if (!currentRestaurant) return false;
+      const key = `offer:${offerId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.deleteOffer(currentRestaurant.id, offerId);
+        if (!res.success) {
           showToast('error', 'تعذر حذف العرض', res.error);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('info', 'تم حذف العرض الترويجي');
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, refreshTenantData, showToast]
+    [currentRestaurant, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   return (

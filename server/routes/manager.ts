@@ -329,7 +329,7 @@ router.get('/orders', async (req: Request, res: Response) => {
       status: o.status,
       paymentMethod: o.paymentMethod,
       notes: o.notes || undefined,
-      estimatedPrepMinutes: o.estimatedPrepMinutes || 18,
+      estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
       createdAt: o.createdAt.toISOString(),
       updatedAt: o.updatedAt.toISOString(),
       items: o.items.map((i) => ({
@@ -470,7 +470,6 @@ router.post(
               subtotal,
               total: subtotal,
               notes: notes || undefined,
-              estimatedPrepMinutes: 15,
               items: { create: pricedItems },
             },
             include: { items: true },
@@ -497,7 +496,6 @@ router.post(
               subtotal,
               total: subtotal,
               notes: notes || undefined,
-              estimatedPrepMinutes: 15,
               items: { create: pricedItems },
             },
             include: { items: true },
@@ -570,15 +568,39 @@ router.put(
         return res.status(404).json({ success: false, error: 'الطلب غير موجود في هذا المطعم', statusCode: 404 });
       }
 
-      // State machine rule: cannot revert SERVED
-      if (order.status === 'SERVED' && status !== 'SERVED') {
-        return res.status(400).json({ success: false, error: 'لا يمكن إرجاع طلب تم تقديمه بالفعل', statusCode: 400 });
+      // Enforce the operational state machine at the authority boundary, not
+      // only in UI buttons. Idempotent repeats are safe; skips, reversals and
+      // resurrection of CANCELLED/SERVED orders are rejected.
+      const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
+        PENDING: 'PREPARING',
+        PREPARING: 'READY',
+        READY: 'SERVED',
+      };
+      if (status === order.status) {
+        return res.json({ success: true, data: { order }, statusCode: 200 });
+      }
+      if (nextStatus[order.status] !== status) {
+        return res.status(409).json({
+          success: false,
+          error: `انتقال حالة غير صالح من ${order.status} إلى ${status}`,
+          statusCode: 409,
+        });
       }
 
-      const updated = await prisma.order.update({
-        where: { id: orderId },
+      // Compare-and-set prevents two operators acting on the same stale card
+      // from both claiming success or overwriting a newer state.
+      const changed = await prisma.order.updateMany({
+        where: { id: orderId, restaurantId: targetRestId, status: order.status },
         data: { status },
       });
+      if (changed.count !== 1) {
+        return res.status(409).json({
+          success: false,
+          error: 'تغيرت حالة الطلب بواسطة مستخدم آخر. حدّث القائمة وحاول مجدداً.',
+          statusCode: 409,
+        });
+      }
+      const updated = await prisma.order.findUnique({ where: { id: orderId } });
 
       await logAuditEvent({
         restaurantId: targetRestId,
@@ -1427,23 +1449,43 @@ router.put(
       if (!existing) return res.status(404).json({ success: false, error: 'النداء غير موجود', statusCode: 404 });
       if (!ownTenant(req, existing.restaurantId)) return deny(req, res);
 
-      const reqObj = await prisma.waiterRequest.update({
-        where: { id },
+      const expectedStatus = status === 'ACKNOWLEDGED' ? 'PENDING' : status === 'RESOLVED' ? 'ACKNOWLEDGED' : null;
+      if (status === existing.status) {
+        return res.json({ success: true, data: existing, statusCode: 200 });
+      }
+      if (!expectedStatus || existing.status !== expectedStatus) {
+        return res.status(409).json({
+          success: false,
+          error: `انتقال حالة نداء غير صالح من ${existing.status} إلى ${status}`,
+          statusCode: 409,
+        });
+      }
+
+      const changed = await prisma.waiterRequest.updateMany({
+        where: { id, restaurantId: existing.restaurantId, status: expectedStatus },
         data: {
           status,
           resolvedAt: status === 'RESOLVED' ? new Date() : null,
         },
       });
+      if (changed.count !== 1) {
+        return res.status(409).json({
+          success: false,
+          error: 'تغيرت حالة النداء بواسطة مستخدم آخر. حدّث القائمة وحاول مجدداً.',
+          statusCode: 409,
+        });
+      }
+      const reqObj = (await prisma.waiterRequest.findUnique({ where: { id } }))!;
 
       if (status === 'RESOLVED') {
-        const remainingPending = await prisma.waiterRequest.count({
+        const remainingActive = await prisma.waiterRequest.count({
           where: {
             tableId: reqObj.tableId,
             restaurantId: reqObj.restaurantId,
-            status: 'PENDING',
+            status: { in: ['PENDING', 'ACKNOWLEDGED'] },
           },
         });
-        if (remainingPending === 0) {
+        if (remainingActive === 0) {
           await prisma.table.update({
             where: { id: reqObj.tableId },
             data: { hasWaiterCall: false },

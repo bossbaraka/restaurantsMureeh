@@ -238,6 +238,12 @@ const frontendDistPath = path.resolve(
   'dist'
 );
 
+// API misses must remain machine-readable 404s. Without this guard, the SPA
+// fallback below returns index.html with HTTP 200 for an unknown GET /api/*.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ success: false, error: 'Endpoint Not Found', statusCode: 404 });
+});
+
 if (fs.existsSync(frontendDistPath)) {
   console.log(
     `📦 React frontend found at: ${frontendDistPath}`
