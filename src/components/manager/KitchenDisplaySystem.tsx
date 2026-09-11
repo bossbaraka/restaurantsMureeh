@@ -4,7 +4,7 @@ import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from
 import { ChefHat, Clock, CheckCircle2, AlertCircle, Volume2, VolumeX, Sparkles, Filter, Utensils } from 'lucide-react';
 
 export const KitchenDisplaySystem: React.FC = () => {
-  const { orders, updateOrderStatus, currentRestaurant, soundEnabled, toggleSound, showToast } = useRestaurant();
+  const { orders, updateOrderStatus, isMutationPending, currentRestaurant, soundEnabled, toggleSound } = useRestaurant();
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'PREPARING' | 'READY'>('ALL');
 
   const kitchenOrders = orders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY');
@@ -14,17 +14,9 @@ export const KitchenDisplaySystem: React.FC = () => {
     return o.status === filter;
   });
 
-  const handleAdvanceStatus = (orderId: string, currentStatus: string) => {
-    if (currentStatus === 'PENDING') {
-      updateOrderStatus(orderId, 'PREPARING');
-      showToast('info', 'جاري التحضير', `تم إدخال الطلب ${orderId} في مرحلة الطهي`);
-    } else if (currentStatus === 'PREPARING') {
-      updateOrderStatus(orderId, 'READY');
-      showToast('success', 'الطلب جاهز للتقديم', `تم إشعار النادل بأن طلب ${orderId} جاهز للتقديم فوراً`);
-    } else if (currentStatus === 'READY') {
-      updateOrderStatus(orderId, 'SERVED');
-      showToast('success', 'تم التقديم', `تم تسليم الطلب ${orderId} للزبون`);
-    }
+  const handleAdvanceStatus = async (orderId: string, currentStatus: string) => {
+    const next = currentStatus === 'PENDING' ? 'PREPARING' : currentStatus === 'PREPARING' ? 'READY' : 'SERVED';
+    await updateOrderStatus(orderId, next);
   };
 
   return (
@@ -96,6 +88,7 @@ export const KitchenDisplaySystem: React.FC = () => {
             const isPreparing = order.status === 'PREPARING';
             const isReady = order.status === 'READY';
             const statusCfg = getOrderStatusConfig(order.status);
+            const isUpdating = isMutationPending(`order:${order.id}`);
 
             return (
               <div
@@ -181,7 +174,9 @@ export const KitchenDisplaySystem: React.FC = () => {
                 <div className="p-3 bg-luxury-950 border-t border-luxury-800">
                   <button
                     onClick={() => handleAdvanceStatus(order.id, order.status)}
-                    className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-98 ${
+                    disabled={isUpdating}
+                    aria-busy={isUpdating}
+                    className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-98 disabled:opacity-60 disabled:cursor-wait ${
                       isPending
                         ? 'bg-amber-500 hover:bg-amber-400 text-luxury-950'
                         : isPreparing
@@ -189,7 +184,7 @@ export const KitchenDisplaySystem: React.FC = () => {
                         : 'bg-luxury-800 hover:bg-luxury-750 text-luxury-200 border border-luxury-700'
                     }`}
                   >
-                    {isPending && (
+                    {isUpdating ? <span>جاري تأكيد الحالة...</span> : isPending && (
                       <>
                         <ChefHat className="w-4 h-4" />
                         <span>بدء التحضير والطهي 👨‍🍳</span>

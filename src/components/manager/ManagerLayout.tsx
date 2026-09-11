@@ -56,11 +56,20 @@ export type ManagerTab =
 
 export const ManagerLayout: React.FC = () => {
   const { orders, waiterRequests, setViewMode, currentRestaurant, tenantsList, setCurrentTenantBySlug, setIsOnboardingOpen } = useRestaurant();
-  const { isSuperAdmin, canAccessManagerTab, switchManagerRestaurant } = useAuth();
+  const { isSuperAdmin, canAccessManagerTab, switchManagerRestaurant, currentUser } = useAuth();
   // Multi-tenant (shared restaurants) switching is reserved for the platform
   // manager; a tenant manager only ever operates inside his own restaurant.
   const isPlatformManager = isSuperAdmin;
-  const [activeTab, setActiveTab] = useState<ManagerTab>('OVERVIEW');
+  const roleStartTab: Partial<Record<string, ManagerTab>> = {
+    RESTAURANT_MANAGER: 'OVERVIEW',
+    PLATFORM_ADMIN: 'OVERVIEW',
+    SUPER_ADMIN: 'OVERVIEW',
+    CASHIER: 'POS',
+    WAITER: 'WAITERS',
+    STAFF: 'WAITERS',
+    KITCHEN: 'ORDERS',
+  };
+  const [activeTab, setActiveTab] = useState<ManagerTab>(() => roleStartTab[currentUser?.role || ''] || 'OVERVIEW');
   const [isTenantDropdownOpen, setIsTenantDropdownOpen] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
@@ -71,32 +80,41 @@ export const ManagerLayout: React.FC = () => {
   // Mobile nav sheet: Escape-to-close + body scroll lock (see hooks/useDialog).
   useDialog({ isOpen: isMobileNavOpen, onClose: () => setIsMobileNavOpen(false) });
 
-  const navConfig: Array<{ id: ManagerTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string; section?: string }> = [
-    { id: 'OVERVIEW', label: 'لوحة العمليات', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'POS', label: 'الكاشير (POS)', icon: <Calculator className="w-4 h-4" /> },
+  const sectionLabels: Record<string, string> = {
+    OPERATIONS: 'العمليات اليومية',
+    RESTAURANT: 'إدارة المطعم',
+    TEAM: 'الفريق',
+    GROWTH: 'النمو والتقارير',
+    SETTINGS: 'الإعدادات',
+  };
+  const navConfig: Array<{ id: ManagerTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string; section: keyof typeof sectionLabels }> = [
+    { id: 'OVERVIEW', label: 'لوحة العمليات', icon: <LayoutDashboard className="w-4 h-4" />, section: 'OPERATIONS' },
+    { id: 'POS', label: 'الكاشير (POS)', icon: <Calculator className="w-4 h-4" />, section: 'OPERATIONS' },
     {
       id: 'ORDERS',
       label: 'شاشة الطلبات والمطبخ',
       icon: <ChefHat className="w-4 h-4" />,
       badge: activeOrdersCount > 0 ? activeOrdersCount : undefined,
       badgeColor: 'bg-amber-500 text-luxury-950',
+      section: 'OPERATIONS',
     },
-    { id: 'TABLES', label: 'خريطة الطاولات', icon: <MapPin className="w-4 h-4" /> },
-    { id: 'QR', label: 'إدارة وطباعة QR', icon: <QrCode className="w-4 h-4" /> },
-    { id: 'MENU', label: 'قائمة الأطباق والتسعير', icon: <Utensils className="w-4 h-4" /> },
-    { id: 'OFFERS', label: 'العروض والكومبو', icon: <Flame className="w-4 h-4" /> },
+    { id: 'TABLES', label: 'خريطة الطاولات', icon: <MapPin className="w-4 h-4" />, section: 'OPERATIONS' },
     {
       id: 'WAITERS',
       label: 'نداءات طاقم الضيافة',
       icon: <Bell className="w-4 h-4" />,
       badge: pendingWaiters > 0 ? pendingWaiters : undefined,
       badgeColor: 'bg-red-500 text-white animate-pulse',
+      section: 'OPERATIONS',
     },
-    { id: 'STAFF', label: 'العمال وطاقم الخدمة', icon: <Users className="w-4 h-4" /> },
-    { id: 'ANALYTICS', label: 'التحليلات والمبيعات', icon: <BarChart3 className="w-4 h-4" /> },
-    { id: 'BRANDING', label: 'الهوية والمظهر', icon: <Palette className="w-4 h-4" /> },
-    { id: 'SUBSCRIPTION', label: 'الباقة والاشتراك', icon: <CreditCard className="w-4 h-4" /> },
-  { id: 'BRANCHES', label: 'الفروع المتعددة', icon: <Building2 className="w-4 h-4" /> },
+    { id: 'QR', label: 'إدارة وطباعة QR', icon: <QrCode className="w-4 h-4" />, section: 'RESTAURANT' },
+    { id: 'MENU', label: 'قائمة الأطباق والتسعير', icon: <Utensils className="w-4 h-4" />, section: 'RESTAURANT' },
+    { id: 'OFFERS', label: 'العروض والكومبو', icon: <Flame className="w-4 h-4" />, section: 'RESTAURANT' },
+    { id: 'BRANCHES', label: 'الفروع المتعددة', icon: <Building2 className="w-4 h-4" />, section: 'RESTAURANT' },
+    { id: 'STAFF', label: 'العمال وطاقم الخدمة', icon: <Users className="w-4 h-4" />, section: 'TEAM' },
+    { id: 'ANALYTICS', label: 'التحليلات والمبيعات', icon: <BarChart3 className="w-4 h-4" />, section: 'GROWTH' },
+    { id: 'BRANDING', label: 'الهوية والمظهر', icon: <Palette className="w-4 h-4" />, section: 'SETTINGS' },
+    { id: 'SUBSCRIPTION', label: 'الباقة والاشتراك', icon: <CreditCard className="w-4 h-4" />, section: 'SETTINGS' },
   ];
 
   const navItems = navConfig.filter((item) => canAccessManagerTab(item.id));
@@ -236,33 +254,40 @@ export const ManagerLayout: React.FC = () => {
             {navItems.length === 0 ? (
               <div className="text-xs text-luxury-400 px-2 py-4">لا توجد صلاحيات متاحة لهذا الدور.</div>
             ) : (
-              navItems.map((item) => {
+              navItems.map((item, index) => {
                 const isSelected = activeTab === item.id;
+                const startsSection = index === 0 || navItems[index - 1]?.section !== item.section;
                 return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
-                    className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 md:shrink select-none ${
-                      isSelected
-                        ? 'bg-gold-500 text-luxury-950 font-bold shadow-gold-glow'
-                        : 'text-luxury-300 hover:text-luxury-50 hover:bg-luxury-900'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      {item.icon}
-                      <span>{item.label}</span>
-                    </div>
-
-                    {item.badge !== undefined && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                          item.badgeColor || 'bg-luxury-800 text-luxury-200'
-                        }`}
-                      >
-                        {item.badge}
+                  <React.Fragment key={item.id}>
+                    {startsSection && (
+                      <span className={`px-3 pt-2 pb-0.5 text-[10px] font-bold text-luxury-500 ${index > 0 ? 'mt-2 border-t border-luxury-850' : ''}`}>
+                        {sectionLabels[item.section]}
                       </span>
                     )}
-                  </button>
+                    <button
+                      onClick={() => setActiveTab(item.id)}
+                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all shrink-0 md:shrink select-none ${
+                        isSelected
+                          ? 'bg-gold-500 text-luxury-950 font-bold shadow-gold-glow'
+                          : 'text-luxury-300 hover:text-luxury-50 hover:bg-luxury-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {item.icon}
+                        <span>{item.label}</span>
+                      </div>
+
+                      {item.badge !== undefined && (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                            item.badgeColor || 'bg-luxury-800 text-luxury-200'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  </React.Fragment>
                 );
               })
             )}
@@ -358,7 +383,7 @@ export const ManagerLayout: React.FC = () => {
 
               {/* Creative button list of sections */}
               <nav className="space-y-2">
-                {navItems.map((item, index) => {
+                {navItems.map((item) => {
                   const isSelected = activeTab === item.id;
                   return (
                     <button
@@ -387,8 +412,8 @@ export const ManagerLayout: React.FC = () => {
                           <span className={`text-sm block truncate ${isSelected ? 'font-bold' : 'font-semibold'}`}>
                             {item.label}
                           </span>
-                          <span className={`text-[10px] block font-mono ${isSelected ? 'text-luxury-900/70' : 'text-luxury-500'}`}>
-                            قسم {String(index + 1).padStart(2, '0')}
+                          <span className={`text-[10px] block ${isSelected ? 'text-luxury-900/70' : 'text-luxury-500'}`}>
+                            {sectionLabels[item.section]}
                           </span>
                         </div>
                       </div>

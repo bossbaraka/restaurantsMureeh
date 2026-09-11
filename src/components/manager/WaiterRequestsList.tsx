@@ -4,7 +4,7 @@ import { formatTime, formatRelativeMinutes, formatTableNumber } from '../../util
 import { Bell, CheckCircle2, Clock, HelpCircle, Receipt, Droplets, Sparkles, Check } from 'lucide-react';
 
 export const WaiterRequestsList: React.FC = () => {
-  const { waiterRequests, tables, resolveWaiterRequest } = useRestaurant();
+  const { waiterRequests, tables, resolveWaiterRequest, acknowledgeWaiterRequest, isMutationPending } = useRestaurant();
 
   const getTableLabel = (tableId: string) => {
     const found = tables.find((t) => t.id === tableId);
@@ -13,6 +13,10 @@ export const WaiterRequestsList: React.FC = () => {
   };
 
   const pendingRequests = waiterRequests.filter((w) => w.status === 'PENDING');
+  const acknowledgedRequests = waiterRequests.filter((w) => w.status === 'ACKNOWLEDGED');
+  const activeRequests = [...pendingRequests, ...acknowledgedRequests].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
   const resolvedRequests = waiterRequests.filter((w) => w.status === 'RESOLVED');
 
   const getReasonIcon = (reason: string) => {
@@ -44,7 +48,7 @@ export const WaiterRequestsList: React.FC = () => {
 
         <div className="flex items-center gap-2 text-xs">
           <span className="px-3 py-1.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 font-bold">
-            {pendingRequests.length} نداءات قيد الانتظار
+            {pendingRequests.length} بانتظار الاستلام · {acknowledgedRequests.length} قيد الخدمة
           </span>
           <span className="px-3 py-1.5 rounded-xl bg-luxury-850 text-luxury-400 border border-luxury-800">
             {resolvedRequests.length} تمت خدمتهم
@@ -56,10 +60,10 @@ export const WaiterRequestsList: React.FC = () => {
       <div className="space-y-3">
         <h3 className="text-xs font-bold text-luxury-300 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-          <span>النداءات النشطة غير المنجزة ({pendingRequests.length})</span>
+          <span>النداءات النشطة غير المنجزة ({activeRequests.length})</span>
         </h3>
 
-        {pendingRequests.length === 0 ? (
+        {activeRequests.length === 0 ? (
           <div className="p-8 text-center rounded-2xl bg-luxury-900/50 border border-luxury-800 text-xs text-luxury-400">
             <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
             <p className="font-bold text-luxury-200">جميع الضيوف يتلقون الخدمة برضا تام</p>
@@ -67,7 +71,9 @@ export const WaiterRequestsList: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {pendingRequests.map((req) => (
+            {activeRequests.map((req) => {
+              const isUpdating = isMutationPending(`waiter:${req.id}`);
+              return (
               <div
                 key={req.id}
                 className="p-4 rounded-2xl bg-luxury-900 border border-red-500/40 shadow-luxury flex items-start justify-between gap-3 animate-in fade-in"
@@ -93,14 +99,17 @@ export const WaiterRequestsList: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => resolveWaiterRequest(req.id)}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+                  onClick={() => req.status === 'PENDING' ? acknowledgeWaiterRequest(req.id) : resolveWaiterRequest(req.id)}
+                  disabled={isUpdating}
+                  aria-busy={isUpdating}
+                  className={`px-3.5 py-2 rounded-xl text-luxury-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${req.status === 'PENDING' ? 'bg-amber-500 hover:bg-amber-400' : 'bg-emerald-500 hover:bg-emerald-400'}`}
                 >
-                  <Check className="w-4 h-4" />
-                  <span>تمت الخدمة</span>
+                  {req.status === 'PENDING' ? <Clock className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                  <span>{isUpdating ? 'جاري التأكيد...' : req.status === 'PENDING' ? 'استلام النداء' : 'تمت الخدمة'}</span>
                 </button>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>

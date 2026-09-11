@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useDialog } from '../../hooks/useDialog';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { formatTableNumber } from '../../utils/formatting';
@@ -67,6 +68,8 @@ export const DirectTableEntryModal: React.FC = () => {
     return sortedTables.filter((t) => t.zone === selectedZoneFilter);
   }, [sortedTables, selectedZoneFilter]);
 
+  useDialog({ isOpen: isTableSelectorOpen, onClose: () => setIsTableSelectorOpen(false) });
+
   if (!isTableSelectorOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -104,6 +107,9 @@ export const DirectTableEntryModal: React.FC = () => {
         />
 
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="تحديد طاولة الضيف"
           className="relative z-10 w-full max-w-md bg-luxury-900 border border-luxury-700/80 rounded-2xl shadow-luxury overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col"
           dir="rtl"
         >
@@ -221,6 +227,9 @@ export const DirectTableEntryModal: React.FC = () => {
 
       {/* Modal Container */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="معاينة تجربة الضيف حسب الطاولة"
         className="relative z-10 w-full max-w-2xl bg-luxury-900 border border-luxury-700/80 rounded-2xl shadow-luxury overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col max-h-[90vh]"
         dir="rtl"
       >

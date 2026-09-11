@@ -24,6 +24,7 @@ export const MenuManagement: React.FC = () => {
     updateProduct,
     deleteProduct,
     toggleProductAvailability,
+    isMutationPending,
     addCategory,
     updateCategory,
     deleteCategory,
@@ -59,13 +60,10 @@ export const MenuManagement: React.FC = () => {
     setIsProductModalOpen(true);
   };
 
-  const handleSaveProduct = (prodData: Omit<Product, 'id' | 'restaurantId'>, editId?: string) => {
-    if (editId) {
-      updateProduct({ ...prodData, id: editId, restaurantId: currentRestaurant?.id || "rest-merar" });
-    } else {
-      addProduct(prodData);
-    }
-  };
+  const handleSaveProduct = (prodData: Omit<Product, 'id' | 'restaurantId'>, editId?: string): Promise<boolean> =>
+    editId
+      ? updateProduct({ ...prodData, id: editId, restaurantId: currentRestaurant?.id || 'rest-merar' })
+      : addProduct(prodData);
 
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,8 +211,30 @@ export const MenuManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-luxury-800/60">
+              {filteredProducts.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="p-10 text-center text-luxury-400">
+                    <p className="font-bold text-luxury-200">
+                      {products.length === 0 ? 'لم تتم إضافة أطباق إلى القائمة بعد' : 'لا توجد أطباق تطابق البحث أو الفئة'}
+                    </p>
+                    <p className="mt-1 text-[11px]">
+                      {products.length === 0 ? 'أضف أول طبق لبدء بناء قائمة المطعم.' : 'الأطباق موجودة، لكن الاختيارات الحالية تخفيها.'}
+                    </p>
+                    {products.length > 0 && (selectedCatId !== 'ALL' || searchDish.trim()) && (
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedCatId('ALL'); setSearchDish(''); }}
+                        className="mt-3 px-4 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 text-luxury-100 font-bold"
+                      >
+                        عرض كافة الأطباق
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )}
               {filteredProducts.map((product) => {
                 const categoryObj = categories.find((c) => c.id === product.categoryId);
+                const isUpdating = isMutationPending(`product:${product.id}`);
 
                 return (
                   <tr key={product.id} className="hover:bg-luxury-850/40 transition-colors">
@@ -256,6 +276,8 @@ export const MenuManagement: React.FC = () => {
                     <td className="p-4">
                       <button
                         onClick={() => toggleProductAvailability(product.id)}
+                        disabled={isUpdating}
+                        aria-busy={isUpdating}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
                           product.isAvailable
                             ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
@@ -263,7 +285,7 @@ export const MenuManagement: React.FC = () => {
                         }`}
                         title="انقر لتبديل حالة التوفر الفوري"
                       >
-                        {product.isAvailable ? (
+                        {isUpdating ? <span>جاري التأكيد...</span> : product.isAvailable ? (
                           <>
                             <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>متوفر للطلب</span>
@@ -282,13 +304,15 @@ export const MenuManagement: React.FC = () => {
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenEditProduct(product)}
+                          disabled={isUpdating}
                           className="p-2 rounded-lg bg-luxury-850 hover:bg-luxury-800 text-luxury-300 hover:text-luxury-100 border border-luxury-750 transition-colors"
                           title="تعديل"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => deleteProduct(product.id)}
+                          onClick={() => { if (window.confirm(`حذف الطبق «${product.name}» نهائياً من القائمة؟`)) void deleteProduct(product.id); }}
+                          disabled={isUpdating}
                           className="p-2 rounded-lg bg-luxury-850 hover:bg-red-500/20 text-luxury-400 hover:text-red-400 border border-luxury-750 transition-colors"
                           title="حذف"
                         >

@@ -1451,6 +1451,13 @@ router.put(
         }
       }
 
+      realtimeService.broadcastToTable(
+        reqObj.restaurantId,
+        reqObj.tableId,
+        'WAITER_STATUS_UPDATED',
+        { id: reqObj.id, status: reqObj.status, tableId: reqObj.tableId }
+      );
+
       await logAuditEvent({
         restaurantId: reqObj.restaurantId,
         userId: req.user!.id,

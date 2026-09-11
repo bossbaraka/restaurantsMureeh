@@ -59,7 +59,7 @@ export const CartDrawer: React.FC = () => {
       />
 
       <div className="fixed inset-y-0 left-0 max-w-full flex">
-        <div className="w-screen max-w-md bg-luxury-900 border-r border-luxury-750 shadow-2xl flex flex-col text-right">
+        <div role="dialog" aria-modal="true" aria-labelledby="cart-title" className="w-screen max-w-md bg-luxury-900 border-r border-luxury-750 shadow-2xl flex flex-col text-right">
           {/* Header */}
           <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-950" data-guide="cart-panel">
             <div className="flex items-center gap-3">
@@ -67,7 +67,7 @@ export const CartDrawer: React.FC = () => {
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-luxury-50 font-serif">سلة الطلبات</h3>
+                <h3 id="cart-title" className="text-base font-bold text-luxury-50 font-serif">سلة الطلبات</h3>
                 <p className="text-xs text-luxury-400">
                   {currentRestaurant?.name} · {cartTotalCount} أطباق مختارة
                 </p>
@@ -76,6 +76,7 @@ export const CartDrawer: React.FC = () => {
 
             <button
               onClick={() => setIsCartOpen(false)}
+              aria-label="إغلاق سلة الطلبات"
               className="p-2 rounded-xl text-luxury-400 hover:text-luxury-200 hover:bg-luxury-850 transition-colors"
             >
               <X className="w-5 h-5" />

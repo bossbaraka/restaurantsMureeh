@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 
 export const OrderManagement: React.FC = () => {
-  const { orders, updateOrderStatus, tables } = useRestaurant();
+  const { orders, updateOrderStatus, isMutationPending, tables } = useRestaurant();
 
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -144,15 +144,29 @@ export const OrderManagement: React.FC = () => {
       {filteredOrders.length === 0 ? (
         <div className="p-12 text-center rounded-2xl bg-luxury-900/50 border border-luxury-800">
           <ChefHat className="w-12 h-12 text-luxury-600 mx-auto mb-3" />
-          <h4 className="text-base font-bold text-luxury-200">لا توجد طلبات مطابقة للفلتر</h4>
+          <h4 className="text-base font-bold text-luxury-200">
+            {orders.length === 0 ? 'لا توجد طلبات حتى الآن' : 'لا توجد طلبات تطابق البحث أو الفلتر'}
+          </h4>
           <p className="text-xs text-luxury-400 mt-1">
-            جميع الطلبات المحددة تم إنجازها أو لا توجد طلبات جديدة حالياً.
+            {orders.length === 0
+              ? 'ستظهر طلبات العملاء هنا فور إرسالها من الطاولات.'
+              : 'الطلبات موجودة، لكن لا يطابق أي منها الاختيارات الحالية.'}
           </p>
+          {orders.length > 0 && (statusFilter !== 'ALL' || searchQuery.trim()) && (
+            <button
+              type="button"
+              onClick={() => { setStatusFilter('ALL'); setSearchQuery(''); }}
+              className="mt-4 px-4 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 text-luxury-100 text-xs font-bold"
+            >
+              مسح البحث والفلاتر
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredOrders.map((order) => {
             const statusCfg = getOrderStatusConfig(order.status);
+            const isUpdating = isMutationPending(`order:${order.id}`);
             return (
               <div
                 key={order.id}
@@ -260,6 +274,8 @@ export const OrderManagement: React.FC = () => {
                     {order.status === 'PENDING' && (
                       <button
                         onClick={() => updateOrderStatus(order.id, 'PREPARING')}
+                        disabled={isUpdating}
+                        aria-busy={isUpdating}
                         className="px-3.5 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs transition-colors shadow-gold-glow"
                       >
                         قبول وبدء التحضير
@@ -269,6 +285,8 @@ export const OrderManagement: React.FC = () => {
                     {order.status === 'PREPARING' && (
                       <button
                         onClick={() => updateOrderStatus(order.id, 'READY')}
+                        disabled={isUpdating}
+                        aria-busy={isUpdating}
                         className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-luxury-950 font-bold text-xs transition-colors shadow-sm"
                       >
                         وسم كجاهز للتقديم
@@ -278,6 +296,8 @@ export const OrderManagement: React.FC = () => {
                     {order.status === 'READY' && (
                       <button
                         onClick={() => updateOrderStatus(order.id, 'SERVED')}
+                        disabled={isUpdating}
+                        aria-busy={isUpdating}
                         className="px-3.5 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 text-luxury-100 border border-luxury-700 font-bold text-xs transition-colors"
                       >
                         تم التقديم للعميل

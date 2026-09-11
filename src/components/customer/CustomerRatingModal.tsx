@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDialog } from '../../hooks/useDialog';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Star, Heart, CheckCircle2, MessageSquare, Send, X, Share2 } from 'lucide-react';
 import { formatTableNumber } from '../../utils/formatting';
@@ -16,6 +17,8 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
   const [hoverRating, setHoverRating] = useState<number | null>(null);
   const [feedback, setFeedback] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  useDialog({ isOpen, onClose });
 
   if (!isOpen) return null;
 
@@ -41,7 +44,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in" dir="rtl">
-      <div className="bg-luxury-900 border border-luxury-750 rounded-3xl w-full max-w-md p-6 relative shadow-2xl text-center">
+      <div role="dialog" aria-modal="true" aria-label="تقييم تجربة المطعم" className="bg-luxury-900 border border-luxury-750 rounded-3xl w-full max-w-md p-6 relative shadow-2xl text-center">
         <button
           onClick={onClose}
           className="absolute left-4 top-4 p-2 rounded-xl text-luxury-400 hover:text-white bg-luxury-800/60 hover:bg-luxury-800 transition-colors"

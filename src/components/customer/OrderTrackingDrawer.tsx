@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { Order, OrderStatus } from '../../types/restaurant';
+import { Order } from '../../types/restaurant';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { CustomerRatingModal } from './CustomerRatingModal';
+import { useDialog } from '../../hooks/useDialog';
 import {
   X,
-  Clock,
   CheckCircle2,
   ChefHat,
   Bell,
   Utensils,
   PlusCircle,
-  AlertCircle,
   Edit3,
   Trash2,
   Lock,
@@ -19,7 +18,6 @@ import {
   ChevronUp,
   Share2,
   Star,
-  Printer,
 } from 'lucide-react';
 
 export const OrderTrackingDrawer: React.FC = () => {
@@ -42,6 +40,8 @@ export const OrderTrackingDrawer: React.FC = () => {
   const [editingNotesOrderId, setEditingNotesOrderId] = useState<string | null>(null);
   const [editingNotesText, setEditingNotesText] = useState<string>('');
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+
+  useDialog({ isOpen: isOrderTrackingOpen, onClose: () => setIsOrderTrackingOpen(false) });
 
   if (!isOrderTrackingOpen) return null;
 
@@ -84,6 +84,9 @@ export const OrderTrackingDrawer: React.FC = () => {
 
       {/* Drawer Container */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="order-tracking-title"
         className="relative w-full max-w-lg bg-luxury-900 border-r border-luxury-800 text-luxury-50 h-full flex flex-col shadow-2xl z-10 animate-in slide-in-from-right duration-300"
         dir="rtl"
       >
@@ -95,7 +98,7 @@ export const OrderTrackingDrawer: React.FC = () => {
             </div>
             <div className="text-right">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-luxury-50 font-serif">المطبخ الحي ومتابعة الطلب</h3>
+                <h3 id="order-tracking-title" className="text-base font-bold text-luxury-50 font-serif">المطبخ الحي ومتابعة الطلب</h3>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                   مباشر
@@ -149,11 +152,11 @@ export const OrderTrackingDrawer: React.FC = () => {
                       <p className="text-[11px] text-luxury-300">يتم إرسال حالة الأطباق مباشرة من شاشة المطبخ</p>
                     </div>
                   </div>
-                  <div className="text-left">
-                    <span className="text-[10px] text-luxury-400 block">وقت التحضير المتوقع</span>
-                    <span className="text-xs font-mono font-bold text-[var(--brand-primary-strong)] flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      12 - 18 دقيقة
+                  <div className="text-left" role="status" aria-live="polite">
+                    <span className="text-[10px] text-luxury-400 block">حالة المتابعة</span>
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+                      تحديث مباشر
                     </span>
                   </div>
                 </div>
