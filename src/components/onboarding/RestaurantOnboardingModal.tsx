@@ -164,6 +164,9 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
       <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={onClose} />
 
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="restaurant-onboarding-title"
         className="relative w-full max-w-2xl bg-luxury-900 border border-gold-500/40 rounded-2xl shadow-luxury overflow-hidden z-10 my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col max-h-[92vh]"
         dir="rtl"
       >
@@ -174,7 +177,7 @@ export const RestaurantOnboardingModal: React.FC<RestaurantOnboardingModalProps>
               <Store className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="restaurant-onboarding-title" className="text-base font-bold text-luxury-50 font-serif">
                 إضافة وتدشين مطعم جديد (Restaurant Onboarding)
               </h3>
               <p className="text-xs text-luxury-400">الخطوة {step} من 4 — معالج التهيئة السحابية متعدد المستأجرين</p>

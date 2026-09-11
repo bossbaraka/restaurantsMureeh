@@ -71,6 +71,9 @@ describe('C-01: no committed credentials', () => {
       if (!m) continue;
       for (const hit of m) {
         if (/(\$\{|USER|PASSWORD|<|\bexample\b|placeholder)/i.test(hit)) continue;
+        // Production-hardening tests intentionally use the minimal u:p pair
+        // as a disposable parser fixture; it is not a deployable credential.
+        if (hit.includes('://u:p@')) continue;
         leaks.push(`${f}: ${hit.slice(0, 40)}`);
       }
     }

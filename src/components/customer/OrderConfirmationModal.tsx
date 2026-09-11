@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDialog } from '../../hooks/useDialog';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import { X, Check, ShoppingBag, Receipt, AlertCircle, Clock } from 'lucide-react';
@@ -26,6 +27,8 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   const currency = currentRestaurant?.currency || '₪';
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useDialog({ isOpen: isOpen, onClose: onClose });
+
   if (!isOpen) return null;
 
   const handleConfirmOrder = async () => {
@@ -49,6 +52,9 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
       {/* Confirmation Card */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="order-confirmation-title"
         className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700 rounded-3xl p-6 z-10 shadow-2xl space-y-5 animate-fade-in text-right"
         dir="rtl"
       >
@@ -59,7 +65,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="order-confirmation-title" className="text-base font-bold text-luxury-50 font-serif">
                 تأكيد إرسال الطلب إلى المطبخ
               </h3>
               <p className="text-xs text-luxury-400">

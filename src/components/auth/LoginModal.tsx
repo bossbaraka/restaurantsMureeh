@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDialog } from '../../hooks/useDialog';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api } from '../../services/api';
@@ -65,6 +66,8 @@ export const LoginModal: React.FC = () => {
       setSelectedRestaurantId(found ? found.id : tenantsList[0].id);
     }
   }, [currentRestaurant?.id, tenantsList, selectedRestaurantId]);
+
+  useDialog({ isOpen: isLoginModalOpen, onClose: () => setIsLoginModalOpen(false) });
 
   if (!isLoginModalOpen) return null;
 
@@ -174,6 +177,9 @@ export const LoginModal: React.FC = () => {
 
       {/* Dialog */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="تسجيل الدخول"
         className="relative w-full max-w-md bg-luxury-900 border border-luxury-700/80 rounded-3xl shadow-2xl overflow-hidden z-10 my-4 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col"
         dir="rtl"
       >

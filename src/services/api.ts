@@ -35,6 +35,14 @@ const API_BASE = typeof window !== 'undefined'
 const API_ORIGIN = (configuredApiUrl || '').replace(/\/+$/, '')
   || (typeof window !== 'undefined' ? window.location.origin : '');
 
+/** Resolve browser-managed connections (notably EventSource) against the
+ * configured API origin. A relative SSE URL would otherwise hit the static
+ * frontend host in split Render/Vercel deployments. */
+export function apiConnectionUrl(path: string): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${configuredApiUrl || ''}${normalized}`;
+}
+
 export function absoluteAssetUrl(url: string | null | undefined): string {
   if (!url) return '';
   if (/^(https?:\/\/|data:|blob:)/i.test(url)) return url;
@@ -42,6 +50,16 @@ export function absoluteAssetUrl(url: string | null | undefined): string {
 }
 
 export const AUTH_TOKEN_KEY = 'merar_auth_token';
+
+export function newClientRequestId(): string {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  // RFC 4122 v4 fallback for older embedded browsers; this is an idempotency
+  // identifier, not an authentication secret.
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    return (char === 'x' ? value : (value & 0x3) | 0x8).toString(16);
+  });
+}
 
 // A pasted/legacy base64 data URL (megabytes of text) must never be sent
 // back inside a JSON save payload — it trips the server's 1MB body limit
@@ -253,7 +271,7 @@ export function mapOrderRow(raw: any): Order {
     notes: raw.notes || undefined,
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
-    estimatedPrepMinutes: raw.estimatedPrepMinutes ?? 18,
+    estimatedPrepMinutes: raw.estimatedPrepMinutes ?? undefined,
   };
 }
 
@@ -381,6 +399,7 @@ class RestaurantApiService {
     try {
       const res = await fetch(`${API_BASE}${path}`, {
         method,
+        signal: AbortSignal.timeout(30_000),
         headers: {
           ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(options.auth === false ? {} : this.getAuthHeader()),
@@ -642,6 +661,7 @@ class RestaurantApiService {
     restaurantId: string;
     tableId: string;
     sessionToken?: string;
+    clientRequestId: string;
     items: Order['items'];
     notes?: string;
   }): Promise<ApiResponse<{ order: Order }>> {
@@ -663,7 +683,7 @@ class RestaurantApiService {
     notes?: string,
     sessionToken?: string
   ): Promise<ApiResponse<Order>> {
-    const res = await this.submitOrder({ restaurantId, tableId, sessionToken, items, notes });
+    const res = await this.submitOrder({ restaurantId, tableId, sessionToken, clientRequestId: newClientRequestId(), items, notes });
     if (res.success && res.data) return { success: true, data: res.data.order, statusCode: 201 };
     return { success: false, error: res.error, statusCode: res.statusCode };
   }

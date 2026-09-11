@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { WaiterCallReason } from '../../types/restaurant';
-import { Bell, Check, X, Clock, AlertCircle } from 'lucide-react';
+import { Bell, Check, X, Clock } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
 import { formatTableNumber } from '../../utils/formatting';
 
@@ -54,21 +54,18 @@ export const WaiterCallModal: React.FC = () => {
     { id: 'BILL', label: 'طلب الحساب / الفاتورة', desc: 'إعداد الحساب للدفع عند الكاشير', icon: '🧾' },
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeTableId || cooldownSeconds > 0) return;
+    if (!activeTableId || cooldownSeconds > 0 || activeRequest || isSubmitting) return;
 
     setIsSubmitting(true);
-    callWaiter(selectedReason, note.trim() || undefined);
+    const result = await callWaiter(selectedReason, note.trim() || undefined);
     setIsSubmitting(false);
-    setJustCalled(true);
-    setCooldownSeconds(60); // 60s debounce protection
+    if (!result.success) return;
 
-    setTimeout(() => {
-      setJustCalled(false);
-      setIsWaiterModalOpen(false);
-      setNote('');
-    }, 1800);
+    setJustCalled(true);
+    setCooldownSeconds(60); // UI feedback complements the existing server limiter.
+    setNote('');
   };
 
   return (
@@ -79,6 +76,9 @@ export const WaiterCallModal: React.FC = () => {
       />
 
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="waiter-call-title"
         className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700/70 sm:rounded-3xl rounded-t-3xl p-6 z-10 shadow-2xl space-y-5 animate-fade-in text-right"
         dir="rtl"
       >
@@ -89,7 +89,7 @@ export const WaiterCallModal: React.FC = () => {
               <Bell className="w-5 h-5 animate-bounce" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">طلب النادل إلى الطاولة</h3>
+              <h3 id="waiter-call-title" className="text-base font-bold text-luxury-50 font-serif">طلب النادل إلى الطاولة</h3>
               <p className="text-xs text-luxury-400 font-mono">
                 {activeTableNumber != null
                   ? `طاولة رقم ${activeTableNumber}`
@@ -114,17 +114,17 @@ export const WaiterCallModal: React.FC = () => {
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto animate-pulse">
               <Check className="w-8 h-8" />
             </div>
-            <h4 className="text-base font-bold text-luxury-100 font-serif">تم إرسال طلبك للنادل بنجاح</h4>
-            <p className="text-xs text-luxury-400">طاقم الضيافة في طريقه إلى طاولتك الآن.</p>
+            <h4 className="text-base font-bold text-luxury-100 font-serif">تم إرسال طلبك إلى طاقم الضيافة</h4>
+            <p className="text-xs text-luxury-400">حالة الطلب: بانتظار استلام أحد أفراد الطاقم. لا حاجة لإعادة الإرسال.</p>
           </div>
         ) : activeRequest && cooldownSeconds === 0 ? (
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
             <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
               <Clock className="w-4 h-4 animate-spin" />
-              <span>طلب النادل قيد التنفيذ حالياً</span>
+              <span>{activeRequest.status === 'ACKNOWLEDGED' ? 'تم استلام طلبك والطاقم في الطريق' : 'طلبك بانتظار استلام طاقم الضيافة'}</span>
             </div>
             <p className="text-[11px] text-luxury-300">
-              يوجد نداء نشط بالفعل لطاولتك ({reasons.find((r) => r.id === activeRequest.reason)?.label || activeRequest.reason}). طاقم الخدمة على علم بذلك.
+              يوجد طلب نشط لطاولتك ({reasons.find((r) => r.id === activeRequest.reason)?.label || activeRequest.reason}). لا حاجة لإرسال طلب آخر الآن.
             </p>
           </div>
         ) : null}
@@ -132,7 +132,7 @@ export const WaiterCallModal: React.FC = () => {
         {!justCalled && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-luxury-200 mb-2" htmlFor="waitercallmodal-f1">نوع الطلب:</label>
+              <p className="block text-xs font-bold text-luxury-200 mb-2">نوع الطلب:</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {reasons.map((r) => {
                   const isSelected = selectedReason === r.id;
@@ -159,7 +159,7 @@ export const WaiterCallModal: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-luxury-200 mb-1.5">ملاحظة إضافية (اختياري):</label>
+              <label htmlFor="waitercallmodal-f1" className="block text-xs font-bold text-luxury-200 mb-1.5">ملاحظة إضافية (اختياري):</label>
               <input id="waitercallmodal-f1"
                 type="text"
                 value={note}
@@ -177,11 +177,11 @@ export const WaiterCallModal: React.FC = () => {
 
             <button
               type="submit"
-              disabled={isSubmitting || cooldownSeconds > 0}
+              disabled={isSubmitting || cooldownSeconds > 0 || !!activeRequest}
               className="w-full py-3.5 rounded-2xl bg-[var(--brand-primary-strong)] hover:bg-[var(--brand-primary-strong)] disabled:opacity-50 text-luxury-950 font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
             >
               <Bell className="w-4 h-4" />
-              <span>{isSubmitting ? 'جاري الإرسال...' : cooldownSeconds > 0 ? `انتظر (${cooldownSeconds}s)` : 'إرسال النداء الآن'}</span>
+              <span>{isSubmitting ? 'جاري إرسال الطلب...' : activeRequest ? 'يوجد طلب نشط لطاولتك' : cooldownSeconds > 0 ? `تم الإرسال — انتظر (${cooldownSeconds}s)` : 'إرسال النداء الآن'}</span>
             </button>
           </form>
         )}

@@ -14,6 +14,7 @@ import {
   ArrowUpRight,
   Flame,
   CheckCheck,
+  AlertCircle,
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -126,6 +127,47 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </button>
         </div>
       </div>
+
+      {/* Operational exceptions come before analytics: answer “what needs me now?” */}
+      <section className="bg-luxury-900/90 rounded-2xl border border-luxury-800 p-4" aria-labelledby="attention-heading">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <h3 id="attention-heading" className="text-sm font-bold text-luxury-100 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-400" />
+              يحتاج انتباهك الآن
+            </h3>
+            <p className="text-[11px] text-luxury-400 mt-0.5">اختصارات مباشرة للمهام التشغيلية المعلّقة</p>
+          </div>
+          {pendingOrders.length + readyOrders.length + pendingWaiters.length === 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+              <CheckCheck className="w-4 h-4" /> لا توجد مهام عاجلة
+            </span>
+          )}
+        </div>
+
+        {pendingOrders.length + readyOrders.length + pendingWaiters.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {pendingOrders.length > 0 && (
+              <button onClick={() => onNavigateTab('ORDERS')} className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-right hover:border-amber-500/60 transition-colors">
+                <span className="block text-sm font-bold text-amber-300">{pendingOrders.length} طلبات جديدة</span>
+                <span className="block text-[11px] text-luxury-300 mt-0.5">فتح الطلبات وبدء التحضير ←</span>
+              </button>
+            )}
+            {readyOrders.length > 0 && (
+              <button onClick={() => onNavigateTab('ORDERS')} className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-right hover:border-emerald-500/60 transition-colors">
+                <span className="block text-sm font-bold text-emerald-300">{readyOrders.length} طلبات جاهزة</span>
+                <span className="block text-[11px] text-luxury-300 mt-0.5">فتح الطلبات وتأكيد التقديم ←</span>
+              </button>
+            )}
+            {pendingWaiters.length > 0 && (
+              <button onClick={() => onNavigateTab('WAITERS')} className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-right hover:border-red-500/60 transition-colors">
+                <span className="block text-sm font-bold text-red-300">{pendingWaiters.length} نداءات ضيافة</span>
+                <span className="block text-[11px] text-luxury-300 mt-0.5">فتح النداءات والاستجابة ←</span>
+              </button>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Primary KPI Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">

@@ -41,7 +41,7 @@ interface ProductFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   categories?: Category[];
-  onSave?: (prodData: Omit<Product, 'id' | 'restaurantId'>, editId?: string) => void;
+  onSave?: (prodData: Omit<Product, 'id' | 'restaurantId'>, editId?: string) => Promise<boolean>;
 }
 
 export const ProductFormModal: React.FC<ProductFormModalProps> = ({
@@ -66,6 +66,8 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [isAvailable, setIsAvailable] = useState(true);
   const [isFeatured, setIsFeatured] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDishImageUpload = async (file?: File) => {
@@ -83,6 +85,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         return;
       }
       setImage(res.data.url);
+      setHasUnsavedChanges(true);
       showToast('success', 'تم رفع صورة الطبق بنجاح');
     } catch {
       showToast('error', 'تعذر معالجة الصورة');
@@ -138,15 +141,23 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setSizes([]);
       setAddOns([]);
     }
+    setHasUnsavedChanges(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id, isOpen]);
 
-  // UX-001: Escape-to-close + body scroll lock (see hooks/useDialog).
-  useDialog({ isOpen, onClose });
+  const requestClose = () => {
+    if (isSaving) return;
+    if (hasUnsavedChanges && !window.confirm('لديك تعديلات غير محفوظة. هل تريد مغادرة النموذج وفقدانها؟')) return;
+    onClose();
+  };
+
+  // Costly multi-field edits are protected; Escape/backdrop use the same guard.
+  useDialog({ isOpen, onClose: requestClose });
 
   if (!isOpen) return null;
 
   const handleAddSize = () => {
+    setHasUnsavedChanges(true);
     if (!newSizeName.trim()) return;
     const mod = Number(newSizeMod) || 0;
     setSizes((prev) => [
@@ -158,10 +169,12 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   const handleRemoveSize = (id: string) => {
+    setHasUnsavedChanges(true);
     setSizes((prev) => prev.filter((s) => s.id !== id));
   };
 
   const handleAddAddOn = () => {
+    setHasUnsavedChanges(true);
     if (!newAddOnName.trim()) return;
     setAddOns((prev) => [
       ...prev,
@@ -172,10 +185,12 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   };
 
   const handleRemoveAddOn = (id: string) => {
+    setHasUnsavedChanges(true);
     setAddOns((prev) => prev.filter((a) => a.id !== id));
   };
 
   const handleAddIngredient = () => {
+    setHasUnsavedChanges(true);
     if (!newIngredient.trim()) return;
     if (!removableIngredients.includes(newIngredient.trim())) {
       setRemovableIngredients((prev) => [...prev, newIngredient.trim()]);
@@ -187,9 +202,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setRemovableIngredients((prev) => prev.filter((i) => i !== ing));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !price || !categoryId) return;
+    if (!name.trim() || !price || !categoryId || isSaving) return;
 
     // A base64 dish image would 413 the save (server JSON limit is 1MB) —
     // keep the modal open and point at the upload button instead.
@@ -216,38 +231,40 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       ingredients: removableIngredients.length > 0 ? removableIngredients : undefined,
     };
 
-    if (onSave) {
-      onSave(productPayload, product ? product.id : undefined);
-    } else if (product) {
-      updateProduct({ ...productPayload, id: product.id, restaurantId: product.restaurantId || currentRestaurant?.id || 'rest-merar' });
-    } else {
-      addProduct(productPayload);
-    }
-
-    onClose();
+    setIsSaving(true);
+    const saved = onSave
+      ? await onSave(productPayload, product ? product.id : undefined)
+      : product
+        ? await updateProduct({ ...productPayload, id: product.id, restaurantId: product.restaurantId || currentRestaurant?.id || 'rest-merar' })
+        : await addProduct(productPayload);
+    setIsSaving(false);
+    if (saved) onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={requestClose} />
 
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-form-title"
         className="relative w-full max-w-2xl bg-luxury-900 border border-luxury-700/80 rounded-3xl overflow-hidden shadow-2xl z-10 animate-fade-in text-right max-h-[90vh] flex flex-col"
         dir="rtl"
       >
         {/* Header */}
         <div className="p-5 border-b border-luxury-800 flex items-center justify-between shrink-0 bg-luxury-950">
-          <h3 className="text-base font-bold text-luxury-50 font-serif flex items-center gap-2">
+          <h3 id="product-form-title" className="text-base font-bold text-luxury-50 font-serif flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-gold-400" />
             <span>{product ? `تعديل طبق: ${product.name}` : 'إضافة طبق فاخر جديد'}</span>
           </h3>
-          <button onClick={onClose} aria-label="إغلاق النافذة" className="p-1 text-luxury-400 hover:text-white">
+          <button onClick={requestClose} aria-label="إغلاق النافذة" className="p-1 text-luxury-400 hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Scrollable Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1 custom-scrollbar text-xs">
+        <form onSubmit={handleSubmit} onChangeCapture={() => setHasUnsavedChanges(true)} className="p-6 space-y-5 overflow-y-auto flex-1 custom-scrollbar text-xs">
           {/* Category & Badge */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -559,16 +576,18 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
           <div className="pt-4 border-t border-luxury-800 flex justify-end gap-3 sticky bottom-0 bg-luxury-900 py-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="px-4 py-2.5 rounded-xl bg-luxury-850 text-luxury-300 hover:text-white"
             >
               إلغاء
             </button>
             <button
               type="submit"
+              disabled={isSaving || isUploadingImage}
+              aria-busy={isSaving}
               className="px-6 py-2.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold shadow-gold-glow"
             >
-              {product ? 'حفظ التعديلات' : 'إنشاء الطبق ونشره'}
+              {isSaving ? 'جاري الحفظ...' : product ? 'حفظ التعديلات' : 'إنشاء الطبق ونشره'}
             </button>
           </div>
         </form>

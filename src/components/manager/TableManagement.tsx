@@ -34,6 +34,7 @@ export const TableManagement: React.FC = () => {
 
   // Table Create / Edit Modal State
   const [isTableModalOpen, setIsTableModalOpen] = useState(false);
+  const [isSavingTable, setIsSavingTable] = useState(false);
   const [editingTable, setEditingTable] = useState<RestaurantTable | null>(null);
   const [tableNumInput, setTableNumInput] = useState<number>(1);
   const [capacityInput, setCapacityInput] = useState<number>(4);
@@ -83,8 +84,9 @@ export const TableManagement: React.FC = () => {
 
   const handleSaveTable = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentRestaurant) return;
+    if (!currentRestaurant || isSavingTable) return;
 
+    setIsSavingTable(true);
     const num = Number(tableNumInput);
     const res = editingTable
       ? await api.updateTable(currentRestaurant.id, {
@@ -99,8 +101,9 @@ export const TableManagement: React.FC = () => {
           zone: zoneInput,
         });
 
+    setIsSavingTable(false);
     if (!res.success) {
-      showToast('error', editingTable ? 'تعذر تعديل الطاولة' : 'تعذر إضافة الطاولة', res.error);
+      showToast('error', editingTable ? 'تعذر تعديل الطاولة' : 'تعذر إضافة الطاولة', `${res.error || 'لم يتم الحفظ'}. بقيت بياناتك في النموذج.`);
       return;
     }
     refreshTenantData();
@@ -374,9 +377,11 @@ export const TableManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold shadow-gold-glow"
+                  disabled={isSavingTable}
+                  aria-busy={isSavingTable}
+                  className="px-6 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold shadow-gold-glow disabled:opacity-60 disabled:cursor-wait"
                 >
-                  {editingTable ? 'حفظ التعديلات' : 'إنشاء الطاولة'}
+                  {isSavingTable ? 'جاري الحفظ...' : editingTable ? 'حفظ التعديلات' : 'إنشاء الطاولة'}
                 </button>
               </div>
             </form>

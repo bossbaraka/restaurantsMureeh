@@ -21,7 +21,7 @@ import {
   Plan,
   Subscription,
 } from '../types/restaurant';
-import { api } from '../services/api';
+import { api, apiConnectionUrl, newClientRequestId } from '../services/api';
 import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
 import { applyBrandTheme } from '../theme/brandTheme';
@@ -115,25 +115,26 @@ interface RestaurantContextType {
   createOrder: (notes?: string) => Promise<{ success: boolean; order?: Order; error?: string }>;
   cancelCustomerOrder: (orderId: string) => Promise<{ success: boolean; message: string }>;
   editCustomerOrderNotes: (orderId: string, notes: string) => Promise<{ success: boolean; message: string }>;
-  callWaiter: (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => void;
+  callWaiter: (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => Promise<{ success: boolean; error?: string }>;
   activeTableOrders: Order[];
 
   // Manager Actions
-  updateOrderStatus: (orderId: string, status: OrderStatus) => boolean;
-  updateTableStatus: (tableId: string, status: RestaurantTable['status']) => void;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<boolean>;
+  updateTableStatus: (tableId: string, status: RestaurantTable['status']) => Promise<boolean>;
+  isMutationPending: (key: string) => boolean;
   settleTableAndFree: (tableId: string) => void;
-  resolveWaiterRequest: (requestId: string) => void;
-  acknowledgeWaiterRequest: (requestId: string) => void;
-  toggleProductStock: (productId: string) => void;
-  toggleProductAvailability: (productId: string) => void;
-  addProduct: (product: Omit<Product, 'id' | 'restaurantId'>) => void;
-  updateProduct: (product: Product) => void;
-  deleteProduct: (productId: string) => void;
-  addCategory: (name: string, nameEn?: string) => void;
+  resolveWaiterRequest: (requestId: string) => Promise<boolean>;
+  acknowledgeWaiterRequest: (requestId: string) => Promise<boolean>;
+  toggleProductStock: (productId: string) => Promise<boolean>;
+  toggleProductAvailability: (productId: string) => Promise<boolean>;
+  addProduct: (product: Omit<Product, 'id' | 'restaurantId'>) => Promise<boolean>;
+  updateProduct: (product: Product) => Promise<boolean>;
+  deleteProduct: (productId: string) => Promise<boolean>;
+  addCategory: (name: string, nameEn?: string) => Promise<boolean>;
   updateCategory: (category: Category) => void;
   deleteCategory: (categoryId: string) => void;
-  addOffer: (offer: Omit<Offer, 'id' | 'restaurantId'>) => void;
-  deleteOffer: (offerId: string) => void;
+  addOffer: (offer: Omit<Offer, 'id' | 'restaurantId'>) => Promise<boolean>;
+  deleteOffer: (offerId: string) => Promise<boolean>;
 
   // Platform Admin Super Controls
   switchTenantBySlug: (slug: string) => void;
@@ -303,6 +304,19 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [plans, setPlans] = useState<Plan[]>([]);
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const pendingMutationKeysRef = useRef(new Set<string>());
+  const [, setPendingMutationVersion] = useState(0);
+  const isMutationPending = useCallback((key: string) => pendingMutationKeysRef.current.has(key), []);
+  const beginMutation = useCallback((key: string): boolean => {
+    if (pendingMutationKeysRef.current.has(key)) return false;
+    pendingMutationKeysRef.current.add(key);
+    setPendingMutationVersion((version) => version + 1);
+    return true;
+  }, []);
+  const endMutation = useCallback((key: string) => {
+    pendingMutationKeysRef.current.delete(key);
+    setPendingMutationVersion((version) => version + 1);
+  }, []);
   const [urlHandledRef] = useState<{ done: boolean }>({ done: false });
   const isFetchingRef = useRef(false);
 
@@ -651,6 +665,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Ref to track previous status of customer orders for instant live notifications
   const prevOrderStatusMapRef = useRef<Record<string, string>>({});
+  const orderSubmissionRef = useRef<{ fingerprint: string; clientRequestId: string } | null>(null);
 
   // SSE real-time listener for customers with an active table session.
   useEffect(() => {
@@ -662,7 +677,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Customer streams authenticate with the QR session capability only —
       // the staff JWT must never travel in a URL (logs/history/referrer).
       conn = openEventSourceWithBackoff(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`,
+        apiConnectionUrl(`/api/public/events?restaurantId=${currentRestaurant.id}&tableId=${activeTableId}&sessionToken=${encodeURIComponent(currentTableSession.sessionToken)}`),
         {
           ORDER_STATUS_UPDATED: (e: MessageEvent) => {
             refreshTenantData();
@@ -676,6 +691,24 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           },
           ORDER_CREATED: () => refreshTenantData(),
           ORDER_CANCELLED: () => refreshTenantData(),
+          WAITER_STATUS_UPDATED: (event: MessageEvent) => {
+            try {
+              const data = JSON.parse(event.data as string) as { id?: string; status?: WaiterRequest['status'] };
+              if (!data.id || !data.status) return;
+              setWaiterRequests((current) => current.map((request) => {
+                if (request.id !== data.id) return request;
+                const allowed =
+                  (request.status === 'PENDING' && data.status === 'ACKNOWLEDGED') ||
+                  (request.status === 'ACKNOWLEDGED' && data.status === 'RESOLVED') ||
+                  request.status === data.status;
+                return allowed ? { ...request, status: data.status! } : request;
+              }));
+              if (data.status === 'ACKNOWLEDGED') showToast('info', 'تم استلام ندائك', 'النادل في طريقه إلى طاولتك.');
+              if (data.status === 'RESOLVED') showToast('success', 'تم إنجاز طلب المساعدة');
+            } catch {
+              /* ignore malformed real-time payloads */
+            }
+          },
           TABLE_SETTLED: () => refreshTenantData(),
         }
       );
@@ -697,7 +730,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     let conn: { close: () => void } | null = null;
     try {
       conn = openEventSourceWithBackoff(
-        `/api/public/events?restaurantId=${currentRestaurant.id}&token=${encodeURIComponent(token)}`,
+        apiConnectionUrl(`/api/public/events?restaurantId=${currentRestaurant.id}&token=${encodeURIComponent(token)}`),
         {
           ORDER_CREATED: () => {
             refreshTenantData();
@@ -943,15 +976,28 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         };
       });
 
+      const fingerprint = JSON.stringify({
+        restaurantId: currentRestaurant.id,
+        tableId: activeTableId,
+        sessionId: currentTableSession.id,
+        items: orderItems,
+        notes: notes || '',
+      });
+      if (orderSubmissionRef.current?.fingerprint !== fingerprint) {
+        orderSubmissionRef.current = { fingerprint, clientRequestId: newClientRequestId() };
+      }
+
       const res = await api.submitOrder({
         restaurantId: currentRestaurant.id,
         tableId: activeTableId,
         sessionToken: currentTableSession.sessionToken,
+        clientRequestId: orderSubmissionRef.current.clientRequestId,
         items: orderItems,
         notes,
       });
 
       if (res.success && res.data) {
+        orderSubmissionRef.current = null;
         clearCart();
         refreshTenantData();
         soundFX.playChime();
@@ -968,25 +1014,28 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const updateOrderStatus = useCallback(
-    (orderId: string, nextStatus: OrderStatus): boolean => {
+    async (orderId: string, nextStatus: OrderStatus): Promise<boolean> => {
       if (!currentRestaurant || !currentUser) return false;
-      const order = orders.find((o) => o.id === orderId);
-      if (!order) return false;
-      if (order.status === 'SERVED' && nextStatus !== 'SERVED') return false;
-
-      void api.updateOrderStatus(currentUser, currentRestaurant.id, orderId, nextStatus).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-        } else {
-          showToast('error', 'تعذر تحديث الحالة', res.error);
+      const order = orders.find((item) => item.id === orderId);
+      if (!order || (order.status === 'SERVED' && nextStatus !== 'SERVED')) return false;
+      const key = `order:${orderId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.updateOrderStatus(currentUser, currentRestaurant.id, orderId, nextStatus);
+        if (!res.success) {
+          showToast('error', 'تعذر تحديث حالة الطلب', `${res.error || 'لم يقبل الخادم التغيير'}. بقيت الحالة كما كانت ويمكنك المحاولة مجدداً.`);
+          return false;
         }
-      });
-      soundFX.playTap();
-      if (nextStatus === 'READY') soundFX.playBell();
-      return true;
+        await refreshTenantData();
+        soundFX.playTap();
+        if (nextStatus === 'READY') soundFX.playBell();
+        showToast('success', 'تم تحديث حالة الطلب', `تم تأكيد الحالة الجديدة للطلب ${orderId}.`);
+        return true;
+      } finally {
+        endMutation(key);
+      }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, orders, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, orders, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const cancelCustomerOrder = useCallback(
@@ -1022,19 +1071,24 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const updateTableStatus = useCallback(
-    (tableId: string, status: RestaurantTable['status']) => {
-      if (!currentRestaurant || !currentUser) return;
-      const table = tables.find((t) => t.id === tableId);
-      if (!table) return;
-      // Status-only payload: service staff (cashier/waiter) may flip table
-      // availability, while structural table edits remain manager-only.
-      void api.updateTableStatus(currentRestaurant.id, tableId, status).then((res) => {
-        if (res.success) refreshTenantData();
-        else showToast('error', 'تعذر تحديث الطاولة', res.error);
-      });
+    async (tableId: string, status: RestaurantTable['status']): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser || !tables.some((table) => table.id === tableId)) return false;
+      const key = `table:${tableId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.updateTableStatus(currentRestaurant.id, tableId, status);
+        if (!res.success) {
+          showToast('error', 'تعذر تحديث الطاولة', `${res.error || 'لم يقبل الخادم التغيير'}. بقيت الحالة كما كانت.`);
+          return false;
+        }
+        await refreshTenantData();
+        showToast('success', 'تم تحديث حالة الطاولة');
+        return true;
+      } finally {
+        endMutation(key);
+      }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, tables, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, tables, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const settleTableAndFree = useCallback(
@@ -1057,8 +1111,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const callWaiter = useCallback(
-    (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => {
-      if (!currentRestaurant) return;
+    async (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string): Promise<{ success: boolean; error?: string }> => {
+      if (!currentRestaurant) return { success: false, error: 'المطعم غير محدد' };
       let targetTableId = activeTableId;
       let targetReason: WaiterRequest['reason'] = 'ASSISTANCE';
       let targetText = customText;
@@ -1071,148 +1125,157 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (typeof maybeReason === 'string') targetText = maybeReason;
       }
 
-      if (!targetTableId) return;
+      if (!targetTableId) return { success: false, error: 'لا توجد طاولة نشطة' };
 
-      api
-        .callWaiter(
-          currentRestaurant.id,
-          targetTableId,
-          targetReason,
-          targetText,
-          currentTableSession?.sessionToken
-        )
-        .then((res) => {
-          if (res.success) {
-            refreshTenantData();
-            soundFX.playBell();
-            showToast('success', 'تم استدعاء طاقم الضيافة', `طاقم ${currentRestaurant.name} في طريقه إلى الطاولة لخدمتك.`);
-          } else {
-            showToast('error', 'تعذر إرسال النداء', res.error);
-          }
-        });
+      const res = await api.callWaiter(
+        currentRestaurant.id,
+        targetTableId,
+        targetReason,
+        targetText,
+        currentTableSession?.sessionToken
+      );
+      if (res.success && res.data?.waiterRequest) {
+        // Public catalog refreshes do not include waiter requests. Keep the
+        // accepted request locally so the guest immediately sees a persistent
+        // pending/acknowledged state and cannot accidentally submit it twice.
+        setWaiterRequests((prev) => [
+          res.data!.waiterRequest,
+          ...prev.filter((request) => request.id !== res.data!.waiterRequest.id),
+        ]);
+        refreshTenantData();
+        soundFX.playBell();
+        showToast('success', 'تم استدعاء طاقم الضيافة', `تم إرسال طلبك إلى طاقم ${currentRestaurant.name}. يمكنك متابعة حالته من نافذة النداء.`);
+        return { success: true };
+      }
+
+      const error = res.error || 'تعذر إرسال النداء';
+      showToast('error', 'تعذر إرسال النداء', `${error} لم يتم تسجيل طلب جديد؛ يمكنك المحاولة مرة أخرى.`);
+      return { success: false, error };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentRestaurant, activeTableId, currentTableSession, refreshTenantData, showToast]
   );
 
-  const resolveWaiterRequest = useCallback(
-    (requestId: string) => {
-      if (!currentRestaurant || !currentUser) return;
-      void api
-        .updateWaiterRequestStatus(currentUser, currentRestaurant.id, requestId, 'RESOLVED')
-        .then((res) => {
-          if (res.success) {
-            refreshTenantData();
-            showToast('info', 'تم إنجاز طلب النادل');
-          } else {
-            showToast('error', 'تعذر تحديث النداء', res.error);
-          }
-        });
+  const updateWaiterRequest = useCallback(
+    async (requestId: string, status: 'ACKNOWLEDGED' | 'RESOLVED'): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const key = `waiter:${requestId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.updateWaiterRequestStatus(currentUser, currentRestaurant.id, requestId, status);
+        if (!res.success) {
+          showToast('error', 'تعذر تحديث النداء', `${res.error || 'لم يقبل الخادم التغيير'}. بقي النداء في حالته السابقة.`);
+          return false;
+        }
+        await refreshTenantData();
+        showToast('success', status === 'ACKNOWLEDGED' ? 'تم استلام النداء' : 'تم إنجاز طلب الضيف');
+        return true;
+      } finally {
+        endMutation(key);
+      }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
+  const resolveWaiterRequest = useCallback(
+    (requestId: string) => updateWaiterRequest(requestId, 'RESOLVED'),
+    [updateWaiterRequest]
+  );
   const acknowledgeWaiterRequest = useCallback(
-    (requestId: string) => {
-      if (!currentRestaurant || !currentUser) return;
-      void api
-        .updateWaiterRequestStatus(currentUser, currentRestaurant.id, requestId, 'ACKNOWLEDGED')
-        .then((res) => {
-          if (res.success) {
-            refreshTenantData();
-            showToast('info', 'تم استلام النداء وجاري التوجه للطاولة');
-          } else {
-            showToast('error', 'تعذر تحديث النداء', res.error);
-          }
-        });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, refreshTenantData, showToast]
+    (requestId: string) => updateWaiterRequest(requestId, 'ACKNOWLEDGED'),
+    [updateWaiterRequest]
   );
 
   const toggleProductStock = useCallback(
-    (productId: string) => {
-      if (!currentRestaurant) return;
-      void api.toggleProductStock(currentRestaurant.id, productId).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          const p = products.find((item) => item.id === productId);
-          const nowAvailable = res.data?.product.isAvailable;
-          showToast(
-            nowAvailable === false ? 'warning' : 'success',
-            nowAvailable === false ? 'تم تحويل الطبق إلى غير متوفر (نفد المخزون)' : 'الطبق متوفر الآن',
-            p?.name
-          );
-        } else {
-          showToast('error', 'تعذر تحديث حالة المخزون', res.error);
+    async (productId: string): Promise<boolean> => {
+      if (!currentRestaurant) return false;
+      const key = `product:${productId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.toggleProductStock(currentRestaurant.id, productId);
+        if (!res.success) {
+          showToast('error', 'تعذر تحديث حالة المخزون', `${res.error || 'لم يقبل الخادم التغيير'}. بقيت حالة الطبق كما كانت.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        const product = products.find((item) => item.id === productId);
+        const nowAvailable = res.data?.product.isAvailable;
+        showToast(
+          nowAvailable === false ? 'warning' : 'success',
+          nowAvailable === false ? 'تم تحويل الطبق إلى غير متوفر (نفد المخزون)' : 'الطبق متوفر الآن',
+          product?.name
+        );
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, products, refreshTenantData, showToast]
+    [currentRestaurant, products, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const toggleProductAvailability = toggleProductStock;
 
   const addProduct = useCallback(
-    (product: Omit<Product, 'id' | 'restaurantId'>) => {
-      if (!currentRestaurant || !currentUser) return;
-      const tempId = `prod-${Date.now()}`;
-      const newProduct: Product = {
-        ...product,
-        id: tempId,
-        restaurantId: currentRestaurant.id,
-      };
-      void api.saveProduct(currentUser, currentRestaurant.id, newProduct).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('success', 'تمت إضافة طبق جديد للقائمة', newProduct.name);
-        } else {
-          showToast('error', 'تعذر إضافة الطبق', res.error);
+    async (product: Omit<Product, 'id' | 'restaurantId'>): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const key = 'product:new';
+      if (!beginMutation(key)) return false;
+      const newProduct: Product = { ...product, id: `prod-${Date.now()}`, restaurantId: currentRestaurant.id };
+      try {
+        const res = await api.saveProduct(currentUser, currentRestaurant.id, newProduct);
+        if (!res.success) {
+          showToast('error', 'تعذر إضافة الطبق', `${res.error || 'لم يتم الحفظ'}. بقيت بياناتك في النموذج.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('success', 'تمت إضافة طبق جديد للقائمة', newProduct.name);
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const updateProduct = useCallback(
-    (product: Product) => {
-      if (!currentRestaurant || !currentUser) return;
-      const updatedProd: Product = { ...product, restaurantId: currentRestaurant.id };
-      void api.saveProduct(currentUser, currentRestaurant.id, updatedProd).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('success', 'تم تعديل بيانات الطبق', product.name);
-        } else {
-          showToast('error', 'تعذر تعديل الطبق', res.error);
+    async (product: Product): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const key = `product:${product.id}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.saveProduct(currentUser, currentRestaurant.id, { ...product, restaurantId: currentRestaurant.id });
+        if (!res.success) {
+          showToast('error', 'تعذر تعديل الطبق', `${res.error || 'لم يتم الحفظ'}. بقيت بياناتك في النموذج.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('success', 'تم تعديل بيانات الطبق', product.name);
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const deleteProduct = useCallback(
-    (productId: string) => {
-      if (!currentRestaurant || !currentUser) return;
-      void api.deleteManagerProduct(currentUser, currentRestaurant.id, productId).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('info', 'تم حذف الطبق من القائمة');
-        } else {
-          showToast('error', 'تعذر حذف الطبق', res.error);
+    async (productId: string): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const key = `product:${productId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.deleteManagerProduct(currentUser, currentRestaurant.id, productId);
+        if (!res.success) {
+          showToast('error', 'تعذر حذف الطبق', `${res.error || 'لم يتم الحذف'}. بقي الطبق في القائمة.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('info', 'تم حذف الطبق من القائمة');
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const addCategory = useCallback(
-    (name: string, nameEn?: string) => {
-      if (!currentRestaurant || !currentUser) return;
+    async (name: string, nameEn?: string): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const key = 'category:new';
+      if (!beginMutation(key)) return false;
       const newCat: Category = {
         id: `cat-${Date.now()}`,
         restaurantId: currentRestaurant.id,
@@ -1220,17 +1283,18 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         nameEn,
         sortOrder: categories.length + 1,
       };
-      void api.saveCategory(currentUser, currentRestaurant.id, newCat).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('success', 'تمت إضافة تصنيف جديد', name);
-        } else {
-          showToast('error', 'تعذر إضافة التصنيف', res.error);
+      try {
+        const res = await api.saveCategory(currentUser, currentRestaurant.id, newCat);
+        if (!res.success) {
+          showToast('error', 'تعذر إضافة التصنيف', `${res.error || 'لم يتم الحفظ'}. بقي الاسم في النموذج.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('success', 'تمت إضافة تصنيف جديد', name);
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentUser, categories, refreshTenantData, showToast]
+    [currentRestaurant, currentUser, categories, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const updateCategory = useCallback(
@@ -1267,35 +1331,41 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const addOffer = useCallback(
-    (offer: Omit<Offer, 'id' | 'restaurantId'>) => {
-      if (!currentRestaurant) return;
-      void api.saveOffer(currentRestaurant.id, offer).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('success', 'تم نشر العرض الترويجي', offer.title);
-        } else {
-          showToast('error', 'تعذر نشر العرض', res.error);
+    async (offer: Omit<Offer, 'id' | 'restaurantId'>): Promise<boolean> => {
+      if (!currentRestaurant) return false;
+      const key = 'offer:new';
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.saveOffer(currentRestaurant.id, offer);
+        if (!res.success) {
+          showToast('error', 'تعذر نشر العرض', `${res.error || 'لم يتم الحفظ'}. بقيت بياناتك في النموذج.`);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('success', 'تم نشر العرض الترويجي', offer.title);
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, refreshTenantData, showToast]
+    [currentRestaurant, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const deleteOffer = useCallback(
-    (offerId: string) => {
-      if (!currentRestaurant) return;
-      void api.deleteOffer(currentRestaurant.id, offerId).then((res) => {
-        if (res.success) {
-          refreshTenantData();
-          showToast('info', 'تم حذف العرض الترويجي');
-        } else {
+    async (offerId: string): Promise<boolean> => {
+      if (!currentRestaurant) return false;
+      const key = `offer:${offerId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.deleteOffer(currentRestaurant.id, offerId);
+        if (!res.success) {
           showToast('error', 'تعذر حذف العرض', res.error);
+          return false;
         }
-      });
+        await refreshTenantData();
+        showToast('info', 'تم حذف العرض الترويجي');
+        return true;
+      } finally { endMutation(key); }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, refreshTenantData, showToast]
+    [currentRestaurant, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   return (
@@ -1359,6 +1429,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         activeTableOrders,
         updateOrderStatus,
         updateTableStatus,
+        isMutationPending,
         settleTableAndFree,
         resolveWaiterRequest,
         acknowledgeWaiterRequest,

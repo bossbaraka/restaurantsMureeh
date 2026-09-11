@@ -480,6 +480,7 @@ export const publicOrderSchema = z
     restaurantId: idSchema,
     tableId: idSchema,
     sessionToken: z.string().trim().min(8).max(200),
+    clientRequestId: z.string().uuid('معرّف إرسال الطلب غير صالح').optional(),
     items: z.array(orderItemSchema).min(1).max(50),
     notes: optionalText(1000),
   })

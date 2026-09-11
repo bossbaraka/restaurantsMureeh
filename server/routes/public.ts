@@ -580,7 +580,7 @@ router.get(
         paymentMethod: o.paymentMethod,
         paymentStatus: o.paymentStatus,
         notes: o.notes || undefined,
-        estimatedPrepMinutes: o.estimatedPrepMinutes || 18,
+        estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
         createdAt: o.createdAt.toISOString(),
         updatedAt: o.updatedAt.toISOString(),
         items: o.items.map((i) => ({
@@ -616,10 +616,11 @@ router.post(
   validateBody(publicOrderSchema),
   async (req: Request, res: Response) => {
     try {
-      const { restaurantId, tableId, sessionToken, items, notes } = req.body as {
+      const { restaurantId, tableId, sessionToken, clientRequestId, items, notes } = req.body as {
         restaurantId: string;
         tableId: string;
         sessionToken: string;
+        clientRequestId?: string;
         items: Array<{
           productId: string;
           quantity?: number;
@@ -657,6 +658,30 @@ router.post(
         return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
       }
       const sessionId = session.id;
+      // Backward-compatible for already-open tabs from the prior frontend;
+      // current clients always send their stable UUID.
+      const effectiveClientRequestId = clientRequestId || randomUUID();
+
+      // A retry after a lost response returns the authoritative original order
+      // instead of opening a second kitchen ticket.
+      const replayedOrder = await prisma.order.findUnique({
+        where: { clientRequestId: effectiveClientRequestId },
+        include: { items: true },
+      });
+      if (replayedOrder) {
+        if (
+          replayedOrder.restaurantId !== restaurantId ||
+          replayedOrder.tableId !== tableId ||
+          replayedOrder.sessionId !== sessionId
+        ) {
+          return res.status(409).json({ success: false, error: 'تعارض معرّف إرسال الطلب', statusCode: 409 });
+        }
+        return res.status(200).json({
+          success: true,
+          data: { order: replayedOrder, replayed: true },
+          statusCode: 200,
+        });
+      }
 
       const productIds = [...new Set(items.map((item) => item.productId))];
       const products = (await prisma.product.findMany({
@@ -821,31 +846,47 @@ router.post(
       );
 
       let newOrder: Awaited<ReturnType<typeof prisma.order.create>> | null = null;
+      let wasIdempotentReplay = false;
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 25 && !newOrder; attempt += 1) {
         const nextNum = startNum + attempt;
         const orderId = `#${nextNum}`;
         try {
-          newOrder = await prisma.order.create({
+          newOrder = await prisma.$transaction(async (tx) => {
+            const created = await tx.order.create({
             data: {
               id: orderId,
               numericId: nextNum,
               restaurantId,
               tableId,
               sessionId,
+              clientRequestId: effectiveClientRequestId,
               status: 'PENDING',
               paymentMethod: 'PAY AT CASHIER',
               subtotal,
               total: subtotal,
               notes: notes || undefined,
-              estimatedPrepMinutes: 18,
               items: { create: pricedItems },
             },
             include: { items: true },
+            });
+            await tx.table.update({
+              where: { id: tableId },
+              data: { status: 'OCCUPIED', lastActivityAt: new Date() },
+            });
+            return created;
           });
         } catch (createErr: unknown) {
           lastError = createErr;
           if ((createErr as { code?: string })?.code !== 'P2002') throw createErr;
+          const replay = await prisma.order.findUnique({
+            where: { clientRequestId: effectiveClientRequestId },
+            include: { items: true },
+          });
+          if (replay) {
+            newOrder = replay;
+            wasIdempotentReplay = true;
+          }
         }
       }
 
@@ -853,22 +894,29 @@ router.post(
         try {
           const fallbackNum = startNum + Math.floor(Math.random() * 90000) + 100;
           const fallbackOrderId = `#${fallbackNum}`;
-          newOrder = await prisma.order.create({
+          newOrder = await prisma.$transaction(async (tx) => {
+            const created = await tx.order.create({
             data: {
               id: fallbackOrderId,
               numericId: fallbackNum,
               restaurantId,
               tableId,
               sessionId,
+              clientRequestId: effectiveClientRequestId,
               status: 'PENDING',
               paymentMethod: 'PAY AT CASHIER',
               subtotal,
               total: subtotal,
               notes: notes || undefined,
-              estimatedPrepMinutes: 18,
               items: { create: pricedItems },
             },
             include: { items: true },
+            });
+            await tx.table.update({
+              where: { id: tableId },
+              data: { status: 'OCCUPIED', lastActivityAt: new Date() },
+            });
+            return created;
           });
         } catch (fallbackErr) {
           lastError = fallbackErr;
@@ -880,14 +928,13 @@ router.post(
         return res.status(500).json({ success: false, error: 'تعذر إرسال الطلب للمطبخ، حاول مجدداً', statusCode: 500 });
       }
 
-      // Update table status
-      await prisma.table.update({
-        where: { id: tableId },
-        data: {
-          status: 'OCCUPIED',
-          lastActivityAt: new Date(),
-        },
-      });
+      if (wasIdempotentReplay) {
+        return res.status(200).json({
+          success: true,
+          data: { order: newOrder, replayed: true },
+          statusCode: 200,
+        });
+      }
 
       logAuditEvent({
         restaurantId,
@@ -961,10 +1008,18 @@ router.post(
         });
       }
 
-      const updated = await prisma.order.update({
-        where: { id: orderId },
+      const cancelled = await prisma.order.updateMany({
+        where: { id: orderId, restaurantId: order.restaurantId, sessionId: session.id, status: 'PENDING' },
         data: { status: 'CANCELLED' },
       });
+      if (cancelled.count !== 1) {
+        return res.status(409).json({
+          success: false,
+          error: 'تغيرت حالة الطلب قبل تنفيذ الإلغاء. حدّث حالة الطلب وحاول مجدداً.',
+          statusCode: 409,
+        });
+      }
+      const updated = await prisma.order.findUnique({ where: { id: orderId } });
 
       // Check if table has other active orders
       const remainingActive = await prisma.order.count({
@@ -1030,10 +1085,18 @@ router.put(
         });
       }
 
-      const updated = await prisma.order.update({
-        where: { id: orderId },
+      const changed = await prisma.order.updateMany({
+        where: { id: orderId, restaurantId, sessionId: session.id, status: 'PENDING' },
         data: { notes: notes || null },
       });
+      if (changed.count !== 1) {
+        return res.status(409).json({
+          success: false,
+          error: 'بدأت معالجة الطلب قبل حفظ الملاحظات. حدّث حالة الطلب.',
+          statusCode: 409,
+        });
+      }
+      const updated = await prisma.order.findUnique({ where: { id: orderId } });
 
       realtimeService.broadcastToTable(order.restaurantId, order.tableId, 'ORDER_NOTES_UPDATED', {
         orderId,
@@ -1076,45 +1139,57 @@ router.post(
         return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
       }
 
-      // Debounce: Check for pending request for the same table within 45 seconds
-      const recentPending = await prisma.waiterRequest.findFirst({
-        where: {
-          restaurantId,
-          tableId,
-          status: { in: ['PENDING', 'ACKNOWLEDGED'] },
-          createdAt: { gte: new Date(Date.now() - 45 * 1000) },
-        },
-      });
+      // One active request per table, plus the existing 45-second cooldown.
+      // SERIALIZABLE + retry closes the check-then-create race between two
+      // devices/tabs while keeping request creation and the table flag atomic.
+      let waiterReq: Awaited<ReturnType<typeof prisma.waiterRequest.create>> | null = null;
+      for (let attempt = 0; attempt < 3 && !waiterReq; attempt += 1) {
+        try {
+          waiterReq = await prisma.$transaction(async (tx) => {
+            const duplicate = await tx.waiterRequest.findFirst({
+              where: {
+                restaurantId,
+                tableId,
+                OR: [
+                  { status: { in: ['PENDING', 'ACKNOWLEDGED'] } },
+                  { createdAt: { gte: new Date(Date.now() - 45 * 1000) } },
+                ],
+              },
+            });
+            if (duplicate) return null;
 
-      if (recentPending) {
+            const created = await tx.waiterRequest.create({
+              data: {
+                restaurantId,
+                tableId,
+                sessionId: session.id,
+                reason,
+                reasonText: note || undefined,
+                status: 'PENDING',
+              },
+            });
+            await tx.table.update({
+              where: { id: tableId },
+              data: {
+                hasWaiterCall: true,
+                status: reason === 'BILL' ? 'BILL_REQUESTED' : undefined,
+              },
+            });
+            return created;
+          }, { isolationLevel: 'Serializable' });
+        } catch (transactionError) {
+          if ((transactionError as { code?: string })?.code === 'P2034' && attempt < 2) continue;
+          throw transactionError;
+        }
+      }
+
+      if (!waiterReq) {
         return res.status(429).json({
           success: false,
-          error: 'تم إرسال نداء مؤخراً لطاقم الضيافة. يرجى الانتظار قليلاً وسيكونون بخدمتك.',
+          error: 'يوجد نداء نشط أو تم إرسال نداء مؤخراً. يرجى الانتظار وسيكون الطاقم بخدمتك.',
           statusCode: 429,
         });
       }
-
-      const sessionId = session.id;
-
-      const waiterReq = await prisma.waiterRequest.create({
-        data: {
-          restaurantId,
-          tableId,
-          sessionId,
-          reason,
-          reasonText: note || undefined,
-          status: 'PENDING',
-        },
-      });
-
-      // Update table flag
-      await prisma.table.update({
-        where: { id: tableId },
-        data: {
-          hasWaiterCall: true,
-          status: reason === 'BILL' ? 'BILL_REQUESTED' : undefined,
-        },
-      });
 
       realtimeService.broadcastToTable(restaurantId, tableId, 'WAITER_CALL', {
         requestId: waiterReq.id,

@@ -190,9 +190,14 @@ export const CustomerHeader: React.FC = () => {
             >
               <ShoppingBag className="w-4 h-4" />
               {cartTotalCount > 0 && (
-                <span className="bg-luxury-950 text-[var(--brand-primary-strong)] text-[11px] px-1.5 py-0.2 rounded-md font-bold">
-                  {cartTotalCount}
-                </span>
+                <>
+                  <span className="bg-luxury-950 text-[var(--brand-primary-strong)] text-[11px] px-1.5 py-0.2 rounded-md font-bold">
+                    {cartTotalCount}
+                  </span>
+                  <span className="text-[11px] font-bold whitespace-nowrap" dir="ltr">
+                    {formatPrice(cartSubtotal, currentRestaurant?.currency)}
+                  </span>
+                </>
               )}
             </button>
 

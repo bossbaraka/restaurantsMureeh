@@ -82,6 +82,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
       {/* Modal Card */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-detail-title"
         className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700/80 rounded-3xl overflow-hidden shadow-2xl z-10 animate-fade-in text-right max-h-[90vh] flex flex-col"
         dir="rtl"
       >
@@ -101,6 +104,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* Close button */}
           <button
             onClick={onClose}
+            aria-label="إغلاق تفاصيل الصنف"
             className="absolute top-4 left-4 w-9 h-9 rounded-full bg-luxury-950/80 text-luxury-300 hover:text-white flex items-center justify-center border border-luxury-700 transition-colors backdrop-blur-sm cursor-pointer z-20"
           >
             <X className="w-5 h-5" />
@@ -116,7 +120,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* Product Title on Image Bottom */}
           <div className="absolute bottom-3 right-4 left-4">
-            <h2 className="text-xl sm:text-2xl font-bold font-serif text-luxury-50 leading-tight">
+            <h2 id="product-detail-title" className="text-xl sm:text-2xl font-bold font-serif text-luxury-50 leading-tight">
               {product.name}
             </h2>
             {product.nameEn && (
@@ -162,9 +166,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* SIZES SELECTOR */}
           {product.sizes && product.sizes.length > 0 && (
             <div>
-              <label className="block text-xs font-bold text-luxury-200 mb-2" htmlFor="productdetailmodal-f1">
+              <p className="block text-xs font-bold text-luxury-200 mb-2">
                 اختر الحجم
-              </label>
+              </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {product.sizes.map((size) => {
                   const isSelected = selectedSize?.id === size.id;
@@ -269,7 +273,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* SPECIAL INSTRUCTIONS INPUT */}
           <div>
-            <label className="block text-xs font-bold text-luxury-200 mb-1.5">
+            <label htmlFor="productdetailmodal-f1" className="block text-xs font-bold text-luxury-200 mb-1.5">
               ملاحظات أو طلبات خاصة للشيف
             </label>
             <textarea id="productdetailmodal-f1"
