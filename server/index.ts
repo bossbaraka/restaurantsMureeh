@@ -16,6 +16,20 @@ import publicRoutes from './routes/public';
 import managerRoutes from './routes/manager';
 import adminRoutes from './routes/admin';
 import uploadRoutes from './routes/uploads';
+import { verifyStorageReady } from './services/storage';
+
+/** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
+async function verifyStorageReadyWithRetry(): Promise<{ ok: boolean; error?: string }> {
+  let last: { ok: boolean; error?: string } = { ok: false, error: 'not attempted' };
+  for (const delayMs of [0, 1500]) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+    last = await verifyStorageReady();
+    if (last.ok) return last;
+  }
+  return last;
+}
 
 const app = express();
 
@@ -346,7 +360,7 @@ if (process.env.NODE_ENV !== 'test') {
   const server = app.listen(
     PORT,
     '0.0.0.0',
-    () => {
+    async () => {
       console.log(
         `🚀 MÉRAR SaaS Server listening on port ${PORT}`
       );
@@ -376,11 +390,31 @@ if (process.env.NODE_ENV !== 'test') {
         }, 2 * 60 * 1000);
       }
 
+      // Object storage readiness: credentials/bucket policy mistakes must be
+      // visible in the deploy logs immediately rather than surfacing as the
+      // first failed tenant upload hours later. The result is non-fatal after
+      // retries (a transient Supabase outage must not crash-loop the API, and
+      // missing credentials already fail the boot earlier in config.ts).
+      const storageReady = config.storageDriver === 'local'
+        ? { ok: true }
+        : await verifyStorageReadyWithRetry();
+      if (!storageReady.ok) {
+        console.error(
+          `❌ [STORAGE] Object storage "${config.supabaseBucket}" is NOT reachable at boot ` +
+            `(${storageReady.error}). Image uploads will fail until this is fixed — check ` +
+            'SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY and that the public bucket exists.'
+        );
+      } else {
+        console.log(
+          `✅ [STORAGE] Driver "${config.storageDriver}" ready (bucket "${config.supabaseBucket}", persistent=${config.storageDriver === 'supabase'}).`
+        );
+      }
+
       // Opt-in scheduled database backups (crash/restart resilience). Off by
       // default; enable with BACKUP_ENABLED=true and DB_PASSWORD. Backups are
       // written to ./backups (chmod 600) — mount a persistent volume there or
       // ship the .sql dumps off-instance, otherwise a disk failure takes the
-      // backups down with the server.
+      // backups down with the server. Failures are logged loudly (never silent).
       if (process.env.BACKUP_ENABLED === 'true') {
         const backupHours = Math.max(
           1,
@@ -389,10 +423,21 @@ if (process.env.NODE_ENV !== 'test') {
         const backupMs = backupHours * 60 * 60 * 1000;
         const runBackup = async () => {
           const { createDatabaseBackup } = await import('./services/backup');
-          await createDatabaseBackup();
+          const result = await createDatabaseBackup();
+          if (!result.success) {
+            // A backup that fails quietly is worse than no backup: operators
+            // must see the failure on every interval (DATABASE_URL/password
+            // drift, missing pg_dump, full disk). The credential itself is
+            // never printed — the service returns stderr only.
+            console.error(
+              `❌ [BACKUP] Scheduled database backup FAILED: ${result.error || 'unknown error'}. ` +
+                'Backups must ship off-instance or target a mounted persistent volume.'
+            );
+          }
         };
         console.log(
-          `💾 Scheduled backups enabled: every ${backupHours}h to ./backups (DB_PASSWORD must be set)`
+          `💾 Scheduled backups enabled: every ${backupHours}h to ./backups (DB_PASSWORD must be set; ` +
+            'mount a persistent volume at ./backups or the dumps are lost on redeploy).'
         );
         setInterval(() => void runBackup(), backupMs).unref();
       }

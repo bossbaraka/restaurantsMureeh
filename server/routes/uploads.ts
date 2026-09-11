@@ -117,6 +117,7 @@ router.post(
         entityId: stored.key,
         details: `رفع صورة (${kind}) بحجم ${stored.size} بايت`,
         metadata: { mimeType: stored.mimeType },
+        ipAddress: req.ip,
       }).catch(() => undefined);
 
       // `url` is the permanent public URL the client persists in PostgreSQL;
@@ -183,6 +184,7 @@ router.post('/delete', requireManager(), async (req: Request, res: Response) => 
           entity: 'Storage',
           entityId: key,
           details: `محاولة حذف ملف خارج نطاق المطعم: ${key}`,
+          ipAddress: req.ip,
         }).catch(() => undefined);
         return res.status(403).json({
           success: false,
@@ -203,6 +205,7 @@ router.post('/delete', requireManager(), async (req: Request, res: Response) => 
       entity: 'Storage',
       entityId: key,
       details: `حذف صورة: ${key}`,
+      ipAddress: req.ip,
     }).catch(() => undefined);
 
     return res.json({

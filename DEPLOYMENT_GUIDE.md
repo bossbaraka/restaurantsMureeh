@@ -240,15 +240,30 @@ sudo certbot --nginx -d menu.yourdomain.com
 1. **تغيير كلمات المرور الافتراضية**:
    - قم بتغيير كلمات مرور المدراء والمشرف العام فوراً عبر لوحة التحكم.
 2. **النسخ الاحتياطي الدوري**:
-   - السكريبت المدمج جاهز لتوليد نسخ SQL لقاعدة البيانات. يتطلب `DB_PASSWORD` في البيئة (لا توجد كلمة افتراضية)، ويحفظ الملف بصلاحيات `0600`:
+   - السكريبت المدمج جاهز لتوليد نسخ SQL لقاعدة البيانات عبر `pg_dump` (يتطلب ثنائية `pg_dump` متوافقة مع إصدار Postgres). يستمد المضيف/المنفذ/المستخدم/القاعدة من `DATABASE_URL` ويتطلب `DB_PASSWORD` في البيئة (لا توجد كلمة افتراضية)، ويحفظ الملف بصلاحيات `0600`:
    ```bash
-   DB_PASSWORD='...' npx tsx -e "import { createDatabaseBackup } from './server/services/backup.js'; createDatabaseBackup();"
+   DB_PASSWORD='...' npx tsx -e "import { createDatabaseBackup } from './server/services/backup.ts'; createDatabaseBackup();"
    ```
    - يمكنك جدولته يومياً في `crontab`:
    ```bash
-   0 3 * * * cd /var/www/restaurant-system && DB_PASSWORD='...' npx tsx -e "import { createDatabaseBackup } from './server/services/backup.js'; createDatabaseBackup();"
+   0 3 * * * cd /var/www/restaurant-system && DB_PASSWORD='...' npx tsx -e "import { createDatabaseBackup } from './server/services/backup.ts'; createDatabaseBackup();"
    ```
    - انقل النسخ خارج الخادم (S3 مشفّر) ولا تعتمد على القرص المحلي وحده.
+   - **اختبار الاستعادة دورياً** — نسخة لا تُستَرد بنجاح لا قيمة لها. الاستعادة على قاعدة فارغة:
+   ```bash
+   # أنشئ قاعدة فارغة أولاً، ثم:
+   PGPASSWORD='...' psql -h <host> -U <user> -d <new_database> \
+     -v ON_ERROR_STOP=1 --single-transaction \
+     -f backups/mureeh-db-YYYYMMDD-HHMMSS.sql
+   ```
+   ملاحظة: مزوّدو Postgres المُدارون (Supabase/Neon/Render) يوفرون Point-in-Time Recovery — فعّله وفق وثائق المزوّد إضافةً للنسخ المنطقية.
+3. **انتهاء الاشتراكات**: الانتقال من فترة السماح إلى «ملغى» يتم عبر مهمة مجدولة فقط (لا تعمل تلقائياً عند الإقلاع). جدولها يومياً:
+   ```bash
+   30 3 * * * cd /var/www/restaurant-system && npx tsx server/db/expire-subscriptions.ts >> /var/log/mureeh-subscriptions.log 2>&1
+   ```
+   على Render استخدم [Cron Job](https://render.com/docs/cronjobs) بنفس الأمر. الوضع الجاف (اختبار بلا كتابة): `npx tsx server/db/expire-subscriptions.ts --dry-run`.
+4. **التخزين في الإنتاج**: يجب أن يكون `STORAGE_DRIVER=supabase` مع `SUPABASE_URL` و`SUPABASE_SERVICE_ROLE_KEY`؛ الخادم يرفض الإقلاع بدونهما (fail-closed) ولا يعود إلى التخزين المحلي. التخزين المحلي في الإنتاج ممنوع إلا مع `STORAGE_ALLOW_LOCAL_IN_PROD=true` على وحدة تخزين دائمة (Render Disk / Docker Volume) — وفي هذه الحالة أنت مسؤول عن نسخ مجلد `uploads/`.
+   - ترحيل صور Base64 القديمة عملية يدوية لا تعمل عند الإقلاع: `npm run storage:migrate` (كشف ← رفع ← تحقق من المفتاح ← تحديث السجل ← تحقق من الرابط ← تنظيف المؤقت)، والسجلات القديمة لا تُحذف من قاعدة البيانات.
 
 ---
 
@@ -261,7 +276,7 @@ sudo certbot --nginx -d menu.yourdomain.com
    node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
    ```
    الخادم يرفض الإقلاع إذا كان السر أقصر من 32 حرفاً، ولا يوجد أي سر احتياطي مضمّن.
-2. **حدّث قاعدة البيانات**: شغّل `npx prisma db push` (بدون `--accept-data-loss` — أُزيل من سكربتات النشر نهائياً). التغيير إضافي فقط: عمود `tokenVersion` في `RestaurantUser` + قيمة `KITCHEN` في `TenantRole`.
+2. **حدّث قاعدة البيانات**: شغّل `npx prisma migrate deploy` (لا يُستخدم `db push` ولا `--accept-data-loss` في النشر إطلاقاً؛ في Docker/Render يتم تلقائياً عبر سكربت `server/db/deploy-migrations.ts` قبل الإقلاع، وبدون أي seed). جميع التغييرات إضافية (مثل عمود `tokenVersion` في `RestaurantUser` وقيمة `KITCHEN` في `TenantRole` وعمود `ipAddress` في `AuditLog`). الـ seed عملية يدوية متعمَّدة فقط.
 3. **اضبط `CORS_ORIGIN` بدقة**: أصول الإنتاج فقط مفصولة بفواصل. في الإنتاج يفشل الخادم إقلاعياً إذا تُرك فارغاً (fail-closed).
 4. **اضبط `TRUST_PROXY`**: خلف Render/Nginx ضعه `1`، وعلى سيرفر مكشوف مباشرة اتركه `0` (القيمة الافتراضية).
 5. **أغلق منفذ قاعدة البيانات**: في `docker-compose.yml` أصبحت PostgreSQL مربوطة على `127.0.0.1` فقط — لا تعرض `5432` للشبكة.

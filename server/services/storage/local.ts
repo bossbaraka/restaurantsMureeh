@@ -4,14 +4,16 @@ import type { StoredObject, StorageService, StorageUploadParams } from './index'
 import { buildStorageKey, LOCAL_PUBLIC_PREFIX, localKeyFromUrl } from './helpers';
 
 // ============================================================
-// LocalStorageDriver — development, test, and fallback storage.
+// LocalStorageDriver — development, test, and explicitly opted-in
+// self-hosted storage.
 //
 // Writes files under `baseDir` (default ./uploads) in the SAME
 // tenant-scoped key layout as the object-storage driver, and
-// serves them at `/uploads/{key}`. In production, if object
-// storage credentials are not provided or if STORAGE_DRIVER=local,
-// config.ts logs a warning regarding ephemeral cloud storage
-// while allowing the server to boot safely without crashing.
+// serves them at `/uploads/{key}`. In production config.ts FAILS
+// CLOSED and refuses to boot with this driver unless
+// STORAGE_ALLOW_LOCAL_IN_PROD=true is set for a deployment that
+// mounts a real persistent volume at UPLOAD_DIR — there is never
+// an automatic supabase -> local fallback in production.
 // ============================================================
 
 export interface LocalStorageOptions {

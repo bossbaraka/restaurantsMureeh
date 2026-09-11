@@ -16,6 +16,7 @@ import {
   waiterCallLimiter,
   qrSessionLimiter,
   customerOrdersLimiter,
+  sseConnectionLimiter,
 } from '../middleware/rateLimit';
 import {
   validateBody,
@@ -42,7 +43,7 @@ async function getQrSession(sessionToken: unknown, restaurantId: string, tableId
 }
 
 // GET /api/public/events (SSE Stream for Real-time Updates)
-router.get('/events', async (req: Request, res: Response) => {
+router.get('/events', sseConnectionLimiter, async (req: Request, res: Response) => {
   const restaurantId = req.query.restaurantId as string;
   const tableId = req.query.tableId as string | undefined;
   const sessionToken = req.query.sessionToken as string | undefined;
@@ -53,10 +54,16 @@ router.get('/events', async (req: Request, res: Response) => {
   }
 
   let isAllowed = false;
+  // Per-session cap bucket: guests are keyed by their QR session token, staff
+  // by their user id. Populated only once the corresponding credential has
+  // been freshly verified below.
+  let connectionSubject: string | undefined;
+
   if (authToken) {
     // Staff stream: the token is verified against the real secret with
-    // algorithm/issuer/audience pinning AND a fresh account check —
-    // suspended or logged-out staff cannot hold a stream open.
+    // algorithm/issuer/audience pinning AND a fresh account/restaurant check —
+    // suspended users, suspended restaurants and logged-out (stale tv) staff
+    // cannot hold a stream open.
     try {
       const decoded = jwt.verify(authToken, config.jwtSecret, {
         algorithms: [JWT_ALGORITHM],
@@ -71,19 +78,32 @@ router.get('/events', async (req: Request, res: Response) => {
       if (decoded && decoded.id) {
         const dbUser = await prisma.restaurantUser.findUnique({
           where: { id: decoded.id },
-          select: { id: true, restaurantId: true, role: true, status: true, tokenVersion: true },
+          select: {
+            id: true,
+            restaurantId: true,
+            role: true,
+            status: true,
+            tokenVersion: true,
+            restaurant: { select: { status: true } },
+          },
         });
+        const isPlatform =
+          !!dbUser &&
+          (dbUser.role === 'SUPER_ADMIN' || dbUser.role === 'PLATFORM_ADMIN');
         const fresh =
           !!dbUser &&
           dbUser.status === 'ACTIVE' &&
           (decoded.tv ?? 0) === dbUser.tokenVersion;
-        if (
-          fresh &&
-          (dbUser!.role === 'SUPER_ADMIN' ||
-            dbUser!.role === 'PLATFORM_ADMIN' ||
-            dbUser!.restaurantId === restaurantId)
-        ) {
+        // Tenant staff additionally require an ACTIVE restaurant; platform
+        // staff are exempt so they can monitor suspended tenants.
+        const restaurantOk =
+          isPlatform ||
+          (!!dbUser &&
+            dbUser.restaurantId === restaurantId &&
+            dbUser.restaurant?.status === 'ACTIVE');
+        if (fresh && restaurantOk && dbUser) {
           isAllowed = true;
+          connectionSubject = `staff:${dbUser.id}`;
         }
       }
     } catch {
@@ -92,8 +112,10 @@ router.get('/events', async (req: Request, res: Response) => {
   }
 
   if (!isAllowed && tableId && sessionToken) {
-    if (await getQrSession(sessionToken, restaurantId, tableId)) {
+    const session = await getQrSession(sessionToken, restaurantId, tableId);
+    if (session) {
       isAllowed = true;
+      connectionSubject = `qr:${session.sessionToken}`;
     }
   }
 
@@ -107,10 +129,35 @@ router.get('/events', async (req: Request, res: Response) => {
   res.flushHeaders();
 
   const clientId = `sse-${randomUUID()}`;
-  const accepted = realtimeService.addClient({ id: clientId, restaurantId, tableId, res });
-  if (!accepted) {
-    return res.status(503).json({ success: false, error: 'خدمة البث المباشر مزدحمة حالياً', statusCode: 503 });
+  const result = realtimeService.addClient({
+    id: clientId,
+    restaurantId,
+    tableId,
+    subject: connectionSubject,
+    res,
+  });
+  if (!result.accepted) {
+    const messageByReason = {
+      global: 'خدمة البث المباشر مزدحمة حالياً، حاول لاحقاً',
+      tenant: 'عدد اتصالات البث لهذا المطعم مرتفع حالياً، حاول لاحقاً',
+      subject: 'لديك عدد كبير جداً من الاتصالات المباشرة لنفس الجلسة — أغلق التبويبات الزائدة وأعد المحاولة',
+    } as const;
+    return res
+      .status(503)
+      .json({ success: false, error: messageByReason[result.reason], statusCode: 503 });
   }
+
+  // Heartbeat: keeps the stream alive through idle proxy timeouts and lets the
+  // server notice half-open connections (write error → client removed). It is
+  // cleared the moment the response closes, so disconnects never leak timers.
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      realtimeService.removeClient(clientId);
+    }
+  }, 25_000);
+  res.on('close', () => clearInterval(heartbeat));
 
   // Send initial ping
   res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', clientId })}\n\n`);

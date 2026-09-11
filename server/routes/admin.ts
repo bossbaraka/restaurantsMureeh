@@ -26,34 +26,42 @@ router.use(requirePlatformAdmin);
 // GET /api/admin/overview
 router.get('/overview', async (req: Request, res: Response) => {
   try {
-    const restaurants = await prisma.restaurant.findMany({
-      include: {
-        subscription: { include: { plan: true } },
-        _count: { select: { orders: true, tables: true, products: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Hard safety cap: this overview is a management screen, not an export —
+    // a bounded list prevents a pathological tenant count from turning the
+    // response into an unbounded payload. Counts below remain exact (SQL).
+    const OVERVIEW_CAP = 1000;
+    const [restaurants, totalRestaurants, activeRestaurants, subscriptions, plans, auditLogs, revenueAgg] =
+      await Promise.all([
+        prisma.restaurant.findMany({
+          include: {
+            subscription: { include: { plan: true } },
+            _count: { select: { orders: true, tables: true, products: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          take: OVERVIEW_CAP,
+        }),
+        prisma.restaurant.count(),
+        prisma.restaurant.count({ where: { status: 'ACTIVE' } }),
+        prisma.subscription.findMany({
+          include: { plan: true, restaurant: true },
+          take: OVERVIEW_CAP,
+          orderBy: { updatedAt: 'desc' },
+        }),
+        prisma.plan.findMany({}),
+        prisma.auditLog.findMany({
+          take: 50,
+          orderBy: { createdAt: 'desc' },
+          include: { restaurant: true },
+        }),
+        // Total gross platform sales — summed in PostgreSQL; never pull every
+        // order row into Node just to add up totals.
+        prisma.order.aggregate({
+          where: { status: { not: 'CANCELLED' } },
+          _sum: { total: true },
+        }),
+      ]);
 
-    const totalRestaurants = restaurants.length;
-    const activeRestaurants = restaurants.filter((r) => r.status === 'ACTIVE').length;
-
-    const subscriptions = await prisma.subscription.findMany({
-      include: { plan: true, restaurant: true },
-    });
-
-    const plans = await prisma.plan.findMany({});
-    const auditLogs = await prisma.auditLog.findMany({
-      take: 50,
-      orderBy: { createdAt: 'desc' },
-      include: { restaurant: true },
-    });
-
-    // Total gross platform sales
-    const allValidOrders = await prisma.order.findMany({
-      where: { status: { not: 'CANCELLED' } },
-      select: { total: true },
-    });
-    const totalRevenue = allValidOrders.reduce((sum, o) => sum + o.total, 0);
+    const totalRevenue = revenueAgg._sum.total ?? 0;
 
     return res.json({
       success: true,

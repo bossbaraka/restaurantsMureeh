@@ -40,6 +40,71 @@ export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Payment methods accepted by the POS ledger and table settlement. */
+export const PAYMENT_METHODS_CASH = ['CASH'] as const;
+export const SUPPORTED_PAYMENT_METHODS = ['CASH', 'CARD', 'MOBILE', 'SPLIT'] as const;
+export type SupportedPaymentMethod = (typeof SUPPORTED_PAYMENT_METHODS)[number];
+
+export interface CashReconciliationInput {
+  method: string;
+  total: number;
+  /** Optional tip added on top of the bill (cash only). */
+  tip?: number | null;
+  /** Tendered cash supplied by the guest. */
+  cashReceived?: number | null;
+}
+
+export type CashReconciliation =
+  | {
+      ok: true;
+      cashReceived: number | null;
+      changeDue: number;
+      tip: number;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Pure cash-till reconciliation shared by POST /payments and
+ * POST /tables/:id/settle.
+ *
+ * Rules (financial integrity):
+ *  - The method must be one of the ledger enum (callers validate via Zod).
+ *  - CASH requires a finite tendered amount that covers total + tip; a short
+ *    payment is rejected instead of being silently marked PAID.
+ *  - changeDue is computed server-side as tendered - (total + tip); the client
+ *    never supplies it and `cashReceived === total` is never ASSUMED — the
+ *    caller decides whether exact cash is the UI default.
+ *  - Non-cash methods record no cash/change.
+ */
+export function reconcileCashPayment(input: CashReconciliationInput): CashReconciliation {
+  const total = roundMoney(input.total);
+  const tip = roundMoney(Math.max(0, input.tip ?? 0));
+
+  if (!(SUPPORTED_PAYMENT_METHODS as readonly string[]).includes(input.method)) {
+    return { ok: false, error: 'طريقة الدفع غير صالحة' };
+  }
+
+  if (input.method !== 'CASH') {
+    return { ok: true, cashReceived: null, changeDue: 0, tip };
+  }
+
+  const received = input.cashReceived;
+  if (received === undefined || received === null || !Number.isFinite(received)) {
+    return { ok: false, error: 'مبلغ المقبوض النقدي مطلوب للدفع النقدي' };
+  }
+  const tendered = roundMoney(Number(received));
+  const due = roundMoney(total + tip);
+  if (tendered < due) {
+    return { ok: false, error: 'المبلغ المقبوض أقل من قيمة الفاتورة' };
+  }
+  return {
+    ok: true,
+    cashReceived: tendered,
+    changeDue: roundMoney(tendered - due),
+    tip,
+  };
+}
+
 /** Escape a string for safe interpolation into HTML documents. */
 export function escapeHtml(value: unknown): string {
   return String(value ?? '')

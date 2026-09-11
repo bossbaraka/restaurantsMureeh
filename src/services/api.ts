@@ -771,6 +771,8 @@ class RestaurantApiService {
     subscription: Subscription | null;
     plan: Plan | null;
     totalRevenue: number;
+    /** Revenue for the tenant-local current day, aggregated in SQL (never the capped in-memory list). */
+    todayRevenue: number;
     todayOrdersCount: number;
     activeTablesCount: number;
     totalTablesCount: number;
@@ -790,6 +792,7 @@ class RestaurantApiService {
           subscription: res.data.subscription ? mapSubscriptionRow(res.data.subscription) : null,
           plan: res.data.plan ? mapPlanRow(res.data.plan) : null,
           totalRevenue: Number(res.data.totalRevenue) || 0,
+          todayRevenue: Number(res.data.todayRevenue) || 0,
           todayOrdersCount: Number(res.data.todayOrdersCount) || 0,
           activeTablesCount: Number(res.data.activeTablesCount) || 0,
           totalTablesCount: Number(res.data.totalTablesCount) || 0,
@@ -1040,7 +1043,10 @@ class RestaurantApiService {
     user: RestaurantUser,
     restaurantId: string,
     tableId: string,
-    paymentMethod: string = 'PAY AT CASHIER'
+    // Quick settle is cash-at-counter. Must stay inside the server ledger
+    // enum (CASH|CARD|MOBILE|SPLIT) — the legacy 'PAY AT CASHIER' placeholder
+    // is an order paymentMethod, not a ledger method, and was rejected.
+    paymentMethod: string = 'CASH'
   ): Promise<ApiResponse<{ message: string; orderIds: string[] }>> {
     const res = await this.request<any>('POST', `/manager/tables/${encodeURIComponent(tableId)}/settle`, {
       body: { restaurantId, paymentMethod },
@@ -1178,8 +1184,23 @@ class RestaurantApiService {
     return res as ApiResponse<never>;
   }
 
-  public async changeSubscriptionPlan(restaurantId: string, planId: string): Promise<ApiResponse<{ subscription: Subscription }>> {
+  public async changeSubscriptionPlan(
+    restaurantId: string,
+    planId: string
+  ): Promise<ApiResponse<{ subscription: Subscription }> & { pending?: boolean }> {
     const res = await this.request<any>('PUT', '/manager/subscription/plan', { body: { restaurantId, planId } });
+    // 202 Accepted: paid upgrades are never self-granted — the request is
+    // queued for platform-admin approval after out-of-band payment. No
+    // subscription row exists in the response (nothing was changed).
+    if ((res.statusCode === 202 || res.data?.pending) && res.data?.pending) {
+      return {
+        success: true,
+        pending: true,
+        data: undefined as unknown as { subscription: Subscription },
+        error: res.error,
+        statusCode: 202,
+      };
+    }
     if (res.success && res.data?.subscription) {
       return { success: true, data: { subscription: mapSubscriptionRow(res.data.subscription) }, statusCode: 200 };
     }

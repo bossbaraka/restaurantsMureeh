@@ -185,6 +185,124 @@ export function evaluatePlanChange(params: {
   };
 }
 
+// ============================================================
+// Subscription period lifecycle (audit P1-15)
+// ------------------------------------------------------------
+// A subscription row must not stay ACTIVE forever past its
+// `currentPeriodEnd`. No payment gateway exists in this deployment, so this
+// module models the lifecycle as PURE rules that are (a) enforced lazily on
+// every entitlement read (no cron required) and (b) persisted by a callable
+// service (`subscriptionLifecycle.processExpiringSubscriptions`) that a
+// scheduled Render Cron Job can invoke later.
+//
+//   ACTIVE past period end            -> PAST_DUE  (grace window)
+//   PAST_DUE past the grace window    -> CANCELLED (free limits)
+//   TRIAL past trial/period end       -> CANCELLED (no payment on file)
+// ============================================================
+
+/** Default grace days between period end and full entitlement downgrade. */
+export const DEFAULT_PAST_DUE_GRACE_DAYS = 7;
+
+export interface EffectiveSubscriptionInput {
+  status?: string | null;
+  currentPeriodEnd?: Date | string | null;
+  trialEndsAt?: Date | string | null;
+}
+
+export interface EffectiveSubscriptionState {
+  /** Effective status after applying period-end rules (read-only view). */
+  effectiveStatus: 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED' | 'SUSPENDED';
+  /** Whether paid plan limits/entitlements are still in force right now. */
+  entitled: boolean;
+  /** Whole days left on the current window (negative when overdue). */
+  daysRemaining: number;
+  /** Whole days past due since period end (0 before expiry). */
+  daysPastDue: number;
+}
+
+/**
+ * Compute the *effective* state of a subscription at instant `now`.
+ *
+ * Returns the stored status unchanged for future-dated periods. After expiry:
+ * trials end immediately (CANCELLED — no payment method to dun), paid ACTIVE
+ * subscriptions enter a finite PAST_DUE grace and then become CANCELLED.
+ */
+export function effectiveSubscriptionState(
+  sub: EffectiveSubscriptionInput | null | undefined,
+  now: Date | number = new Date(),
+  graceDays: number = DEFAULT_PAST_DUE_GRACE_DAYS
+): EffectiveSubscriptionState {
+  const nowMs = now instanceof Date ? now.getTime() : now;
+  const dayMs = 86_400_000;
+
+  if (!sub || !sub.status) {
+    return { effectiveStatus: 'CANCELLED', entitled: false, daysRemaining: 0, daysPastDue: 0 };
+  }
+
+  if (sub.status === 'SUSPENDED' || sub.status === 'CANCELLED') {
+    return {
+      effectiveStatus: sub.status as 'SUSPENDED' | 'CANCELLED',
+      entitled: false,
+      daysRemaining: 0,
+      daysPastDue: 0,
+    };
+  }
+
+  const isTrial = sub.status === 'TRIAL';
+  const endMs = toTime(isTrial ? sub.trialEndsAt ?? sub.currentPeriodEnd : sub.currentPeriodEnd);
+
+  if (endMs === null) {
+    // No defined window: trust explicit ACTIVE rows created out of band,
+    // never trials (a trial without an end is invalid).
+    return {
+      effectiveStatus: (sub.status as 'ACTIVE') || 'ACTIVE',
+      entitled: !isTrial,
+      daysRemaining: 0,
+      daysPastDue: 0,
+    };
+  }
+
+  const daysRemaining = Math.ceil((endMs - nowMs) / dayMs);
+  const daysPastDue = Math.max(0, Math.floor((nowMs - endMs) / dayMs));
+
+  if (nowMs <= endMs) {
+    return {
+      effectiveStatus: isTrial ? 'TRIAL' : 'ACTIVE',
+      entitled: true,
+      daysRemaining,
+      daysPastDue: 0,
+    };
+  }
+
+  if (isTrial) {
+    // No payment instrument on file — no grace extension for trials.
+    return { effectiveStatus: 'CANCELLED', entitled: false, daysRemaining: 0, daysPastDue };
+  }
+
+  if (daysPastDue <= graceDays) {
+    return { effectiveStatus: 'PAST_DUE', entitled: true, daysRemaining: 0, daysPastDue };
+  }
+  return { effectiveStatus: 'CANCELLED', entitled: false, daysRemaining: 0, daysPastDue };
+}
+
+/**
+ * Persisted status transition a scheduler should write for an expired row.
+ * Returns null when the subscription needs no transition at `now`.
+ */
+export function dueStatusTransition(
+  sub: EffectiveSubscriptionInput & { status?: string | null },
+  now: Date | number = new Date(),
+  graceDays: number = DEFAULT_PAST_DUE_GRACE_DAYS
+): 'PAST_DUE' | 'CANCELLED' | null {
+  const stored = (sub.status || '').toUpperCase();
+  if (stored === 'CANCELLED' || stored === 'SUSPENDED') return null;
+
+  const state = effectiveSubscriptionState(sub, now, graceDays);
+  if (state.effectiveStatus === 'PAST_DUE' && stored !== 'PAST_DUE') return 'PAST_DUE';
+  if (state.effectiveStatus === 'CANCELLED' && stored !== 'CANCELLED') return 'CANCELLED';
+  return null;
+}
+
 export type TrialActivationVerdict =
   | { allowed: true }
   | { allowed: false; statusCode: 409 | 410; reason: string };

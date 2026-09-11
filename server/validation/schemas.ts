@@ -677,6 +677,12 @@ export const tableSettleSchema = z
     paymentMethod: z
       .enum(PAYMENT_METHODS, { message: 'طريقة الدفع غير صالحة' })
       .default('CASH'),
+    // Tendered cash for CASH settlements. Optional for backwards
+    // compatibility (legacy clients simply close the table with exact cash);
+    // when supplied it MUST cover the bill and the change is computed
+    // server-side. The route rejects short payments.
+    cashReceived: moneySchema.optional(),
+    tip: moneySchema.optional(),
     note: z.string().trim().max(500, 'الملاحظة طويلة جداً').optional(),
   })
   .strict();

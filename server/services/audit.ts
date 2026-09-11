@@ -11,6 +11,8 @@ export async function logAuditEvent(params: {
   entityId?: string;
   details: string;
   metadata?: any;
+  /** Client IP as resolved by Express behind the trusted proxy (req.ip). */
+  ipAddress?: string | null;
 }) {
   try {
     await prisma.auditLog.create({
@@ -24,6 +26,7 @@ export async function logAuditEvent(params: {
         entityId: params.entityId,
         details: params.details,
         metadata: params.metadata || undefined,
+        ipAddress: params.ipAddress || null,
       },
     });
   } catch (err) {

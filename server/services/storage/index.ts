@@ -84,3 +84,26 @@ export function getStorage(): StorageService {
 export function resetStorageForTests(): void {
   storageSingleton = null;
 }
+
+/**
+ * Boot-time readiness probe.
+ *
+ * - Local driver: the base directory must exist / be creatable (the driver
+ *   constructor already creates it; this re-checks writability).
+ * - Object storage: list a probe key. Either "found" or "not found" is a
+ *   success — both prove credentials/bucket/network work; a thrown error
+ *   means the bucket is missing, the key is invalid, or credentials are
+ *   wrong and image uploads would fail at runtime.
+ *
+ * Missing CREDENTIALS never reach here: config.ts fails closed first. This
+ * probe distinguishes "configured" from "reachable".
+ */
+export async function verifyStorageReady(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const storage = getStorage();
+    await storage.exists('__healthcheck__/readiness-probe');
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
