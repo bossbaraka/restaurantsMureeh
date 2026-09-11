@@ -12,10 +12,11 @@ describe('production release regressions', () => {
     const route = read('../../server/routes/public.ts');
     const context = read('../context/RestaurantContext.tsx');
 
-    expect(schema).toMatch(/clientRequestId\s+String\?\s+@unique/);
-    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "Order_clientRequestId_key"');
+    expect(schema).toMatch(/clientRequestId\s+String\s+@default\(dbgenerated\("gen_random_uuid\(\)"\)\)/);
+    expect(schema).toContain('@@unique([restaurantId, clientRequestId])');
+    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "Order_restaurantId_clientRequestId_key"');
     expect(validation).toContain("clientRequestId: z.string().uuid");
-    expect(route).toContain('where: { clientRequestId: effectiveClientRequestId }');
+    expect(route).toContain('restaurantId_clientRequestId');
     expect(route).toContain('const effectiveClientRequestId = clientRequestId || randomUUID()');
     expect(route).toContain('wasIdempotentReplay = true');
     expect(context).toContain('orderSubmissionRef.current?.fingerprint !== fingerprint');
