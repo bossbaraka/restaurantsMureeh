@@ -26,6 +26,9 @@ preview/
 # carried live database connection strings (audit C-01). Anything needing
 # database access must read process.env.DATABASE_URL with no fallback.
 scratch/
+# Local run environment for the e2e/ harness (contains the test database URL
+# and a throwaway JWT secret). Committed templates live in e2e/*.example.
+.e2e-scratch/
 *.credentials
 *.secrets
 secrets.json

@@ -260,14 +260,25 @@ describe('QR splash showcase stage', () => {
     expect(markup).toContain(`${categories.length} أقسام`);
   });
 
-  it('shows the gallery first and the guest reviews underneath it', () => {
+  it('keeps the third beat image-free and uncluttered', () => {
     const markup = render('WELCOME_SHOWCASE');
-    const galleryAt = markup.indexOf('صور من أجواء وضيافة');
-    const reviewsAt = markup.indexOf('آراء ضيوف المطعم');
 
-    expect(galleryAt).toBeGreaterThan(-1);
-    expect(reviewsAt).toBeGreaterThan(-1);
-    expect(galleryAt).toBeLessThan(reviewsAt);
+    // Redesign: the CONNECT beat carries no photography at all — no ambient
+    // cover, no logo image, no gallery tiles, no lightbox.
+    expect(markup).not.toContain('<img');
+    expect(markup).not.toContain('welcome-tile');
+    expect(markup).not.toContain('صور من أجواء وضيافة');
+    expect(markup).toContain('welcome-canvas-wash');
+    // The guest reviews remain, directly under the catalogue facts.
+    expect(markup).toContain('آراء ضيوف المطعم');
+  });
+
+  it('sizes the third beat to the device height instead of growing past it', () => {
+    const markup = render('WELCOME_SHOWCASE');
+
+    // The shell is a fixed, full-viewport surface; the showcase fills it.
+    expect(componentSource).toContain('welcome-shell fixed inset-0');
+    expect(markup).toMatch(/relative z-10 flex h-full w-full flex-col justify-between/);
   });
 
   it('rotates guest reviews with an aria-live region and one control per review', () => {

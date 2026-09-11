@@ -403,21 +403,30 @@ router.post(
       });
       const orderCount = await prisma.order.count({ where: { restaurantId } });
 
+      // Allocation only trusts the app's own "#<n>" id shape: legacy/imported
+      // rows (e.g. "order-A-<timestamp>") and out-of-range numericIds must
+      // never push the sequence past the Int4 ceiling of Order.numericId —
+      // that overflow used to 500 every order creation for the tenant.
+      const MAX_ALLOCATABLE_NUM = 2_000_000_000;
       let maxNum = 1000;
       for (const ord of existingOrders) {
         if (ord.numericId && ord.numericId > maxNum) {
-          maxNum = ord.numericId;
+          maxNum = Math.min(ord.numericId, MAX_ALLOCATABLE_NUM);
         }
-        const match = ord.id.match(/\d+/);
+        const match = ord.id.match(/^#(\d+)$/);
         if (match) {
-          const num = parseInt(match[0], 10);
+          const num = parseInt(match[1], 10);
           if (!isNaN(num) && num > maxNum) {
-            maxNum = num;
+            maxNum = Math.min(num, MAX_ALLOCATABLE_NUM);
           }
         }
       }
 
-      const startNum = Math.max(1001, maxNum + 1, orderCount + 1001);
+      const startNum = Math.max(
+        1001,
+        maxNum + 1,
+        Math.min(orderCount + 1001, MAX_ALLOCATABLE_NUM)
+      );
 
       let newOrder: Awaited<ReturnType<typeof prisma.order.create>> | null = null;
       let lastError: unknown = null;
