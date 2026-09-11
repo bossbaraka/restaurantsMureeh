@@ -1962,25 +1962,13 @@ router.put(
           statusCode: verdict.statusCode,
         });
       }
-      // Guard against exceeding plan limits with existing data
-      const [tablesCount, categoriesCount, productsCount, branchesCount] = await Promise.all([
-        prisma.table.count({ where: { restaurantId } }),
-        prisma.category.count({ where: { restaurantId } }),
-        prisma.product.count({ where: { restaurantId } }),
-        prisma.branch.count({ where: { restaurantId } }),
-      ]);
-      if (
-        tablesCount > plan.maxTables ||
-        categoriesCount > plan.maxCategories ||
-        productsCount > plan.maxProducts ||
-        branchesCount > plan.maxBranches
-      ) {
-        return res.status(400).json({
-          success: false,
-          error: `لا يمكن الترقية: بياناتك الحالية تتجاوز حدود الباقة (طاولات ${plan.maxTables} / تصنيفات ${plan.maxCategories} / أطباق ${plan.maxProducts} / فروع ${plan.maxBranches})`,
-          statusCode: 400,
-        });
-      }
+      // A downgrade is entitlements-only: we change the plan binding (which
+      // locks the higher-tier features and new-usage ceilings) but NEVER
+      // delete the tenant's existing rows. Rows that now exceed the target
+      // plan's ceilings are simply left in place — the plan's create-guards
+      // and entitlement gates take effect going forward. Blocking the change
+      // here (or pruning data) would destroy a paying tenant's history, so we
+      // intentionally allow it to proceed.
       const subscription = await prisma.subscription.upsert({
         where: { restaurantId },
         create: {
@@ -2044,6 +2032,7 @@ router.put(
         latitude?: number;
         longitude?: number;
         mapUrl?: string | '';
+        mapImage?: string;
       };
 
       const hasCustomBrandingFields =
@@ -2098,6 +2087,12 @@ router.put(
               ? b.mapUrl === ''
                 ? null
                 : b.mapUrl
+              : undefined,
+          mapImageUrl:
+            b.mapImage !== undefined
+              ? b.mapImage === ''
+                ? null
+                : b.mapImage
               : undefined,
         },
       });

@@ -20,6 +20,8 @@ function resolveMapSources(restaurant: Restaurant) {
   const lat = restaurant.latitude;
   const lng = restaurant.longitude;
   const address = restaurant.address?.trim();
+  // A venue-provided static map image replaces the external embed entirely.
+  const mapImage = restaurant.mapImageUrl || null;
 
   const hasCoords = typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng);
 
@@ -37,7 +39,7 @@ function resolveMapSources(restaurant: Restaurant) {
     restaurant.mapUrl ||
     `https://www.google.com/maps/search/?api=1&query=${query}`;
 
-  return { lat, lng, hasCoords, embedUrl, openUrl };
+  return { lat, lng, hasCoords, mapImage, embedUrl, openUrl };
 }
 
 export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
@@ -47,7 +49,7 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
 }) => {
   if (!isOpen || !restaurant) return null;
 
-  const { lat, lng, hasCoords, embedUrl, openUrl } = resolveMapSources(restaurant);
+  const { lat, lng, hasCoords, mapImage, embedUrl, openUrl } = resolveMapSources(restaurant);
   const primaryColor = restaurant.primaryColor || '#D4AF37';
 
   return (
@@ -87,33 +89,56 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
 
         {/* Map Body & Embed */}
         <div className="p-5 space-y-4 overflow-y-auto">
-          {/* Interactive Map Frame */}
-          <div className="relative w-full h-72 sm:h-80 rounded-2xl overflow-hidden border border-luxury-800 shadow-inner bg-luxury-900">
-            <iframe
-              title={`خريطة موقع ${restaurant.name}`}
-              src={embedUrl}
-              className="w-full h-full border-none"
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              allowFullScreen
-            />
-            {/* Overlay Navigation Badge */}
-            <div className="absolute top-3 right-3 bg-luxury-950/90 backdrop-blur-md border border-luxury-750 px-3 py-1.5 rounded-xl text-[11px] font-bold text-luxury-100 flex items-center gap-1.5 shadow-lg pointer-events-none">
-              <Compass className="w-3.5 h-3.5 text-gold-400" />
-              <span>
-                {hasCoords && lat !== undefined && lng !== undefined
-                  ? `الإحداثيات: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
-                  : 'الموقع حسب العنوان'}
-              </span>
+          {/* Map: prefer the venue's uploaded static map image, otherwise fall
+              back to an interactive embed by address/coordinates. */}
+          {mapImage ? (
+            <div className="relative w-full h-72 sm:h-80 rounded-2xl overflow-hidden border border-luxury-800 shadow-inner bg-luxury-900">
+              <img
+                src={mapImage}
+                alt={`خريطة موقع ${restaurant.name}`}
+                className="w-full h-full object-cover"
+              />
+              {/* Overlay Navigation Badge */}
+              <div className="absolute top-3 right-3 bg-luxury-950/90 backdrop-blur-md border border-luxury-750 px-3 py-1.5 rounded-xl text-[11px] font-bold text-luxury-100 flex items-center gap-1.5 shadow-lg pointer-events-none">
+                <Compass className="w-3.5 h-3.5 text-gold-400" />
+                <span>
+                  {hasCoords && lat !== undefined && lng !== undefined
+                    ? `الإحداثيات: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
+                    : 'الموقع حسب العنوان'}
+                </span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <>
+              {/* Interactive Map Frame */}
+              <div className="relative w-full h-72 sm:h-80 rounded-2xl overflow-hidden border border-luxury-800 shadow-inner bg-luxury-900">
+                <iframe
+                  title={`خريطة موقع ${restaurant.name}`}
+                  src={embedUrl}
+                  className="w-full h-full border-none"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
+                />
+                {/* Overlay Navigation Badge */}
+                <div className="absolute top-3 right-3 bg-luxury-950/90 backdrop-blur-md border border-luxury-750 px-3 py-1.5 rounded-xl text-[11px] font-bold text-luxury-100 flex items-center gap-1.5 shadow-lg pointer-events-none">
+                  <Compass className="w-3.5 h-3.5 text-gold-400" />
+                  <span>
+                    {hasCoords && lat !== undefined && lng !== undefined
+                      ? `الإحداثيات: ${lat.toFixed(4)}, ${lng.toFixed(4)}`
+                      : 'الموقع حسب العنوان'}
+                  </span>
+                </div>
+              </div>
 
-          {/* Fallback hint: the embed may be blocked by an ad-blocker or an
-              offline network; the button below always works. */}
-          <p className="text-[11px] text-luxury-400 leading-relaxed flex items-center gap-1.5">
-            <Navigation className="w-3.5 h-3.5 text-gold-400 shrink-0" />
-            إن لم تظهر الخريطة أعلاه، استخدم الزر التالي لفتحها مباشرة في تطبيق الخرائط.
-          </p>
+              {/* Fallback hint: the embed may be blocked by an ad-blocker or an
+                  offline network; the button below always works. */}
+              <p className="text-[11px] text-luxury-400 leading-relaxed flex items-center gap-1.5">
+                <Navigation className="w-3.5 h-3.5 text-gold-400 shrink-0" />
+                إن لم تظهر الخريطة أعلاه، استخدم الزر التالي لفتحها مباشرة في تطبيق الخرائط.
+              </p>
+            </>
+          )}
 
           {/* Restaurant Location Details Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

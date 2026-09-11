@@ -126,9 +126,7 @@ export const BrandingSettingsView: React.FC = () => {
   const [description, setDescription] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [latitude, setLatitude] = useState<number>(31.9029);
-  const [longitude, setLongitude] = useState<number>(35.2062);
-  const [mapUrl, setMapUrl] = useState('');
+  const [mapImage, setMapImage] = useState('');
   const [logo, setLogo] = useState('');
   const [logoFit, setLogoFit] = useState<'cover' | 'contain'>('cover');
   const [logoPosition, setLogoPosition] = useState('50% 50%');
@@ -143,10 +141,12 @@ export const BrandingSettingsView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
   const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [uploadingMap, setUploadingMap] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const mapInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentRestaurant) {
@@ -155,9 +155,7 @@ export const BrandingSettingsView: React.FC = () => {
       setDescription(currentRestaurant.description);
       setPhone(currentRestaurant.phone);
       setAddress(currentRestaurant.address);
-      setLatitude(currentRestaurant.latitude || 31.9029);
-      setLongitude(currentRestaurant.longitude || 35.2062);
-      setMapUrl(currentRestaurant.mapUrl || '');
+      setMapImage(currentRestaurant.mapImageUrl || '');
       setLogo(currentRestaurant.logo);
       setLogoFit(currentRestaurant.logoFit === 'contain' ? 'contain' : 'cover');
       setLogoPosition(currentRestaurant.logoPosition || '50% 50%');
@@ -209,7 +207,7 @@ export const BrandingSettingsView: React.FC = () => {
     setUploading(kind);
     try {
       const { blob, ext } = await fileToResizedBlob(file, kind === 'logo' ? 512 : 1600);
-      const res = await api.uploadImage(blob, `brand-${kind}-${Date.now()}.${ext}`, kind);
+      const res = await api.uploadImage(blob, `brand-${kind}-${Date.now()}.${ext}`, kind, currentRestaurant.id);
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع الصورة إلى الخادم', res.error);
         return;
@@ -245,7 +243,7 @@ export const BrandingSettingsView: React.FC = () => {
     setUploadingGallery(true);
     try {
       const { blob, ext } = await fileToResizedBlob(file, 1600);
-      const res = await api.uploadImage(blob, `hall-gallery-${Date.now()}.${ext}`, 'gallery');
+      const res = await api.uploadImage(blob, `hall-gallery-${Date.now()}.${ext}`, 'gallery', currentRestaurant.id);
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع الصورة', res.error);
         return;
@@ -257,6 +255,30 @@ export const BrandingSettingsView: React.FC = () => {
     } finally {
       setUploadingGallery(false);
       if (galleryInputRef.current) galleryInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadMap = async (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      showToast('error', 'صيغة غير مدعومة', 'يرجى اختيار صورة JPG أو PNG أو WEBP');
+      return;
+    }
+    setUploadingMap(true);
+    try {
+      const { blob, ext } = await fileToResizedBlob(file, 1200);
+      const res = await api.uploadImage(blob, `map-${Date.now()}.${ext}`, 'map', currentRestaurant.id);
+      if (!res.success || !res.data) {
+        showToast('error', 'تعذر رفع صورة الخريطة', res.error);
+        return;
+      }
+      setMapImage(res.data.url);
+      showToast('success', 'تم رفع صورة الخريطة', 'احفظ التعديلات لتظهر خريطة موقعك للعملاء');
+    } catch {
+      showToast('error', 'تعذر معالجة الصورة', 'تعذر قراءة الملف');
+    } finally {
+      setUploadingMap(false);
+      if (mapInputRef.current) mapInputRef.current.value = '';
     }
   };
 
@@ -282,9 +304,7 @@ export const BrandingSettingsView: React.FC = () => {
       description: description.trim(),
       phone: phone.trim(),
       address: address.trim(),
-      latitude,
-      longitude,
-      mapUrl: mapUrl.trim(),
+      mapImageUrl: mapImage.trim(),
       logo: logo.trim(),
       logoFit,
       logoPosition,
@@ -460,49 +480,48 @@ export const BrandingSettingsView: React.FC = () => {
               </div>
             </div>
 
-            {/* Map Location & Coordinates Settings */}
+            {/* Map Image (replaces the Google Maps link) */}
             <div className="pt-2 border-t border-luxury-850 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f6">خط العرض (Latitude)</label>
-                  <input id="brandingsettingsview-f6"
-                    type="number"
-                    step="0.0001"
-                    value={latitude}
-                    onChange={(e) => setLatitude(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f7">خط الطول (Longitude)</label>
-                  <input id="brandingsettingsview-f7"
-                    type="number"
-                    step="0.0001"
-                    value={longitude}
-                    onChange={(e) => setLongitude(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f8">رابط Google Maps (اختياري)</label>
-                  <input id="brandingsettingsview-f8"
-                    type="text"
-                    value={mapUrl}
-                    onChange={(e) => setMapUrl(e.target.value)}
-                    className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl text-xs"
-                    placeholder="https://maps.app.goo.gl/..."
-                  />
-                </div>
+              <div className="flex items-center justify-between">
+                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1" htmlFor="brandingsettingsview-map">
+                  <MapPin className="w-3.5 h-3.5 text-gold-400" /> صورة الخريطة (موقع المطعم)
+                </label>
+                <span className="text-[10px] text-luxury-500">اختياري — تظهر للعملاء بدل الخريطة الخارجية</span>
               </div>
-
-              {/* Live Map Preview Frame */}
-              <div className="rounded-xl overflow-hidden border border-luxury-800 h-36 bg-luxury-950 relative">
-                <iframe
-                  title="معاينة الخريطة"
-                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.005},${latitude - 0.005},${longitude + 0.005},${latitude + 0.005}&layer=mapnik&marker=${latitude},${longitude}`}
-                  className="w-full h-full border-none"
-                  loading="lazy"
+              <div className="h-36 rounded-xl overflow-hidden border border-luxury-700 bg-luxury-900 flex items-center justify-center">
+                {mapImage ? (
+                  <img src={mapImage} alt="خريطة الموقع" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[10px] text-luxury-500">لا توجد صورة خريطة بعد</span>
+                )}
+              </div>
+              <div className="space-y-2">
+                <input
+                  ref={mapInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => handleUploadMap(e.target.files?.[0])}
                 />
+                <button
+                  type="button"
+                  onClick={() => mapInputRef.current?.click()}
+                  disabled={uploadingMap}
+                  className="w-full py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
+                >
+                  {uploadingMap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}
+                  {uploadingMap ? 'جاري رفع صورة الخريطة...' : mapImage ? 'استبدال صورة الخريطة' : 'رفع صورة خريطة من الجهاز'}
+                </button>
+                {mapImage && (
+                  <button
+                    type="button"
+                    onClick={() => setMapImage('')}
+                    className="w-full py-2 rounded-xl bg-luxury-900 hover:bg-luxury-800 border border-luxury-700 text-luxury-400 text-xs flex items-center justify-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    إزالة صورة الخريطة
+                  </button>
+                )}
               </div>
             </div>
           </form>

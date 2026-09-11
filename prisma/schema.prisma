@@ -99,6 +99,9 @@ model Restaurant {
   latitude        Float?
   longitude       Float?
   mapUrl          String?
+  // Static map/location image the venue can upload to show guests where it
+  // is without embedding an external (Google Maps) frame.
+  mapImageUrl     String?
   customDomain    String?
   planId          String?
   createdAt       DateTime          @default(now())

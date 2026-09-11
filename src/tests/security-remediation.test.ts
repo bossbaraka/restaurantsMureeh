@@ -252,11 +252,19 @@ describe('H-04: promo video URLs are allowlisted', () => {
   it.each([
     'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     'https://youtu.be/dQw4w9WgXcQ',
-    'https://player.vimeo.com/video/12345',
-    '/uploads/promo.mp4',
+    'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+    'https://www.youtube.com/embed/dQw4w9WgXcQ',
     '',
   ])('accepts %s', (good) => {
     expect(isAllowedPromoVideoUrl(good)).toBe(true);
+  });
+
+  it('rejects non-YouTube and malformed video URLs', () => {
+    expect(isAllowedPromoVideoUrl('https://player.vimeo.com/video/12345')).toBe(false);
+    expect(isAllowedPromoVideoUrl('/uploads/promo.mp4')).toBe(false);
+    // Too-short / missing video id
+    expect(isAllowedPromoVideoUrl('https://www.youtube.com/watch?v=abc')).toBe(false);
+    expect(isAllowedPromoVideoUrl('https://www.youtube.com/watch')).toBe(false);
   });
 
   it('the settings schema rejects a hostile promo video URL', () => {
@@ -265,7 +273,7 @@ describe('H-04: promo video URLs are allowlisted', () => {
     });
     expect(bad.success).toBe(false);
     const ok = brandingSchema.safeParse({
-      promoVideoUrl: 'https://www.youtube.com/watch?v=abc',
+      promoVideoUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     });
     expect(ok.success).toBe(true);
   });

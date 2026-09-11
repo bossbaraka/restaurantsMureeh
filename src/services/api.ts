@@ -84,6 +84,7 @@ export function mapRestaurantRow(raw: any): Restaurant {
     latitude: raw.latitude != null ? Number(raw.latitude) : undefined,
     longitude: raw.longitude != null ? Number(raw.longitude) : undefined,
     mapUrl: raw.mapUrl || undefined,
+    mapImageUrl: raw.mapImageUrl ? absoluteAssetUrl(raw.mapImageUrl) : undefined,
     currency: raw.currency || '₪',
     language: (raw.language || 'ar') === 'en' ? 'en' : 'ar',
     timezone: raw.timezone || 'Asia/Jerusalem',
@@ -479,14 +480,22 @@ class RestaurantApiService {
   public async uploadImage(
     file: File | Blob,
     fileName = 'image.png',
-    kind?: 'logo' | 'cover' | 'gallery' | 'product' | 'category' | 'offer'
+    kind?: 'logo' | 'cover' | 'gallery' | 'product' | 'category' | 'offer' | 'map',
+    restaurantId?: string
   ): Promise<ApiResponse<{ url: string; pathUrl?: string; key?: string }>> {
     try {
       const form = new FormData();
       form.append('image', file, fileName);
       if (kind) form.append('kind', kind);
+      // Platform staff (SUPER_ADMIN / PLATFORM_ADMIN) have no JWT tenant, so
+      // the upload route must be told which restaurant the file belongs to.
+      // Tenant users are unaffected: the server always resolves their upload
+      // to their own JWT restaurantId and ignores this hint.
+      const tenantQuery = restaurantId
+        ? `?restaurantId=${encodeURIComponent(restaurantId)}`
+        : '';
       const token = this.getAuthToken();
-      const res = await fetch(`${API_BASE}/uploads/image`, {
+      const res = await fetch(`${API_BASE}/uploads/image${tenantQuery}`, {
         method: 'POST',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -516,7 +525,7 @@ class RestaurantApiService {
   // replaced logo/cover/dish). The server re-validates tenant ownership, so
   // a caller can never delete another restaurant's file. Failures are
   // returned but must be treated as non-fatal by callers.
-  public async deleteImage(url: string): Promise<ApiResponse<{ deleted: boolean; key: string | null }>> {
+  public async deleteImage(url: string, restaurantId?: string): Promise<ApiResponse<{ deleted: boolean; key: string | null }>> {
     try {
       const token = this.getAuthToken();
       const res = await fetch(`${API_BASE}/uploads/delete`, {
@@ -525,7 +534,7 @@ class RestaurantApiService {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url, ...(restaurantId ? { restaurantId } : {}) }),
       });
       const json: any = await res.json().catch(() => null);
       if (res.ok && json?.success) {
@@ -1212,6 +1221,7 @@ class RestaurantApiService {
         latitude: patch.latitude,
         longitude: patch.longitude,
         mapUrl: patch.mapUrl,
+        mapImage: patch.mapImageUrl,
       },
     });
     if (res.success && res.data?.restaurant) {

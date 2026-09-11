@@ -267,6 +267,7 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           latitude: restaurant.latitude,
           longitude: restaurant.longitude,
           mapUrl: restaurant.mapUrl,
+          mapImageUrl: restaurant.mapImageUrl,
           logoFit: restaurant.logoFit,
           logoPosition: restaurant.logoPosition,
           promoVideoUrl: restaurant.promoVideoUrl,
