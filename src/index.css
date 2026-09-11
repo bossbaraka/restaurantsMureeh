@@ -611,6 +611,20 @@
   will-change: transform;
 }
 
+/* Image-free ambient wash for the third beat (CONNECT). The tenant palette
+   itself is the backdrop — no photography to download, nothing to crop. */
+.welcome-canvas-wash {
+  background:
+    radial-gradient(72% 52% at 50% 0%, rgb(var(--brand-primary-rgb) / 0.20) 0%, transparent 70%),
+    radial-gradient(56% 44% at 88% 100%, rgb(var(--brand-accent-rgb) / 0.14) 0%, transparent 72%);
+}
+
+/* Dish rows in the menu preview keep their square rhythm without photos. */
+.welcome-device__thumb {
+  background-image: var(--brand-fill);
+  color: var(--brand-ink);
+}
+
 .welcome-qr-section {
   /* Comes into focus as the guest scrolls it into the middle of the timeline. */
   opacity: calc(0.55 + var(--scroll, 0) * 0.45);

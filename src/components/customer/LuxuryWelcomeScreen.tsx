@@ -7,7 +7,6 @@ import {
   MessageCircle,
   Star,
   Quote,
-  X,
   Flame,
   QrCode,
   ShieldCheck,
@@ -128,33 +127,6 @@ const CURATED_REVIEWS: CustomerReview[] = [
     badge: 'ضيف معتمد · عشاء عائلي',
     rating: 5,
     comment: 'اهتمام فائق بأدق التفاصيل من لحظة مسح الباركود حتى استلام الطلب. بالتأكيد سأكرر الزيارة مراراً.',
-  },
-];
-
-const DEFAULT_GALLERY_PHOTOS = [
-  {
-    id: 'g-1',
-    title: 'أجواء الضيافة والاسترخاء',
-    url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
-    tag: 'أجواء المكان ✨',
-  },
-  {
-    id: 'g-2',
-    title: 'المشروبات والقهوة المختصة',
-    url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=800&q=80',
-    tag: 'قهوة مختصة ☕',
-  },
-  {
-    id: 'g-3',
-    title: 'أطباق فاخرة محضرة بعناية',
-    url: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=800&q=80',
-    tag: 'مذاق فريد 🌿',
-  },
-  {
-    id: 'g-4',
-    title: 'عصائر ومنعشات طازجة',
-    url: 'https://images.unsplash.com/photo-1613478223719-2ab802602423?auto=format&fit=crop&w=800&q=80',
-    tag: 'طازج ولذيذ 🔥',
   },
 ];
 
@@ -608,8 +580,6 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
   restaurantName,
   restaurantNameEn,
   monogram,
-  logoImg,
-  logoStyle,
   tableNumStr,
   currency,
   defaultLanguage,
@@ -706,18 +676,9 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
               {/* Title bar */}
               <span className="flex items-center gap-2 border-b border-[var(--brand-line)] px-3 py-2.5">
                 <span className="welcome-device__logo flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg">
-                  {logoImg ? (
-                    <img
-                      src={logoImg}
-                      alt=""
-                      className="h-full w-full"
-                      style={logoStyle || { objectFit: 'cover', objectPosition: '50% 50%' }}
-                    />
-                  ) : (
-                    <span className="welcome-monogram font-serif text-sm font-black">
-                      {monogram}
-                    </span>
-                  )}
+                  <span className="welcome-monogram font-serif text-sm font-black">
+                    {monogram}
+                  </span>
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[11px] font-bold text-luxury-50">
@@ -796,16 +757,13 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
                     key={p.id}
                     className="welcome-device__row flex items-center gap-2.5 rounded-xl px-1.5 py-1.5"
                   >
-                    <span className="h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-black/30">
-                      {p.image && (
-                        <img
-                          src={optimizeImageUrl(p.image, 120, 70)}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                          className="h-full w-full object-cover"
-                        />
-                      )}
+                    <span
+                      className="welcome-device__thumb flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+                      aria-hidden="true"
+                    >
+                      <span className="font-serif text-sm font-black">
+                        {(lang === 'en' ? p.nameEn || p.name : p.name).charAt(0)}
+                      </span>
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[11px] font-bold text-luxury-100">
@@ -853,7 +811,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
   const [step, setStep] = useState<WelcomeStep>(initialStep);
   const [isDismissing, setIsDismissing] = useState(false);
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
-  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   // Guests who asked for less motion get the CTA immediately — nothing to wait for.
   const [showTapHint, setShowTapHint] = useState(() => initialStep !== 'LOGO_REVEAL' || reducedMotion);
   const [reviewPaused, setReviewPaused] = useState(false);
@@ -895,10 +852,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
 
   const restName = currentRestaurant?.name || 'مطعم مريح';
   const restNameEn = currentRestaurant?.nameEn || '';
-  const rawCoverImg =
-    currentRestaurant?.coverImage ||
-    'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
-  const coverImg = optimizeImageUrl(rawCoverImg, 1280, 70);
   const logoImg = currentRestaurant?.logo ? optimizeImageUrl(currentRestaurant.logo, 240, 85) : '';
   const logoStyle: React.CSSProperties = {
     objectFit: currentRestaurant?.logoFit === 'contain' ? 'contain' : 'cover',
@@ -914,48 +867,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
   const stageLabel = STAGE_LABELS[step] ?? STAGE_LABELS.NETWORKING;
   const night = isNightSession();
 
-  // Build curated gallery images from restaurant & products
-  const galleryImages = useMemo(() => {
-    const list: Array<{ id: string; title: string; url: string; tag: string }> = [];
-
-    if (currentRestaurant?.coverImage) {
-      list.push({
-        id: 'cover',
-        title: restName,
-        url: currentRestaurant.coverImage,
-        tag: 'الواجهة الرئيسية ✦',
-      });
-    }
-
-    if (currentRestaurant?.galleryImages && currentRestaurant.galleryImages.length > 0) {
-      currentRestaurant.galleryImages.forEach((img, idx) => {
-        list.push({
-          id: `custom-g-${idx}`,
-          title: `أجواء ${restName}`,
-          url: img,
-          tag: 'أجواء المطعم ✨',
-        });
-      });
-    }
-
-    // Add signature dishes with photos
-    if (products && products.length > 0) {
-      products
-        .filter((p) => p.image && p.image.trim().length > 10 && !p.image.includes('placeholder'))
-        .slice(0, 4)
-        .forEach((p) => {
-          list.push({
-            id: p.id,
-            title: p.name,
-            url: p.image,
-            tag: p.badge || (p.isFeatured ? 'مختارات الشيف ✦' : 'الأكثر طلباً 🔥'),
-          });
-        });
-    }
-
-    if (list.length >= 4) return list.slice(0, 4);
-    return [...list, ...DEFAULT_GALLERY_PHOTOS].slice(0, 4);
-  }, [currentRestaurant, products, restName]);
 
   // ---------------------------------------------------------------------------
   // Canvas particle network + logo reveal animation (tenant-coloured)
@@ -1249,10 +1160,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'Escape') return;
-    if (lightboxImage) {
-      setLightboxImage(null);
-      return;
-    }
     handleStartBrowsing();
   };
 
@@ -1425,16 +1332,11 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
       {/* STAGE 3: Restaurant welcome showcase                               */}
       {/* ================================================================= */}
       {step === 'WELCOME_SHOWCASE' && (
-        <div className="animate-in fade-in relative z-10 flex min-h-screen w-full flex-col justify-between duration-500">
-          {/* Ambient cover art on the shared dark canvas */}
+        <div className="animate-in fade-in relative z-10 flex h-full w-full flex-col justify-between duration-500">
+          {/* Ambient brand wash on the shared dark canvas — no imagery: the
+              third beat is deliberately image-free and uncluttered. */}
           <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden="true">
-            <img
-              src={coverImg}
-              alt=""
-              loading="eager"
-              decoding="async"
-              className="welcome-parallax h-full w-full object-cover object-center opacity-[0.16] blur-sm"
-            />
+            <div className="welcome-parallax welcome-canvas-wash absolute inset-0" />
             <div className="welcome-scrim absolute inset-0" />
             <div className="welcome-aura absolute inset-0 opacity-70" />
             <WelcomeStarField />
@@ -1486,22 +1388,11 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
           </header>
 
           {/* Main content */}
-          <main className="relative z-10 mx-auto w-full max-w-xl flex-1 space-y-5 px-4 py-5 sm:px-6">
+          <main className="relative z-10 mx-auto w-full max-w-xl flex-1 space-y-4 px-4 py-4 sm:px-6">
             {/* 1. Identity */}
             <div className="space-y-3 pt-1 text-center">
               <div className="welcome-medallion relative mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl sm:h-24 sm:w-24">
-                {logoImg ? (
-                  <img
-                    src={logoImg}
-                    alt={restName}
-                    className="h-full w-full p-1"
-                    style={logoStyle}
-                    loading="eager"
-                    decoding="async"
-                  />
-                ) : (
-                  <span className="welcome-monogram font-serif text-3xl font-black">{monogram}</span>
-                )}
+                <span className="welcome-monogram font-serif text-3xl font-black">{monogram}</span>
               </div>
 
               <div className="space-y-1">
@@ -1611,76 +1502,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
               )}
             </section>
 
-            {/* 4. Gallery — shown before the reviews */}
-            <section className="space-y-2.5 text-right" aria-label={`صور من ${restName}`}>
-              <div className="flex items-center justify-between px-1">
-                <h3 className="flex items-center gap-1.5 font-serif text-xs font-bold text-luxury-200">
-                  <Flame className="h-3.5 w-3.5 text-[var(--brand-primary-strong)]" />
-                  <span>صور من أجواء وضيافة {restName}</span>
-                </h3>
-                <span className="text-[10px] text-luxury-500">المس أي صورة للتكبير</span>
-              </div>
-
-              {/* Asymmetric editorial grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {galleryImages[0] && (
-                  <button
-                    type="button"
-                    onClick={() => setLightboxImage(galleryImages[0].url)}
-                    aria-label={`تكبير صورة: ${galleryImages[0].title}`}
-                    className="welcome-tile group col-span-2 h-44 cursor-pointer rounded-2xl sm:h-52"
-                  >
-                    <img
-                      src={optimizeImageUrl(galleryImages[0].url, 800, 80)}
-                      alt={galleryImages[0].title}
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span className="welcome-tile__scrim absolute inset-0" />
-                    <span className="absolute inset-x-3 bottom-3 z-10 flex items-end justify-between gap-2">
-                      <span className="truncate text-xs font-bold text-white drop-shadow">
-                        {galleryImages[0].title}
-                      </span>
-                      <span className="welcome-chip shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold backdrop-blur-md">
-                        {galleryImages[0].tag}
-                      </span>
-                    </span>
-                  </button>
-                )}
-
-                {galleryImages.slice(1, 4).map((item, idx) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setLightboxImage(item.url)}
-                    aria-label={`تكبير صورة: ${item.title}`}
-                    className={`welcome-tile group cursor-pointer rounded-2xl ${
-                      idx === 0 ? 'col-span-2 h-36 sm:h-40' : 'h-28 sm:h-36'
-                    }`}
-                  >
-                    <img
-                      src={optimizeImageUrl(item.url, 500, 75)}
-                      alt={item.title}
-                      className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                    <span className="welcome-tile__scrim absolute inset-0" />
-                    <span className="absolute inset-x-2.5 bottom-2 z-10 block text-right">
-                      <span className="block truncate text-[10px] font-bold text-white drop-shadow">
-                        {item.title}
-                      </span>
-                      <span className="text-[9px] font-medium text-[var(--brand-primary-strong)]">
-                        {item.tag}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {/* 5. Guest reviews — below the gallery — auto-rotating, with a visible timer */}
+            {/* 4. Guest reviews — auto-rotating, with a visible timer */}
             <section
               className="welcome-card rounded-2xl p-4 text-right shadow-lg"
               aria-label="آراء ضيوف المطعم"
@@ -1780,35 +1602,6 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
             </div>
           </footer>
 
-          {/* Lightbox */}
-          {lightboxImage && (
-            <div
-              className="animate-in fade-in fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 backdrop-blur-xl duration-200"
-              onClick={() => setLightboxImage(null)}
-              role="dialog"
-              aria-modal="true"
-              aria-label="معاينة الصورة"
-            >
-              <button
-                type="button"
-                onClick={() => setLightboxImage(null)}
-                className="absolute left-4 top-4 z-10 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-2 focus-visible:outline-offset-2"
-                aria-label="إغلاق المعاينة"
-              >
-                <X className="h-5 w-5" />
-              </button>
-              <div
-                className="relative max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--brand-line-strong)] shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <img
-                  src={optimizeImageUrl(lightboxImage, 1400, 85)}
-                  alt={restName}
-                  className="mx-auto max-h-[75vh] w-full bg-black object-contain"
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>
