@@ -215,7 +215,7 @@ describe('entry experience — direction', () => {
     const html = render();
     expect(html).toContain('dir="rtl"');
     expect(html).toContain('--entry-dir:1');
-    expect(html).toContain('اسحب لاستكشاف القائمة');
+    expect(html).toContain('اسحب للمتابعة');
   });
 
   it('is LTR for an English tenant and mirrors the gesture', () => {
@@ -242,7 +242,7 @@ describe('entry experience — everyone can get in', () => {
     // A native <button> gives every guest keyboard, screen-reader and single
     // tap access to the same destination as the gesture.
     expect(html).toMatch(/<button[^>]*class="entry-action__button"/);
-    expect(html).toContain('الدخول إلى القائمة');
+    expect(html).toContain('تصفّح القائمة');
     // The logo invitation is a button too, never a div with a click handler.
     expect(html).toMatch(/<button[^>]*class="entry-logo-button"/);
   });
