@@ -2326,3 +2326,609 @@ input[type='range'].saas-range::-moz-range-thumb {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   RESTAURANT ENTRY EXPERIENCE — the layer a guest lands on after a QR scan
+   ==========================================================================
+   Fully isolated: every selector below is `.entry-*`, nothing existing is
+   redefined, overridden or depended upon, and no layout outside the entry
+   layer can be affected by this block.
+   Palette is the tenant's own `--brand-*` tokens (written by theme/brandTheme),
+   with a neutral canvas that matches the customer menu behind it so the
+   hand-off produces no colour or brightness jump.
+   Sized mobile-first (360px) with clamp() caps so 1920px stays composed, and
+   all fixed edges respect env(safe-area-inset-*).
+   ========================================================================== */
+
+.entry-root {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  background: #0a0b0d; /* identical to the customer menu canvas */
+  color: #f6f8fb;
+  font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overscroll-behavior: contain;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* The moving layer. `--entry-shift` is written once per pointer frame;
+   `--entry-dir` is +1 when the gesture travels right (RTL), -1 for LTR. */
+.entry-sheet {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform: translate3d(var(--entry-shift, 0px), 0, 0);
+  /* pan-y leaves vertical scrolling to the browser; horizontal drives entry. */
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+/* Spring-back after a short drag, and the completed exit. */
+.entry-sheet--snap {
+  transition: transform 620ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.entry-sheet--exiting {
+  opacity: 0;
+  transform: translate3d(calc(var(--entry-dir, 1) * 100%), 0, 0);
+  transition:
+    transform 460ms cubic-bezier(0.55, 0, 0.2, 1),
+    opacity 460ms ease-out;
+}
+
+/* --------------------------------------------------------------------------
+   Cinematic cover — the restaurant's own photography
+   -------------------------------------------------------------------------- */
+.entry-cover {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0a0b0d;
+}
+
+.entry-cover__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* object-fit + absolute fill: never distorts, never overflows. */
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transition: opacity 1100ms ease-out;
+  filter: saturate(1.04) contrast(1.02) brightness(0.94);
+  user-select: none;
+}
+.entry-cover__img--ready {
+  opacity: 1;
+  animation: entry-cover-drift 30s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+/* Brand-built ambience when the tenant has no cover image (or it fails):
+   the venue still reads as itself instead of as a generic placeholder. */
+.entry-cover__fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(118% 88% at 20% 10%, rgb(var(--brand-primary-rgb) / 0.5) 0%, transparent 62%),
+    radial-gradient(104% 78% at 84% 88%, rgb(var(--brand-accent-rgb) / 0.38) 0%, transparent 60%),
+    linear-gradient(158deg, #101319 0%, #0a0b0d 54%, #0d1016 100%);
+}
+
+/* Legibility for the identity sitting on top of an unknown photograph. */
+.entry-cover__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      to top,
+      #0a0b0d 0%,
+      rgb(10 11 13 / 0.88) 24%,
+      rgb(10 11 13 / 0.34) 56%,
+      rgb(10 11 13 / 0.06) 80%,
+      transparent 100%
+    ),
+    linear-gradient(
+      to bottom,
+      rgb(10 11 13 / 0.66) 0%,
+      rgb(10 11 13 / 0.16) 20%,
+      transparent 44%
+    );
+}
+.entry-cover__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(118% 88% at 50% 44%, transparent 36%, rgb(0 0 0 / 0.52) 100%);
+}
+
+/* A single slow light pass — atmosphere, not a spotlight effect. */
+.entry-cover__sweep {
+  position: absolute;
+  inset: -20% -45%;
+  pointer-events: none;
+  background: linear-gradient(
+    104deg,
+    transparent 40%,
+    rgb(255 255 255 / 0.06) 50%,
+    transparent 60%
+  );
+  animation: entry-sweep 11s linear infinite;
+}
+
+/* Ambient motes: a dozen elements, never a particle system. */
+.entry-motes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.entry-mote {
+  position: absolute;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.6);
+  box-shadow: 0 0 10px 2px rgb(var(--brand-primary-rgb) / 0.35);
+  animation-name: entry-mote;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+/* --------------------------------------------------------------------------
+   Stages — cover invitation, then identity
+   -------------------------------------------------------------------------- */
+.entry-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 1.5rem)
+    calc(env(safe-area-inset-right, 0px) + 1.25rem)
+    calc(env(safe-area-inset-bottom, 0px) + 1.5rem)
+    calc(env(safe-area-inset-left, 0px) + 1.25rem);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 520ms ease,
+    transform 720ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s linear 520ms;
+}
+.entry-stage[data-active='true'] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 520ms ease,
+    transform 720ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s linear 0s;
+}
+.entry-stage--cover:not([data-active='true']) {
+  transform: scale(1.08);
+}
+.entry-stage--identity:not([data-active='true']) {
+  transform: translate3d(calc(var(--entry-dir, 1) * -16px), 26px, 0) scale(0.97);
+}
+
+/* --------------------------------------------------------------------------
+   Stage 1 — the logo is the invitation
+   -------------------------------------------------------------------------- */
+.entry-invite {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1.2rem, 4.5vh, 2.4rem);
+}
+
+.entry-logo-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(104px, 27vw, 150px);
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  animation: entry-breathe 4.8s ease-in-out infinite;
+}
+.entry-logo-button:focus-visible {
+  outline: 2px solid var(--brand-primary-strong, #c9a227);
+  outline-offset: 8px;
+  border-radius: 50%;
+}
+
+.entry-logo__halo {
+  position: absolute;
+  inset: -42%;
+  z-index: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(var(--brand-primary-rgb) / 0.4) 0%,
+    rgb(var(--brand-accent-rgb) / 0.16) 44%,
+    transparent 70%
+  );
+  filter: blur(20px);
+}
+.entry-logo__ring {
+  position: absolute;
+  inset: -13%;
+  z-index: 1;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-top-color: rgb(var(--brand-primary-rgb) / 0.85);
+  animation: entry-spin 9.5s linear infinite;
+}
+
+.entry-logo__disc {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-soft-strong, #1b1f27) 55%, #12141a);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  box-shadow:
+    0 20px 48px rgb(0 0 0 / 0.55),
+    0 0 0 1px rgb(var(--brand-primary-rgb) / 0.22),
+    inset 0 1px 0 rgb(255 255 255 / 0.16);
+}
+.entry-logo__img {
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+.entry-logo__monogram {
+  font-family: 'Cormorant Garamond', 'Tajawal', Georgia, serif;
+  font-size: clamp(2.4rem, 8vw, 3.2rem);
+  line-height: 1;
+  color: #fff;
+}
+
+.entry-invite__hint {
+  margin: 0;
+  font-size: clamp(0.76rem, 3.4vw, 0.92rem);
+  letter-spacing: 0.16em;
+  color: rgb(246 248 251 / 0.6);
+}
+
+/* --------------------------------------------------------------------------
+   Stage 2 — identity + restaurant-specific composition
+   -------------------------------------------------------------------------- */
+.entry-composition {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.entry-composition__glow {
+  position: absolute;
+  width: min(126%, 640px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgb(var(--brand-primary-rgb) / 0.26) 0%,
+    rgb(var(--brand-accent-rgb) / 0.12) 40%,
+    transparent 68%
+  );
+  filter: blur(28px);
+}
+.entry-rings {
+  width: min(92vw, 520px);
+  height: auto;
+  overflow: visible;
+}
+.entry-ring {
+  fill: none;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.entry-ring--outer {
+  stroke: rgb(255 255 255 / 0.09);
+  stroke-width: 1;
+}
+.entry-ring--mid {
+  stroke: rgb(var(--brand-primary-rgb) / 0.32);
+  stroke-width: 1.2;
+  stroke-dasharray: 2 13;
+  animation: entry-spin 72s linear infinite;
+}
+.entry-ring--inner {
+  stroke: rgb(var(--brand-accent-rgb) / 0.2);
+  stroke-width: 1;
+}
+.entry-ring--orbit {
+  stroke: rgb(255 255 255 / 0.16);
+  stroke-width: 1;
+  stroke-dasharray: 44 260;
+  animation: entry-spin 19s linear infinite reverse;
+}
+
+.entry-identity {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.7rem, 2.2vh, 1.15rem);
+  max-width: min(92vw, 34rem);
+  text-align: center;
+}
+.entry-identity__crest {
+  display: grid;
+  place-items: center;
+  width: clamp(70px, 19vw, 96px);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-soft-strong, #1b1f27) 55%, #12141a);
+  border: 1px solid rgb(255 255 255 / 0.18);
+  box-shadow:
+    0 14px 34px rgb(0 0 0 / 0.5),
+    inset 0 1px 0 rgb(255 255 255 / 0.18);
+}
+.entry-identity__logo {
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+.entry-identity__name {
+  margin: 0;
+  /* Arabic glyphs fall back to Tajawal per-character; Latin uses the
+     display serif — one stack, no language branch. */
+  font-family: 'Cormorant Garamond', 'Tajawal', Georgia, serif;
+  font-size: clamp(1.9rem, 8.4vw, 3.3rem);
+  font-weight: 700;
+  line-height: 1.14;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  text-wrap: balance;
+  text-shadow: 0 2px 26px rgb(0 0 0 / 0.6);
+}
+.entry-identity__desc {
+  margin: 0;
+  max-width: 32ch;
+  font-size: clamp(0.82rem, 3.5vw, 1rem);
+  line-height: 1.75;
+  color: rgb(246 248 251 / 0.72);
+}
+.entry-identity__table {
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  background: rgb(255 255 255 / 0.06);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: rgb(246 248 251 / 0.82);
+}
+
+/* Hollow, dimensional arrow — a floating object, not a button. */
+.entry-arrow-wrap {
+  position: relative;
+  z-index: 2;
+  margin-top: clamp(1.5rem, 5.5vh, 2.8rem);
+  display: flex;
+  justify-content: center;
+  /* Fades as the guest drags, so the gesture reads as progress. */
+  opacity: clamp(0.12, calc(1 - var(--entry-progress, 0) * 1.5), 1);
+}
+.entry-arrow__float {
+  animation: entry-float 4.6s ease-in-out infinite alternate;
+}
+.entry-arrow__gesture {
+  animation: entry-arrow-gesture 3.4s ease-in-out infinite;
+}
+.entry-arrow {
+  display: block;
+  width: clamp(62px, 17vw, 88px);
+  height: auto;
+  overflow: visible;
+  transform: scaleX(var(--entry-dir, 1));
+}
+.entry-arrow__depth {
+  fill: none;
+  stroke: rgb(0 0 0 / 0.5);
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transform: translate(2.5px, 4px);
+}
+.entry-arrow__face {
+  fill: none;
+  stroke: url(#entry-arrow-face);
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  filter: drop-shadow(0 7px 16px rgb(0 0 0 / 0.5));
+}
+.entry-arrow__sheen {
+  fill: none;
+  stroke: url(#entry-arrow-sheen);
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* Accessible counterpart to the gesture. */
+.entry-action {
+  position: relative;
+  z-index: 3;
+  margin-top: clamp(0.9rem, 3.2vh, 1.7rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.entry-action__hint {
+  margin: 0;
+  font-size: clamp(0.74rem, 3.2vw, 0.86rem);
+  letter-spacing: 0.12em;
+  color: rgb(246 248 251 / 0.58);
+}
+.entry-action__button {
+  font-family: inherit;
+  font-size: clamp(0.8rem, 3.4vw, 0.94rem);
+  padding: 0.66rem 1.5rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  background: rgb(255 255 255 / 0.08);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition:
+    transform 200ms ease,
+    background 200ms ease,
+    border-color 200ms ease;
+}
+.entry-action__button:hover {
+  background: rgb(255 255 255 / 0.14);
+  border-color: rgb(255 255 255 / 0.32);
+}
+.entry-action__button:active {
+  transform: translateY(1px);
+}
+.entry-action__button:focus-visible {
+  outline: 2px solid var(--brand-primary-strong, #c9a227);
+  outline-offset: 3px;
+}
+
+/* --------------------------------------------------------------------------
+   Keyframes
+   -------------------------------------------------------------------------- */
+@keyframes entry-cover-drift {
+  from {
+    transform: scale(1.06) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.16)
+      translate3d(calc(var(--entry-dir, 1) * 1.4%), -1.2%, 0);
+  }
+}
+
+@keyframes entry-sweep {
+  0% {
+    transform: translate3d(-40%, 0, 0);
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  58% {
+    transform: translate3d(40%, 0, 0);
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(40%, 0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes entry-mote {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.14;
+  }
+  50% {
+    opacity: 0.72;
+  }
+  to {
+    transform: translate3d(var(--entry-mote-drift, 8px), -28px, 0);
+    opacity: 0.18;
+  }
+}
+
+@keyframes entry-breathe {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0) scale(1.025);
+  }
+}
+
+@keyframes entry-float {
+  from {
+    transform: translate3d(0, -3px, 0);
+  }
+  to {
+    transform: translate3d(0, 5px, 0);
+  }
+}
+
+@keyframes entry-arrow-gesture {
+  0%,
+  58% {
+    transform: translate3d(0, 0, 0);
+  }
+  78% {
+    transform: translate3d(calc(var(--entry-dir, 1) * 16px), 0, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes entry-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion — the choreography stops, the journey does not.
+   The logo tap, the swipe fallback and the exit all still work; only the
+   movement is minimised.
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .entry-cover__img--ready,
+  .entry-cover__sweep,
+  .entry-mote,
+  .entry-logo-button,
+  .entry-logo__ring,
+  .entry-ring--mid,
+  .entry-ring--orbit,
+  .entry-arrow__float,
+  .entry-arrow__gesture {
+    animation: none !important;
+  }
+
+  .entry-cover__img--ready {
+    transform: scale(1.02);
+  }
+
+  .entry-sheet--snap {
+    transition: transform 240ms ease-out;
+  }
+  .entry-sheet--exiting {
+    transform: none;
+    transition: opacity 180ms linear;
+  }
+  .entry-stage {
+    transform: none !important;
+    transition:
+      opacity 180ms linear,
+      visibility 0s linear 180ms;
+  }
+  .entry-stage[data-active='true'] {
+    transition:
+      opacity 180ms linear,
+      visibility 0s linear 0s;
+  }
+}
