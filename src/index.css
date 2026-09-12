@@ -2415,24 +2415,30 @@ input[type='range'].saas-range::-moz-range-thumb {
     linear-gradient(158deg, #101319 0%, #0a0b0d 54%, #0d1016 100%);
 }
 
-/* Legibility for the identity sitting on top of an unknown photograph. */
+/* Legibility for the identity sitting on top of an unknown photograph.
+   The top pass is a touch stronger than the bottom because the persistent
+   context bar (brand / table / skip) lives up there on every stage. The
+   centre pass is a soft cinematic pool of dark that the content column
+   sits inside — the photo stays present around it but never competes with
+   the text. */
 .entry-cover__scrim {
   position: absolute;
   inset: 0;
   background:
+    radial-gradient(72% 55% at 50% 58%, rgb(10 11 13 / 0.58) 0%, transparent 72%),
     linear-gradient(
       to top,
       #0a0b0d 0%,
-      rgb(10 11 13 / 0.88) 24%,
-      rgb(10 11 13 / 0.34) 56%,
+      rgb(10 11 13 / 0.9) 26%,
+      rgb(10 11 13 / 0.36) 58%,
       rgb(10 11 13 / 0.06) 80%,
       transparent 100%
     ),
     linear-gradient(
       to bottom,
-      rgb(10 11 13 / 0.66) 0%,
-      rgb(10 11 13 / 0.16) 20%,
-      transparent 44%
+      rgb(10 11 13 / 0.74) 0%,
+      rgb(10 11 13 / 0.22) 24%,
+      transparent 48%
     );
 }
 .entry-cover__vignette {
@@ -2482,10 +2488,12 @@ input[type='range'].saas-range::-moz-range-thumb {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* The bottom edge clears the persistent rail + credit zone, so the CTA
+     column can never lean on the chrome below it. */
   padding:
     calc(env(safe-area-inset-top, 0px) + 1.5rem)
     calc(env(safe-area-inset-right, 0px) + 1.25rem)
-    calc(env(safe-area-inset-bottom, 0px) + 1.5rem)
+    calc(env(safe-area-inset-bottom, 0px) + 3.4rem)
     calc(env(safe-area-inset-left, 0px) + 1.25rem);
   opacity: 0;
   visibility: hidden;
@@ -2512,6 +2520,243 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 
 /* --------------------------------------------------------------------------
+   Persistent chrome — the top context bar and the two-step rail live OUTSIDE
+   the two stages, so while the beats cross-fade the guest's bearings (who,
+   which table, how far in) never move. That stillness is what reads as
+   "composed" instead of "two different screens".
+   -------------------------------------------------------------------------- */
+.entry-topbar {
+  position: absolute;
+  top: 0;
+  inset-inline: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 1rem)
+    calc(env(safe-area-inset-right, 0px) + 1.25rem)
+    0
+    calc(env(safe-area-inset-left, 0px) + 1.25rem);
+  /* The bar must never intercept the sheet's drag: only the skip button
+     opts back into pointer events. */
+  pointer-events: none;
+}
+
+.entry-topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  max-width: 46vw;
+}
+
+.entry-topbar__crest {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand-soft-strong, #1b1f27) 60%, #12141a);
+  border: 1px solid rgb(255 255 255 / 0.22);
+  box-shadow:
+    0 8px 20px rgb(0 0 0 / 0.45),
+    inset 0 1px 0 rgb(255 255 255 / 0.16);
+}
+.entry-topbar__crest-img {
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+.entry-topbar__monogram {
+  font-family: 'Cormorant Garamond', 'Tajawal', Georgia, serif;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: #fff;
+}
+
+.entry-topbar__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: var(--entry-ls, 0em);
+  color: rgb(255 255 255 / 0.88);
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.65);
+}
+
+.entry-topbar__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+}
+
+/* Table badge: frosted so it stays legible over any part of the photograph. */
+.entry-topbar__table {
+  padding: 0.32rem 0.72rem;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  background: rgb(255 255 255 / 0.08);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--entry-ls, 0em);
+  color: rgb(255 255 255 / 0.82);
+  white-space: nowrap;
+}
+
+/* The one interactive element of the bar: a quiet ghost pill, never a
+   competitor to the stage content. */
+.entry-topbar__skip {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.42rem 0.95rem;
+  min-height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+  background: rgb(255 255 255 / 0.07);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: rgb(255 255 255 / 0.78);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
+}
+/* Quiet chevron inside the skip pill: marks it as an ACTION (the table badge
+   beside it is information only) and points the direction the guest travels.
+   The scaleX flip is the same single source of truth as every other arrow. */
+.entry-topbar__skip-arrow {
+  width: 0.95em;
+  height: 0.95em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.7;
+  transform: scaleX(var(--entry-dir, 1));
+}
+.entry-topbar__skip:hover {
+  background: rgb(255 255 255 / 0.14);
+  border-color: rgb(255 255 255 / 0.32);
+  color: #fff;
+}
+.entry-topbar__skip:active {
+  transform: scale(0.96);
+}
+.entry-topbar__skip:focus-visible {
+  outline: 2px solid var(--brand-primary-strong, #c9a227);
+  outline-offset: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Two-step rail — the journey is invitation -> identity, and the guest can
+   always see which beat they are on. The fill is an opacity crossfade (a
+   compositor-only transition — no width animation anywhere in this layer).
+   -------------------------------------------------------------------------- */
+.entry-progress {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1.55rem);
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  pointer-events: none;
+}
+
+/* The platform credit lives at the very bottom, under the rail: the
+   smallest thing on the layer, in the quietest tone. */
+.entry-credit {
+  position: absolute;
+  inset-inline: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.4rem);
+  z-index: 4;
+  margin: 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--entry-ls, 0em);
+  color: rgb(255 255 255 / 0.38);
+  pointer-events: none;
+}
+.entry-progress__label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: rgb(255 255 255 / 0.35);
+  font-variant-numeric: tabular-nums;
+}
+.entry-progress__seg {
+  position: relative;
+  width: 26px;
+  height: 3px;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 0.14);
+}
+.entry-progress__seg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image: var(--brand-fill);
+  box-shadow: 0 0 10px -1px var(--brand-glow);
+  opacity: 0;
+  transition: opacity 0.45s ease;
+}
+.entry-progress__seg[data-active='true']::after {
+  opacity: 1;
+}
+
+/* --------------------------------------------------------------------------
+   Eyebrow — the small brand-tinted line that frames the logo (beat 1) and
+   the name (beat 2). Hairlines are pure decoration; the text carries the
+   meaning. Letter-spacing comes from `--entry-ls`, which is 0 for Arabic.
+   -------------------------------------------------------------------------- */
+.entry-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: var(--entry-ls, 0em);
+  color: var(--brand-accent-strong);
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.55);
+}
+.entry-eyebrow::before,
+.entry-eyebrow::after {
+  content: '';
+  width: 22px;
+  height: 1px;
+  background: rgb(var(--brand-accent-rgb) / 0.45);
+}
+.entry-eyebrow--identity {
+  font-size: 11px;
+}
+/* Latin script can take the classic wide-tracked eyebrow; Arabic never does. */
+.entry-root[dir='ltr'] .entry-eyebrow--identity {
+  letter-spacing: 0.22em;
+}
+
+/* --------------------------------------------------------------------------
    Stage 1 — the logo is the invitation
    -------------------------------------------------------------------------- */
 .entry-invite {
@@ -2521,6 +2766,14 @@ input[type='range'].saas-range::-moz-range-thumb {
   flex-direction: column;
   align-items: center;
   gap: clamp(1.2rem, 4.5vh, 2.4rem);
+}
+/* Eyebrow + medallion group: the welcome line sits closer to the logo than
+   the tap hint below it, which keeps the reading order tight. */
+.entry-invite__lead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.85rem, 2.4vh, 1.3rem);
 }
 
 .entry-logo-button {
@@ -2580,6 +2833,11 @@ input[type='range'].saas-range::-moz-range-thumb {
     0 20px 48px rgb(0 0 0 / 0.55),
     0 0 0 1px rgb(var(--brand-primary-rgb) / 0.22),
     inset 0 1px 0 rgb(255 255 255 / 0.16);
+  /* Tactile press: the disc compresses under the finger, like a physical seal. */
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.entry-logo-button:active .entry-logo__disc {
+  transform: scale(0.94);
 }
 .entry-logo__img {
   width: 100%;
@@ -2596,7 +2854,7 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-invite__hint {
   margin: 0;
   font-size: clamp(0.76rem, 3.4vw, 0.92rem);
-  letter-spacing: 0.16em;
+  letter-spacing: var(--entry-ls, 0em);
   color: rgb(246 248 251 / 0.6);
 }
 
@@ -2611,49 +2869,20 @@ input[type='range'].saas-range::-moz-range-thumb {
   place-items: center;
   pointer-events: none;
 }
+/* One restrained pool of brand light behind the identity — atmosphere, not
+   ornament. It no longer draws geometry through the text. */
 .entry-composition__glow {
   position: absolute;
-  width: min(126%, 640px);
+  width: min(120%, 560px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    rgb(var(--brand-primary-rgb) / 0.26) 0%,
-    rgb(var(--brand-accent-rgb) / 0.12) 40%,
-    transparent 68%
+    rgb(var(--brand-primary-rgb) / 0.18) 0%,
+    rgb(var(--brand-accent-rgb) / 0.08) 42%,
+    transparent 66%
   );
   filter: blur(28px);
-}
-.entry-rings {
-  width: min(92vw, 520px);
-  height: auto;
-  overflow: visible;
-}
-.entry-ring {
-  fill: none;
-  stroke-linecap: round;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-.entry-ring--outer {
-  stroke: rgb(255 255 255 / 0.09);
-  stroke-width: 1;
-}
-.entry-ring--mid {
-  stroke: rgb(var(--brand-primary-rgb) / 0.32);
-  stroke-width: 1.2;
-  stroke-dasharray: 2 13;
-  animation: entry-spin 72s linear infinite;
-}
-.entry-ring--inner {
-  stroke: rgb(var(--brand-accent-rgb) / 0.2);
-  stroke-width: 1;
-}
-.entry-ring--orbit {
-  stroke: rgb(255 255 255 / 0.16);
-  stroke-width: 1;
-  stroke-dasharray: 44 260;
-  animation: entry-spin 19s linear infinite reverse;
 }
 
 .entry-identity {
@@ -2669,7 +2898,7 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-identity__crest {
   display: grid;
   place-items: center;
-  width: clamp(70px, 19vw, 96px);
+  width: clamp(76px, 20vw, 104px);
   aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 50%;
@@ -2687,9 +2916,11 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-identity__name {
   margin: 0;
   /* Arabic glyphs fall back to Tajawal per-character; Latin uses the
-     display serif — one stack, no language branch. */
+     display serif — one stack, no language branch. The name is the
+     strongest textual element of the layer: ~34px on a 375px phone,
+     up to 64px on a wide desktop viewport. */
   font-family: 'Cormorant Garamond', 'Tajawal', Georgia, serif;
-  font-size: clamp(1.9rem, 8.4vw, 3.3rem);
+  font-size: clamp(2rem, 9vw, 4rem);
   font-weight: 700;
   line-height: 1.14;
   letter-spacing: -0.01em;
@@ -2703,15 +2934,79 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-size: clamp(0.82rem, 3.5vw, 1rem);
   line-height: 1.75;
   color: rgb(246 248 251 / 0.72);
+  /* A long tenant description must never push the CTA off a small screen —
+     the full text is one tap away in the menu hero anyway. */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
-.entry-identity__table {
-  padding: 0.3rem 0.8rem;
-  border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.18);
-  background: rgb(255 255 255 / 0.06);
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  color: rgb(246 248 251 / 0.82);
+
+/* --------------------------------------------------------------------------
+   Choreography — when a beat activates, its elements rise into place one
+   after another (logo -> welcome line -> name -> copy -> arrow -> CTA).
+   Fill-mode is `backwards` on purpose: the `from` state covers the delay,
+   but nothing is held after the animation ends, so the arrow's drag-progress
+   opacity (a plain `opacity` property) keeps working once the entrance has
+   finished.
+   -------------------------------------------------------------------------- */
+@keyframes entry-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* Beat 1 (plays once on first load, while the cover is the active stage). */
+.entry-stage--cover[data-active='true'] .entry-invite__lead > * {
+  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.entry-stage--cover[data-active='true'] .entry-invite__lead > *:nth-child(2) {
+  animation-delay: 120ms;
+}
+.entry-stage--cover[data-active='true'] .entry-invite__hint {
+  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 260ms backwards;
+}
+
+/* Beat 2 (plays when the identity stage activates after the logo tap). */
+.entry-stage--identity[data-active='true'] .entry-identity > * {
+  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(2) {
+  animation-delay: 70ms;
+}
+.entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(3) {
+  animation-delay: 140ms;
+}
+.entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(4) {
+  animation-delay: 210ms;
+}
+.entry-stage--identity[data-active='true'] .entry-arrow-wrap {
+  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 280ms backwards;
+}
+.entry-stage--identity[data-active='true'] .entry-action {
+  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 350ms backwards;
+}
+
+/* The crest gets a dedicated scale-in: the logo is the object of the beat,
+   so it materialises like a seal being set down, not just lifted. */
+@keyframes entry-crest-rise {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(1) {
+  animation: entry-crest-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 
 /* Hollow, dimensional arrow — a floating object, not a button. */
@@ -2761,7 +3056,9 @@ input[type='range'].saas-range::-moz-range-thumb {
   stroke-linecap: round;
 }
 
-/* Accessible counterpart to the gesture. */
+/* Accessible counterpart to the gesture. The button is the single loudest
+   element of beat 2 — the swipe teaches the power users, the button carries
+   everyone else. */
 .entry-action {
   position: relative;
   z-index: 3;
@@ -2769,40 +3066,86 @@ input[type='range'].saas-range::-moz-range-thumb {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
 }
 .entry-action__hint {
   margin: 0;
-  font-size: clamp(0.74rem, 3.2vw, 0.86rem);
-  letter-spacing: 0.12em;
+  font-size: clamp(0.72rem, 3vw, 0.82rem);
+  letter-spacing: var(--entry-ls, 0em);
   color: rgb(246 248 251 / 0.58);
 }
 .entry-action__button {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-family: inherit;
-  font-size: clamp(0.8rem, 3.4vw, 0.94rem);
-  padding: 0.66rem 1.5rem;
+  font-size: clamp(0.85rem, 3.4vw, 0.98rem);
+  font-weight: 800;
+  padding: 0.8rem 1.7rem;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.2);
-  background: rgb(255 255 255 / 0.08);
-  color: #fff;
+  border: none;
+  background-image: var(--brand-fill);
+  color: var(--brand-ink);
   cursor: pointer;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  box-shadow:
+    0 18px 40px -18px var(--brand-glow),
+    0 0 0 1px rgb(var(--brand-primary-strong-rgb) / 0.35),
+    inset 0 1px 0 rgb(255 255 255 / 0.35);
   transition:
     transform 200ms ease,
-    background 200ms ease,
-    border-color 200ms ease;
+    filter 200ms ease,
+    box-shadow 200ms ease;
+  -webkit-tap-highlight-color: transparent;
 }
 .entry-action__button:hover {
-  background: rgb(255 255 255 / 0.14);
-  border-color: rgb(255 255 255 / 0.32);
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow:
+    0 22px 46px -18px var(--brand-glow),
+    0 0 0 1px rgb(var(--brand-primary-strong-rgb) / 0.5),
+    inset 0 1px 0 rgb(255 255 255 / 0.4);
 }
 .entry-action__button:active {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 .entry-action__button:focus-visible {
   outline: 2px solid var(--brand-primary-strong, #c9a227);
   outline-offset: 3px;
+}
+/* One slow sheen pass over the fill — polish, not attention-hijacking. */
+.entry-action__button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgb(255 255 255 / 0.22) 50%,
+    transparent 65%
+  );
+  transform: translateX(-130%);
+  animation: entry-cta-sheen 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+.entry-action__chevron {
+  width: 1.05em;
+  height: 1.05em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Mirrors the sheet: the chevron points the direction the guest travels. */
+  transform: scaleX(var(--entry-dir, 1));
+  transition: transform 220ms ease;
+}
+/* Hover nudge: translateX applies before the scaleX flip, so the same rule
+   pushes the chevron forward for both RTL (right) and LTR (left) tenants. */
+.entry-action__button:hover .entry-action__chevron {
+  transform: scaleX(var(--entry-dir, 1)) translateX(3px);
 }
 
 /* --------------------------------------------------------------------------
@@ -2891,6 +3234,61 @@ input[type='range'].saas-range::-moz-range-thumb {
   }
 }
 
+/* The CTA's single slow sheen pass: most of the cycle is still, the sweep
+   is a brief event — the button reads as solid material, not a slideshow. */
+@keyframes entry-cta-sheen {
+  0%,
+  58% {
+    transform: translateX(-130%);
+  }
+  88%,
+  100% {
+    transform: translateX(130%);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Short, wide viewports (landscape phones): both beats must stay fully
+   composed — nothing may clip or scroll. The tenant description yields first
+   (it re-appears in the menu hero), then the crest and the arrow compress.
+   -------------------------------------------------------------------------- */
+@media (max-height: 520px) {
+  .entry-invite {
+    gap: 0.85rem;
+  }
+  .entry-invite__lead {
+    gap: 0.7rem;
+  }
+  .entry-logo-button {
+    width: 96px;
+  }
+  .entry-identity {
+    gap: 0.55rem;
+  }
+  .entry-identity__crest {
+    width: 54px;
+  }
+  .entry-identity__name {
+    font-size: clamp(1.5rem, 6.5vw, 2.2rem);
+  }
+  .entry-identity__desc {
+    display: none;
+  }
+  .entry-arrow-wrap {
+    margin-top: 0.85rem;
+  }
+  .entry-arrow {
+    width: 46px;
+  }
+  .entry-action {
+    margin-top: 0.5rem;
+    gap: 0.4rem;
+  }
+  .entry-action__button {
+    padding: 0.6rem 1.3rem;
+  }
+}
+
 /* --------------------------------------------------------------------------
    Reduced motion — the choreography stops, the journey does not.
    The logo tap, the swipe fallback and the exit all still work; only the
@@ -2902,11 +3300,20 @@ input[type='range'].saas-range::-moz-range-thumb {
   .entry-mote,
   .entry-logo-button,
   .entry-logo__ring,
-  .entry-ring--mid,
-  .entry-ring--orbit,
   .entry-arrow__float,
-  .entry-arrow__gesture {
+  .entry-arrow__gesture,
+  .entry-stage--cover[data-active='true'] .entry-invite__lead > *,
+  .entry-stage--cover[data-active='true'] .entry-invite__hint,
+  .entry-stage--identity[data-active='true'] .entry-identity > *,
+  .entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(1),
+  .entry-stage--identity[data-active='true'] .entry-arrow-wrap,
+  .entry-stage--identity[data-active='true'] .entry-action {
     animation: none !important;
+  }
+
+  /* The CTA keeps its fill and glow; only the sheen pass is dropped. */
+  .entry-action__button::after {
+    display: none;
   }
 
   .entry-cover__img--ready {

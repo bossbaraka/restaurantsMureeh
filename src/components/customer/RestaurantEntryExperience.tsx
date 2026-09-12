@@ -12,10 +12,13 @@ import { useBrandTheme } from '../../theme/brandTheme';
  * --------------
  * Presentation + motion + interaction only. It renders the tenant's cover
  * photography, asks the guest to open the venue (logo tap), reveals the venue
- * identity, teaches a swipe, and then gets out of the way. It owns NO business
- * logic: no session, no table, no cart, no API call. The only thing it hands
- * back to `CustomerLayout` is "the guest is done here" (`onEnter`), which is the
- * same one boolean the previous welcome screen used.
+ * identity, teaches a swipe, and then gets out of the way. Two pieces of
+ * chrome are persistent across both beats on purpose: a top context bar
+ * (brand, table badge, skip) and a two-step progress rail — the guest always
+ * knows where they are, which table they are on, and how far in they are. It
+ * owns NO business logic: no session, no table, no cart, no API call. The
+ * only thing it hands back to `CustomerLayout` is "the guest is done here"
+ * (`onEnter`), which is the same one boolean the previous welcome screen used.
  *
  * DATA
  * ----
@@ -243,14 +246,17 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
       }
       if (g.axis === 'vertical') return;
 
-      const travel = dx * dirSign; // px in the "open the menu" direction
+      // travel is measured in the "open the menu" direction; the sheet
+      // itself lives in screen space, so it must be multiplied back by
+      // dirSign or an LTR tenant would watch the sheet flee the finger.
+      const travel = dx * dirSign;
       if (travel <= 0) {
         // Dragging backwards is allowed but resists: the sheet feels attached
         // without letting the guest pull the wrong way open.
-        setShift(Math.max(travel * 0.28, -48));
+        setShift(Math.max(travel * 0.28, -48) * dirSign);
         return;
       }
-      setShift(Math.min(travel, thresholdPx * 1.4));
+      setShift(Math.min(travel, thresholdPx * 1.4) * dirSign);
     },
     [dirSign, dragging, thresholdPx]
   );
@@ -262,7 +268,9 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
 
       const elapsed = Math.max(1, event.timeStamp - g.startTime);
       const velocity = ((event.clientX - g.startX) * dirSign) / elapsed; // px/ms
-      const travelled = shift;
+      // shift is screen-space; convert back to gesture-direction px so the
+      // distance test is identical for RTL and LTR tenants.
+      const travelled = shift * dirSign;
 
       gesture.current = {
         pointerId: null,
@@ -303,7 +311,9 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
     [completeEntry, dirSign]
   );
 
-  const progress = clamp(shift / Math.max(1, thresholdPx), 0, 1);
+  // Gesture-direction progress (0..1), independent of which way the sheet
+  // actually travels on screen.
+  const progress = clamp((shift * dirSign) / Math.max(1, thresholdPx), 0, 1);
   const revealed = stage === 'IDENTITY';
 
   return (
@@ -328,6 +338,10 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
           ['--entry-shift' as string]: `${shift.toFixed(1)}px`,
           ['--entry-dir' as string]: String(dirSign),
           ['--entry-progress' as string]: progress.toFixed(3),
+          // Letter-spacing is a Latin-script device: it visibly breaks the
+          // connected strokes of Arabic, so Arabic tenants get zero spacing
+          // on the same elements.
+          ['--entry-ls' as string]: isEnglish ? '0.08em' : '0em',
         }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -383,17 +397,78 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
         </div>
 
         {/* --------------------------------------------------------------- */}
+        {/* Persistent context bar — WHO the guest just entered, WHICH      */}
+        {/* table the QR belongs to, and a one-tap skip. It lives OUTSIDE   */}
+        {/* the stages so it stays put while the two beats cross-fade,      */}
+        {/* which is what reads as "one composed screen", not two screens.  */}
+        {/* --------------------------------------------------------------- */}
+        <div className="entry-topbar">
+          <span className="entry-topbar__brand">
+            <span className="entry-topbar__crest" aria-hidden="true">
+              {logoSrc ? (
+                <img
+                  className="entry-topbar__crest-img"
+                  src={logoSrc}
+                  alt=""
+                  decoding="async"
+                  draggable={false}
+                  style={{
+                    objectFit: currentRestaurant?.logoFit === 'contain' ? 'contain' : 'cover',
+                    objectPosition: currentRestaurant?.logoPosition || '50% 50%',
+                  }}
+                />
+              ) : (
+                <span className="entry-topbar__monogram">{monogram}</span>
+              )}
+            </span>
+            <span className="entry-topbar__name">{displayName}</span>
+          </span>
+
+          <span className="entry-topbar__actions">
+            {activeTableNumber != null && (
+              <span className="entry-topbar__table" dir="ltr">
+                {isEnglish ? `Table ${activeTableNumber}` : `طاولة ${activeTableNumber}`}
+              </span>
+            )}
+            <button
+              type="button"
+              className="entry-topbar__skip"
+              onClick={completeEntry}
+              aria-label={
+                isEnglish
+                  ? 'Skip the introduction and open the menu'
+                  : 'تخطي مقدمة المطعم والدخول مباشرة إلى القائمة'
+              }
+            >
+              <span>{isEnglish ? 'Skip' : 'تخطي'}</span>
+              <svg
+                className="entry-topbar__skip-arrow"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M9 5.5 L15.5 12 L9 18.5" />
+              </svg>
+            </button>
+          </span>
+        </div>
+
+        {/* --------------------------------------------------------------- */}
         {/* Stage 1 — the logo is the invitation.                          */}
         {/* --------------------------------------------------------------- */}
         <div className="entry-stage entry-stage--cover" data-active={stage === 'COVER'}>
           <div className="entry-invite">
-            {stage === 'COVER' && (
-              <button
-                type="button"
-                onClick={handleReveal}
-                className="entry-logo-button"
-                aria-label={displayName ? `ادخل إلى عالم ${displayName}` : 'ادخل إلى قائمة المطعم'}
-              >
+            <div className="entry-invite__lead">
+              <p className="entry-eyebrow">{isEnglish ? 'Welcome' : 'أهلاً بكم'}</p>
+              {stage === 'COVER' && (
+                <button
+                  type="button"
+                  onClick={handleReveal}
+                  className="entry-logo-button"
+                  aria-label={
+                    displayName ? `المس للدخول إلى قائمة ${displayName}` : 'المس للدخول إلى القائمة'
+                  }
+                >
                 <span className="entry-logo__halo" aria-hidden="true" />
                 {!reducedMotion && <span className="entry-logo__ring" aria-hidden="true" />}
                 <span className="entry-logo__disc">
@@ -416,10 +491,11 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
                   )}
                 </span>
               </button>
-            )}
+              )}
+            </div>
 
             <p className="entry-invite__hint">
-              {isEnglish ? 'Tap to enter' : 'المس للدخول'}
+              {isEnglish ? 'Tap the logo to continue' : 'المس الشعار للمتابعة'}
             </p>
           </div>
         </div>
@@ -429,15 +505,11 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
         {/* --------------------------------------------------------------- */}
         <div className="entry-stage entry-stage--identity" data-active={revealed}>
           {/* Geometry is drawn from the tenant palette, so the venue reads as
-              its own world rather than a platform template. */}
+              its own world rather than a platform template. The composition
+              is a single soft glow now — the former ring set crossed the
+              identity text and read as clutter, not as atmosphere. */}
           <div className="entry-composition" aria-hidden="true">
             <span className="entry-composition__glow" />
-            <svg className="entry-rings" viewBox="0 0 400 400" focusable="false">
-              <circle className="entry-ring entry-ring--outer" cx="200" cy="200" r="188" />
-              <circle className="entry-ring entry-ring--mid" cx="200" cy="200" r="142" />
-              <circle className="entry-ring entry-ring--inner" cx="200" cy="200" r="98" />
-              <circle className="entry-ring entry-ring--orbit" cx="200" cy="200" r="62" />
-            </svg>
           </div>
 
           <div className="entry-identity">
@@ -461,16 +533,16 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
               )}
             </span>
 
+            {/* The table badge now lives in the persistent top bar, so the
+                identity block reads as a single centred composition. */}
+            <p className="entry-eyebrow entry-eyebrow--identity">
+              {isEnglish ? 'WELCOME TO' : 'أهلاً بكم في'}
+            </p>
+
             <h1 className="entry-identity__name">{displayName}</h1>
 
             {/* Omitted entirely when the tenant has no description. */}
             {description && <p className="entry-identity__desc">{description}</p>}
-
-            {activeTableNumber != null && (
-              <span className="entry-identity__table" dir="ltr">
-                {isEnglish ? 'Table' : 'طاولة'} {activeTableNumber}
-              </span>
-            )}
           </div>
 
           {/* Hollow, dimensional arrow — a floating object, not a button. */}
@@ -521,13 +593,40 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
               single-tap guests to exactly the same place. */}
           <div className="entry-action">
             <p className="entry-action__hint" aria-hidden="true">
-              {isEnglish ? 'Swipe to open the menu' : 'اسحب لاستكشاف القائمة'}
+              {isEnglish ? 'Swipe to continue' : 'اسحب للمتابعة'}
             </p>
             <button type="button" className="entry-action__button" onClick={completeEntry}>
-              {isEnglish ? 'Open the menu' : 'الدخول إلى القائمة'}
+              <span className="entry-action__label">
+                {isEnglish ? 'Browse the menu' : 'تصفّح القائمة'}
+              </span>
+              <svg
+                className="entry-action__chevron"
+                viewBox="0 0 24 24"
+                role="presentation"
+                focusable="false"
+                aria-hidden="true"
+              >
+                <path d="M9 5.5 L15.5 12 L9 18.5" />
+              </svg>
             </button>
           </div>
         </div>
+
+        {/* --------------------------------------------------------------- */}
+        {/* Two-step rail — which beat the guest is on. Persistent across   */}
+        {/* both stages (like the top bar), so the flow reads as one        */}
+        {/* composed journey: invitation, then identity, then the menu.     */}
+        {/* --------------------------------------------------------------- */}
+        <div className="entry-progress" aria-hidden="true">
+          <span className="entry-progress__label">01</span>
+          <span className="entry-progress__seg" data-active={stage === 'COVER'} />
+          <span className="entry-progress__seg" data-active={revealed} />
+          <span className="entry-progress__label">02</span>
+        </div>
+
+        {/* Persistent platform credit — the smallest element of the layer:
+            it supports the restaurant brand rather than competing with it. */}
+        <p className="entry-credit">{isEnglish ? 'Powered by Mureeh' : 'مدعوم بـ MUREEH'}</p>
       </div>
     </div>
   );
