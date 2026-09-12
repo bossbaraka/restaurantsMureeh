@@ -17,7 +17,7 @@ import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
 import { CustomerOrderLiveNotifier } from './CustomerOrderLiveNotifier';
 import { CustomerGuideOverlay } from './CustomerGuideOverlay';
 import { OrderCompletedModal } from './OrderCompletedModal';
-import { LuxuryWelcomeScreen } from './LuxuryWelcomeScreen';
+import { RestaurantEntryExperience } from './RestaurantEntryExperience';
 import { DisplayMenu } from './DisplayMenu';
 import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 
@@ -313,8 +313,9 @@ export const CustomerLayout: React.FC = () => {
 
   return (
     <div className="customer-shell min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation" dir="rtl">
-      {/* Luxury Welcome Overlay for initial QR entry */}
-      {showWelcome && <LuxuryWelcomeScreen onDismiss={handleDismissWelcome} />}
+      {/* Entry experience shown right after a QR scan. Dismissing it hands the
+          guest straight to the menu below, unchanged. */}
+      {showWelcome && <RestaurantEntryExperience onEnter={handleDismissWelcome} />}
 
       {/* Sticky Luxury Customer Header */}
       <CustomerHeader />
