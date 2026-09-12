@@ -775,6 +775,32 @@ router.post(
   }
 );
 
+async function generateNextReceiptNumber(
+  restaurantId: string,
+  now: Date,
+  attempt: number
+): Promise<string> {
+  const yearPrefix = `RC-${now.getFullYear()}-`;
+  const latest = await prisma.payment.findFirst({
+    where: {
+      restaurantId,
+      receiptNumber: { startsWith: yearPrefix },
+    },
+    orderBy: { receiptNumber: 'desc' },
+    select: { receiptNumber: true },
+  });
+  let maxSeq = 0;
+  if (latest?.receiptNumber) {
+    const parts = latest.receiptNumber.split('-');
+    const parsed = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(parsed)) maxSeq = parsed;
+  }
+  const count = await prisma.payment.count({ where: { restaurantId } });
+  const base = Math.max(maxSeq, count);
+  const seq = base + 1 + attempt;
+  return `${yearPrefix}${String(seq).padStart(4, '0')}`;
+}
+
 // POST /api/manager/tables/:id/settle (Settle Table Bill)
 router.post(
   '/tables/:id/settle',
@@ -843,11 +869,7 @@ router.post(
       let settled = false;
       for (let attempt = 0; attempt < 5 && !settled; attempt++) {
         try {
-          const seq =
-            (await prisma.payment.count({ where: { restaurantId: table.restaurantId } })) +
-            1 +
-            attempt;
-          const receiptNumber = `RC-${now.getFullYear()}-${String(seq).padStart(4, '0')}`;
+          const receiptNumber = await generateNextReceiptNumber(table.restaurantId, now, attempt);
 
           paymentRecord = await prisma.$transaction(async (tx) => {
             // Conditional claim: only rows that are STILL UNPAID flip. A
@@ -933,7 +955,16 @@ router.post(
         }
       }
       if (!settled || !paymentRecord) {
-        console.error('Table settle receipt allocation failed:', receiptError);
+        console.error('[Table Settle Error] Receipt allocation exhausted:', {
+          endpoint: 'POST /api/manager/tables/:id/settle',
+          tenantId: table.restaurantId,
+          tableId: id,
+          orderIds: unpaidOrders.map((o) => o.id),
+          method: paidMethod,
+          message: (receiptError as any)?.message || 'Failed to allocate unique receipt number after retries',
+          code: (receiptError as any)?.code,
+          meta: (receiptError as any)?.meta,
+        });
         return res.status(500).json({ success: false, error: 'تعذر إتمام التسوية، حاول مجدداً', statusCode: 500 });
       }
     } else {
@@ -984,7 +1015,13 @@ router.post(
       statusCode: 200,
     });
   } catch (err) {
-    console.error('Table settle error:', err);
+    console.error('[Table Settle Error]', {
+      endpoint: 'POST /api/manager/tables/:id/settle',
+      tableId: req.params?.id,
+      message: (err as any)?.message || String(err),
+      code: (err as any)?.code,
+      meta: (err as any)?.meta,
+    });
     return res.status(500).json({ success: false, error: 'تعذر تصفية حساب الطاولة', statusCode: 500 });
   }
   }
@@ -2724,8 +2761,7 @@ router.post(
       let payment: Awaited<ReturnType<typeof prisma.payment.create>> | null = null;
       let lastError: unknown = null;
       for (let attempt = 0; attempt < 5 && !payment; attempt += 1) {
-        const seq = (await prisma.payment.count({ where: { restaurantId } })) + 1 + attempt;
-        const receiptNumber = `RC-${now.getFullYear()}-${String(seq).padStart(4, '0')}`;
+        const receiptNumber = await generateNextReceiptNumber(restaurantId, now, attempt);
         try {
           payment = await prisma.$transaction(async (tx) => {
             // Conditional claim: only still-UNPAID rows flip; the count
@@ -2804,7 +2840,16 @@ router.post(
         }
       }
       if (!payment) {
-        console.error('Payment receipt allocation failed:', lastError);
+        console.error('[Payment Error] Receipt allocation exhausted:', {
+          endpoint: 'POST /api/manager/payments',
+          tenantId: restaurantId,
+          tableId,
+          orderIds,
+          method,
+          message: (lastError as any)?.message || 'Failed to allocate unique receipt number after retries',
+          code: (lastError as any)?.code,
+          meta: (lastError as any)?.meta,
+        });
         return res.status(500).json({ success: false, error: 'تعذر إتمام الدفع، حاول مجدداً', statusCode: 500 });
       }
 
@@ -2827,8 +2872,17 @@ router.post(
       });
 
       return res.status(201).json({ success: true, data: { payment }, statusCode: 201 });
-    } catch (err) {
-      console.error('Payment error:', err);
+    } catch (err: unknown) {
+      console.error('[Payment Error]', {
+        endpoint: 'POST /api/manager/payments',
+        tenantId: getTenantId(req),
+        tableId: (req.body as any)?.tableId,
+        orderIds: (req.body as any)?.orderIds,
+        method: (req.body as any)?.method,
+        message: (err as any)?.message || String(err),
+        code: (err as any)?.code,
+        meta: (err as any)?.meta,
+      });
       return res.status(500).json({ success: false, error: 'تعذر إتمام الدفع', statusCode: 500 });
     }
   }

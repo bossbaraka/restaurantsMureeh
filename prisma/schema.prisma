@@ -466,7 +466,7 @@ model Branch {
 // ============================================
 model Payment {
   id            String     @id
-  receiptNumber String     @unique
+  receiptNumber String
   restaurantId  String
   restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   branchId      String?
@@ -486,6 +486,7 @@ model Payment {
   note          String?
   createdAt     DateTime   @default(now())
 
+  @@unique([restaurantId, receiptNumber])
   @@index([restaurantId])
   @@index([createdAt])
   @@index([method])
