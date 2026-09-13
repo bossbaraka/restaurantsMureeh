@@ -2328,46 +2328,76 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 
 /* ==========================================================================
-   Customer entry loader (.mload-*) — premium guest loading / recovery /
-   invalid states. Fully scoped: nothing outside this block references
-   these classes. CSS-only motion; prefers-reduced-motion removes it.
-   Palette: Mureeh deep navy (#00072D → #051650 → #0A2472 → #123499).
+   Customer entry loader (.mload-*) — the premium guest loading stage.
+   --------------------------------------------------------------------------
+   Fully scoped: every selector below is `.mload-*`, so nothing outside this
+   block is referenced, redefined or restyled by it, and it depends on no
+   global token other than the already-existing `--font-serif`.
+
+   The 3D read is real CSS 3D — perspective + preserve-3d + six-faced cubes,
+   an orbit ring mask, a receding floor grid — so it needs no canvas, no
+   WebGL, no image, no extra dependency and no JS animation loop. Every
+   animation is transform/opacity only, i.e. compositor friendly.
+
+   Palette: midnight navy canvas, aurum (gold) + azure light.
+   Motion:  `prefers-reduced-motion` stops every animation and leaves the
+            stage composed and still (see the block at the end of this file
+            section).
    ========================================================================== */
 .mload {
+  /* Loader-local palette, declared on `.mload` alone so no global or tenant
+     brand variable can be affected by this layer. */
+  --ml-ink: #01030e;
+  --ml-azure: #38bdf8;
+  --ml-azure-soft: #7dd3fc;
+  --ml-gold: #e6c86e;
+  --ml-gold-deep: #c5a880;
+  --ml-text: #f4f7ff;
+  --ml-muted: rgb(226 236 255 / 0.68);
+
   position: fixed;
   inset: 0;
   z-index: 90;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 18px 20px;
+  padding: calc(18px + env(safe-area-inset-top)) 20px calc(18px + env(safe-area-inset-bottom));
   overflow: hidden;
-  background: linear-gradient(160deg, #00072d 0%, #051650 48%, #0a2472 100%);
-  color: #f4f7ff;
+  color: var(--ml-text);
+  color-scheme: dark;
+  background:
+    radial-gradient(118% 76% at 50% -14%, #0e3190 0%, #071d59 32%, #030a26 72%, var(--ml-ink) 100%);
+}
+
+/* --- cinematic backdrop -------------------------------------------------- */
+.mload__backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
 .mload__glow {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(70px);
-  opacity: 0.5;
-  pointer-events: none;
+  filter: blur(66px);
+  opacity: 0.6;
 }
 .mload__glow--a {
-  width: 52vmax;
-  height: 52vmax;
-  top: -18vmax;
-  right: -14vmax;
-  background: radial-gradient(circle, rgba(18, 52, 153, 0.55) 0%, rgba(18, 52, 153, 0) 70%);
-  animation: mload-drift 9s ease-in-out infinite alternate;
+  width: 58vmax;
+  height: 58vmax;
+  top: -22vmax;
+  inset-inline-end: -16vmax;
+  background: radial-gradient(circle, rgb(18 52 153 / 0.75) 0%, rgb(18 52 153 / 0) 70%);
+  animation: mload-drift 10s ease-in-out infinite alternate;
 }
 .mload__glow--b {
-  width: 44vmax;
-  height: 44vmax;
-  bottom: -16vmax;
-  left: -12vmax;
-  background: radial-gradient(circle, rgba(10, 36, 114, 0.7) 0%, rgba(10, 36, 114, 0) 72%);
-  animation: mload-drift 11s ease-in-out infinite alternate-reverse;
+  width: 50vmax;
+  height: 50vmax;
+  bottom: -20vmax;
+  inset-inline-start: -14vmax;
+  background: radial-gradient(circle, rgb(56 189 248 / 0.3) 0%, rgb(10 36 114 / 0) 72%);
+  animation: mload-drift 13s ease-in-out infinite alternate-reverse;
 }
 
 @keyframes mload-drift {
@@ -2375,40 +2405,144 @@ input[type='range'].saas-range::-moz-range-thumb {
   to { transform: translate3d(-3%, 4%, 0) scale(1.06); }
 }
 
+/* Stage light falling from above the guest. */
+.mload__beam {
+  position: absolute;
+  left: 50%;
+  top: -26%;
+  width: min(620px, 132vw);
+  height: 70%;
+  translate: -50% 0;
+  background: radial-gradient(50% 50% at 50% 0%, rgb(125 211 252 / 0.22) 0%, rgb(125 211 252 / 0) 72%);
+  filter: blur(26px);
+  animation: mload-breathe 9s ease-in-out infinite;
+}
+
+/* Warm aurum haze rising off the floor. */
+.mload__floor-haze {
+  position: absolute;
+  left: 50%;
+  bottom: -18%;
+  width: 132vw;
+  height: 48%;
+  translate: -50% 0;
+  background: radial-gradient(50% 50% at 50% 100%, rgb(230 200 110 / 0.17) 0%, rgb(230 200 110 / 0) 72%);
+  filter: blur(30px);
+}
+
+.mload__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 92% at 50% 44%,
+    rgb(0 0 0 / 0) 34%,
+    rgb(0 4 20 / 0.5) 76%,
+    rgb(0 2 12 / 0.9) 100%
+  );
+}
+
+@keyframes mload-breathe {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
 .mload__inner {
   position: relative;
+  z-index: 2;
   width: min(560px, 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   text-align: center;
 }
 
+/* --- 3D stage ------------------------------------------------------------ */
+.mload__stage {
+  position: relative;
+  width: min(360px, 92vw);
+  height: clamp(168px, 23vh, 216px);
+  display: grid;
+  place-items: center;
+  margin-bottom: 2px;
+}
+
+/* The camera. Everything inside `.mload__scene` shares this perspective. */
+.mload__scene {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  perspective: 780px;
+  perspective-origin: 50% 46%;
+  transform-style: preserve-3d;
+  animation: mload-stage-in 900ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes mload-stage-in {
+  from { opacity: 0; transform: translateZ(-90px) scale(0.94); }
+  to { opacity: 1; transform: translateZ(0) scale(1); }
+}
+
+/* The venue's own plate: the still, flat core the whole stage orbits. */
+.mload__core {
+  position: relative;
+  z-index: 2;
+  width: clamp(78px, 21vw, 96px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 30%;
+  background: linear-gradient(
+    150deg,
+    rgb(255 255 255 / 0.18),
+    rgb(255 255 255 / 0.04) 46%,
+    rgb(56 189 248 / 0.14)
+  );
+  border: 1px solid rgb(255 255 255 / 0.18);
+  box-shadow:
+    0 26px 60px rgb(0 6 32 / 0.72),
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    0 0 46px rgb(56 189 248 / 0.22);
+  animation: mload-core-float 6.5s ease-in-out infinite;
+}
+
+/* Sheen painted *under* the logo, so the tenant mark stays crisp. */
+.mload__core::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(155deg, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0) 54%);
+  opacity: 0.75;
+}
+
+@keyframes mload-core-float {
+  0%, 100% { transform: translateY(-4px); }
+  50% { transform: translateY(4px); }
+}
+
 .mload__logo {
-  width: 92px;
-  height: 92px;
+  width: 100%;
+  height: 100%;
+  padding: 13%;
   object-fit: contain;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow: 0 18px 50px rgba(0, 7, 45, 0.55);
+  border-radius: inherit;
+  filter: drop-shadow(0 8px 18px rgb(0 6 32 / 0.45));
   animation: mload-reveal 700ms ease-out both;
 }
 
 .mload__monogram {
-  width: 92px;
-  height: 92px;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 24px;
+  border-radius: inherit;
   font-family: var(--font-serif);
-  font-size: 40px;
-  color: #e8eeff;
-  background: linear-gradient(145deg, #123499 0%, #0a2472 55%, #051650 100%);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 18px 50px rgba(0, 7, 45, 0.55);
+  font-size: clamp(30px, 9vw, 38px);
+  color: var(--ml-gold);
+  text-shadow: 0 0 26px rgb(230 200 110 / 0.42);
   animation: mload-reveal 700ms ease-out both;
 }
 
@@ -2417,45 +2551,450 @@ input[type='range'].saas-range::-moz-range-thumb {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Soft light pooling behind the core. */
+.mload__halo-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(300px, 84vw);
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(56 189 248 / 0.3) 0%, rgb(56 189 248 / 0) 62%);
+  filter: blur(14px);
+  animation: mload-breathe 5.5s ease-in-out infinite;
+}
+
+/* Ground shadow: breathes in counter-phase with the floating plate. */
+.mload__shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  width: min(220px, 62vw);
+  height: 18px;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgb(56 189 248 / 0.42) 0%, rgb(56 189 248 / 0) 74%);
+  filter: blur(7px);
+  animation: mload-shadow-breathe 6.5s ease-in-out infinite;
+}
+
+@keyframes mload-shadow-breathe {
+  0%, 100% { transform: scale(0.94); opacity: 0.85; }
+  50% { transform: scale(1.06); opacity: 0.6; }
+}
+
+/* Receding light-grid floor: the floor plane is static, only the grid lines
+   slide, so the animation never repaints the mask. */
+.mload__floor {
+  position: absolute;
+  left: 50%;
+  bottom: -6%;
+  width: min(760px, 214vw);
+  height: 54%;
+  translate: -50% 0;
+  transform: rotateX(74deg);
+  transform-origin: 50% 100%;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to top, rgb(0 0 0 / 0.95) 0%, rgb(0 0 0 / 0) 78%);
+  mask-image: linear-gradient(to top, rgb(0 0 0 / 0.95) 0%, rgb(0 0 0 / 0) 78%);
+}
+.mload__floor-grid {
+  position: absolute;
+  inset: -20% 0;
+  background-image:
+    repeating-linear-gradient(90deg, rgb(125 211 252 / 0.2) 0 1px, rgb(125 211 252 / 0) 1px 46px),
+    repeating-linear-gradient(0deg, rgb(125 211 252 / 0.16) 0 1px, rgb(125 211 252 / 0) 1px 34px);
+  animation: mload-grid-slide 4.2s linear infinite;
+}
+
+@keyframes mload-grid-slide {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, 34px, 0); }
+}
+
+/* --- orbit rings --------------------------------------------------------- */
+.mload__ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  border-radius: 50%;
+}
+.mload__ring--wide {
+  width: min(330px, 96vw);
+  aspect-ratio: 1;
+  --ring-paint: conic-gradient(
+    from 90deg,
+    rgb(125 211 252 / 0) 0deg,
+    rgb(125 211 252 / 0.16) 62deg,
+    rgb(56 189 248 / 0.85) 148deg,
+    rgb(230 200 110 / 0.95) 200deg,
+    rgb(125 211 252 / 0) 300deg,
+    rgb(125 211 252 / 0) 360deg
+  );
+  transform: rotateX(74deg);
+  animation: mload-ring-spin-wide 16s linear infinite;
+}
+.mload__ring--tilt {
+  width: min(214px, 62vw);
+  aspect-ratio: 1;
+  --ring-paint: conic-gradient(
+    from 220deg,
+    rgb(56 189 248 / 0) 0deg,
+    rgb(56 189 248 / 0.7) 120deg,
+    rgb(56 189 248 / 0) 240deg
+  );
+  transform: rotateX(64deg) rotateZ(24deg);
+  animation: mload-ring-spin-tilt 11s linear infinite;
+}
+.mload__ring--halo {
+  width: min(146px, 40vw);
+  aspect-ratio: 1;
+  --ring-paint: conic-gradient(
+    from 40deg,
+    rgb(230 200 110 / 0) 0deg,
+    rgb(230 200 110 / 0.9) 92deg,
+    rgb(230 200 110 / 0) 224deg
+  );
+  transform: rotateX(12deg);
+  animation: mload-ring-spin-halo 7s linear infinite;
+}
+
+/* The annulus itself. A conic sweep + a radial mask is what turns a disc
+   into a glowing ring; the `@supports` fallback below covers engines
+   without mask support. */
+.mload__ring-line {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--ring-paint);
+  -webkit-mask-image: radial-gradient(
+    farthest-side,
+    rgb(0 0 0 / 0) calc(100% - 1.6px),
+    #000 calc(100% - 1.6px)
+  );
+  mask-image: radial-gradient(
+    farthest-side,
+    rgb(0 0 0 / 0) calc(100% - 1.6px),
+    #000 calc(100% - 1.6px)
+  );
+}
+@supports not ((mask-image: radial-gradient(#000, #000)) or (-webkit-mask-image: radial-gradient(#000, #000))) {
+  .mload__ring-line {
+    background: none;
+    border: 1.5px solid rgb(125 211 252 / 0.32);
+  }
+}
+
+/* A bright traveller on each orbit — the clearest depth cue of the stage. */
+.mload__ring-dot {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow:
+    0 0 12px 2px rgb(125 211 252 / 0.9),
+    0 0 26px 6px rgb(56 189 248 / 0.45);
+}
+.mload__ring-dot--gold {
+  background: #fff6d8;
+  box-shadow:
+    0 0 12px 2px rgb(230 200 110 / 0.9),
+    0 0 26px 6px rgb(230 200 110 / 0.4);
+}
+
+@keyframes mload-ring-spin-wide {
+  from { transform: rotateX(74deg) rotateZ(0deg); }
+  to { transform: rotateX(74deg) rotateZ(360deg); }
+}
+@keyframes mload-ring-spin-tilt {
+  from { transform: rotateX(64deg) rotateZ(24deg); }
+  to { transform: rotateX(64deg) rotateZ(384deg); }
+}
+@keyframes mload-ring-spin-halo {
+  from { transform: rotateX(12deg) rotateZ(0deg); }
+  to { transform: rotateX(12deg) rotateZ(360deg); }
+}
+
+/* --- 3D cubes ------------------------------------------------------------ */
+/* `--cube` is the edge length; every face derives its own offset from it. */
+.mload__cube {
+  position: absolute;
+  inset: 0;
+  width: var(--cube, 16px);
+  height: var(--cube, 16px);
+  margin: auto; /* centres itself on its 0×0 orbit anchor */
+  transform-style: preserve-3d;
+  transform: rotateX(-22deg) rotateY(28deg);
+  animation: mload-cube-spin var(--spin, 11s) linear infinite;
+}
+
+@keyframes mload-cube-spin {
+  from { transform: rotateX(-22deg) rotateY(28deg); }
+  to { transform: rotateX(-22deg) rotateY(388deg); }
+}
+
+.mload__cube-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 22%;
+  border: 1px solid rgb(125 211 252 / 0.45);
+  background: linear-gradient(
+    150deg,
+    rgb(125 211 252 / 0.32) 0%,
+    rgb(11 42 120 / 0.62) 58%,
+    rgb(3 10 34 / 0.86) 100%
+  );
+  box-shadow: inset 0 0 12px rgb(56 189 248 / 0.35);
+  backface-visibility: hidden;
+  color: rgb(224 242 254 / 0.95);
+}
+
+.mload__cube-face--front { transform: translateZ(calc(var(--cube) / 2)); }
+.mload__cube-face--back { transform: rotateY(180deg) translateZ(calc(var(--cube) / 2)); }
+.mload__cube-face--right { transform: rotateY(90deg) translateZ(calc(var(--cube) / 2)); }
+.mload__cube-face--left { transform: rotateY(-90deg) translateZ(calc(var(--cube) / 2)); }
+.mload__cube-face--top { transform: rotateX(90deg) translateZ(calc(var(--cube) / 2)); }
+.mload__cube-face--bottom { transform: rotateX(-90deg) translateZ(calc(var(--cube) / 2)); }
+
+.mload__cube--gold .mload__cube-face {
+  border-color: rgb(255 240 200 / 0.55);
+  background: linear-gradient(150deg, #fbeeb6 0%, var(--ml-gold) 42%, var(--ml-gold-deep) 100%);
+  box-shadow:
+    inset 0 0 10px rgb(255 255 255 / 0.5),
+    0 0 18px rgb(230 200 110 / 0.35);
+  color: #2a1e06;
+}
+.mload__cube--deep .mload__cube-face {
+  border-color: rgb(125 211 252 / 0.3);
+  background: linear-gradient(150deg, rgb(12 44 134 / 0.9) 0%, rgb(3 10 34 / 0.92) 100%);
+  box-shadow: inset 0 0 10px rgb(56 189 248 / 0.25);
+}
+
+/* Cubes travelling the orbit. The path is a 2D ellipse read as a tilted
+   circle: wide travel, shallow vertical travel, and a scale/opacity change
+   between the front (near) and back (far) pass. */
+.mload__sat {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+}
+/* `--ry` is kept clear of the plate's half-size so an orbiting cube never
+   has to cross the venue's logo on its far pass. */
+.mload__sat--a {
+  --rx: min(126px, 34vw);
+  --ry: 62px;
+  transform: translate(var(--rx), 0);
+  animation: mload-orbit-a 15s linear infinite;
+}
+.mload__sat--b {
+  --rx: min(-100px, -28vw);
+  --ry: 58px;
+  transform: translate(var(--rx), 0);
+  animation: mload-orbit-b 11s linear infinite;
+}
+
+@keyframes mload-orbit-a {
+  0% { transform: translate(var(--rx), 0) scale(1); opacity: 1; }
+  25% { transform: translate(0, var(--ry)) scale(1.08); opacity: 1; }
+  50% { transform: translate(calc(var(--rx) * -1), 0) scale(1); opacity: 1; }
+  75% { transform: translate(0, calc(var(--ry) * -1)) scale(0.82); opacity: 0.55; }
+  100% { transform: translate(var(--rx), 0) scale(1); opacity: 1; }
+}
+@keyframes mload-orbit-b {
+  0% { transform: translate(var(--rx), 0) scale(0.86); opacity: 0.6; }
+  25% { transform: translate(0, calc(var(--ry) * -1)) scale(0.8); opacity: 0.5; }
+  50% { transform: translate(calc(var(--rx) * -1), 0) scale(1.06); opacity: 1; }
+  75% { transform: translate(0, var(--ry)) scale(1.1); opacity: 1; }
+  100% { transform: translate(var(--rx), 0) scale(0.86); opacity: 0.6; }
+}
+
+/* Free-floating debris: each one drifts on its own Z so the scene keeps
+   parallax even when nothing else is moving. */
+.mload__drift {
+  position: absolute;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+}
+.mload__drift--1 {
+  left: 14%;
+  top: 24%;
+  animation: mload-cube-drift 9s ease-in-out infinite;
+}
+.mload__drift--2 {
+  left: 84%;
+  top: 32%;
+  animation: mload-cube-drift 11s ease-in-out -3s infinite reverse;
+}
+.mload__drift--3 {
+  left: 24%;
+  top: 76%;
+  animation: mload-cube-drift 13s ease-in-out -6s infinite;
+}
+
+@keyframes mload-cube-drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -12px, 26px); }
+}
+
+/* Rising dust. */
+.mload__spark {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, rgb(125 211 252 / 0.9) 46%, rgb(125 211 252 / 0) 100%);
+  box-shadow: 0 0 10px rgb(125 211 252 / 0.8);
+  opacity: 0;
+  animation: mload-spark 8s ease-in-out infinite;
+}
+.mload__spark--1 { left: 22%; top: 78%; animation-delay: -0.5s; }
+.mload__spark--2 { left: 44%; top: 88%; animation-delay: -3.2s; animation-duration: 9.5s; }
+.mload__spark--3 { left: 66%; top: 72%; animation-delay: -5.4s; animation-duration: 7.2s; }
+.mload__spark--4 { left: 86%; top: 64%; animation-delay: -6.8s; animation-duration: 10s; }
+
+@keyframes mload-spark {
+  0% { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.6); }
+  20% { opacity: 0.9; }
+  70% { opacity: 0.45; }
+  100% { opacity: 0; transform: translate3d(0, -46px, 0) scale(1.1); }
+}
+
+/* --- guest-facing copy --------------------------------------------------- */
+.mload__headline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 .mload__name {
   font-family: var(--font-serif);
-  font-size: 22px;
+  font-size: clamp(19px, 5.2vw, 24px);
   font-weight: 700;
   letter-spacing: 0.01em;
+  color: var(--ml-text);
+  filter: drop-shadow(0 3px 14px rgb(56 189 248 / 0.25));
   animation: mload-reveal 700ms 80ms ease-out both;
+}
+/* Gradient wordmark where the engine can clip text to a background. */
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .mload__name {
+    background: linear-gradient(115deg, #ffffff 6%, #dbe9ff 46%, var(--ml-gold) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 }
 
 .mload__status {
-  font-size: 13px;
-  color: rgba(232, 238, 255, 0.72);
-  animation: mload-pulse 2.2s ease-in-out infinite;
+  font-size: clamp(13px, 3.7vw, 15px);
+  font-weight: 600;
+  color: #edf4ff;
+  text-shadow: 0 0 20px rgb(56 189 248 / 0.35);
+  animation: mload-pulse 2.4s ease-in-out infinite;
 }
 
 @keyframes mload-pulse {
-  0%, 100% { opacity: 0.55; }
+  0%, 100% { opacity: 0.62; }
   50% { opacity: 1; }
+}
+
+/* Estimated-progress rail: fills once and holds near the end, while the
+   shine keeps travelling so the screen never looks frozen. Grows from the
+   inline start, i.e. right-to-left for this RTL screen. */
+.mload__rail {
+  position: relative;
+  width: min(260px, 66vw);
+  height: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.1);
+  overflow: hidden;
+}
+.mload__rail-fill {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 96%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ml-azure) 0%, var(--ml-azure-soft) 45%, var(--ml-gold) 100%);
+  box-shadow: 0 0 14px rgb(56 189 248 / 0.55);
+  animation: mload-rail-fill 6.4s cubic-bezier(0.16, 0.84, 0.28, 1) both;
+}
+.mload__rail-shine {
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  background: linear-gradient(90deg, rgb(255 255 255 / 0) 0%, rgb(255 255 255 / 0.75) 50%, rgb(255 255 255 / 0) 100%);
+  animation: mload-rail-shine 2.6s ease-in-out infinite;
+}
+
+@keyframes mload-rail-fill {
+  from { width: 4%; }
+  to { width: 96%; }
+}
+@keyframes mload-rail-shine {
+  0% { transform: translateX(320%); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateX(-120%); opacity: 0; }
+}
+
+/* Three warm lines cross-fading on a 12s loop — something to read while
+   waiting, without a single line of JS. */
+.mload__poems {
+  position: relative;
+  width: 100%;
+  height: 18px;
+}
+.mload__poem {
+  position: absolute;
+  inset: 0;
+  font-size: clamp(12px, 3.2vw, 13px);
+  color: var(--ml-muted);
+  opacity: 0;
+  animation: mload-poem 12s ease-in-out infinite;
+}
+.mload__poem--1 { animation-delay: 0s; }
+.mload__poem--2 { animation-delay: 4s; }
+.mload__poem--3 { animation-delay: 8s; }
+
+@keyframes mload-poem {
+  0% { opacity: 0; transform: translateY(7px); }
+  5%, 28% { opacity: 1; transform: translateY(0); }
+  33%, 100% { opacity: 0; transform: translateY(-7px); }
 }
 
 /* --- menu-shaped skeleton ------------------------------------------------ */
 .mload__skeleton {
   width: 100%;
-  margin-top: 18px;
+  margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 11px;
 }
 
 .mload__sk-bar,
 .mload__sk-pill {
   background: linear-gradient(
     100deg,
-    rgba(255, 255, 255, 0.07) 30%,
-    rgba(255, 255, 255, 0.16) 50%,
-    rgba(255, 255, 255, 0.07) 70%
+    rgb(255 255 255 / 0.06) 28%,
+    rgb(125 211 252 / 0.2) 50%,
+    rgb(255 255 255 / 0.06) 72%
   );
   background-size: 220% 100%;
   border-radius: 12px;
-  animation: mload-shimmer 1.6s linear infinite;
+  animation: mload-shimmer 1.8s linear infinite;
 }
 
 @keyframes mload-shimmer {
@@ -2470,8 +3009,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   width: 100%;
   padding: 16px;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.03);
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -2482,12 +3021,15 @@ input[type='range'].saas-range::-moz-range-thumb {
 
 /* --- recovery / invalid cards -------------------------------------------- */
 .mload__card {
-  width: 100%;
+  width: min(420px, 100%);
   padding: 34px 26px;
-  border-radius: 26px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(5, 22, 80, 0.55);
-  backdrop-filter: blur(8px);
+  border-radius: 28px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: linear-gradient(160deg, rgb(11 42 120 / 0.55) 0%, rgb(2 8 28 / 0.72) 100%);
+  backdrop-filter: blur(14px);
+  box-shadow:
+    0 30px 70px rgb(0 6 32 / 0.62),
+    inset 0 1px 0 rgb(255 255 255 / 0.12);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2495,7 +3037,18 @@ input[type='range'].saas-range::-moz-range-thumb {
   animation: mload-reveal 500ms ease-out both;
 }
 
-.mload__card-icon { font-size: 34px; line-height: 1; }
+.mload__card-icon {
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  font-size: 28px;
+  line-height: 1;
+  background: linear-gradient(150deg, rgb(255 255 255 / 0.16), rgb(56 189 248 / 0.1));
+  border: 1px solid rgb(255 255 255 / 0.18);
+  box-shadow: 0 16px 36px rgb(0 6 32 / 0.5);
+}
 
 .mload__card-title {
   font-family: var(--font-serif);
@@ -2505,25 +3058,49 @@ input[type='range'].saas-range::-moz-range-thumb {
 
 .mload__card-sub {
   font-size: 13px;
-  color: rgba(232, 238, 255, 0.72);
+  color: var(--ml-muted);
 }
 
 .mload__retry {
   margin-top: 10px;
   padding: 12px 34px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: linear-gradient(135deg, #123499 0%, #0a2472 100%);
-  color: #ffffff;
+  border: 1px solid rgb(255 240 200 / 0.5);
+  background: linear-gradient(135deg, #f9edbe 0%, var(--ml-gold) 45%, var(--ml-gold-deep) 100%);
+  color: #1c1503;
   font-weight: 700;
   font-size: 14px;
   cursor: pointer;
   transition: transform 150ms ease, box-shadow 150ms ease;
-  box-shadow: 0 10px 30px rgba(0, 7, 45, 0.5);
+  box-shadow: 0 12px 32px rgb(0 6 32 / 0.5), 0 0 24px rgb(230 200 110 / 0.22);
 }
-.mload__retry:hover { transform: translateY(-1px); box-shadow: 0 14px 34px rgba(0, 7, 45, 0.6); }
+.mload__retry:hover { transform: translateY(-1px); box-shadow: 0 16px 36px rgb(0 6 32 / 0.6), 0 0 30px rgb(230 200 110 / 0.32); }
 .mload__retry:focus-visible { outline: 2px solid #9db8ff; outline-offset: 3px; }
 
+/* --- fit the stage to short viewports ------------------------------------ */
+@media (max-height: 720px) {
+  .mload__stage { height: clamp(140px, 20vh, 184px); }
+  .mload__core { width: clamp(70px, 13vh, 88px); }
+  .mload__sat--a { --ry: 58px; }
+  .mload__sat--b { --ry: 54px; }
+  .mload__skeleton { margin-top: 10px; gap: 9px; }
+  .mload__sk-card:last-child { display: none; }
+}
+
+/* Landscape phones: the plate and its orbits shrink with the short edge so
+   the stage still reads as a composed 3D scene instead of a cropped one. */
+@media (max-height: 560px) {
+  .mload__stage { height: clamp(112px, 30vh, 152px); }
+  .mload__core { width: clamp(58px, 15vh, 74px); }
+  .mload__ring--halo { width: min(118px, 34vw); }
+  .mload__sat--a { --ry: 46px; }
+  .mload__sat--b { --ry: 42px; }
+  .mload__skeleton { display: none; }
+  .mload__name { font-size: 17px; }
+  .mload__poems { height: 16px; }
+}
+
+/* --- motion sensitivity --------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .mload__glow--a,
   .mload__glow--b,
@@ -2532,9 +3109,24 @@ input[type='range'].saas-range::-moz-range-thumb {
   .mload__sk-pill,
   .mload__logo,
   .mload__monogram,
-  .mload__card {
+  .mload__card,
+  .mload__scene,
+  .mload__halo-glow,
+  .mload__shadow,
+  .mload__beam,
+  .mload__floor-grid,
+  .mload__ring,
+  .mload__sat,
+  .mload__cube,
+  .mload__drift,
+  .mload__spark,
+  .mload__poem,
+  .mload__rail-fill,
+  .mload__rail-shine {
     animation: none;
   }
+  /* The stage keeps its 3D geometry — it simply stands still. */
+  .mload__poem--1 { opacity: 1; transform: none; }
   .mload__retry { transition: none; }
 }
 

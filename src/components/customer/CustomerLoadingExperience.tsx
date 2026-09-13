@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ChefHat, Flame, Sparkles, UtensilsCrossed } from 'lucide-react';
 import type { EntryInvalidReason, EntryPhase } from '../../services/customerEntry';
 
 // ============================================================
@@ -14,8 +15,12 @@ import type { EntryInvalidReason, EntryPhase } from '../../services/customerEntr
 //   RECOVERY → calm customer-safe retry card
 //   INVALID  → minimal friendly invalid state (QR or venue)
 //
-// Visual language: Mureeh deep-navy palette, CSS-only motion,
-// `prefers-reduced-motion` respected in src/index.css (.mload-*).
+// Visual language: a cinematic deep-navy stage where the venue's own logo
+// floats as the core of a 3D orbit system. Every shape (rings, cubes,
+// dust, the receding floor grid) is real CSS 3D — no canvas, no WebGL, no
+// images, no animation loop in JS, and no extra dependency. Motion is
+// `prefers-reduced-motion` aware: the stage stays composed but still, and
+// every animation is owned by the scoped `.mload-*` block in src/index.css.
 // ============================================================
 
 interface IdentityLike {
@@ -67,6 +72,112 @@ const Monogram: React.FC = () => (
   </div>
 );
 
+// ------------------------------------------------------------------
+// 3D primitives — six real CSS faces per cube, rotated in a shared
+// perspective. Purely decorative: every cube lives inside an
+// `aria-hidden` scene.
+// ------------------------------------------------------------------
+
+const CUBE_FACES = ['front', 'back', 'right', 'left', 'top', 'bottom'] as const;
+
+interface Cube3DProps {
+  /** Edge length as a CSS length, e.g. "26px". */
+  size: string;
+  tone?: 'gold' | 'glass' | 'deep';
+  /** Seconds per full turn — each cube gets its own rhythm. */
+  spin?: number;
+  /** Optional glyphs for the four upright faces, so the spin reads. */
+  glyphs?: React.ReactNode[];
+  className?: string;
+}
+
+const Cube3D: React.FC<Cube3DProps> = ({
+  size,
+  tone = 'glass',
+  spin = 11,
+  glyphs,
+  className = '',
+}) => (
+  <span
+    className={`mload__cube mload__cube--${tone} ${className}`.trim()}
+    style={{ '--cube': size, '--spin': `${spin}s` } as React.CSSProperties}
+  >
+    {CUBE_FACES.map((face, i) => (
+      <span key={face} className={`mload__cube-face mload__cube-face--${face}`}>
+        {glyphs?.[i] ?? null}
+      </span>
+    ))}
+  </span>
+);
+
+/**
+ * The loading stage: a receding light-grid floor, two gyroscope orbit
+ * rings, a handful of tumbling cubes and rising dust — arranged around
+ * the (centred, outside this scene) tenant plate.
+ */
+const LoadingScene: React.FC = () => (
+  <div className="mload__scene" aria-hidden="true">
+    <span className="mload__halo-glow" />
+    <span className="mload__floor">
+      <span className="mload__floor-grid" />
+    </span>
+    <span className="mload__shadow" />
+
+    <span className="mload__ring mload__ring--wide">
+      <span className="mload__ring-line" />
+    </span>
+    <span className="mload__ring mload__ring--tilt">
+      <span className="mload__ring-line" />
+      <span className="mload__ring-dot" />
+    </span>
+    <span className="mload__ring mload__ring--halo">
+      <span className="mload__ring-line" />
+      <span className="mload__ring-dot mload__ring-dot--gold" />
+    </span>
+
+    <span className="mload__sat mload__sat--a">
+      <Cube3D
+        size="26px"
+        tone="gold"
+        spin={13}
+        glyphs={[
+          <Sparkles size={13} strokeWidth={2.2} key="sparkles" />,
+          <ChefHat size={13} strokeWidth={2.1} key="chef" />,
+          <UtensilsCrossed size={13} strokeWidth={2.2} key="utensils" />,
+          <Flame size={13} strokeWidth={2.2} key="flame" />,
+        ]}
+      />
+    </span>
+    <span className="mload__sat mload__sat--b">
+      <Cube3D size="16px" tone="glass" spin={9} />
+    </span>
+
+    <span className="mload__drift mload__drift--1">
+      <Cube3D size="13px" tone="glass" spin={15} />
+    </span>
+    <span className="mload__drift mload__drift--2">
+      <Cube3D size="10px" tone="deep" spin={18} />
+    </span>
+    <span className="mload__drift mload__drift--3">
+      <Cube3D size="8px" tone="gold" spin={12} />
+    </span>
+
+    <span className="mload__spark mload__spark--1" />
+    <span className="mload__spark mload__spark--2" />
+    <span className="mload__spark mload__spark--3" />
+    <span className="mload__spark mload__spark--4" />
+  </div>
+);
+
+/** Three short, warm lines that cross-fade under the status — CSS only. */
+const PacingLines: React.FC = () => (
+  <div className="mload__poems" aria-hidden="true">
+    <span className="mload__poem mload__poem--1">لحظات وتبدأ التجربة</span>
+    <span className="mload__poem mload__poem--2">نُحضّر لك القائمة بعناية</span>
+    <span className="mload__poem mload__poem--3">الجمال يستحق ثوانٍ من الانتظار</span>
+  </div>
+);
+
 export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps> = ({
   phase,
   restaurant,
@@ -80,24 +191,44 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
 
   return (
     <div className="mload" dir="rtl" aria-live="polite" aria-busy={isLoading}>
-      <div className="mload__glow mload__glow--a" aria-hidden="true" />
-      <div className="mload__glow mload__glow--b" aria-hidden="true" />
+      <div className="mload__backdrop" aria-hidden="true">
+        <span className="mload__glow mload__glow--a" />
+        <span className="mload__glow mload__glow--b" />
+        <span className="mload__beam" />
+        <span className="mload__floor-haze" />
+        <span className="mload__vignette" />
+      </div>
 
       <div className="mload__inner">
         {isLoading && (
           <>
-            {logo ? (
-              <img
-                src={logo}
-                alt={name ? `${name}` : 'شعار المطعم'}
-                className="mload__logo"
-                onError={() => setLogoBroken(true)}
-              />
-            ) : (
-              <Monogram />
-            )}
-            {name && <div className="mload__name">{name}</div>}
-            <div className="mload__status">نجهّز لك التجربة...</div>
+            <div className="mload__stage">
+              <LoadingScene />
+              <div className="mload__core">
+                {logo ? (
+                  <img
+                    src={logo}
+                    alt={name ? `${name}` : 'شعار المطعم'}
+                    className="mload__logo"
+                    onError={() => setLogoBroken(true)}
+                  />
+                ) : (
+                  <Monogram />
+                )}
+              </div>
+            </div>
+
+            <div className="mload__headline">
+              {name && <div className="mload__name">{name}</div>}
+              <div className="mload__status">نجهّز لك التجربة...</div>
+            </div>
+
+            <div className="mload__rail" aria-hidden="true">
+              <span className="mload__rail-fill" />
+              <span className="mload__rail-shine" />
+            </div>
+
+            <PacingLines />
             <MenuSkeleton />
           </>
         )}
