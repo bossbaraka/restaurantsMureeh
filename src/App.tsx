@@ -16,7 +16,7 @@ import { useBrandTheme } from './theme/brandTheme';
 
 const AppContent: React.FC = () => {
   const { viewMode, isOnboardingOpen, setIsOnboardingOpen, currentRestaurant } = useRestaurant();
-  const { canAccessView, isLoginModalOpen } = useAuth();
+  const { canAccessView, isLoginModalOpen, currentUser } = useAuth();
 
   // Keep brand theme active across the entire application (including Manager, KDS, Modals, Customer)
   useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor, {
@@ -36,8 +36,13 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#040D1A] text-slate-100 flex flex-col font-sans selection:bg-[#0072BC]/30 selection:text-[#38BDF8]">
-      {/* Top Prototype & Multi-Tenant Navigation Bar — hidden on the public SaaS landing page, which renders its own navbar */}
-      {safeViewMode !== 'SAAS_LANDING' && <ViewSwitcher />}
+      {/* Top Prototype & Multi-Tenant Navigation Bar — hidden on the public
+          SaaS landing page (which renders its own navbar) and for anonymous
+          GUESTS on the customer view: a guest scanning their table QR must
+          see the restaurant's own world, not the staff console chrome. */}
+      {safeViewMode !== 'SAAS_LANDING' && !(safeViewMode === 'CUSTOMER' && !currentUser) && (
+        <ViewSwitcher />
+      )}
 
       {/* Dynamic View Mode Router */}
       <div className="flex-1">

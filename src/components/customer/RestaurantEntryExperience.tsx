@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { soundFX } from '../../utils/audio';
 import { optimizeImageUrl } from './ProductImage';
 import { useBrandTheme } from '../../theme/brandTheme';
+import { PlexusField } from './PlexusField';
 
 /**
  * Restaurant Entry Experience — the layer a guest lands on right after
@@ -134,6 +135,13 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
 
   // An empty description is omitted entirely — no invented copy.
   const description = (currentRestaurant?.description || '').trim();
+  // The Latin name, shown in small caps inside the seal on Arabic pages —
+  // the same composition as a printed letterhead. Omitted when absent, or on
+  // English pages where it would just duplicate the big title.
+  const nameEn = (currentRestaurant?.nameEn || '').trim();
+  const showCrestName = !isEnglish && nameEn.length > 0 && nameEn !== displayName;
+  const rating = currentRestaurant?.rating;
+  const reviewCount = currentRestaurant?.reviewCount;
   const coverSrc = useMemo(() => {
     const raw = (currentRestaurant?.coverImage || '').trim();
     return raw ? optimizeImageUrl(raw, 1600, 80) : '';
@@ -374,6 +382,11 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
           <div className="entry-cover__vignette" aria-hidden="true" />
           {!reducedMotion && <div className="entry-cover__sweep" aria-hidden="true" />}
 
+          {/* The constellation — a slow network of light in the venue's own
+              colour, linking the ambience like a guest map. Deterministic
+              (seeded), and a static frame under reduced motion. */}
+          <PlexusField className="entry-plexus" count={18} speed={5.5} opacity={0.42} seed={11} />
+
           {/* Atmosphere: a handful of slow motes, never a particle system. */}
           {!reducedMotion && (
             <div className="entry-motes" aria-hidden="true">
@@ -396,6 +409,34 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
           )}
         </div>
 
+        {/* The Thread of Light — the journey's signature: one luminous
+            hairline that draws itself across the base of the layer, in the
+            venue's own colour. It travels with the sheet, so the gesture and
+            the thread part the same way. */}
+        <div className="entry-thread" aria-hidden="true">
+          <svg
+            className="entry-thread__svg"
+            viewBox="0 0 100 12"
+            preserveAspectRatio="none"
+            focusable="false"
+          >
+            <defs>
+              <linearGradient id="entry-thread-grad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="rgb(255 255 255 / 0)" />
+                <stop offset="18%" stopColor="var(--brand-primary-strong)" />
+                <stop offset="50%" stopColor="var(--brand-accent-strong)" />
+                <stop offset="82%" stopColor="var(--brand-primary-strong)" />
+                <stop offset="100%" stopColor="rgb(255 255 255 / 0)" />
+              </linearGradient>
+            </defs>
+            <path
+              className="entry-thread__path"
+              d="M0 8 C 18 3.5, 32 11, 50 7 S 82 3.5, 100 8"
+              pathLength={200}
+            />
+          </svg>
+        </div>
+
         {/* --------------------------------------------------------------- */}
         {/* Persistent context bar — WHO the guest just entered, WHICH      */}
         {/* table the QR belongs to, and a one-tap skip. It lives OUTSIDE   */}
@@ -403,6 +444,8 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
         {/* which is what reads as "one composed screen", not two screens.  */}
         {/* --------------------------------------------------------------- */}
         <div className="entry-topbar">
+          {/* The name belongs to the centred composition below — the top bar
+              keeps only the crest mark, so the identity reads as one object. */}
           <span className="entry-topbar__brand">
             <span className="entry-topbar__crest" aria-hidden="true">
               {logoSrc ? (
@@ -421,7 +464,6 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
                 <span className="entry-topbar__monogram">{monogram}</span>
               )}
             </span>
-            <span className="entry-topbar__name">{displayName}</span>
           </span>
 
           <span className="entry-topbar__actions">
@@ -513,6 +555,8 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
           </div>
 
           <div className="entry-identity">
+            {/* The seal — a gold-rimmed disc carrying the tenant's mark,
+                lettered like a printed letterhead. */}
             <span className="entry-identity__crest">
               {logoSrc ? (
                 <img
@@ -531,18 +575,46 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
                   {monogram}
                 </span>
               )}
+              {showCrestName && (
+                <span className="entry-identity__crest-name" aria-hidden="true">
+                  {nameEn}
+                </span>
+              )}
             </span>
 
-            {/* The table badge now lives in the persistent top bar, so the
-                identity block reads as a single centred composition. */}
-            <p className="entry-eyebrow entry-eyebrow--identity">
-              {isEnglish ? 'WELCOME TO' : 'أهلاً بكم في'}
-            </p>
-
+            {/* No welcome eyebrow on the poster beat: the seal letters the
+                venue, the name headlines it — nothing else competes. The
+                table badge lives in the persistent top bar. */}
             <h1 className="entry-identity__name">{displayName}</h1>
 
             {/* Omitted entirely when the tenant has no description. */}
             {description && <p className="entry-identity__desc">{description}</p>}
+
+            {/* Rating line — rendered only when the tenant actually has
+                review data; never invented. */}
+            {typeof rating === 'number' && rating > 0 && (
+              <p
+                className="entry-identity__rating"
+                aria-label={isEnglish ? `Rated ${rating} out of 5` : `تقييم ${rating} من 5`}
+              >
+                <svg
+                  className="entry-identity__star"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M12 2.8l2.85 5.8 6.4.93-4.63 4.5 1.1 6.37L12 17.4l-5.72 3-1.1-6.37-4.63-4.5 6.4-.93L12 2.8z" />
+                </svg>
+                <span className="entry-identity__rating-value" dir="ltr">
+                  {rating.toFixed(1)}
+                </span>
+                {typeof reviewCount === 'number' && reviewCount > 0 && (
+                  <span className="entry-identity__rating-count" dir="ltr">
+                    ({reviewCount})
+                  </span>
+                )}
+              </p>
+            )}
           </div>
 
           {/* Hollow, dimensional arrow — a floating object, not a button. */}
@@ -601,12 +673,13 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
               </span>
               <svg
                 className="entry-action__chevron"
-                viewBox="0 0 24 24"
+                viewBox="0 0 34 24"
                 role="presentation"
                 focusable="false"
                 aria-hidden="true"
               >
-                <path d="M9 5.5 L15.5 12 L9 18.5" />
+                {/* Shaft + head: one long travel arrow, not a chevron. */}
+                <path d="M32 12 H4.5 M11.5 5 L4.5 12 L11.5 19" />
               </svg>
             </button>
           </div>
@@ -625,8 +698,12 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
         </div>
 
         {/* Persistent platform credit — the smallest element of the layer:
-            it supports the restaurant brand rather than competing with it. */}
-        <p className="entry-credit">{isEnglish ? 'Powered by Mureeh' : 'مدعوم بـ MUREEH'}</p>
+            it supports the restaurant brand rather than competing with it.
+            "Mureeh" carries the accent, the rest stays whisper-quiet. */}
+        <p className="entry-credit" dir="ltr">
+          <span className="entry-credit__by">Powered by </span>
+          <span className="entry-credit__brand">Mureeh</span>
+        </p>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
 import { Search, Sparkles, Flame, ChefHat, Clock, ArrowLeft, UtensilsCrossed, Camera, Play, X, Eye } from 'lucide-react';
@@ -33,6 +33,32 @@ export const CustomerHero: React.FC = () => {
 
   const [activeGalleryImg, setActiveGalleryImg] = useState<string | null>(null);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+
+  // Depth parallax — the hero photograph drifts a little slower than the
+  // page while the guest scrolls, so the venue reads as a room with depth,
+  // not a poster. Compositor-only transform, rAF-throttled, and skipped
+  // entirely for reduced-motion guests.
+  const parallaxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = parallaxRef.current;
+    if (!node || typeof window === 'undefined') return;
+    if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const y = Math.min(window.scrollY, 520);
+      node.style.transform = `translate3d(0, ${(y * 0.14).toFixed(1)}px, 0)`;
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
 
   const activeOffers = offers.filter((o) => o.isActive);
 
@@ -103,18 +129,22 @@ export const CustomerHero: React.FC = () => {
           </div>
         ) : (
           <>
-            <img
-              src={optimizeImageUrl(heroImage, 1280, 75)}
-              alt={restName}
-              loading="eager"
-              decoding="async"
-              // React 19 prop; DOM attribute is `fetchpriority`.
-              {...({ fetchPriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)}
-              className="w-full h-full object-cover object-center transform scale-105 transition-transform duration-1000 ease-out group-hover:scale-100"
-            />
+            <div className="customer-hero__parallax" ref={parallaxRef}>
+              <img
+                src={optimizeImageUrl(heroImage, 1280, 75)}
+                alt={restName}
+                loading="eager"
+                decoding="async"
+                // React 19 prop; DOM attribute is `fetchpriority`.
+                {...({ fetchPriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)}
+                className="customer-hero__img object-cover object-center"
+              />
+            </div>
             {/* Layered luxury overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-luxury-950 via-luxury-950/70 to-luxury-950/20" />
             <div className="absolute inset-0 bg-gradient-to-r from-luxury-950/90 via-luxury-950/40 to-transparent" />
+            {/* Hairline brand frame — the venue's own colour dresses the hero. */}
+            <div className="customer-hero__frame" aria-hidden="true" />
 
             {/* Hero Content */}
             <div className="absolute inset-0 p-6 sm:p-8 flex flex-col justify-end text-right z-10 max-w-xl">
