@@ -22,6 +22,14 @@ import {
   Subscription,
 } from '../types/restaurant';
 import { api, apiConnectionUrl, newClientRequestId } from '../services/api';
+import {
+  runCustomerEntry,
+  type EntryApiResponse,
+  type EntryCatalogData,
+  type EntryInvalidReason,
+  type EntryPhase,
+  type EntrySessionData,
+} from '../services/customerEntry';
 import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
 import { applyBrandTheme } from '../theme/brandTheme';
@@ -79,6 +87,16 @@ interface RestaurantContextType {
   setActiveTableNumber: (tableNumber: number | null) => void;
   activeTable: RestaurantTable | null;
   currentTableSession: TableSession | null;
+  /**
+   * Customer QR entry lifecycle (see services/customerEntry.ts). READY is
+   * only reached after session + restaurant + catalog ALL confirmed success.
+   * Non-guest starts (staff/landing) begin READY.
+   */
+  entryPhase: EntryPhase;
+  /** Why entry is INVALID: bad table QR ('qr') or unavailable venue ('restaurant'). */
+  entryInvalidReason: EntryInvalidReason | null;
+  /** Customer-safe retry after bounded recovery is exhausted (RECOVERY). */
+  retryEntry: () => void;
   setTableByNumber: (num: number) => { success: boolean; tableId?: string; error?: string };
   validateAndSetTable: (num: number) => { success: boolean; tableId?: string; error?: string };
 
@@ -260,6 +278,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [activeTableNumber, setActiveTableNumber] = useState<number | null>(null);
   const [currentTableSession, setCurrentTableSession] = useState<TableSession | null>(null);
+
+  // Customer QR entry state machine. Each entry run carries a unique
+  // identity (entryRunRef); async steps consult it before committing, so a
+  // stale response from an older QR scan can never overwrite newer state.
+  const entryRunRef = useRef(0);
+  const [entryPhase, setEntryPhase] = useState<EntryPhase>(() => {
+    if (typeof window === 'undefined') return 'READY';
+    const pathname = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const isGuestEntry =
+      pathname.startsWith('/r/') ||
+      params.has('qr') ||
+      params.has('table') ||
+      params.has('t') ||
+      params.has('tableId');
+    return isGuestEntry ? 'INITIALIZING' : 'READY';
+  });
+  const [entryInvalidReason, setEntryInvalidReason] = useState<EntryInvalidReason | null>(null);
+
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -526,12 +563,24 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [currentRestaurant?.id, refreshTenantData]);
 
   // -------------------------------------------------------------------------
-  // URL / QR handling: customer opens /r/:slug?qr=<real-table-qr> which
-  // creates an anonymous, expiring, table-scoped session on the server.
+  // Customer QR entry — one explicit state machine (services/customerEntry):
+  //
+  //   INITIALIZING → VALIDATING_QR → LOADING_CATALOG → READY
+  //   transient failure → RETRYING (bounded backoff) → READY / RECOVERY
+  //   permanently invalid QR / venue → INVALID
+  //
+  // Invariants enforced here:
+  //   - READY only after session AND catalog requests genuinely succeeded —
+  //     never inferred from empty arrays, so no empty-menu flash is possible;
+  //   - every run has a unique identity (entryRunRef) — a stale response from
+  //     an older QR scan can never overwrite newer customer state;
+  //   - a newly scanned VALID QR supersedes stale table context; an INVALID
+  //     new QR can never destroy the existing bound session;
+  //   - guests never see technical errors — only the premium loader, the
+  //     safe recovery card or the minimal invalid state.
   // -------------------------------------------------------------------------
-  useEffect(() => {
-    if (typeof window === 'undefined' || urlHandledRef.done) return;
-
+  const parseEntryUrl = useCallback((): { slug: string; qrToken: string } => {
+    if (typeof window === 'undefined') return { slug: 'mureeh', qrToken: '' };
     const params = new URLSearchParams(window.location.search);
     const pathMatch = window.location.pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
     let rawSlug = (pathMatch?.[1] || params.get('r') || params.get('restaurant') || params.get('slug') || '').toLowerCase();
@@ -540,12 +589,169 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     const slug = rawSlug || 'mureeh';
     const qrToken = params.get('qr') || params.get('table') || params.get('t') || params.get('tableId') || '';
+    return { slug, qrToken };
+  }, []);
+
+  const startCustomerEntry = useCallback(
+    async (runId: number, slug: string, qrTokenRaw: string) => {
+      const isStale = () => entryRunRef.current !== runId;
+      const setPhaseSafe = (phase: EntryPhase) => {
+        if (!isStale()) setEntryPhase(phase);
+      };
+
+      // The entry orchestrator works on minimal structural shapes; the real
+      // API client returns rich domain types — bridge them once here.
+      const entryApi = {
+        createTableSession: (token: string, s?: string) =>
+          api.createTableSession(token, s) as unknown as Promise<EntryApiResponse<EntrySessionData>>,
+        getCatalog: (s: string, q?: string) =>
+          api.getPublicRestaurantBySlug(s, q) as unknown as Promise<EntryApiResponse<EntryCatalogData>>,
+      };
+      const hooksFor = (): {
+        isStale: () => boolean;
+        wait: (ms: number) => Promise<void>;
+        onPhase: (phase: EntryPhase) => void;
+        onIdentity: (restaurant: EntrySessionData['restaurant']) => void;
+      } => ({
+        isStale,
+        wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+        onPhase: setPhaseSafe,
+        onIdentity: (restaurant) => {
+          if (!isStale()) setCurrentRestaurant(restaurant as unknown as Restaurant);
+        },
+      });
+
+      if (!isStale()) setEntryInvalidReason(null);
+
+      const storedBinding = readTableBinding();
+      const urlToken = qrTokenRaw && qrTokenRaw !== 'default' ? qrTokenRaw : '';
+      // A fresh scan takes precedence over stale table context: the new token
+      // is validated SERVER-SIDE before anything is adopted. Only when the
+      // URL carries no token at all (refresh / relaunch) do we reuse the
+      // bound table's token.
+      const targetToken = urlToken || storedBinding?.qrToken || '';
+
+      // Commit a successful run — the ONLY place customer state changes.
+      const commitReady = (
+        session: EntrySessionData | null,
+        catalog: EntryCatalogData,
+        adoptedToken: string | null
+      ) => {
+        if (isStale()) return;
+        if (session) {
+          setActiveTableId(session.table.id);
+          setActiveTableNumber(session.table.tableNumber);
+          setCurrentTableSession(session.session as unknown as TableSession);
+          setViewMode('CUSTOMER');
+
+          // Keep the session's table in the local registry so every view can
+          // render the real table number printed on its QR card.
+          const sessionTable = session.table as unknown as RestaurantTable;
+          if (sessionTable?.id) {
+            setTables((prev) => (prev.some((t) => t.id === sessionTable.id) ? prev : [...prev, sessionTable]));
+          }
+
+          // Persist the binding: a refresh restores THIS table, and an
+          // invalid foreign QR can never move this device elsewhere.
+          if (adoptedToken && session.restaurant?.id) {
+            writeTableBinding({
+              restaurantId: String(session.restaurant.id),
+              tableId: session.table.id,
+              tableNumber: session.table.tableNumber,
+              qrToken: adoptedToken,
+            });
+          }
+        }
+
+        setCategories(catalog.categories as Category[]);
+        setProducts(catalog.products as Product[]);
+        setOffers(catalog.offers as Offer[]);
+        const catalogTables = catalog.tables as RestaurantTable[] | undefined;
+        if (catalogTables && catalogTables.length > 0) {
+          setTables(catalogTables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
+        }
+        setCurrentRestaurant(catalog.restaurant as unknown as Restaurant);
+        setSelectedCategoryId(
+          resolveBestInitialCategory(catalog.categories as Category[], catalog.products as Product[])
+        );
+        setEntryPhase('READY');
+        // Kick off the guest's live order-status stream.
+        void refreshTenantData();
+      };
+
+      const outcome = await runCustomerEntry({ slug, qrToken: targetToken || undefined }, entryApi, hooksFor());
+      if (outcome.outcome === 'STALE' || isStale()) return;
+
+      if (outcome.outcome === 'READY') {
+        commitReady(outcome.session, outcome.catalog, outcome.qrToken);
+        return;
+      }
+
+      // A DIFFERENT new QR that turned out invalid must not strand a guest
+      // who already has a live bound session: fall back to the bound table
+      // exactly once. (This is also the one case the guest is told about,
+      // in plain non-technical language.)
+      if (
+        outcome.outcome === 'INVALID' &&
+        outcome.reason === 'qr' &&
+        storedBinding?.qrToken &&
+        targetToken !== storedBinding.qrToken
+      ) {
+        if (!isStale()) {
+          showToast(
+            'error',
+            'لا يمكن تغيير الطاولة',
+            `الرمز الجديد غير صالح — بقيت مرتبطاً بطاولة ${storedBinding.tableNumber || '—'}.`
+          );
+        }
+        const fallback = await runCustomerEntry({ slug, qrToken: storedBinding.qrToken }, entryApi, hooksFor());
+        if (fallback.outcome === 'STALE' || isStale()) return;
+        if (fallback.outcome === 'READY') {
+          commitReady(fallback.session, fallback.catalog, storedBinding.qrToken);
+          return;
+        }
+        if (fallback.outcome === 'INVALID') {
+          setEntryInvalidReason(fallback.reason);
+          setPhaseSafe('INVALID');
+          return;
+        }
+        setPhaseSafe('RECOVERY');
+        return;
+      }
+
+      if (outcome.outcome === 'INVALID') {
+        setEntryInvalidReason(outcome.reason);
+        setPhaseSafe('INVALID');
+        return;
+      }
+      // Bounded recovery exhausted (or unexpected orchestration fault):
+      // customer-safe retry card — never a technical error screen.
+      setPhaseSafe('RECOVERY');
+    },
+    [refreshTenantData, showToast, setViewMode]
+  );
+
+  /** Manual retry from the RECOVERY card: starts a brand-new entry run. */
+  const retryEntry = useCallback(() => {
+    const { slug, qrToken } = parseEntryUrl();
+    const runId = ++entryRunRef.current;
+    setEntryPhase('INITIALIZING');
+    setEntryInvalidReason(null);
+    void startCustomerEntry(runId, slug, qrToken);
+  }, [parseEntryUrl, startCustomerEntry]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || urlHandledRef.done) return;
+
+    const { slug, qrToken } = parseEntryUrl();
 
     if (slug && displayMode) {
       // Read-only board: load the catalog by slug only — no table session is
       // created, so there is nothing to order against and no cart to fill.
       urlHandledRef.done = true;
+      const runId = ++entryRunRef.current;
       api.getPublicRestaurantBySlug(slug).then((catalogRes) => {
+        if (entryRunRef.current !== runId) return; // superseded by a newer run
         if (catalogRes.success && catalogRes.data) {
           setCategories(catalogRes.data.categories);
           setProducts(catalogRes.data.products);
@@ -563,86 +769,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     if (slug) {
       urlHandledRef.done = true;
-      let targetToken = qrToken || 'default';
-
-      // One-table-per-device: if this tab already scanned a table QR, the
-      // guest stays bound to it. A different QR token in the URL is rejected
-      // (no table switching) and the bound token is used instead.
-      const storedBinding = readTableBinding();
-      if (storedBinding && storedBinding.qrToken) {
-        if (targetToken !== 'default' && targetToken !== storedBinding.qrToken) {
-          showToast(
-            'error',
-            'لا يمكن تغيير الطاولة',
-            `هذا الجهاز مرتبط حالياً بطاولة ${storedBinding.tableNumber || '—'}. لبدء جلسة جديدة أغلق الصفحة وأعد مسح الرمز الموجود على طاولتك.`
-          );
-        }
-        targetToken = storedBinding.qrToken;
-      }
-
-      api.createTableSession(targetToken, slug).then((sessionRes) => {
-        if (sessionRes.success && sessionRes.data) {
-          setCurrentRestaurant(sessionRes.data.restaurant);
-          setActiveTableId(sessionRes.data.table.id);
-          setActiveTableNumber(sessionRes.data.table.tableNumber);
-          setCurrentTableSession(sessionRes.data.session);
-          setViewMode('CUSTOMER');
-
-          // Keep the session's table in the local registry so every view can
-          // render the real table number printed on its QR card instead of
-          // scraping digits out of the opaque table ID.
-          const sessionTable = sessionRes.data.table;
-          if (sessionTable?.id) {
-            setTables((prev) => (prev.some((t) => t.id === sessionTable.id) ? prev : [...prev, sessionTable]));
-          }
-
-          // Persist the binding so a refresh (or a URL with another table's
-          // QR) can never move this device to a different table.
-          if (targetToken !== 'default') {
-            writeTableBinding({
-              restaurantId: sessionRes.data.restaurant.id,
-              tableId: sessionRes.data.table.id,
-              tableNumber: sessionRes.data.table.tableNumber,
-              qrToken: targetToken,
-            });
-          }
-
-          const cleanQr = targetToken !== 'default' ? targetToken : undefined;
-          api.getPublicRestaurantBySlug(slug, cleanQr).then((catalogRes) => {
-            if (catalogRes.success && catalogRes.data) {
-              setCategories(catalogRes.data.categories);
-              setProducts(catalogRes.data.products);
-              setOffers(catalogRes.data.offers);
-              if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
-                setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
-              }
-              setCurrentRestaurant(catalogRes.data.restaurant);
-              setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
-            }
-          });
-
-          // Kick off the guest's live order-status stream immediately.
-          void refreshTenantData();
-        } else {
-          // If session by token failed, load public menu directly by slug
-          api.getPublicRestaurantBySlug(slug).then((catalogRes) => {
-            if (catalogRes.success && catalogRes.data) {
-              setCategories(catalogRes.data.categories);
-              setProducts(catalogRes.data.products);
-              setOffers(catalogRes.data.offers);
-              if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
-                setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
-              }
-              setCurrentRestaurant(catalogRes.data.restaurant);
-              setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
-              setViewMode('CUSTOMER');
-            } else {
-              showToast('error', 'تعذر تحميل قائمة المطعم', catalogRes.error || 'رمز QR غير صالح');
-              setViewMode('SAAS_LANDING');
-            }
-          });
-        }
-      });
+      const runId = ++entryRunRef.current;
+      void startCustomerEntry(runId, slug, qrToken);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -931,6 +1059,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   }, [activeTableOrders, viewMode]);
 
+  /**
+   * Silent one-shot recovery for an expired QR session: the device binding
+   * still carries the physical table token, so the server can issue a fresh
+   * session without any guest interaction. Used AT MOST once per action —
+   * never a refresh loop.
+   */
+  const recoverExpiredSession = useCallback(async (): Promise<TableSession | null> => {
+    const binding = readTableBinding();
+    if (!binding?.qrToken || !currentRestaurant?.slug) return null;
+    const res = await api.createTableSession(binding.qrToken, currentRestaurant.slug);
+    if (res.success && res.data) {
+      setCurrentTableSession(res.data.session);
+      setActiveTableId(res.data.table.id);
+      setActiveTableNumber(res.data.table.tableNumber);
+      return res.data.session;
+    }
+    return null;
+  }, [currentRestaurant?.slug]);
+
   // Create order: POST to the public API bound to the QR session; the server
   // re-prices every item from the tenant's DB menu.
   const createOrder = useCallback(
@@ -987,7 +1134,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         orderSubmissionRef.current = { fingerprint, clientRequestId: newClientRequestId() };
       }
 
-      const res = await api.submitOrder({
+      let res = await api.submitOrder({
         restaurantId: currentRestaurant.id,
         tableId: activeTableId,
         sessionToken: currentTableSession.sessionToken,
@@ -995,6 +1142,21 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         items: orderItems,
         notes,
       });
+
+      // Session expired while the guest was browsing? Recover silently once.
+      if (!res.success && res.statusCode === 403) {
+        const fresh = await recoverExpiredSession();
+        if (fresh?.sessionToken) {
+          res = await api.submitOrder({
+            restaurantId: currentRestaurant.id,
+            tableId: activeTableId,
+            sessionToken: fresh.sessionToken,
+            clientRequestId: orderSubmissionRef.current!.clientRequestId,
+            items: orderItems,
+            notes,
+          });
+        }
+      }
 
       if (res.success && res.data) {
         orderSubmissionRef.current = null;
@@ -1010,7 +1172,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return { success: false, error: res.error || 'تعذر إرسال الطلب' };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, activeTableId, currentTableSession, cartItems, cartSubtotal, clearCart, refreshTenantData, showToast]
+    [currentRestaurant, activeTableId, currentTableSession, cartItems, cartSubtotal, clearCart, refreshTenantData, showToast, recoverExpiredSession]
   );
 
   const updateOrderStatus = useCallback(
@@ -1041,7 +1203,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const cancelCustomerOrder = useCallback(
     async (orderId: string): Promise<{ success: boolean; message: string }> => {
       if (!currentRestaurant) return { success: false, message: 'المطعم غير محدد' };
-      const res = await api.cancelOrder(currentRestaurant.id, orderId, currentTableSession?.sessionToken);
+      let res = await api.cancelOrder(currentRestaurant.id, orderId, currentTableSession?.sessionToken);
+      if (!res.success && res.statusCode === 403) {
+        const fresh = await recoverExpiredSession();
+        if (fresh?.sessionToken) {
+          res = await api.cancelOrder(currentRestaurant.id, orderId, fresh.sessionToken);
+        }
+      }
       if (res.success) {
         refreshTenantData();
         showToast('info', 'تم إلغاء الطلب', `تم إلغاء الطلب ${orderId} بنجاح.`);
@@ -1051,13 +1219,19 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return { success: false, message: res.error || 'تعذر إلغاء الطلب' };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentTableSession, refreshTenantData, showToast]
+    [currentRestaurant, currentTableSession, refreshTenantData, showToast, recoverExpiredSession]
   );
 
   const editCustomerOrderNotes = useCallback(
     async (orderId: string, notes: string): Promise<{ success: boolean; message: string }> => {
       if (!currentRestaurant) return { success: false, message: 'المطعم غير محدد' };
-      const res = await api.updateOrderNotes(currentRestaurant.id, orderId, notes, currentTableSession?.sessionToken);
+      let res = await api.updateOrderNotes(currentRestaurant.id, orderId, notes, currentTableSession?.sessionToken);
+      if (!res.success && res.statusCode === 403) {
+        const fresh = await recoverExpiredSession();
+        if (fresh?.sessionToken) {
+          res = await api.updateOrderNotes(currentRestaurant.id, orderId, notes, fresh.sessionToken);
+        }
+      }
       if (res.success) {
         refreshTenantData();
         showToast('success', 'تم حفظ التعديلات');
@@ -1067,7 +1241,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return { success: false, message: res.error || 'تعذر تعديل الطلب' };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, currentTableSession, refreshTenantData, showToast]
+    [currentRestaurant, currentTableSession, refreshTenantData, showToast, recoverExpiredSession]
   );
 
   const updateTableStatus = useCallback(
@@ -1127,13 +1301,19 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       if (!targetTableId) return { success: false, error: 'لا توجد طاولة نشطة' };
 
-      const res = await api.callWaiter(
+      let res = await api.callWaiter(
         currentRestaurant.id,
         targetTableId,
         targetReason,
         targetText,
         currentTableSession?.sessionToken
       );
+      if (!res.success && res.statusCode === 403) {
+        const fresh = await recoverExpiredSession();
+        if (fresh?.sessionToken) {
+          res = await api.callWaiter(currentRestaurant.id, targetTableId, targetReason, targetText, fresh.sessionToken);
+        }
+      }
       if (res.success && res.data?.waiterRequest) {
         // Public catalog refreshes do not include waiter requests. Keep the
         // accepted request locally so the guest immediately sees a persistent
@@ -1153,7 +1333,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return { success: false, error };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentRestaurant, activeTableId, currentTableSession, refreshTenantData, showToast]
+    [currentRestaurant, activeTableId, currentTableSession, refreshTenantData, showToast, recoverExpiredSession]
   );
 
   const updateWaiterRequest = useCallback(
@@ -1397,6 +1577,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         setActiveTableNumber,
         activeTable,
         currentTableSession,
+        entryPhase,
+        entryInvalidReason,
+        retryEntry,
         setTableByNumber,
         validateAndSetTable,
         categories,

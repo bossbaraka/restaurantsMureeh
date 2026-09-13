@@ -17,6 +17,7 @@ import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
 import { CustomerOrderLiveNotifier } from './CustomerOrderLiveNotifier';
 import { CustomerGuideOverlay } from './CustomerGuideOverlay';
 import { OrderCompletedModal } from './OrderCompletedModal';
+import { CustomerLoadingExperience } from './CustomerLoadingExperience';
 import { RestaurantEntryExperience } from './RestaurantEntryExperience';
 import { DisplayMenu } from './DisplayMenu';
 import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
@@ -84,6 +85,9 @@ export const CustomerLayout: React.FC = () => {
     activeTableId,
     setViewMode,
     displayMode,
+    entryPhase,
+    entryInvalidReason,
+    retryEntry,
   } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
@@ -280,6 +284,22 @@ export const CustomerLayout: React.FC = () => {
   // asks for a table and never mounts a cart or an ordering drawer.
   if (displayMode) {
     return <DisplayMenu />;
+  }
+
+  // Guest entry in flight: the premium loader / recovery / invalid state owns
+  // the whole screen until the entry machine reaches READY. This replaces the
+  // old blank-then-error flash, and guarantees the menu (or the welcome
+  // layer) is never painted before session + catalog genuinely succeeded.
+  // `entryPhase` is READY by default for non-guest starts (staff preview etc).
+  if ((entryPhase ?? 'READY') !== 'READY') {
+    return (
+      <CustomerLoadingExperience
+        phase={entryPhase}
+        restaurant={currentRestaurant}
+        invalidReason={entryInvalidReason}
+        onRetry={retryEntry}
+      />
+    );
   }
 
   const isPublicRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/r/');

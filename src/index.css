@@ -2328,6 +2328,217 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 
 /* ==========================================================================
+   Customer entry loader (.mload-*) — premium guest loading / recovery /
+   invalid states. Fully scoped: nothing outside this block references
+   these classes. CSS-only motion; prefers-reduced-motion removes it.
+   Palette: Mureeh deep navy (#00072D → #051650 → #0A2472 → #123499).
+   ========================================================================== */
+.mload {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #00072d 0%, #051650 48%, #0a2472 100%);
+  color: #f4f7ff;
+}
+
+.mload__glow {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+.mload__glow--a {
+  width: 52vmax;
+  height: 52vmax;
+  top: -18vmax;
+  right: -14vmax;
+  background: radial-gradient(circle, rgba(18, 52, 153, 0.55) 0%, rgba(18, 52, 153, 0) 70%);
+  animation: mload-drift 9s ease-in-out infinite alternate;
+}
+.mload__glow--b {
+  width: 44vmax;
+  height: 44vmax;
+  bottom: -16vmax;
+  left: -12vmax;
+  background: radial-gradient(circle, rgba(10, 36, 114, 0.7) 0%, rgba(10, 36, 114, 0) 72%);
+  animation: mload-drift 11s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes mload-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(-3%, 4%, 0) scale(1.06); }
+}
+
+.mload__inner {
+  position: relative;
+  width: min(560px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.mload__logo {
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 18px 50px rgba(0, 7, 45, 0.55);
+  animation: mload-reveal 700ms ease-out both;
+}
+
+.mload__monogram {
+  width: 92px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24px;
+  font-family: var(--font-serif);
+  font-size: 40px;
+  color: #e8eeff;
+  background: linear-gradient(145deg, #123499 0%, #0a2472 55%, #051650 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 18px 50px rgba(0, 7, 45, 0.55);
+  animation: mload-reveal 700ms ease-out both;
+}
+
+@keyframes mload-reveal {
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.mload__name {
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  animation: mload-reveal 700ms 80ms ease-out both;
+}
+
+.mload__status {
+  font-size: 13px;
+  color: rgba(232, 238, 255, 0.72);
+  animation: mload-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes mload-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* --- menu-shaped skeleton ------------------------------------------------ */
+.mload__skeleton {
+  width: 100%;
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mload__sk-bar,
+.mload__sk-pill {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.07) 30%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.07) 70%
+  );
+  background-size: 220% 100%;
+  border-radius: 12px;
+  animation: mload-shimmer 1.6s linear infinite;
+}
+
+@keyframes mload-shimmer {
+  from { background-position: 130% 0; }
+  to { background-position: -90% 0; }
+}
+
+.mload__sk-header { height: 46px; width: 100%; border-radius: 16px; }
+.mload__sk-cats { display: flex; gap: 8px; justify-content: center; }
+.mload__sk-pill { height: 26px; width: 74px; border-radius: 999px; }
+.mload__sk-card {
+  width: 100%;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.mload__sk-line-lg { height: 16px; width: 78%; }
+.mload__sk-line-md { height: 12px; width: 56%; }
+.mload__sk-line-sm { height: 12px; width: 34%; }
+
+/* --- recovery / invalid cards -------------------------------------------- */
+.mload__card {
+  width: 100%;
+  padding: 34px 26px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(5, 22, 80, 0.55);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  animation: mload-reveal 500ms ease-out both;
+}
+
+.mload__card-icon { font-size: 34px; line-height: 1; }
+
+.mload__card-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.mload__card-sub {
+  font-size: 13px;
+  color: rgba(232, 238, 255, 0.72);
+}
+
+.mload__retry {
+  margin-top: 10px;
+  padding: 12px 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(135deg, #123499 0%, #0a2472 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+  box-shadow: 0 10px 30px rgba(0, 7, 45, 0.5);
+}
+.mload__retry:hover { transform: translateY(-1px); box-shadow: 0 14px 34px rgba(0, 7, 45, 0.6); }
+.mload__retry:focus-visible { outline: 2px solid #9db8ff; outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mload__glow--a,
+  .mload__glow--b,
+  .mload__status,
+  .mload__sk-bar,
+  .mload__sk-pill,
+  .mload__logo,
+  .mload__monogram,
+  .mload__card {
+    animation: none;
+  }
+  .mload__retry { transition: none; }
+}
+
+/* ==========================================================================
    RESTAURANT ENTRY EXPERIENCE — the layer a guest lands on after a QR scan
    ==========================================================================
    Fully isolated: every selector below is `.entry-*`, nothing existing is
@@ -3339,3 +3550,4 @@ input[type='range'].saas-range::-moz-range-thumb {
       visibility 0s linear 0s;
   }
 }
+
