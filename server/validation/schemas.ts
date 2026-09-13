@@ -536,10 +536,6 @@ export const publicOrderSchema = z
     clientRequestId: z.string().uuid('معرّف إرسال الطلب غير صالح').optional(),
     items: z.array(orderItemSchema).min(1).max(50),
     notes: optionalText(1000),
-    // Customer contact for WhatsApp notifications (explicit opt-in required)
-    customerName: z.string().trim().max(120).optional(),
-    customerPhone: z.string().trim().max(30).optional(),
-    whatsappOptIn: z.boolean().optional(),
   })
   .strict();
 
@@ -574,9 +570,6 @@ export const posOrderSchema = z
       .min(1)
       .max(100),
     notes: optionalText(1000),
-    customerName: z.string().trim().max(120).optional(),
-    customerPhone: z.string().trim().max(30).optional(),
-    whatsappOptIn: z.boolean().optional(),
   })
   .strict();
 
@@ -773,31 +766,6 @@ export const paymentCreateSchema = z
     cashReceived: moneySchema.optional(),
     tip: moneySchema.optional(),
     note: optionalText(500),
-  })
-  .strict();
-
-// ---------------- WhatsApp Integration ----------------
-
-export const whatsappConfigSchema = z
-  .object({
-    restaurantId: idSchema.optional(),
-    enabled: z.boolean().optional(),
-    phoneNumberId: z.string().trim().max(100).optional().or(z.literal('')),
-    wabaId: z.string().trim().max(100).optional().or(z.literal('')),
-    accessToken: z.string().trim().max(500).optional().or(z.literal('')),
-    displayPhoneNumber: z.string().trim().max(30).optional().or(z.literal('')),
-    status: z.enum(['PENDING', 'ACTIVE', 'DISABLED', 'FAILED']).optional(),
-    metadata: z.any().optional(),
-  })
-  .strict();
-
-export const whatsappTestSchema = z
-  .object({
-    restaurantId: idSchema.optional(),
-    to: z.string().trim().min(7).max(30),
-    templateName: z.string().trim().max(100).optional(),
-    languageCode: z.string().trim().max(10).optional(),
-    variables: z.array(z.string().max(1024)).max(10).optional(),
   })
   .strict();
 

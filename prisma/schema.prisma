@@ -71,38 +71,6 @@ enum WaiterRequestStatus {
   CANCELLED
 }
 
-enum WhatsAppIntegrationStatus {
-  PENDING
-  ACTIVE
-  DISABLED
-  FAILED
-}
-
-enum NotificationChannel {
-  WHATSAPP
-  SMS
-  EMAIL
-  PUSH
-}
-
-enum NotificationStatus {
-  PENDING
-  SENT
-  DELIVERED
-  READ
-  FAILED
-}
-
-enum NotificationEventType {
-  ORDER_CONFIRMED
-  ORDER_PREPARING
-  ORDER_READY
-  ORDER_COMPLETED
-  ORDER_CANCELLED
-  PAYMENT_CONFIRMED
-  RESERVATION_CONFIRMED
-}
-
 model Restaurant {
   id              String            @id @default(uuid())
   name            String
@@ -158,21 +126,18 @@ model Restaurant {
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
-  users               RestaurantUser[]
-  subscription        Subscription?
-  categories          Category[]
-  products            Product[]
-  tables              Table[]
-  tableSessions       TableSession[]
-  orders              Order[]
-  waiterRequests      WaiterRequest[]
-  offers              Offer[]
-  auditLogs           AuditLog[]
-  branches            Branch[]
-  payments            Payment[]
-  whatsappIntegration WhatsAppIntegration?
-  notificationLogs    NotificationLog[]
-  webhookEvents       WhatsAppWebhookEvent[]
+  users           RestaurantUser[]
+  subscription    Subscription?
+  categories      Category[]
+  products        Product[]
+  tables          Table[]
+  tableSessions   TableSession[]
+  orders          Order[]
+  waiterRequests  WaiterRequest[]
+  offers          Offer[]
+  auditLogs       AuditLog[]
+  branches        Branch[]
+  payments        Payment[]
 
   @@index([slug])
   @@index([status])
@@ -374,47 +339,38 @@ model AddOn {
 }
 
 model Order {
-  id                          String            @id
-  numericId                   Int               @default(autoincrement())
-  restaurantId                String
-  restaurant                  Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  tableId                     String
-  table                       Table             @relation(fields: [tableId], references: [id], onDelete: Cascade)
-  sessionId                   String?
-  session                     TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  id                    String            @id
+  numericId             Int               @default(autoincrement())
+  restaurantId          String
+  restaurant            Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tableId               String
+  table                 Table             @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  sessionId             String?
+  session               TableSession?     @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   // Client-generated UUID makes customer order submission safely replayable
   // after a timeout/response loss without creating a second kitchen ticket.
-  clientRequestId             String             @default(dbgenerated("gen_random_uuid()"))
-  status                      OrderStatus       @default(PENDING)
-  paymentMethod               String            @default("PAY AT CASHIER")
-  paymentStatus               String            @default("UNPAID") // UNPAID | PAID
-  settledAt                   DateTime?
-  cashierId                   String?
-  branchId                    String?
-  subtotal                    Float
-  tax                         Float             @default(0)
-  total                       Float
-  notes                       String?
-  estimatedPrepMinutes        Int?
-  // Customer contact for WhatsApp notifications (explicit opt-in required)
-  customerName                String?
-  customerPhone               String?
-  customerPhoneE164           String?
-  whatsappOptIn               Boolean           @default(false)
-  lastWhatsappNotificationAt  DateTime?
-  lastWhatsappNotificationType String?
-  createdAt                   DateTime          @default(now())
-  updatedAt                   DateTime          @updatedAt
+  clientRequestId       String             @default(dbgenerated("gen_random_uuid()"))
+  status                OrderStatus       @default(PENDING)
+  paymentMethod         String            @default("PAY AT CASHIER")
+  paymentStatus         String            @default("UNPAID") // UNPAID | PAID
+  settledAt             DateTime?
+  cashierId             String?
+  branchId              String?
+  subtotal              Float
+  tax                   Float             @default(0)
+  total                 Float
+  notes                 String?
+  estimatedPrepMinutes  Int?
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
 
-  items                       OrderItem[]
-  notificationLogs            NotificationLog[]
+  items                 OrderItem[]
 
   @@unique([restaurantId, clientRequestId])
   @@index([restaurantId])
   @@index([tableId])
   @@index([status])
   @@index([createdAt])
-  @@index([customerPhoneE164])
 }
 
 model OrderItem {
@@ -553,73 +509,4 @@ model Payment {
   @@index([restaurantId])
   @@index([createdAt])
   @@index([method])
-}
-
-// ============================================
-// WhatsApp Business Platform Integration
-// Multi-tenant, isolated per restaurant
-// ============================================
-model WhatsAppIntegration {
-  id                  String                      @id @default(uuid())
-  restaurantId        String                      @unique
-  restaurant          Restaurant                  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  enabled             Boolean                     @default(false)
-  // Meta Cloud API identifiers — per tenant, never shared
-  phoneNumberId       String?
-  wabaId              String?
-  // Encrypted access token (AES-256-GCM). Never returned via API.
-  accessToken         String?
-  // Optional display phone number for UI (e.g. +970599123456)
-  displayPhoneNumber  String?
-  status              WhatsAppIntegrationStatus   @default(PENDING)
-  // Template namespace or business verification status metadata
-  metadata            Json?
-  createdAt           DateTime                    @default(now())
-  updatedAt           DateTime                    @updatedAt
-
-  @@index([restaurantId])
-  @@index([enabled])
-  @@index([status])
-}
-
-model NotificationLog {
-  id                String              @id @default(uuid())
-  restaurantId      String
-  restaurant        Restaurant          @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  orderId           String?
-  order             Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  channel           NotificationChannel @default(WHATSAPP)
-  eventType         NotificationEventType
-  recipientPhone    String?
-  recipientPhoneE164 String?
-  templateName      String?
-  providerMessageId String?             @unique
-  status            NotificationStatus  @default(PENDING)
-  failureReason     String?
-  metadata          Json?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  @@index([restaurantId])
-  @@index([orderId])
-  @@index([status])
-  @@index([eventType])
-  @@index([createdAt])
-  @@index([providerMessageId])
-}
-
-model WhatsAppWebhookEvent {
-  id            String      @id @default(uuid())
-  // Meta's event/message identifier for idempotency (wamid or status id)
-  eventId       String      @unique
-  eventType     String?
-  restaurantId  String?
-  restaurant    Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: SetNull)
-  payloadHash   String?
-  processedAt   DateTime    @default(now())
-  createdAt     DateTime    @default(now())
-
-  @@index([restaurantId])
-  @@index([eventType])
-  @@index([createdAt])
 }
