@@ -2,39 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Product, ProductSize, ProductAddOn, Category } from '../../types/restaurant';
 import { api, isEmbeddedImage } from '../../services/api';
+import { optimizeImageFile } from '../../utils/imageOptimize';
 import { X, Plus, Trash2, Sparkles, Image as ImageIcon, Check, Upload, Loader2 } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
-
-async function fileToResizedBlob(file: File, maxDim: number): Promise<{ blob: Blob; ext: string }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width, height } = img;
-      const ratio = Math.min(1, maxDim / Math.max(width, height));
-      width = Math.max(1, Math.round(width * ratio));
-      height = Math.max(1, Math.round(height * ratio));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return reject(new Error('canvas'));
-      ctx.drawImage(img, 0, 0, width, height);
-      const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
-      canvas.toBlob(
-        (b) => (b ? resolve({ blob: b, ext: isPng ? 'png' : 'jpg' }) : reject(new Error('encode'))),
-        isPng ? 'image/png' : 'image/jpeg',
-        0.84
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('load'));
-    };
-    img.src = url;
-  });
-}
 
 interface ProductFormModalProps {
   product: Product | null;
@@ -78,7 +48,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }
     setIsUploadingImage(true);
     try {
-      const { blob, ext } = await fileToResizedBlob(file, 1000);
+      const { blob, ext } = await optimizeImageFile(file, 'product');
       const res = await api.uploadImage(blob, `dish-${Date.now()}.${ext}`, 'product', currentRestaurant?.id);
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع صورة الطبق', res.error);

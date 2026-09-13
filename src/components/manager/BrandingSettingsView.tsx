@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api, isEmbeddedImage } from '../../services/api';
+import { optimizeImageFile } from '../../utils/imageOptimize';
 import { applyBrandTheme, getCachedBrandTheme } from '../../theme/brandTheme';
 import {
   AlertTriangle,
@@ -86,37 +87,11 @@ const LOGO_POSITION_GRID: Array<{ label: string; value: string }> = [
   { label: 'أسفل يسار', value: '0% 100%' },
 ];
 
-/** ضغط الصورة على جهاز المستخدم ثم رفعها للسيرفر الحقيقي */
-async function fileToResizedBlob(file: File, maxDim: number): Promise<{ blob: Blob; ext: string }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width, height } = img;
-      const ratio = Math.min(1, maxDim / Math.max(width, height));
-      width = Math.max(1, Math.round(width * ratio));
-      height = Math.max(1, Math.round(height * ratio));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return reject(new Error('canvas'));
-      ctx.drawImage(img, 0, 0, width, height);
-      const isPng = file.type === 'image/png' || file.name.toLowerCase().endsWith('.png');
-      canvas.toBlob(
-        (b) => (b ? resolve({ blob: b, ext: isPng ? 'png' : 'jpg' }) : reject(new Error('encode'))),
-        isPng ? 'image/png' : 'image/jpeg',
-        0.84
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('load'));
-    };
-    img.src = url;
-  });
-}
+/**
+ * ضغط الصورة على جهاز المدير قبل الرفع — عبر خط الضغط الموحّد
+ * (سياسة لكل نوع: شعار/غلاف/معرض/خريطة، WebP عندما يدعمه المتصفح).
+ * الخادم يبقى حد الأمان: يتحقق من البصمة الثنائية والحجم والملكية.
+ */
 
 export const BrandingSettingsView: React.FC = () => {
   const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast } = useRestaurant();
@@ -206,7 +181,7 @@ export const BrandingSettingsView: React.FC = () => {
     }
     setUploading(kind);
     try {
-      const { blob, ext } = await fileToResizedBlob(file, kind === 'logo' ? 512 : 1600);
+      const { blob, ext } = await optimizeImageFile(file, kind);
       const res = await api.uploadImage(blob, `brand-${kind}-${Date.now()}.${ext}`, kind, currentRestaurant.id);
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع الصورة إلى الخادم', res.error);
@@ -242,7 +217,7 @@ export const BrandingSettingsView: React.FC = () => {
     }
     setUploadingGallery(true);
     try {
-      const { blob, ext } = await fileToResizedBlob(file, 1600);
+      const { blob, ext } = await optimizeImageFile(file, 'gallery');
       const res = await api.uploadImage(blob, `hall-gallery-${Date.now()}.${ext}`, 'gallery', currentRestaurant.id);
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع الصورة', res.error);
@@ -266,7 +241,7 @@ export const BrandingSettingsView: React.FC = () => {
     }
     setUploadingMap(true);
     try {
-      const { blob, ext } = await fileToResizedBlob(file, 1200);
+      const { blob, ext } = await optimizeImageFile(file, 'map');
       const res = await api.uploadImage(blob, `map-${Date.now()}.${ext}`, 'map', currentRestaurant.id);
       if (!res.success || !res.data) {
         showToast('error', 'تعذر رفع صورة الخريطة', res.error);
