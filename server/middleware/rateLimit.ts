@@ -134,3 +134,24 @@ export const sseConnectionLimiter = rateLimit({
   limit: 100,
   message: limiterError('اتصالات بث مباشر كثيرة من هذا الجهاز. أعد المحاولة لاحقاً.'),
 });
+
+export const whatsappWebhookLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  message: limiterError('طلبات Webhook كثيرة. حاول لاحقاً.'),
+});
+
+export const whatsappConfigLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  message: limiterError('طلبات إعدادات واتساب كثيرة. حاول لاحقاً.'),
+});
+
+export const whatsappTestLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  message: limiterError('رسائل واتساب تجريبية كثيرة. حاول لاحقاً.'),
+});

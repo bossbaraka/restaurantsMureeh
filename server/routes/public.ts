@@ -33,6 +33,7 @@ import {
   waiterCallSchema,
   qrSessionSchema,
 } from '../validation/schemas';
+import { normalizePhoneNumber } from '../services/whatsapp/phone';
 
 const router = Router();
 
@@ -675,7 +676,7 @@ router.post(
   validateBody(publicOrderSchema),
   async (req: Request, res: Response) => {
     try {
-      const { restaurantId, tableId, sessionToken, clientRequestId, items, notes } = req.body as {
+      const { restaurantId, tableId, sessionToken, clientRequestId, items, notes, customerName, customerPhone, whatsappOptIn } = req.body as {
         restaurantId: string;
         tableId: string;
         sessionToken: string;
@@ -692,7 +693,24 @@ router.post(
           notes?: string;
         }>;
         notes?: string;
+        customerName?: string;
+        customerPhone?: string;
+        whatsappOptIn?: boolean;
       };
+
+      // Validate customer phone if provided with opt-in
+      let normalizedPhone: string | null = null;
+      if (customerPhone) {
+        normalizedPhone = normalizePhoneNumber(customerPhone);
+        if (!normalizedPhone) {
+          return res.status(400).json({ success: false, error: 'رقم الهاتف غير صالح، استخدم صيغة دولية مثل +970599123456', statusCode: 400 });
+        }
+        // If phone provided but opt-in not explicitly true, default to false — require explicit consent
+        // whatsappOptIn must be true to actually send notifications
+      }
+      if (whatsappOptIn === true && !customerPhone) {
+        return res.status(400).json({ success: false, error: 'رقم الهاتف مطلوب عند تفعيل إشعارات واتساب', statusCode: 400 });
+      }
 
       const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
       if (!restaurant || restaurant.status !== 'ACTIVE') {
@@ -925,6 +943,10 @@ router.post(
               subtotal,
               total: subtotal,
               notes: notes || undefined,
+              customerName: customerName || undefined,
+              customerPhone: customerPhone || undefined,
+              customerPhoneE164: normalizedPhone || undefined,
+              whatsappOptIn: whatsappOptIn === true,
               items: { create: pricedItems },
             },
             include: { items: true },
@@ -967,6 +989,10 @@ router.post(
               subtotal,
               total: subtotal,
               notes: notes || undefined,
+              customerName: customerName || undefined,
+              customerPhone: customerPhone || undefined,
+              customerPhoneE164: normalizedPhone || undefined,
+              whatsappOptIn: whatsappOptIn === true,
               items: { create: pricedItems },
             },
             include: { items: true },
