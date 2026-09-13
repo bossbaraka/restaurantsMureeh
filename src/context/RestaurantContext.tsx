@@ -60,14 +60,6 @@ interface RestaurantContextType {
   /** True on the read-only display board (`?view=display`). */
   displayMode: boolean;
   setViewMode: (mode: AppViewMode) => void;
-  /**
-   * The guest's QR-entry journey state: resolving → ready, or one of the two
-   * designed end states (restaurant unavailable / QR error). Drives the
-   * entry screens rendered by CustomerLayout instead of the old dead-ends.
-   */
-  qrEntry: QrEntry;
-  /** Re-run the QR resolution (a clean reload — bindings and tokens included). */
-  retryQrEntry: () => void;
   selectedCategoryId: string;
   setSelectedCategoryId: (id: string) => void;
   searchQuery: string;
@@ -232,37 +224,6 @@ export function resolveBestInitialCategory(cats: Category[], prods: Product[]): 
   return cats[0]?.id || 'all';
 }
 
-// ---------------------------------------------------------------------------
-// QR entry state machine.
-//
-// After scanning a table QR, the guest's device is in exactly one of four
-// composed states, each rendered as a designed screen (see
-// customer/RestaurantEntryStates.tsx). A guest scanning their table QR is
-// never bounced to the SaaS landing page with a generic error toast — the
-// device always ends somewhere the guest understands what happened and what
-// to do next.
-// ---------------------------------------------------------------------------
-export type QrEntryReason = 'SUSPENDED' | 'MAINTENANCE' | 'ONBOARDING' | 'INACTIVE';
-export type QrEntryErrorKind = 'INVALID_QR' | 'NOT_FOUND' | 'NETWORK';
-
-export type QrEntry =
-  | { phase: 'RESOLVING' }
-  | { phase: 'READY' }
-  | { phase: 'UNAVAILABLE'; reason: QrEntryReason }
-  | { phase: 'ERROR'; kind: QrEntryErrorKind; message: string };
-
-export function restaurantUnavailableReason(status?: string | null): QrEntryReason {
-  if (status === 'MAINTENANCE') return 'MAINTENANCE';
-  if (status === 'ONBOARDING') return 'ONBOARDING';
-  if (status === 'SUSPENDED') return 'SUSPENDED';
-  return 'INACTIVE';
-}
-
-/** Network-level failure (server unreachable / timeout), not a business rule. */
-function isNetworkLevelError(error?: string, statusCode?: number): boolean {
-  return statusCode === 503 || statusCode === 0 || /تعذر الاتصال|network|timeout/i.test(error || '');
-}
-
 export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useAuth();
   const { currentUser, currentManagerRestaurant, setCurrentUser: authSetCurrentUser, logout: authLogout } = auth;
@@ -271,18 +232,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Read-only menu board (TV / social media). Fixed for the session: it comes
   // from the URL and never flips while the board is open.
   const [displayMode] = useState<boolean>(isDisplayModeUrl);
-  // QR journey state. On a public `/r/...` URL the device starts RESOLVING —
-  // the guest sees the composed "preparing your table" screen while the table
-  // session is created, instead of a premature "invalid link" dead-end.
-  const [qrEntry, setQrEntry] = useState<QrEntry>(() => {
-    if (typeof window === 'undefined') return { phase: 'READY' };
-    return window.location.pathname.startsWith('/r/') ? { phase: 'RESOLVING' } : { phase: 'READY' };
-  });
-  const retryQrEntry = useCallback(() => {
-    // A clean reload re-runs URL handling from scratch: fresh session
-    // attempts, binding re-checks and a retry of the catalog fetch.
-    if (typeof window !== 'undefined') window.location.reload();
-  }, []);
   const [viewMode, setViewModeState] = useState<AppViewMode>(() => {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
@@ -475,25 +424,18 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           setOrders(ordersRes.data);
         }
 
-        if (catalogRes.success && catalogRes.data && catalogRes.data.products) {
-          setCategories(catalogRes.data.categories || []);
+        if (catalogRes.success && catalogRes.data) {
+          setCategories(catalogRes.data.categories);
           setProducts(catalogRes.data.products);
-          setOffers(catalogRes.data.offers || []);
+          setOffers(catalogRes.data.offers);
           if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
             setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
           }
           setSelectedCategoryId((prev) =>
-            prev && (prev === 'all' || (catalogRes.data!.categories || []).some((c) => c.id === prev))
+            prev && (prev === 'all' || catalogRes.data!.categories.some((c) => c.id === prev))
               ? prev
-              : resolveBestInitialCategory(catalogRes.data!.categories || [], catalogRes.data!.products!)
+              : resolveBestInitialCategory(catalogRes.data!.categories, catalogRes.data!.products)
           );
-        } else if (catalogRes.data?.restaurant && catalogRes.data.restaurant.status !== 'ACTIVE') {
-          // Live status flip: the venue was suspended / put into maintenance
-          // while the guest was at the table. Hand the guest over to the
-          // branded unavailable screen instead of letting every 10s poll
-          // fail silently against an 403.
-          setCurrentRestaurant(catalogRes.data.restaurant);
-          setQrEntry({ phase: 'UNAVAILABLE', reason: restaurantUnavailableReason(catalogRes.data.restaurant.status) });
         }
       } else if (displayMode && currentRestaurant?.slug) {
         // Display board: same public catalog, no table token, no session.
@@ -586,19 +528,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // -------------------------------------------------------------------------
   // URL / QR handling: customer opens /r/:slug?qr=<real-table-qr> which
   // creates an anonymous, expiring, table-scoped session on the server.
-  //
-  // Every outcome lands on a designed screen (qrEntry) — the guest is never
-  // bounced to the SaaS landing page with a bare error toast:
-  //   RESOLVING   → cinematic "preparing your table" splash while the
-  //                 session is being created (fixes the old premature
-  //                 "invalid link" flash on every scan).
-  //   READY       → the menu, with or without a table session.
-  //   UNAVAILABLE → the branded closed/maintenance/onboarding screen.
-  //   ERROR       → the composed invalid-QR / not-found / no-network card.
   // -------------------------------------------------------------------------
   useEffect(() => {
     if (typeof window === 'undefined' || urlHandledRef.done) return;
-    urlHandledRef.done = true;
 
     const params = new URLSearchParams(window.location.search);
     const pathMatch = window.location.pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
@@ -606,21 +538,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (rawSlug === 'marer' || rawSlug === 'merar') {
       rawSlug = 'mureeh';
     }
-    let slug = rawSlug || 'mureeh';
+    const slug = rawSlug || 'mureeh';
     const qrToken = params.get('qr') || params.get('table') || params.get('t') || params.get('tableId') || '';
-    const hasQrInUrl = qrToken.length > 0;
 
-    if (displayMode) {
+    if (slug && displayMode) {
       // Read-only board: load the catalog by slug only — no table session is
       // created, so there is nothing to order against and no cart to fill.
+      urlHandledRef.done = true;
       api.getPublicRestaurantBySlug(slug).then((catalogRes) => {
-        if (catalogRes.success && catalogRes.data && catalogRes.data.restaurant) {
-          setCategories(catalogRes.data.categories || []);
-          setProducts(catalogRes.data.products || []);
-          setOffers(catalogRes.data.offers || []);
+        if (catalogRes.success && catalogRes.data) {
+          setCategories(catalogRes.data.categories);
+          setProducts(catalogRes.data.products);
+          setOffers(catalogRes.data.offers);
           setCurrentRestaurant(catalogRes.data.restaurant);
-          setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories || [], catalogRes.data.products || []));
-          setQrEntry({ phase: 'READY' });
+          setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
           setViewMode('CUSTOMER');
         } else {
           showToast('error', 'تعذر تحميل قائمة العرض', catalogRes.error || 'الرابط غير صالح');
@@ -630,57 +561,37 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    if (!slug) return;
+    if (slug) {
+      urlHandledRef.done = true;
+      let targetToken = qrToken || 'default';
 
-    setQrEntry({ phase: 'RESOLVING' });
-    let targetToken = qrToken || 'default';
-
-    // One-table-per-device: if this tab already scanned a table QR, the
-    // guest stays bound to it. A different QR token in the URL is rejected
-    // (no table switching) and the bound token is used instead.
-    const storedBinding = readTableBinding();
-    if (storedBinding && storedBinding.qrToken) {
-      if (targetToken !== 'default' && targetToken !== storedBinding.qrToken) {
-        showToast(
-          'error',
-          'لا يمكن تغيير الطاولة',
-          `هذا الجهاز مرتبط حالياً بطاولة ${storedBinding.tableNumber || '—'}. لبدء جلسة جديدة أغلق الصفحة وأعد مسح الرمز الموجود على طاولتك.`
-        );
-      }
-      targetToken = storedBinding.qrToken;
-    }
-
-    void (async () => {
-      let sessionRes = await api.createTableSession(targetToken, slug);
-
-      // Printed QR links may carry a stale slug (a tenant that renamed its
-      // slug, or a URL built before a tenant switch). The token itself is an
-      // opaque capability, so a 400 "QR does not belong to this restaurant"
-      // gets ONE retry without the slug hint — the server resolves the true
-      // tenant from the token alone. This was the main historical cause of
-      // the "failed to load the menu" error on a perfectly valid QR.
-      if (!sessionRes.success && targetToken !== 'default' && sessionRes.statusCode === 400) {
-        sessionRes = await api.createTableSession(targetToken);
+      // One-table-per-device: if this tab already scanned a table QR, the
+      // guest stays bound to it. A different QR token in the URL is rejected
+      // (no table switching) and the bound token is used instead.
+      const storedBinding = readTableBinding();
+      if (storedBinding && storedBinding.qrToken) {
+        if (targetToken !== 'default' && targetToken !== storedBinding.qrToken) {
+          showToast(
+            'error',
+            'لا يمكن تغيير الطاولة',
+            `هذا الجهاز مرتبط حالياً بطاولة ${storedBinding.tableNumber || '—'}. لبدء جلسة جديدة أغلق الصفحة وأعد مسح الرمز الموجود على طاولتك.`
+          );
+        }
+        targetToken = storedBinding.qrToken;
       }
 
-      if (sessionRes.success && sessionRes.data) {
-        const data = sessionRes.data;
-        if (data.session && data.table && data.restaurant) {
-          // The retry may have resolved a tenant under a different slug —
-          // follow it so the rewritten public URL stays honest.
-          if (data.restaurant.slug && data.restaurant.slug.toLowerCase() !== slug.toLowerCase()) {
-            slug = data.restaurant.slug.toLowerCase();
-          }
-          setCurrentRestaurant(data.restaurant);
-          setActiveTableId(data.table.id);
-          setActiveTableNumber(data.table.tableNumber);
-          setCurrentTableSession(data.session);
+      api.createTableSession(targetToken, slug).then((sessionRes) => {
+        if (sessionRes.success && sessionRes.data) {
+          setCurrentRestaurant(sessionRes.data.restaurant);
+          setActiveTableId(sessionRes.data.table.id);
+          setActiveTableNumber(sessionRes.data.table.tableNumber);
+          setCurrentTableSession(sessionRes.data.session);
           setViewMode('CUSTOMER');
 
           // Keep the session's table in the local registry so every view can
           // render the real table number printed on its QR card instead of
           // scraping digits out of the opaque table ID.
-          const sessionTable = data.table;
+          const sessionTable = sessionRes.data.table;
           if (sessionTable?.id) {
             setTables((prev) => (prev.some((t) => t.id === sessionTable.id) ? prev : [...prev, sessionTable]));
           }
@@ -689,105 +600,50 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           // QR) can never move this device to a different table.
           if (targetToken !== 'default') {
             writeTableBinding({
-              restaurantId: data.restaurant.id,
-              tableId: data.table.id,
-              tableNumber: data.table.tableNumber,
+              restaurantId: sessionRes.data.restaurant.id,
+              tableId: sessionRes.data.table.id,
+              tableNumber: sessionRes.data.table.tableNumber,
               qrToken: targetToken,
             });
           }
 
           const cleanQr = targetToken !== 'default' ? targetToken : undefined;
           api.getPublicRestaurantBySlug(slug, cleanQr).then((catalogRes) => {
-            if (catalogRes.success && catalogRes.data && catalogRes.data.products) {
-              setCategories(catalogRes.data.categories || []);
+            if (catalogRes.success && catalogRes.data) {
+              setCategories(catalogRes.data.categories);
               setProducts(catalogRes.data.products);
-              setOffers(catalogRes.data.offers || []);
+              setOffers(catalogRes.data.offers);
               if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
                 setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
               }
-              if (catalogRes.data.restaurant) setCurrentRestaurant(catalogRes.data.restaurant);
-              setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories || [], catalogRes.data.products));
-              setQrEntry({ phase: 'READY' });
-            } else if (catalogRes.data?.restaurant && catalogRes.data.restaurant.status !== 'ACTIVE') {
-              // The venue went inactive between session creation and the
-              // catalog fetch — hand the guest over to the branded screen.
               setCurrentRestaurant(catalogRes.data.restaurant);
-              setQrEntry({ phase: 'UNAVAILABLE', reason: restaurantUnavailableReason(catalogRes.data.restaurant.status) });
-            } else {
-              // Session is valid but the catalog is unreachable right now:
-              // stay on the menu shell — the 10s poll recovers the catalog.
-              setQrEntry({ phase: 'READY' });
+              setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
             }
           });
 
           // Kick off the guest's live order-status stream immediately.
           void refreshTenantData();
-          return;
+        } else {
+          // If session by token failed, load public menu directly by slug
+          api.getPublicRestaurantBySlug(slug).then((catalogRes) => {
+            if (catalogRes.success && catalogRes.data) {
+              setCategories(catalogRes.data.categories);
+              setProducts(catalogRes.data.products);
+              setOffers(catalogRes.data.offers);
+              if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
+                setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
+              }
+              setCurrentRestaurant(catalogRes.data.restaurant);
+              setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories, catalogRes.data.products));
+              setViewMode('CUSTOMER');
+            } else {
+              showToast('error', 'تعذر تحميل قائمة المطعم', catalogRes.error || 'رمز QR غير صالح');
+              setViewMode('SAAS_LANDING');
+            }
+          });
         }
-      }
-
-      // No session. An inactive tenant (suspended / maintenance / onboarding)
-      // still returns its public identity on the rejection — render the
-      // branded unavailable screen with the venue's own colours, logo and
-      // cover, never a generic error.
-      const inactiveMeta = sessionRes.data?.restaurant;
-      if (inactiveMeta && inactiveMeta.status !== 'ACTIVE') {
-        setCurrentRestaurant(inactiveMeta);
-        setViewMode('CUSTOMER');
-        setQrEntry({ phase: 'UNAVAILABLE', reason: restaurantUnavailableReason(inactiveMeta.status) });
-        return;
-      }
-
-      // No session for this table: fall back to the public catalog by slug,
-      // so a browser-opened /r/:slug (no QR) still shows the venue's identity.
-      const catalogRes = await api.getPublicRestaurantBySlug(slug);
-      if (catalogRes.success && catalogRes.data && catalogRes.data.products) {
-        setCategories(catalogRes.data.categories || []);
-        setProducts(catalogRes.data.products);
-        setOffers(catalogRes.data.offers || []);
-        if (catalogRes.data.tables && catalogRes.data.tables.length > 0) {
-          setTables(catalogRes.data.tables.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0)));
-        }
-        if (catalogRes.data.restaurant) setCurrentRestaurant(catalogRes.data.restaurant);
-        setSelectedCategoryId(resolveBestInitialCategory(catalogRes.data.categories || [], catalogRes.data.products));
-        setViewMode('CUSTOMER');
-        // A QR was scanned but the session could not be created: tell the
-        // guest exactly that, on a designed card, instead of the landing page.
-        setQrEntry(
-          hasQrInUrl
-            ? { phase: 'ERROR', kind: 'INVALID_QR', message: sessionRes.error || 'رمز QR غير صالح' }
-            : { phase: 'READY' }
-        );
-        return;
-      }
-
-      if (catalogRes.data?.restaurant && catalogRes.data.restaurant.status !== 'ACTIVE') {
-        setCurrentRestaurant(catalogRes.data.restaurant);
-        setViewMode('CUSTOMER');
-        setQrEntry({ phase: 'UNAVAILABLE', reason: restaurantUnavailableReason(catalogRes.data.restaurant.status) });
-        return;
-      }
-
-      if (isNetworkLevelError(sessionRes.error, sessionRes.statusCode) || isNetworkLevelError(catalogRes.error, catalogRes.statusCode)) {
-        setQrEntry({
-          phase: 'ERROR',
-          kind: 'NETWORK',
-          message: catalogRes.error || sessionRes.error || 'تعذر الاتصال بالخادم',
-        });
-      } else {
-        setQrEntry({
-          phase: 'ERROR',
-          kind: catalogRes.statusCode === 404 && !hasQrInUrl ? 'NOT_FOUND' : 'INVALID_QR',
-          message: catalogRes.error || sessionRes.error || (hasQrInUrl ? 'رمز QR غير صالح' : 'المطعم غير موجود'),
-        });
-      }
-      setViewMode('CUSTOMER');
-    })().catch(() => {
-      // Safety net: no unexpected throw may leave the guest stranded on the
-      // "preparing your table" splash — the composed error card always wins.
-      setQrEntry({ phase: 'ERROR', kind: 'NETWORK', message: 'حدث خطأ غير متوقع أثناء فتح القائمة. حاول مرة أخرى.' });
-      setViewMode('CUSTOMER');
-    });
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1526,8 +1382,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         viewMode,
         setViewMode,
         displayMode,
-        qrEntry,
-        retryQrEntry,
         selectedCategoryId,
         setSelectedCategoryId,
         searchQuery,

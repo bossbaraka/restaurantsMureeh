@@ -1,4 +1,4 @@
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { CartItem, Product } from '../../types/restaurant';
 import { useBrandTheme } from '../../theme/brandTheme';
@@ -19,14 +19,7 @@ import { CustomerGuideOverlay } from './CustomerGuideOverlay';
 import { OrderCompletedModal } from './OrderCompletedModal';
 import { RestaurantEntryExperience } from './RestaurantEntryExperience';
 import { DisplayMenu } from './DisplayMenu';
-import {
-  QrResolvingScreen,
-  RestaurantUnavailableScreen,
-  QrErrorScreen,
-  QrRequiredPrompt,
-} from './RestaurantEntryStates';
-import { restaurantUnavailableReason } from '../../context/RestaurantContext';
-import { UtensilsCrossed } from 'lucide-react';
+import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 
 /** Cards rendered above the fold get eager loading + network priority. */
 const PRIORITY_CARDS = 4;
@@ -91,8 +84,6 @@ export const CustomerLayout: React.FC = () => {
     activeTableId,
     setViewMode,
     displayMode,
-    qrEntry,
-    retryQrEntry,
   } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
@@ -270,34 +261,6 @@ export const CustomerLayout: React.FC = () => {
     [cartIndex, handleQuickAdd, updateCartItemQuantity]
   );
 
-  // The scroll thread — a hairline of the venue's own light that fills with
-  // the reading progress, so a guest always knows how far into the menu they
-  // are. Pure transform (compositor-only), rAF-throttled, passive listeners.
-  const threadRef = useRef<HTMLSpanElement | null>(null);
-  useEffect(() => {
-    const node = threadRef.current;
-    if (!node || typeof window === 'undefined') return;
-    let raf = 0;
-    const update = () => {
-      raf = 0;
-      const doc = document.documentElement;
-      const max = doc.scrollHeight - window.innerHeight;
-      const progress = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
-      node.style.transform = `scaleX(${progress.toFixed(4)})`;
-    };
-    const onScroll = () => {
-      if (!raf) raf = requestAnimationFrame(update);
-    };
-    update();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
   const handleSortChange = useCallback(
     (value: MenuSortKey) => updatePreferences({ sort: value }),
     [updatePreferences]
@@ -319,62 +282,37 @@ export const CustomerLayout: React.FC = () => {
     return <DisplayMenu />;
   }
 
-  // The QR journey is driven by `qrEntry` — each outcome renders a composed,
-  // branded screen instead of the old dead-ends: while the table session is
-  // being created the guest sees "preparing your table" (never the premature
-  // "invalid link" card), an inactive venue gets the branded unavailable
-  // screen, and a failed scan lands on a designed error card with retry and
-  // support — the guest is never bounced to the SaaS landing page.
   const isPublicRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/r/');
-  if (isPublicRoute) {
-    if (qrEntry.phase === 'RESOLVING') {
-      return <QrResolvingScreen restaurant={currentRestaurant} />;
-    }
-    if (qrEntry.phase === 'UNAVAILABLE') {
-      return (
-        <RestaurantUnavailableScreen
-          restaurant={currentRestaurant}
-          reason={qrEntry.reason}
-          onRetry={retryQrEntry}
-        />
-      );
-    }
-    if (qrEntry.phase === 'ERROR') {
-      return (
-        <QrErrorScreen
-          restaurant={currentRestaurant}
-          kind={qrEntry.kind}
-          message={qrEntry.message}
-          onRetry={retryQrEntry}
-        />
-      );
-    }
-    // READY, but no table was ever scanned: the catalog opened in a browser.
-    // The composed "scan your table" prompt replaces the old dead-end card.
-    if (!activeTableId) {
-      return <QrRequiredPrompt restaurant={currentRestaurant} />;
-    }
+  if (isPublicRoute && !activeTableId) {
+    return (
+      <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex items-center justify-center p-6 text-center" dir="rtl">
+        <div className="max-w-md p-8 rounded-3xl bg-luxury-900 border border-amber-500/40 space-y-4">
+          <div className="text-4xl">QR</div>
+          <h2 className="text-xl font-bold font-serif text-luxury-50">افتح القائمة عبر رمز QR</h2>
+          <p className="text-xs text-luxury-400 leading-relaxed">هذا الرابط غير صالح للدخول المباشر. امسح رمز QR الموجود على طاولة المطعم.</p>
+        </div>
+      </div>
+    );
   }
 
-  // A venue whose status is KNOWN to be non-active (e.g. suspended while the
-  // guest's 10s polls keep running) renders the same branded screen.
-  if (currentRestaurant && currentRestaurant.status && currentRestaurant.status !== 'ACTIVE') {
+  if (currentRestaurant?.status === 'SUSPENDED') {
     return (
-      <RestaurantUnavailableScreen
-        restaurant={currentRestaurant}
-        reason={restaurantUnavailableReason(currentRestaurant.status)}
-        onRetry={retryQrEntry}
-      />
+      <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex items-center justify-center p-6 text-center" dir="rtl">
+        <div className="max-w-md p-8 rounded-3xl bg-luxury-900 border border-red-500/40 space-y-4">
+          <div className="w-14 h-14 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold font-serif text-luxury-50">هذا المطعم غير متاح للطلب حالياً</h2>
+          <p className="text-xs text-luxury-400 leading-relaxed">
+            تم إيقاف الخدمة مؤقتاً لهذا المطعم. يرجى مراجعة إدارة المطعم أو الكاشير.
+          </p>
+        </div>
+      </div>
     );
   }
 
   return (
     <div className="customer-shell min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation" dir="rtl">
-      {/* Scroll thread — the reading-progress hairline of the venue's light. */}
-      <div className="customer-thread" aria-hidden="true">
-        <span ref={threadRef} className="customer-thread__fill" />
-      </div>
-
       {/* Entry experience shown right after a QR scan. Dismissing it hands the
           guest straight to the menu below, unchanged. */}
       {showWelcome && <RestaurantEntryExperience onEnter={handleDismissWelcome} />}
@@ -402,10 +340,9 @@ export const CustomerLayout: React.FC = () => {
           />
         </div>
 
-        {/* Section Title when browsing by category. Keyed by category so the
-            rule redraws itself on every "turn of the menu". */}
+        {/* Section Title when browsing by category */}
         {!isSearching && activeCategoryObj && (
-          <div className="menu-section-head" key={`section-head-${effectiveCategoryId}`}>
+          <div className="menu-section-head">
             <div>
               <h3 className="menu-section-head__title">{activeCategoryObj.name}</h3>
               {activeCategoryObj.nameEn && (
@@ -462,14 +399,7 @@ export const CustomerLayout: React.FC = () => {
             </div>
           </div>
         ) : (
-          <div
-            className="menu-grid"
-            data-layout={layout}
-            // Keyed by the active section (or the search flag): switching
-            // categories "turns the menu" — the cards re-enter with their
-            // staggered reveal, exactly like a printed menu being turned.
-            key={`grid-${isSearching ? 'search' : effectiveCategoryId}`}
-          >
+          <div className="menu-grid" data-layout={layout}>
             {visibleProducts.map((product, index) => (
               <ProductCard
                 key={product.id}
@@ -478,7 +408,6 @@ export const CustomerLayout: React.FC = () => {
                 cartQuantity={cartIndex.get(product.id)?.quantity || 0}
                 priority={index < PRIORITY_CARDS}
                 featured={product.id === featuredProductId}
-                revealIndex={index % 8}
                 onSelect={handleSelect}
                 onQuickAdd={handleQuickAdd}
                 onQuantityChange={handleQuantityChange}

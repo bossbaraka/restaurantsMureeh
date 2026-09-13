@@ -95,13 +95,6 @@ export function mapRestaurantRow(raw: any): Restaurant {
     logoPosition: typeof raw.logoPosition === 'string' && raw.logoPosition.trim() ? raw.logoPosition : '50% 50%',
     coverImage: absoluteAssetUrl(raw.coverImageUrl || raw.coverImage || '') || undefined,
     description: raw.description || '',
-    // Optional review stats — absent on legacy payloads; the entry layer
-    // hides its rating line rather than inventing numbers.
-    rating: raw.rating != null && Number.isFinite(Number(raw.rating)) ? Number(raw.rating) : undefined,
-    reviewCount:
-      raw.reviewCount != null && Number.isFinite(Number(raw.reviewCount))
-        ? Number(raw.reviewCount)
-        : undefined,
     phone: raw.phone || '',
     address: raw.address || '',
     // Keep geo fields undefined when unset so the map can fall back to the
@@ -598,10 +591,10 @@ class RestaurantApiService {
   }
 
   public async getPublicRestaurantBySlug(slug: string, qrToken?: string): Promise<ApiResponse<{
-    restaurant?: Restaurant;
-    categories?: Category[];
-    products?: Product[];
-    offers?: Offer[];
+    restaurant: Restaurant;
+    categories: Category[];
+    products: Product[];
+    offers: Offer[];
     tables?: RestaurantTable[];
   }>> {
     const cleanQr = (qrToken && qrToken.toLowerCase() !== 'default') ? qrToken : '';
@@ -624,17 +617,6 @@ class RestaurantApiService {
         statusCode: 200,
       };
     }
-    // An inactive tenant (suspended / maintenance / onboarding) still returns
-    // its public identity on the 403 so the guest device can render the
-    // branded "unavailable" screen instead of a dead error toast.
-    if (res.data && res.data.restaurant) {
-      return {
-        success: false,
-        error: res.error,
-        statusCode: res.statusCode,
-        data: { restaurant: mapRestaurantRow(res.data.restaurant) },
-      };
-    }
     return res as ApiResponse<never>;
   }
 
@@ -655,15 +637,11 @@ class RestaurantApiService {
   }
 
   // Create anonymous table session from a valid physical QR code.
-  //
-  // On rejection the server may still return the tenant's public identity
-  // (an inactive restaurant — the QR itself was valid), so `data.restaurant`
-  // can be present on a failed response while `session`/`table` stay absent.
   public async createTableSession(
     qrToken: string,
     slug?: string,
     restaurantId?: string
-  ): Promise<ApiResponse<{ session?: TableSession; table?: RestaurantTable; restaurant?: Restaurant }>> {
+  ): Promise<ApiResponse<{ session: TableSession; table: RestaurantTable; restaurant: Restaurant }>> {
     const res = await this.request<any>('POST', `/public/tables/qr/${encodeURIComponent(qrToken)}/session`, {
       auth: false,
       body: { slug, restaurantId },
@@ -673,14 +651,6 @@ class RestaurantApiService {
       const table = mapTableRow({ id: res.data.tableId, restaurantId: restaurant.id, number: res.data.tableNumber });
       const session = mapSessionRow({ ...res.data, status: 'ACTIVE' }, restaurant.id, res.data.tableId);
       return { success: true, data: { session, table, restaurant }, statusCode: 200 };
-    }
-    if (res.data && res.data.restaurant) {
-      return {
-        success: false,
-        error: res.error,
-        statusCode: res.statusCode,
-        data: { restaurant: mapRestaurantRow(res.data.restaurant) },
-      };
     }
     return res as ApiResponse<never>;
   }
