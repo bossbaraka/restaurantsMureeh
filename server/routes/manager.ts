@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/prisma';
+import { config } from '../config';
 import {
   requireAuth,
   requireTenantAccess,
@@ -18,7 +19,17 @@ import {
   effectiveSubscriptionState,
 } from '../services/plans';
 import { logAuditEvent } from '../services/audit';
-import { getStorage, deleteManagedAssets } from '../services/storage';
+import {
+  getStorage,
+  deleteManagedAssets,
+  assetNormalizerFor,
+  assetUrlResolverFor,
+  normalizeAssetReference,
+  resolveRestaurantAssets,
+  isStorageKey,
+  keyBelongsToRestaurant,
+  type NormalizedAsset,
+} from '../services/storage';
 import { generateQrToken, csvField, roundMoney, parsePagination, reconcileCashPayment } from '../utils/security';
 import { startOfDayInTimezone } from '../utils/datetime';
 import { paymentLimiter, orderStatusLimiter, staffMutationLimiter } from '../middleware/rateLimit';
@@ -260,6 +271,11 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
         revenue: roundMoney(r._sum.totalPrice ?? 0),
       }));
 
+    const dashboardRestaurant = resolveRestaurantAssets(
+      restaurant,
+      assetNormalizerFor(getStorage()),
+      assetUrlResolverFor(getStorage(), config.appUrl)
+    );
     return res.json({
       success: true,
       data: {
@@ -268,8 +284,10 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
           name: restaurant.name,
           nameEn: restaurant.nameEn,
           slug: restaurant.slug,
-          logo: restaurant.logoUrl,
-          coverImage: restaurant.coverImageUrl,
+          logo: dashboardRestaurant.logoUrl,
+          coverImage: dashboardRestaurant.coverImageUrl,
+          logoStoragePath: dashboardRestaurant.logoStoragePath,
+          coverStoragePath: dashboardRestaurant.coverStoragePath,
           currency: restaurant.currency,
           primaryColor: restaurant.primaryColor,
           accentColor: restaurant.accentColor,
@@ -2368,12 +2386,121 @@ router.put(
         });
       }
 
-      // Capture the pre-update asset URLs so replaced images can be cleaned up
-      // AFTER the database commit succeeds (never before — see rule 7).
+      // ------------------------------------------------------------------
+      // Image fields — the persistent-reference contract (STEP 10/11):
+      //
+      //   field omitted          -> UNCHANGED (Prisma `undefined`)
+      //   null / ''              -> EXPLICIT deletion (a separate,
+      //                              intentional operation)
+      //   managed URL or key     -> folded into the tenant-scoped object
+      //                              key (host-independent stable path)
+      //   external http(s) URL   -> persisted verbatim (stable by design)
+      //   data: / blob: / script -> REJECTED — never persisted
+      //
+      // The database holds the stable reference; the response below carries
+      // BOTH the resolved renderable URL and the reference itself.
+      // ------------------------------------------------------------------
+      const storage = getStorage();
+      const normalizer = assetNormalizerFor(storage);
+
+      // The persistable reference of a normalized asset: the stable key
+      // (managed) or the external URL — undefined for clear/reject. A
+      // `reject` never reaches here (400'd above); this keeps the union
+      // narrowed for the compiler as well as for runtime.
+      const persistableRef = (n: NormalizedAsset): string | undefined =>
+        n.kind === 'key' || n.kind === 'external' ? n.reference : undefined;
+
+      const normLogo: NormalizedAsset | undefined =
+        b.logo !== undefined ? normalizeAssetReference(b.logo, normalizer) : undefined;
+      const normCover: NormalizedAsset | undefined =
+        b.coverImage !== undefined ? normalizeAssetReference(b.coverImage, normalizer) : undefined;
+      const normMap: NormalizedAsset | undefined =
+        b.mapImage !== undefined ? normalizeAssetReference(b.mapImage, normalizer) : undefined;
+      const normGallery: NormalizedAsset[] | undefined =
+        b.galleryImages !== undefined
+          ? b.galleryImages.map((u) => normalizeAssetReference(u, normalizer))
+          : undefined;
+
+      const rejected = [
+        ...(normLogo ? [normLogo] : []),
+        ...(normCover ? [normCover] : []),
+        ...(normMap ? [normMap] : []),
+        ...(normGallery ?? []),
+      ].filter(
+        (n): n is Extract<NormalizedAsset, { kind: 'reject' }> => n.kind === 'reject'
+      );
+      if (rejected.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'رابط الصورة غير صالح — ارفع الصورة عبر زر الرفع من جهازك ثم احفظ مجدداً',
+          statusCode: 400,
+        });
+      }
+
+      // Tenant isolation: a managed storage key always lives under its owner
+      // tenant's folder (`restaurants/{tenantId}/…`). A tenant can never
+      // point its theme at another restaurant's asset or at a key outside
+      // its own namespace — the same boundary the upload/delete routes enforce.
+      const keyTenantError = (
+        n: NormalizedAsset | undefined,
+        label: string
+      ): string | null => {
+        if (n && n.kind === 'key' && !keyBelongsToRestaurant(n.reference, restaurantId)) {
+          return `رابط ${label} لا ينتمي لمطعمك`;
+        }
+        return null;
+      };
+      for (const [label, n] of [
+        ['الشعار', normLogo],
+        ['صورة الغلاف', normCover],
+        ['صورة الخريطة', normMap],
+      ] as const) {
+        const tenantError = keyTenantError(n, label);
+        if (tenantError) {
+          return res.status(400).json({
+            success: false,
+            error: tenantError,
+            statusCode: 400,
+          });
+        }
+      }
+      if (normGallery) {
+        for (const n of normGallery) {
+          if (n.kind === 'key' && !keyBelongsToRestaurant(n.reference, restaurantId)) {
+            return res.status(400).json({
+              success: false,
+              error: 'رابط صورة المعرض لا ينتمي لمطعمك',
+              statusCode: 400,
+            });
+          }
+        }
+      }
+
+      // Capture the pre-update references so replaced images can be cleaned
+      // up AFTER the database commit succeeds (never before — see rule 7).
       const existing = await prisma.restaurant.findUnique({
         where: { id: restaurantId },
-        select: { logoUrl: true, coverImageUrl: true, galleryImages: true },
+        select: {
+          logoUrl: true,
+          coverImageUrl: true,
+          mapImageUrl: true,
+          galleryImages: true,
+        },
       });
+
+      // Fold any legacy stored form (absolute local URL on any host, Supabase
+      // public URL, raw key) down to the object key for change comparison.
+      const foldToKey = (v: string | null | undefined): string | null => {
+        if (!v) return null;
+        const t = String(v).trim();
+        if (!t) return null;
+        if (isStorageKey(t)) return t;
+        try {
+          return storage.keyFromUrl(t);
+        } catch {
+          return null;
+        }
+      };
 
       const updated = await prisma.restaurant.update({
         where: { id: restaurantId },
@@ -2383,8 +2510,18 @@ router.put(
           description: b.description !== undefined ? b.description : undefined,
           phone: b.phone !== undefined ? b.phone : undefined,
           address: b.address !== undefined ? b.address : undefined,
-          logoUrl: b.logo !== undefined ? b.logo : undefined,
-          coverImageUrl: b.coverImage !== undefined ? b.coverImage : undefined,
+          // Omitted -> undefined (unchanged); explicit clear -> '';
+          // otherwise the stable reference itself (key or external URL).
+          logoUrl: normLogo
+            ? normLogo.kind === 'clear'
+              ? ''
+              : persistableRef(normLogo)
+            : undefined,
+          coverImageUrl: normCover
+            ? normCover.kind === 'clear'
+              ? null
+              : persistableRef(normCover)
+            : undefined,
           currency: b.currency !== undefined ? b.currency : undefined,
           language: b.language !== undefined ? b.language : undefined,
           timezone: b.timezone !== undefined ? b.timezone : undefined,
@@ -2396,7 +2533,11 @@ router.put(
           // so it is deliberately outside `hasCustomBrandingFields` above.
           businessType: b.businessType !== undefined ? b.businessType : undefined,
           promoVideoUrl: b.promoVideoUrl !== undefined ? b.promoVideoUrl : undefined,
-          galleryImages: b.galleryImages !== undefined ? b.galleryImages : undefined,
+          galleryImages: normGallery
+            ? normGallery
+                .map((g) => persistableRef(g) ?? '')
+                .filter((u) => u !== '')
+            : undefined,
           latitude: b.latitude !== undefined ? b.latitude : undefined,
           longitude: b.longitude !== undefined ? b.longitude : undefined,
           mapUrl:
@@ -2405,12 +2546,11 @@ router.put(
                 ? null
                 : b.mapUrl
               : undefined,
-          mapImageUrl:
-            b.mapImage !== undefined
-              ? b.mapImage === ''
-                ? null
-                : b.mapImage
-              : undefined,
+          mapImageUrl: normMap
+            ? normMap.kind === 'clear'
+              ? null
+              : persistableRef(normMap)
+            : undefined,
         },
       });
       await logAuditEvent({
@@ -2424,33 +2564,59 @@ router.put(
         details: `تم تحديث هوية المطعم البصرية`,
       });
 
-      // Best-effort cleanup of replaced assets — AFTER the DB commit. Only
-      // URLs owned by this tenant are touched; failures are logged, never
-      // thrown, so a storage hiccup cannot roll back the committed branding.
+      // Best-effort cleanup of replaced/deleted managed assets — AFTER the
+      // DB commit. Only keys owned by this tenant are touched; failures are
+      // logged, never thrown, so a storage hiccup cannot roll back the
+      // committed branding. Comparison is done on FOLDED keys so a legacy
+      // URL and the same asset's canonical key compare equal (no false
+      // "replacement" when the client round-trips an existing asset).
       if (existing) {
-        const replaced: Array<string | null | undefined> = [];
-        if (b.logo !== undefined && existing.logoUrl && b.logo !== existing.logoUrl) {
-          replaced.push(existing.logoUrl);
-        }
-        if (
-          b.coverImage !== undefined &&
-          existing.coverImageUrl &&
-          b.coverImage !== existing.coverImageUrl
-        ) {
-          replaced.push(existing.coverImageUrl);
-        }
-        if (b.galleryImages !== undefined) {
-          const next = new Set(b.galleryImages);
+        const replaced: string[] = [];
+        const replacedByField = (
+          n: NormalizedAsset | undefined,
+          existingRef: string | null | undefined
+        ) => {
+          if (!n) return; // omitted — unchanged, nothing to clean
+          const oldKey = foldToKey(existingRef);
+          if (!oldKey) return; // legacy external/unknown — nothing managed
+          const newKey =
+            n.kind === 'key' || n.kind === 'external'
+              ? foldToKey(n.reference)
+              : null;
+          if (oldKey !== newKey) replaced.push(String(existingRef));
+        };
+        replacedByField(normLogo, existing.logoUrl);
+        replacedByField(normCover, existing.coverImageUrl);
+        replacedByField(normMap, existing.mapImageUrl);
+        if (normGallery) {
+          const nextKeys = new Set(
+            normGallery
+              .filter(
+                (g): g is Extract<NormalizedAsset, { kind: 'key' | 'external' }> =>
+                  g.kind === 'key' || g.kind === 'external'
+              )
+              .map((g) => foldToKey(g.reference))
+              .filter((k): k is string => !!k)
+          );
           for (const old of existing.galleryImages) {
-            if (!next.has(old)) replaced.push(old);
+            const oldKey = foldToKey(old);
+            if (oldKey && !nextKeys.has(oldKey)) replaced.push(old);
           }
         }
         if (replaced.length > 0) {
-          void deleteManagedAssets(getStorage(), restaurantId, replaced);
+          void deleteManagedAssets(storage, restaurantId, replaced);
         }
       }
 
-      return res.json({ success: true, data: { restaurant: updated }, statusCode: 200 });
+      // Single contract for the response: renderable URLs in the existing
+      // fields + the stable references themselves in the additive
+      // `*StoragePath` fields (the { storagePath, url } persistence pair).
+      const restaurantPayload = resolveRestaurantAssets(
+        updated,
+        normalizer,
+        assetUrlResolverFor(storage, config.appUrl)
+      );
+      return res.json({ success: true, data: { restaurant: restaurantPayload }, statusCode: 200 });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر تحديث الهوية البصرية', statusCode: 500 });
     }

@@ -27,12 +27,22 @@ export interface Restaurant {
   name: string;
   nameEn: string;
   slug: string;
+  /** Renderable logo URL (resolved server-side from the stored reference). */
   logo: string;
+  /**
+   * Stable storage path persisted in PostgreSQL for the logo
+   * (`restaurants/{tenant}/{folder}/{uuid}{ext}`) — the `{ storagePath, url }`
+   * persistence pair; additive, absent on legacy payloads.
+   */
+  logoStoragePath?: string;
   /** Logo framing: 'cover' (crop-to-fill) or 'contain' (fit whole logo). */
   logoFit?: 'cover' | 'contain';
   /** Logo anchor inside its box, as a CSS object-position value (e.g. '50% 50%'). */
   logoPosition?: string;
+  /** Renderable cover URL (resolved server-side from the stored reference). */
   coverImage?: string;
+  /** Stable storage path persisted for the cover image (additive). */
+  coverStoragePath?: string;
   description: string;
   phone: string;
   address: string;
@@ -40,6 +50,8 @@ export interface Restaurant {
   longitude?: number;
   mapUrl?: string;
   mapImageUrl?: string;
+  /** Stable storage path persisted for the map image (additive). */
+  mapStoragePath?: string;
   currency: string;
   language: 'ar' | 'en';
   timezone: string;
@@ -54,6 +66,8 @@ export interface Restaurant {
   accentColor: string;
   promoVideoUrl?: string;
   galleryImages?: string[];
+  /** Stable storage paths persisted for each gallery image (additive). */
+  galleryStoragePaths?: string[];
   planId: string;
   customDomain?: string;
   createdAt: string;

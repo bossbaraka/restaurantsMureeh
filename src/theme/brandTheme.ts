@@ -381,7 +381,18 @@ export function applyBrandTheme(
   primary?: string | null,
   accent?: string | null,
   styleTarget?: { setProperty(name: string, value: string): void } | null,
-  options?: { presetId?: string; restaurantId?: string; slug?: string }
+  options?: {
+    presetId?: string;
+    restaurantId?: string;
+    slug?: string;
+    /**
+     * Set false for TRANSIENT paints (no server theme loaded yet): the CSS
+     * variables are applied for immediate styling, but nothing is written to
+     * localStorage — a fallback/default palette must never be persisted
+     * before the server theme has arrived to replace it.
+     */
+    persist?: boolean;
+  }
 ): BrandTokens {
   const cached = getCachedBrandTheme();
   const effectivePrimary = primary || (primary === undefined && cached?.primary) || BRAND_FALLBACK.primary;
@@ -397,8 +408,10 @@ export function applyBrandTheme(
     }
   }
 
-  // Persist to local storage if non-empty primary or accent was provided
-  if (primary || accent) {
+  // Persist to local storage only for REAL colors (a server theme or an
+  // explicit user pick) — never for the fallback palette used while no
+  // server theme has loaded yet.
+  if ((primary || accent) && options?.persist !== false) {
     setCachedBrandTheme({
       primary: tokens.primary,
       accent: tokens.accent,
@@ -430,19 +443,30 @@ export function useBrandTheme(
     [resolvedPrimary, resolvedAccent]
   );
 
+  // LOADING-STATE RULE: while the server theme has not loaded (both props
+  // undefined — UNINITIALIZED), the paint is transient: CSS variables only,
+  // no localStorage write. Only a real (server-provided) theme persists, so
+  // a fresh render can never be stuck on a persisted default.
+  const hasServerTheme = Boolean(primary || accent);
   useEffect(() => {
-    applyBrandTheme(resolvedPrimary, resolvedAccent, null, options);
-  }, [resolvedPrimary, resolvedAccent, options?.presetId, options?.restaurantId, options?.slug]);
+    applyBrandTheme(resolvedPrimary, resolvedAccent, null, {
+      ...options,
+      persist: hasServerTheme,
+    });
+  }, [resolvedPrimary, resolvedAccent, options?.presetId, options?.restaurantId, options?.slug, hasServerTheme]);
 
   return tokens;
 }
 
-// Eager initialization: apply cached theme immediately on script evaluation
+// Eager initialization: apply the previously-persisted server theme
+// immediately on script evaluation (fast first paint, colors only).
+// persist: false — the values are already in localStorage; rewriting them
+// here would also blur the "only real themes persist" rule.
 if (typeof window !== 'undefined') {
   try {
     const cached = getCachedBrandTheme();
     if (cached?.primary && cached?.accent) {
-      applyBrandTheme(cached.primary, cached.accent, null, cached);
+      applyBrandTheme(cached.primary, cached.accent, null, { ...cached, persist: false });
     }
   } catch {}
 }

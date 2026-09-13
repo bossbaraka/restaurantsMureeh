@@ -10,6 +10,13 @@ import {
   JWT_AUDIENCE,
   JWT_ALGORITHM,
 } from '../config';
+import {
+  getStorage,
+  assetNormalizerFor,
+  assetUrlResolverFor,
+  resolveRestaurantAssets,
+  resolveAssetReference,
+} from '../services/storage';
 import { generateSessionToken, roundMoney } from '../utils/security';
 import {
   publicOrderLimiter,
@@ -28,6 +35,38 @@ import {
 } from '../validation/schemas';
 
 const router = Router();
+
+// One shared instance of the asset-reference contract for every public
+// response: stable stored reference -> renderable URL (and back).
+// Lazy: the storage singleton is constructed on first use, never at import
+// time (keeps the module side-effect-free for tests and boot ordering).
+let assetContract: {
+  normalizer: ReturnType<typeof assetNormalizerFor>;
+  toUrl: (key: string) => string;
+} | null = null;
+function assetContractFor() {
+  if (!assetContract) {
+    const storage = getStorage();
+    assetContract = {
+      normalizer: assetNormalizerFor(storage),
+      toUrl: assetUrlResolverFor(storage, config.appUrl),
+    };
+  }
+  return assetContract;
+}
+const resolveRow = (row: {
+  logoUrl: string;
+  coverImageUrl: string | null;
+  mapImageUrl: string | null;
+  galleryImages: string[];
+}) => {
+  const { normalizer, toUrl } = assetContractFor();
+  return resolveRestaurantAssets(row, normalizer, toUrl);
+};
+const resolveAssetUrl = (value: string | null | undefined): string | null => {
+  const { normalizer, toUrl } = assetContractFor();
+  return resolveAssetReference(value, normalizer, toUrl).url;
+};
 
 async function getQrSession(sessionToken: unknown, restaurantId: string, tableId: string) {
   if (typeof sessionToken !== 'string' || !sessionToken) return null;
@@ -173,8 +212,12 @@ router.get('/restaurants', async (_req: Request, res: Response) => {
         name: true,
         nameEn: true,
         slug: true,
+        // The full image-field set so the single asset contract can resolve
+        // every reference (mapImageUrl/galleryImages included).
         logoUrl: true,
         coverImageUrl: true,
+        mapImageUrl: true,
+        galleryImages: true,
         primaryColor: true,
         accentColor: true,
         businessType: true,
@@ -185,17 +228,22 @@ router.get('/restaurants', async (_req: Request, res: Response) => {
     return res.json({
       success: true,
       data: {
-        restaurants: restaurants.map((r) => ({
-          id: r.id,
-          name: r.name,
-          nameEn: r.nameEn || r.name,
-          slug: r.slug,
-          logo: r.logoUrl,
-          coverImage: r.coverImageUrl,
-          primaryColor: r.primaryColor,
-          accentColor: r.accentColor,
-          businessType: r.businessType,
-        })),
+        restaurants: restaurants.map((r) => {
+          const assets = resolveRow(r);
+          return {
+            id: r.id,
+            name: r.name,
+            nameEn: r.nameEn || r.name,
+            slug: r.slug,
+            logo: assets.logoUrl,
+            coverImage: assets.coverImageUrl,
+            logoStoragePath: assets.logoStoragePath,
+            coverStoragePath: assets.coverStoragePath,
+            primaryColor: r.primaryColor,
+            accentColor: r.accentColor,
+            businessType: r.businessType,
+          };
+        }),
       },
       statusCode: 200,
     });
@@ -288,6 +336,10 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
       })),
     }));
 
+    // Theme images are returned through the single asset contract:
+    // renderable URL in the existing fields + the stable storage path in
+    // the additive `*StoragePath` fields (the persistence pair).
+    const catalogRestaurant = resolveRow(restaurant);
     return res.json({
       success: true,
       data: {
@@ -296,8 +348,10 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           name: restaurant.name,
           nameEn: restaurant.nameEn,
           slug: restaurant.slug,
-          logo: restaurant.logoUrl,
-          coverImage: restaurant.coverImageUrl,
+          logo: catalogRestaurant.logoUrl,
+          coverImage: catalogRestaurant.coverImageUrl,
+          logoStoragePath: catalogRestaurant.logoStoragePath,
+          coverStoragePath: catalogRestaurant.coverStoragePath,
           description: restaurant.description,
           phone: restaurant.phone,
           address: restaurant.address,
@@ -314,11 +368,13 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           latitude: restaurant.latitude,
           longitude: restaurant.longitude,
           mapUrl: restaurant.mapUrl,
-          mapImageUrl: restaurant.mapImageUrl,
+          mapImageUrl: catalogRestaurant.mapImageUrl,
+          mapStoragePath: catalogRestaurant.mapStoragePath,
           logoFit: restaurant.logoFit,
           logoPosition: restaurant.logoPosition,
           promoVideoUrl: restaurant.promoVideoUrl,
-          galleryImages: restaurant.galleryImages,
+          galleryImages: catalogRestaurant.galleryImages,
+          galleryStoragePaths: catalogRestaurant.galleryStoragePaths,
         },
         categories: restaurant.categories.map((c) => ({
           id: c.id,
@@ -405,7 +461,7 @@ router.get('/tables/qr/:qrToken', qrSessionLimiter, async (req: Request, res: Re
           slug: table.restaurant.slug,
           name: table.restaurant.name,
           nameEn: table.restaurant.nameEn,
-          logo: table.restaurant.logoUrl,
+          logo: resolveAssetUrl(table.restaurant.logoUrl),
           // The guest splash frames the venue by kind. It renders before the
           // full catalog fetch resolves, so the kind must ride along here too —
           // otherwise a café or bakery shows restaurant copy in that window.
@@ -497,6 +553,9 @@ router.post(
             slug: restaurant.slug,
             // Same reason as the QR-verify payload: this object becomes
             // `currentRestaurant` before the catalog fetch overwrites it.
+            // The logo rides along resolved so the guest splash never
+            // flashes an empty brand between session creation and catalog.
+            logo: resolveAssetUrl(restaurant.logoUrl),
             businessType: restaurant.businessType,
           },
         },

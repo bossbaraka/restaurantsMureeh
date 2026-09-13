@@ -43,10 +43,39 @@ export function apiConnectionUrl(path: string): string {
   return `${configuredApiUrl || ''}${normalized}`;
 }
 
+/**
+ * True when `value` is a stable storage path (object key) as persisted in
+ * PostgreSQL — `restaurants/{tenant}/{folder}/{uuid}{ext}`. A key is NOT
+ * renderable by itself: the server resolves it to a URL in every response,
+ * and this guard makes sure a stray key is never mangled into a bogus
+ * origin-relative URL by absoluteAssetUrl().
+ */
+export function isStorageKeyRef(value: unknown): boolean {
+  return (
+    typeof value === 'string' &&
+    value.trim().startsWith('restaurants/') &&
+    !value.includes('://') &&
+    !value.includes('//') &&
+    !value.includes('..')
+  );
+}
+
+/**
+ * Central client-side normalization of a server-provided asset value into a
+ * renderable src (the single client resolver — no component builds asset
+ * URLs on its own):
+ *   - absolute http(s) / data: / blob: values pass through untouched;
+ *   - relative paths (legacy `/uploads/…`) are resolved against the API
+ *     origin (split frontend/API deployments);
+ *   - bare storage keys are returned as '' (they are never renderable
+ *     client-side; the server always ships the resolved URL alongside).
+ */
 export function absoluteAssetUrl(url: string | null | undefined): string {
   if (!url) return '';
-  if (/^(https?:\/\/|data:|blob:)/i.test(url)) return url;
-  return `${API_ORIGIN}${url.startsWith('/') ? url : `/${url}`}`;
+  const v = String(url).trim();
+  if (isStorageKeyRef(v)) return '';
+  if (/^(https?:\/\/|data:|blob:)/i.test(v)) return v;
+  return `${API_ORIGIN}${v.startsWith('/') ? v : `/${v}`}`;
 }
 
 export const AUTH_TOKEN_KEY = 'merar_auth_token';
@@ -91,9 +120,15 @@ export function mapRestaurantRow(raw: any): Restaurant {
     nameEn: raw.nameEn || raw.name,
     slug: raw.slug,
     logo: absoluteAssetUrl(raw.logoUrl || raw.logo || ''),
+    // The persistence pair: the stable path PostgreSQL holds (additive —
+    // absent on legacy payloads). Never rendered directly; present so the
+    // client can tell a resolved URL from a raw row and round-trips stay
+    // byte-identical to what the server stores.
+    logoStoragePath: typeof raw.logoStoragePath === 'string' && raw.logoStoragePath ? raw.logoStoragePath : undefined,
     logoFit: raw.logoFit === 'contain' ? 'contain' : 'cover',
     logoPosition: typeof raw.logoPosition === 'string' && raw.logoPosition.trim() ? raw.logoPosition : '50% 50%',
     coverImage: absoluteAssetUrl(raw.coverImageUrl || raw.coverImage || '') || undefined,
+    coverStoragePath: typeof raw.coverStoragePath === 'string' && raw.coverStoragePath ? raw.coverStoragePath : undefined,
     description: raw.description || '',
     phone: raw.phone || '',
     address: raw.address || '',
@@ -103,6 +138,7 @@ export function mapRestaurantRow(raw: any): Restaurant {
     longitude: raw.longitude != null ? Number(raw.longitude) : undefined,
     mapUrl: raw.mapUrl || undefined,
     mapImageUrl: raw.mapImageUrl ? absoluteAssetUrl(raw.mapImageUrl) : undefined,
+    mapStoragePath: typeof raw.mapStoragePath === 'string' && raw.mapStoragePath ? raw.mapStoragePath : undefined,
     currency: raw.currency || '₪',
     language: (raw.language || 'ar') === 'en' ? 'en' : 'ar',
     timezone: raw.timezone || 'Asia/Jerusalem',
@@ -117,6 +153,10 @@ export function mapRestaurantRow(raw: any): Restaurant {
     accentColor: raw.accentColor || '#C5A880',
     promoVideoUrl: raw.promoVideoUrl || undefined,
     galleryImages: Array.isArray(raw.galleryImages) ? raw.galleryImages.map(absoluteAssetUrl) : [],
+    // Stable paths for the gallery images (same order as galleryImages).
+    galleryStoragePaths: Array.isArray(raw.galleryStoragePaths)
+      ? raw.galleryStoragePaths.filter((p: unknown) => typeof p === 'string' && p)
+      : undefined,
     planId: raw.planId || '',
     customDomain: raw.customDomain || undefined,
     createdAt: toISO(raw.createdAt),
