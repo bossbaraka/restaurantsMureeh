@@ -1,6 +1,7 @@
 import { config } from '../../config';
 import { LocalStorageDriver } from './local';
 import { SupabaseStorageDriver } from './supabase';
+import { absolutizePublicUrl } from './resolve';
 import type { StorageKind } from './helpers';
 
 // ============================================================
@@ -55,6 +56,54 @@ export { LocalStorageDriver } from './local';
 export { SupabaseStorageDriver } from './supabase';
 export type { CleanupResult } from './cleanup';
 export { deleteManagedAssets } from './cleanup';
+// The single asset-reference contract (stored stable reference <-> URL).
+export type {
+  AssetNormalizer,
+  NormalizedAsset,
+  ResolvedAsset,
+  RestaurantAssetRow,
+} from './resolve';
+export {
+  STORAGE_KEY_PREFIX,
+  absolutizePublicUrl,
+  isStorageKey,
+  normalizeAssetReference,
+  resolveAssetReference,
+  resolveRestaurantAssets,
+} from './resolve';
+
+/**
+ * Driver wiring for the asset-reference contract. Every route that
+ * persists or returns image fields goes through these two adapters so
+ * there is exactly one place that knows how the active storage driver
+ * maps keys <-> URLs.
+ */
+export function assetNormalizerFor(
+  storage: Pick<StorageService, 'keyFromUrl'>
+): import('./resolve').AssetNormalizer {
+  return {
+    keyFromUrl: (value: string) => {
+      try {
+        return storage.keyFromUrl(value);
+      } catch {
+        return null;
+      }
+    },
+  };
+}
+
+/**
+ * Build the key -> renderable URL resolver for API responses.
+ * Relative URLs from the local driver are absolutized with the
+ * deployment's public origin (APP_URL); the Supabase public URL is
+ * already absolute and passes through.
+ */
+export function assetUrlResolverFor(
+  storage: Pick<StorageService, 'getUrl'>,
+  publicOrigin: string
+): (key: string) => string {
+  return (key: string) => absolutizePublicUrl(storage.getUrl(key), publicOrigin);
+}
 
 let storageSingleton: StorageService | null = null;
 

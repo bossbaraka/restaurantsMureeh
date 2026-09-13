@@ -1,6 +1,13 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db/prisma';
+import { config } from '../config';
+import {
+  getStorage,
+  assetNormalizerFor,
+  assetUrlResolverFor,
+  resolveRestaurantAssets,
+} from '../services/storage';
 import { signToken, requireAuth } from '../middleware/auth';
 import {
   loginLimiter,
@@ -38,6 +45,36 @@ function publicUserShape(user: {
     avatar: user.avatar,
     createdAt: user.createdAt,
   };
+}
+
+// Resolve a persisted restaurant row's image fields through the single
+// asset contract so login/me responses carry renderable URLs (plus the
+// stable storage paths). Platform staff (no tenant) pass through as null.
+let authAssetContract: {
+  normalizer: ReturnType<typeof assetNormalizerFor>;
+  toUrl: (key: string) => string;
+} | null = null;
+function publicRestaurantShape(
+  restaurant: {
+    logoUrl: string;
+    coverImageUrl: string | null;
+    mapImageUrl: string | null;
+    galleryImages: string[];
+  } | null | undefined
+) {
+  if (!restaurant) return null;
+  if (!authAssetContract) {
+    const storage = getStorage();
+    authAssetContract = {
+      normalizer: assetNormalizerFor(storage),
+      toUrl: assetUrlResolverFor(storage, config.appUrl),
+    };
+  }
+  return resolveRestaurantAssets(
+    restaurant,
+    authAssetContract.normalizer,
+    authAssetContract.toUrl
+  );
 }
 
 // POST /api/auth/login — credential login for real accounts only.
@@ -168,7 +205,7 @@ router.post(
         success: true,
         data: {
           user: publicUserShape(user),
-          restaurant: user.restaurant,
+          restaurant: publicRestaurantShape(user.restaurant),
           token,
         },
         statusCode: 200,
@@ -223,7 +260,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
           role: user.role,
           avatar: user.avatar,
         },
-        restaurant: user.restaurant,
+        restaurant: publicRestaurantShape(user.restaurant),
       },
       statusCode: 200,
     });
@@ -360,7 +397,7 @@ router.post(
         success: true,
         data: {
           user: publicUserShape(user),
-          restaurant: user.restaurant,
+          restaurant: publicRestaurantShape(user.restaurant),
           token,
         },
         statusCode: 200,

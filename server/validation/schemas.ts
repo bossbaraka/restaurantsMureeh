@@ -109,6 +109,59 @@ const httpsUrl = (label: string) =>
     .optional();
 
 /**
+ * Image asset reference (branding/theme fields: logo, cover, map image,
+ * gallery entries).
+ *
+ * Accepts every form the persistence contract understands:
+ *   - the stable storage path returned by POST /api/uploads/image —
+ *     `restaurants/{tenant}/{folder}/{uuid}{ext}` — the canonical value
+ *     the database persists;
+ *   - same-origin paths (legacy `/uploads/…` rows);
+ *   - absolute http(s) URLs (external CDN/Unsplash references);
+ *   - empty string (explicit "remove this image").
+ *
+ * Rejects embedded base64 payloads (data:), blob:/script schemes and
+ * protocol-relative URLs — the same rules as httpsUrl, extended with the
+ * storage-path form. The ROUTE then applies the strict normalization
+ * contract (normalizeAssetReference) before anything is persisted, so
+ * this schema is the outer bound, not the single source of truth.
+ */
+const assetReference = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(4096, `${label} طويل جداً`)
+    .refine((value) => !value.toLowerCase().startsWith('data:'), {
+      message: `${label}: الصور المضمّنة كنص (base64) غير مسموحة — ارفع الصورة عبر زر الرفع من جهازك ثم احفظ`,
+    })
+    .refine(
+      (value) => {
+        if (!value) return true;
+        // Stable storage path (canonical persisted form).
+        if (value.startsWith('restaurants/')) {
+          return (
+            !value.includes('..') &&
+            !value.includes('\\') &&
+            !value.includes('://') &&
+            !value.includes('//')
+          );
+        }
+        // Same-origin path (e.g. /uploads/…). Protocol-relative `//host`
+        // URLs are rejected — they inherit the scheme and can point anywhere.
+        if (value.startsWith('/')) return !value.startsWith('//');
+        if (/^(?:blob|file|javascript|vbscript):/i.test(value)) return false;
+        try {
+          const url = new URL(value);
+          return url.protocol === 'https:' || url.protocol === 'http:';
+        } catch {
+          return false;
+        }
+      },
+      { message: `${label} يجب أن يكون رابطاً صالحاً للصورة` }
+    )
+    .optional();
+
+/**
  * Promo video URL (audit H-04).
  *
  * `promoVideoUrl` is rendered by the customer hero into an <iframe src> when
@@ -605,8 +658,8 @@ export const brandingSchema = z
     description: optionalText(2000),
     phone: optionalText(60),
     address: optionalText(300),
-    logo: httpsUrl('رابط الشعار'),
-    coverImage: httpsUrl('رابط الغلاف'),
+    logo: assetReference('رابط الشعار'),
+    coverImage: assetReference('رابط الغلاف'),
     currency: z.string().trim().max(8).optional(),
     language: z.enum(['ar', 'en']).optional(),
     timezone: z.string().trim().max(60).optional(),
@@ -648,16 +701,16 @@ export const brandingSchema = z
       .or(z.literal('')),
     // Static map/location image (uploaded via POST /api/uploads/image). Shows
     // guests the venue's location without an external map embed.
-    mapImage: httpsUrl('رابط صورة الخريطة'),
+    mapImage: assetReference('رابط صورة الخريطة'),
     // Venue kind: drives how the guest QR experience is composed. Kept in the
     // branding payload because that is the screen where a tenant describes
     // itself, and `.strict()` would otherwise reject the new field.
     businessType: z.enum(['RESTAURANT', 'CAFE', 'BAKERY']).optional(),
     promoVideoUrl: promoVideoUrl.optional().or(z.literal('')),
     // Gallery entries are rendered as <img src>; constrain them to the same
-    // https/relative-path rules used for logo and cover (audit H-04).
+    // asset-reference rules used for logo and cover (audit H-04).
     galleryImages: z
-      .array(httpsUrl('رابط صورة المعرض').unwrap())
+      .array(assetReference('رابط صورة المعرض').unwrap())
       .max(30)
       .optional(),
   })

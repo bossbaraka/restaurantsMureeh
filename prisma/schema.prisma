@@ -76,6 +76,25 @@ model Restaurant {
   name            String
   nameEn          String            @default("")
   slug            String            @unique
+  // IMAGE PERSISTENCE CONTRACT (single source of truth for theme assets)
+  // ------------------------------------------------------------------
+  // The image columns below store a STABLE REFERENCE, never a transient
+  // one. Valid stored forms:
+  //   1. the driver's object key — `restaurants/{restaurantId}/{folder}/
+  //      {uuid}{ext}` (built by buildStorageKey; tenant-scoped) — the
+  //      canonical form for every asset uploaded through
+  //      POST /api/uploads/image;
+  //   2. an absolute http(s) URL for external assets (CDN/Unsplash/…).
+  // NEVER stored: blob:/data: payloads, `/uploads/…` URLs, Supabase
+  // public URLs, or any value embedding the API's host name. On write
+  // the branding route folds managed URLs back into their key
+  // (normalizeAssetReference); on read every route resolves the stored
+  // reference to a renderable URL through the single contract in
+  // server/services/storage/resolve.ts (resolveRestaurantAssets) and
+  // returns the pair as `logoUrl` + `logoStoragePath` (and the cover /
+  // map / gallery equivalents). `logoUrl = ''` means "no logo" (the
+  // column is NOT NULL); an explicit clear writes '', an omitted field
+  // leaves the column untouched.
   logoUrl         String
   // How the uploaded logo is framed inside its fixed box (customer header,
   // manager sidebar, print menu). `logoFit` chooses crop vs. fit-whole;

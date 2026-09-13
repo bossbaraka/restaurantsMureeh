@@ -3,8 +3,11 @@ import multer from 'multer';
 import { requireManager, isPlatformUser } from '../middleware/auth';
 import { uploadLimiter } from '../middleware/rateLimit';
 import { logAuditEvent } from '../services/audit';
+import { config } from '../config';
 import {
+  assetUrlResolverFor,
   getStorage,
+  isStorageKey,
   normalizeKind,
   keyBelongsToRestaurant,
 } from '../services/storage';
@@ -120,13 +123,20 @@ router.post(
         ipAddress: req.ip,
       }).catch(() => undefined);
 
-      // `url` is the permanent public URL the client persists in PostgreSQL;
-      // `key` is the object key (needed for deletes and diagnostics).
+      // Response contract (single source of truth = the object key):
+      //   - `pathUrl` is the STABLE storage path to persist in PostgreSQL
+      //     (`restaurants/{tenant}/{folder}/{uuid}{ext}`) — host-independent.
+      //   - `url` is the renderable public URL for previews (absolutized
+      //     with APP_URL so split frontend/API deployments resolve it).
+      //   - `key` aliases `pathUrl` for diagnostics/deletes.
+      const renderableUrl = assetUrlResolverFor(getStorage(), config.appUrl)(
+        stored.key
+      );
       return res.json({
         success: true,
         data: {
-          url: stored.url,
-          pathUrl: stored.url,
+          url: renderableUrl,
+          pathUrl: stored.key,
           key: stored.key,
           filename: stored.key.split('/').pop(),
           size: stored.size,
@@ -159,10 +169,14 @@ router.post('/delete', requireManager(), async (req: Request, res: Response) => 
     }
 
     const storage = getStorage();
-    const key = storage.keyFromUrl(url);
+    // The client may send the stable storage path (key) directly, or a
+    // managed URL (legacy) — both resolve to a key before we act.
+    const key = isStorageKey(url.trim())
+      ? url.trim()
+      : storage.keyFromUrl(url);
 
-    // Not a URL this storage driver manages (external/CDN/legacy) — nothing
-    // to delete; report success so callers can treat it as a no-op.
+    // Not a reference this storage driver manages (external/CDN/legacy) —
+    // nothing to delete; report success so callers can treat it as a no-op.
     if (!key) {
       return res.json({
         success: true,

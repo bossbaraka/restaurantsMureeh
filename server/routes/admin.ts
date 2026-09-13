@@ -5,7 +5,12 @@ import { prisma } from '../db/prisma';
 import { config } from '../config';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
 import { logAuditEvent } from '../services/audit';
-import { getStorage } from '../services/storage';
+import {
+  getStorage,
+  assetNormalizerFor,
+  assetUrlResolverFor,
+  resolveRestaurantAssets,
+} from '../services/storage';
 import { validateBody, tenantStatusSchema, onboardSchema, trialActivationSchema } from '../validation/schemas';
 import {
   FREE_TRIAL_DAYS,
@@ -22,6 +27,28 @@ const router = Router();
 
 router.use(requireAuth);
 router.use(requirePlatformAdmin);
+
+// Single asset contract for tenant rows returned to platform admins
+// (renderable URL + stable storage path). Lazy: built on first use.
+let adminAssetContract: {
+  normalizer: ReturnType<typeof assetNormalizerFor>;
+  toUrl: (key: string) => string;
+} | null = null;
+function resolveTenantRow(row: {
+  logoUrl: string;
+  coverImageUrl: string | null;
+  mapImageUrl: string | null;
+  galleryImages: string[];
+}) {
+  if (!adminAssetContract) {
+    const storage = getStorage();
+    adminAssetContract = {
+      normalizer: assetNormalizerFor(storage),
+      toUrl: assetUrlResolverFor(storage, config.appUrl),
+    };
+  }
+  return resolveRestaurantAssets(row, adminAssetContract.normalizer, adminAssetContract.toUrl);
+}
 
 // GET /api/admin/overview
 router.get('/overview', async (req: Request, res: Response) => {
@@ -70,22 +97,27 @@ router.get('/overview', async (req: Request, res: Response) => {
         activeRestaurants,
         totalRevenue,
         activeSubscriptions: subscriptions.filter((s) => s.status === 'ACTIVE' || s.status === 'TRIAL').length,
-        restaurants: restaurants.map((r) => ({
-          id: r.id,
-          name: r.name,
-          nameEn: r.nameEn,
-          slug: r.slug,
-          logo: r.logoUrl,
-          coverImage: r.coverImageUrl,
-          status: r.status,
-          currency: r.currency,
-          planId: r.planId,
-          planName: r.subscription?.plan?.name || 'بدون باقة',
-          tablesCount: r._count.tables,
-          productsCount: r._count.products,
-          ordersCount: r._count.orders,
-          createdAt: r.createdAt.toISOString(),
-        })),
+        restaurants: restaurants.map((r) => {
+          const assets = resolveTenantRow(r);
+          return {
+            id: r.id,
+            name: r.name,
+            nameEn: r.nameEn,
+            slug: r.slug,
+            logo: assets.logoUrl,
+            coverImage: assets.coverImageUrl,
+            logoStoragePath: assets.logoStoragePath,
+            coverStoragePath: assets.coverStoragePath,
+            status: r.status,
+            currency: r.currency,
+            planId: r.planId,
+            planName: r.subscription?.plan?.name || 'بدون باقة',
+            tablesCount: r._count.tables,
+            productsCount: r._count.products,
+            ordersCount: r._count.orders,
+            createdAt: r.createdAt.toISOString(),
+          };
+        }),
         subscriptions,
         plans: plans.map(withTrialMeta),
         auditLogs: auditLogs.map((l) => ({
@@ -432,7 +464,9 @@ router.post('/onboard-restaurant', onboardLimiter, validateBody(onboardSchema), 
       details: `تم تسجيل وتهيئة مطعم جديد: ${newRest.name} (${newRest.slug}) مع ${totalTables} طاولة`,
     });
 
-    return res.status(201).json({ success: true, data: { restaurant: newRest }, statusCode: 201 });
+    return res
+      .status(201)
+      .json({ success: true, data: { restaurant: resolveTenantRow(newRest) }, statusCode: 201 });
   } catch (err) {
     console.error('Onboarding error:', err);
     return res.status(500).json({ success: false, error: 'تعذر إنشاء المطعم', statusCode: 500 });

@@ -2582,9 +2582,13 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-sheet--exiting {
   opacity: 0;
   transform: translate3d(calc(var(--entry-dir, 1) * 100%), 0, 0);
+  /* The sheet defocuses as it leaves — the layer "steps away" instead of
+     being deleted, and the menu beneath reads as the next depth. */
+  filter: blur(10px);
   transition:
     transform 460ms cubic-bezier(0.55, 0, 0.2, 1),
-    opacity 460ms ease-out;
+    opacity 460ms ease-out,
+    filter 460ms ease-out;
 }
 
 /* --------------------------------------------------------------------------
@@ -2595,6 +2599,11 @@ input[type='range'].saas-range::-moz-range-thumb {
   inset: 0;
   overflow: hidden;
   background: #0a0b0d;
+  /* One-shot cinematic reveal on first paint: the photograph settles in
+     from a whisper of scale, exactly once. The 30s Ken-Burns drift on the
+     <img> keeps running afterwards — reveal and drift never fight because
+     they animate different elements. */
+  animation: entry-cover-reveal 1250ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .entry-cover__img {
@@ -2709,25 +2718,33 @@ input[type='range'].saas-range::-moz-range-thumb {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  filter: blur(0px);
   transition:
     opacity 520ms ease,
     transform 720ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 480ms ease,
     visibility 0s linear 520ms;
 }
 .entry-stage[data-active='true'] {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+  filter: blur(0px);
   transition:
     opacity 520ms ease,
     transform 720ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 480ms ease,
     visibility 0s linear 0s;
 }
+/* Rack focus: the beat the guest just left blurs back, so the crossfade
+   reads as the camera shifting depth instead of two screens swapping. */
 .entry-stage--cover:not([data-active='true']) {
   transform: scale(1.08);
+  filter: blur(12px);
 }
 .entry-stage--identity:not([data-active='true']) {
   transform: translate3d(calc(var(--entry-dir, 1) * -16px), 26px, 0) scale(0.97);
+  filter: blur(12px);
 }
 
 /* --------------------------------------------------------------------------
@@ -2753,6 +2770,9 @@ input[type='range'].saas-range::-moz-range-thumb {
   /* The bar must never intercept the sheet's drag: only the skip button
      opts back into pointer events. */
   pointer-events: none;
+  /* First paint: the bar settles down from above, a quiet half-beat after
+     the cover reveal — the chrome "lands" on the photograph. */
+  animation: entry-drop 700ms cubic-bezier(0.16, 1, 0.3, 1) 140ms backwards;
 }
 
 .entry-topbar__brand {
@@ -2891,6 +2911,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   justify-content: center;
   gap: 0.55rem;
   pointer-events: none;
+  /* The rail floats up into place just after the cover has settled. */
+  animation: entry-fade-up 700ms cubic-bezier(0.16, 1, 0.3, 1) 420ms backwards;
 }
 
 /* The platform credit lives at the very bottom, under the rail: the
@@ -2907,6 +2929,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   letter-spacing: var(--entry-ls, 0em);
   color: rgb(255 255 255 / 0.38);
   pointer-events: none;
+  /* Fades in last of all — by the time it is visible, the cover is calm. */
+  animation: entry-fade 900ms ease 640ms backwards;
 }
 .entry-progress__label {
   font-size: 10px;
@@ -3018,6 +3042,9 @@ input[type='range'].saas-range::-moz-range-thumb {
     transparent 70%
   );
   filter: blur(20px);
+  /* The halo breathes in the same 4.8s cycle as the logo disc it wraps,
+     so the light and the object pulse as one living seal. */
+  animation: entry-halo-pulse 4.8s ease-in-out infinite;
 }
 .entry-logo__ring {
   position: absolute;
@@ -3094,6 +3121,9 @@ input[type='range'].saas-range::-moz-range-thumb {
     transparent 66%
   );
   filter: blur(28px);
+  /* The pool of light behind the identity swells on a slow 7s tide —
+     the room's light feels lit, not painted. */
+  animation: entry-glow-breathe 7s ease-in-out infinite;
 }
 
 .entry-identity {
@@ -3459,6 +3489,85 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 
 /* --------------------------------------------------------------------------
+   Cinematic enhancement layer — first-paint choreography + ambient life.
+   Every keyframe below is one-shot (`backwards` fill) or a slow, low-
+   amplitude ambient loop; nothing here moves layout, color or content —
+   only opacity, transform and blur, so the design stays untouched.
+   -------------------------------------------------------------------------- */
+
+/* The photograph settles in from a whisper of scale — one time, ever. */
+@keyframes entry-cover-reveal {
+  from {
+    opacity: 0;
+    transform: scale(1.055);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Persistent chrome lands after the cover: down from above... */
+@keyframes entry-drop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -14px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* ...and the rail floats up from below it. */
+@keyframes entry-fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+/* The platform credit simply fades in last — the quietest of the quiet. */
+@keyframes entry-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* The seal's halo pulses in the same 4.8s breath as the disc it wraps. */
+@keyframes entry-halo-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.055);
+  }
+}
+
+/* The identity pool of light swells on a slow 7s tide. */
+@keyframes entry-glow-breathe {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+/* --------------------------------------------------------------------------
    Short, wide viewports (landscape phones): both beats must stay fully
    composed — nothing may clip or scroll. The tenant description yields first
    (it re-appears in the menu hero), then the crest and the arrow compress.
@@ -3506,11 +3615,17 @@ input[type='range'].saas-range::-moz-range-thumb {
    movement is minimised.
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
+  .entry-cover,
   .entry-cover__img--ready,
   .entry-cover__sweep,
   .entry-mote,
+  .entry-topbar,
+  .entry-progress,
+  .entry-credit,
   .entry-logo-button,
   .entry-logo__ring,
+  .entry-logo__halo,
+  .entry-composition__glow,
   .entry-arrow__float,
   .entry-arrow__gesture,
   .entry-stage--cover[data-active='true'] .entry-invite__lead > *,
@@ -3536,10 +3651,12 @@ input[type='range'].saas-range::-moz-range-thumb {
   }
   .entry-sheet--exiting {
     transform: none;
+    filter: none;
     transition: opacity 180ms linear;
   }
   .entry-stage {
     transform: none !important;
+    filter: none !important;
     transition:
       opacity 180ms linear,
       visibility 0s linear 180ms;
@@ -3549,5 +3666,28 @@ input[type='range'].saas-range::-moz-range-thumb {
       opacity 180ms linear,
       visibility 0s linear 0s;
   }
+  .customer-shell--reveal {
+    animation: none !important;
+  }
 }
 
+
+/* --------------------------------------------------------------------------
+   Menu hand-off — the single soft arrival of the menu after the entry
+   experience hands the guest over (class is added once in CustomerLayout).
+   One-shot, 480ms, compositor-only; the menu itself is never restyled.
+   -------------------------------------------------------------------------- */
+.customer-shell--reveal {
+  animation: customer-menu-reveal 480ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes customer-menu-reveal {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}

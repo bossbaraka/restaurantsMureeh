@@ -29,6 +29,12 @@ const envSchema = z.object({
   TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   // CSP frame-ancestors value for the API/SPA responses.
   FRAME_ANCESTORS: z.string().min(1).default("'self'"),
+  // Public origin of this API service (https://api.example.com). Used to
+  // absolutize driver-relative asset URLs (local driver: /uploads/{key})
+  // in API responses so a guest on a different frontend origin
+  // (Netlify/Vercel SPA + Render API split deployment) can still load
+  // the tenant's images. Empty = same-origin deployment, relative URLs.
+  APP_URL: z.string().min(0).default(''),
   // Uploaded assets (logo/cover/gallery/dish images).
   // - `local`  → process filesystem under UPLOAD_DIR (dev/test only; refused
   //              in production unless explicitly opted-in, see below).
@@ -150,6 +156,7 @@ export const config = {
   frameAncestors: env.FRAME_ANCESTORS,
   storageDriver: resolvedStorageDriver,
   uploadDir: env.UPLOAD_DIR,
+  appUrl: env.APP_URL.replace(/\/+$/, ''),
   supabaseUrl: env.SUPABASE_URL,
   supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   supabaseBucket: env.SUPABASE_STORAGE_BUCKET,

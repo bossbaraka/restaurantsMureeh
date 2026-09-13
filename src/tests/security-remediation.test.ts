@@ -376,10 +376,12 @@ describe('PayloadTooLarge: base64 images are rejected, /uploads paths accepted',
 
   it('the upload route returns a storage URL/key, never base64 bytes', () => {
     const src = read('server/routes/uploads.ts');
-    // The route persists through StorageService and returns the permanent
-    // URL + object key — never the raw image bytes.
-    expect(src).toContain('url: stored.url');
+    // The route persists through StorageService and returns the renderable
+    // URL (resolved through the single asset contract) + the STABLE object
+    // key/path — never the raw image bytes.
+    expect(src).toContain('pathUrl: stored.key');
     expect(src).toContain('key: stored.key');
+    expect(src).toContain('assetUrlResolverFor');
     expect(src).not.toContain('url: base64Data');
     expect(src).not.toMatch(/toString\('base64'\)/);
   });

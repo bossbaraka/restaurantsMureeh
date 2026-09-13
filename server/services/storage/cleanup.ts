@@ -1,4 +1,5 @@
 import { keyBelongsToRestaurant } from './helpers';
+import { isStorageKey } from './resolve';
 import type { StorageService } from './index';
 
 // ============================================================
@@ -32,7 +33,16 @@ export async function deleteManagedAssets(
     if (!url || seen.has(url)) continue;
     seen.add(url);
 
-    const key = storage.keyFromUrl(url);
+    // Stored values may already BE the object key (canonical form) or a
+    // managed URL (legacy rows) — both map to a key before we act.
+    let key: string | null = isStorageKey(url) ? url : null;
+    if (!key) {
+      try {
+        key = storage.keyFromUrl(url);
+      } catch {
+        key = null;
+      }
+    }
     if (!key) {
       // Not a URL we manage (external/CDN/legacy) — nothing to delete.
       result.skipped.push(url);

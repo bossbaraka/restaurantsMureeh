@@ -48,7 +48,11 @@ describe('QR-only entry & one table per device', () => {
     expect(restaurantBlock).toContain('latitude: restaurant.latitude');
     expect(restaurantBlock).toContain('longitude: restaurant.longitude');
     expect(restaurantBlock).toContain('promoVideoUrl: restaurant.promoVideoUrl');
-    expect(restaurantBlock).toContain('galleryImages: restaurant.galleryImages');
+    // Theme media is published through the single asset contract (resolved
+    // renderable URLs), never as raw stored references.
+    expect(restaurantBlock).toContain('galleryImages: catalogRestaurant.galleryImages');
+    expect(restaurantBlock).toContain('mapImageUrl: catalogRestaurant.mapImageUrl');
+    expect(restaurantBlock).toContain('logo: catalogRestaurant.logoUrl');
   });
 
   it('stores venue location columns on the Restaurant model', () => {

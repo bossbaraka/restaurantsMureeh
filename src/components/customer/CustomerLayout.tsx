@@ -109,8 +109,14 @@ export const CustomerLayout: React.FC = () => {
     return true;
   });
 
+  // One-shot flag: when the entry experience hands the guest over, the menu
+  // below arrives with a single soft fade-up (a pure motion hand-off — the
+  // menu's own design is untouched).
+  const [menuReveal, setMenuReveal] = useState(false);
+
   const handleDismissWelcome = () => {
     setShowWelcome(false);
+    setMenuReveal(true);
     if (typeof window !== 'undefined' && currentRestaurant) {
       sessionStorage.setItem(`merar_welcome_seen_${currentRestaurant.slug}`, 'true');
     }
@@ -332,7 +338,10 @@ export const CustomerLayout: React.FC = () => {
   }
 
   return (
-    <div className="customer-shell min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation" dir="rtl">
+    <div
+      className={`customer-shell ${menuReveal ? 'customer-shell--reveal' : ''} min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation`}
+      dir="rtl"
+    >
       {/* Entry experience shown right after a QR scan. Dismissing it hands the
           guest straight to the menu below, unchanged. */}
       {showWelcome && <RestaurantEntryExperience onEnter={handleDismissWelcome} />}
