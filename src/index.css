@@ -2424,21 +2424,24 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-cover__scrim {
   position: absolute;
   inset: 0;
+  /* Poster-grade cinematic pass: a wide dark pool cradles the centred
+     composition (seal -> name -> tagline -> rating -> CTA) while the
+     photograph stays present at the edges, exactly like a printed cover. */
   background:
-    radial-gradient(72% 55% at 50% 58%, rgb(10 11 13 / 0.58) 0%, transparent 72%),
+    radial-gradient(86% 64% at 50% 54%, rgb(6 7 10 / 0.66) 0%, rgb(6 7 10 / 0.28) 52%, transparent 76%),
     linear-gradient(
       to top,
-      #0a0b0d 0%,
-      rgb(10 11 13 / 0.9) 26%,
-      rgb(10 11 13 / 0.36) 58%,
-      rgb(10 11 13 / 0.06) 80%,
+      #05060a 0%,
+      rgb(6 7 10 / 0.94) 30%,
+      rgb(6 7 10 / 0.5) 62%,
+      rgb(6 7 10 / 0.18) 84%,
       transparent 100%
     ),
     linear-gradient(
       to bottom,
-      rgb(10 11 13 / 0.74) 0%,
-      rgb(10 11 13 / 0.22) 24%,
-      transparent 48%
+      rgb(6 7 10 / 0.82) 0%,
+      rgb(6 7 10 / 0.3) 26%,
+      transparent 52%
     );
 }
 .entry-cover__vignette {
@@ -2687,15 +2690,23 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-credit {
   position: absolute;
   inset-inline: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.4rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.55rem);
   z-index: 4;
   margin: 0;
   text-align: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: var(--entry-ls, 0em);
-  color: rgb(255 255 255 / 0.38);
+  letter-spacing: 0.02em;
+  color: rgb(255 255 255 / 0.42);
   pointer-events: none;
+}
+/* "Powered by" whispers; the platform name carries the tenant accent. */
+.entry-credit__by {
+  color: rgb(255 255 255 / 0.42);
+}
+.entry-credit__brand {
+  color: var(--brand-accent-strong);
+  font-weight: 700;
 }
 .entry-progress__label {
   font-size: 10px;
@@ -2747,13 +2758,6 @@ input[type='range'].saas-range::-moz-range-thumb {
   width: 22px;
   height: 1px;
   background: rgb(var(--brand-accent-rgb) / 0.45);
-}
-.entry-eyebrow--identity {
-  font-size: 11px;
-}
-/* Latin script can take the classic wide-tracked eyebrow; Arabic never does. */
-.entry-root[dir='ltr'] .entry-eyebrow--identity {
-  letter-spacing: 0.22em;
 }
 
 /* --------------------------------------------------------------------------
@@ -2891,22 +2895,47 @@ input[type='range'].saas-range::-moz-range-thumb {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(0.7rem, 2.2vh, 1.15rem);
+  gap: clamp(0.85rem, 2.6vh, 1.3rem);
   max-width: min(92vw, 34rem);
   text-align: center;
 }
 .entry-identity__crest {
+  position: relative;
   display: grid;
   place-items: center;
-  width: clamp(76px, 20vw, 104px);
+  /* The seal is the focal object of the poster: large, gold-rimmed and
+     lit from behind, like a wax seal on a letterhead. */
+  width: clamp(118px, 33vw, 178px);
   aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--brand-soft-strong, #1b1f27) 55%, #12141a);
-  border: 1px solid rgb(255 255 255 / 0.18);
+  background:
+    radial-gradient(circle at 50% 34%, rgb(255 255 255 / 0.08) 0%, transparent 58%),
+    linear-gradient(168deg, #131722 0%, #0a0c12 58%, #07080c 100%);
+  border: 1.5px solid rgb(var(--brand-accent-rgb) / 0.9);
   box-shadow:
-    0 14px 34px rgb(0 0 0 / 0.5),
-    inset 0 1px 0 rgb(255 255 255 / 0.18);
+    0 0 0 4px rgb(var(--brand-accent-rgb) / 0.14),
+    0 0 46px 4px rgb(var(--brand-accent-rgb) / 0.3),
+    0 26px 60px rgb(0 0 0 / 0.62),
+    inset 0 1px 0 rgb(255 255 255 / 0.14);
+  animation: entry-breathe 5.6s ease-in-out infinite;
+}
+/* Letterhead caps inside the seal — the venue's Latin name set small and
+   wide-tracked under the mark, the way a printed crest carries its name. */
+.entry-identity__crest-name {
+  position: absolute;
+  inset-inline: 8%;
+  bottom: 11%;
+  text-align: center;
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: clamp(8px, 2.4vw, 11px);
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: rgb(var(--brand-accent-rgb) / 0.92);
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.8);
+  pointer-events: none;
 }
 .entry-identity__logo {
   width: 100%;
@@ -2917,30 +2946,63 @@ input[type='range'].saas-range::-moz-range-thumb {
   margin: 0;
   /* Arabic glyphs fall back to Tajawal per-character; Latin uses the
      display serif — one stack, no language branch. The name is the
-     strongest textual element of the layer: ~34px on a 375px phone,
-     up to 64px on a wide desktop viewport. */
+     loudest line of the poster: ~44px on a 375px phone, up to 74px on a
+     wide desktop viewport, in pure white with a soft bloom. */
   font-family: 'Cormorant Garamond', 'Tajawal', Georgia, serif;
-  font-size: clamp(2rem, 9vw, 4rem);
+  font-size: clamp(2.5rem, 11.5vw, 4.6rem);
   font-weight: 700;
-  line-height: 1.14;
+  line-height: 1.16;
   letter-spacing: -0.01em;
   color: #ffffff;
   text-wrap: balance;
-  text-shadow: 0 2px 26px rgb(0 0 0 / 0.6);
+  text-shadow:
+    0 0 16px rgb(255 255 255 / 0.32),
+    0 0 54px rgb(255 255 255 / 0.16),
+    0 3px 30px rgb(0 0 0 / 0.72);
 }
 .entry-identity__desc {
   margin: 0;
-  max-width: 32ch;
-  font-size: clamp(0.82rem, 3.5vw, 1rem);
-  line-height: 1.75;
-  color: rgb(246 248 251 / 0.72);
+  max-width: 30ch;
+  /* The tagline line of the poster: the tenant's own description set in
+     the brand accent, one quiet step under the name. */
+  font-size: clamp(0.95rem, 4.3vw, 1.22rem);
+  font-weight: 500;
+  line-height: 1.7;
+  color: color-mix(in srgb, var(--brand-accent-strong) 82%, #ffffff);
+  text-shadow: 0 1px 14px rgb(0 0 0 / 0.6);
   /* A long tenant description must never push the CTA off a small screen —
      the full text is one tap away in the menu hero anyway. */
   overflow: hidden;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+/* Guest rating — star, score and review count on one quiet line. Rendered
+   only when the tenant actually has review data. */
+.entry-identity__rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: clamp(1rem, 4.4vw, 1.22rem);
+  font-weight: 800;
+  color: rgb(255 255 255 / 0.94);
+  text-shadow: 0 1px 12px rgb(0 0 0 / 0.65);
+}
+.entry-identity__star {
+  width: 1.15em;
+  height: 1.15em;
+  fill: var(--brand-accent-strong);
+  filter: drop-shadow(0 0 8px rgb(var(--brand-accent-rgb) / 0.55));
+}
+.entry-identity__rating-value {
+  font-variant-numeric: tabular-nums;
+}
+.entry-identity__rating-count {
+  font-size: 0.82em;
+  font-weight: 600;
+  color: rgb(255 255 255 / 0.55);
 }
 
 /* --------------------------------------------------------------------------
@@ -3013,11 +3075,12 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-arrow-wrap {
   position: relative;
   z-index: 2;
-  margin-top: clamp(1.5rem, 5.5vh, 2.8rem);
+  margin-top: clamp(1rem, 3.4vh, 1.8rem);
   display: flex;
   justify-content: center;
-  /* Fades as the guest drags, so the gesture reads as progress. */
-  opacity: clamp(0.12, calc(1 - var(--entry-progress, 0) * 1.5), 1);
+  /* A quiet gesture teacher under the poster composition: present, but
+     never louder than the CTA. Fades as the guest drags. */
+  opacity: clamp(0.1, calc(0.8 - var(--entry-progress, 0) * 1.2), 0.8);
 }
 .entry-arrow__float {
   animation: entry-float 4.6s ease-in-out infinite alternate;
@@ -3027,7 +3090,7 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 .entry-arrow {
   display: block;
-  width: clamp(62px, 17vw, 88px);
+  width: clamp(46px, 12vw, 64px);
   height: auto;
   overflow: visible;
   transform: scaleX(var(--entry-dir, 1));
@@ -3062,7 +3125,7 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-action {
   position: relative;
   z-index: 3;
-  margin-top: clamp(0.9rem, 3.2vh, 1.7rem);
+  margin-top: clamp(1.3rem, 4.6vh, 2.4rem);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3070,9 +3133,9 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 .entry-action__hint {
   margin: 0;
-  font-size: clamp(0.72rem, 3vw, 0.82rem);
+  font-size: clamp(0.7rem, 2.9vw, 0.8rem);
   letter-spacing: var(--entry-ls, 0em);
-  color: rgb(246 248 251 / 0.58);
+  color: rgb(246 248 251 / 0.42);
 }
 .entry-action__button {
   position: relative;
@@ -3080,20 +3143,29 @@ input[type='range'].saas-range::-moz-range-thumb {
   isolation: isolate;
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.85rem;
   font-family: inherit;
-  font-size: clamp(0.85rem, 3.4vw, 0.98rem);
+  /* The poster's single loud object: a deep gold pill, lit from above and
+     glowing into the dark, exactly one per screen. */
+  font-size: clamp(0.98rem, 4.4vw, 1.16rem);
   font-weight: 800;
-  padding: 0.8rem 1.7rem;
+  padding: 1rem 2.5rem;
   border-radius: 999px;
   border: none;
-  background-image: var(--brand-fill);
+  background-image: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--brand-accent-strong) 42%, #ffffff) 0%,
+    var(--brand-accent-strong) 46%,
+    color-mix(in srgb, var(--brand-accent-strong) 74%, #000000) 100%
+  );
   color: var(--brand-ink);
   cursor: pointer;
   box-shadow:
-    0 18px 40px -18px var(--brand-glow),
-    0 0 0 1px rgb(var(--brand-primary-strong-rgb) / 0.35),
-    inset 0 1px 0 rgb(255 255 255 / 0.35);
+    0 20px 48px -16px var(--brand-glow),
+    0 0 36px -4px rgb(var(--brand-accent-rgb) / 0.45),
+    0 0 0 1px rgb(255 255 255 / 0.28),
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    inset 0 -3px 8px rgb(0 0 0 / 0.22);
   transition:
     transform 200ms ease,
     filter 200ms ease,
@@ -3131,14 +3203,16 @@ input[type='range'].saas-range::-moz-range-thumb {
   pointer-events: none;
 }
 .entry-action__chevron {
-  width: 1.05em;
-  height: 1.05em;
+  /* A long, thin travel arrow — shaft plus head — like the one drawn on
+     the poster next to the CTA label. */
+  width: 2.05em;
+  height: 1.45em;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.4;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  /* Mirrors the sheet: the chevron points the direction the guest travels. */
+  /* Mirrors the sheet: the arrow points the direction the guest travels. */
   transform: scaleX(var(--entry-dir, 1));
   transition: transform 220ms ease;
 }
@@ -3300,6 +3374,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   .entry-mote,
   .entry-logo-button,
   .entry-logo__ring,
+  .entry-identity__crest,
   .entry-arrow__float,
   .entry-arrow__gesture,
   .entry-stage--cover[data-active='true'] .entry-invite__lead > *,
@@ -3337,5 +3412,779 @@ input[type='range'].saas-range::-moz-range-thumb {
     transition:
       opacity 180ms linear,
       visibility 0s linear 0s;
+  }
+}
+
+/* ==========================================================================
+   RESTAURANT ENTRY STATES — the composed screens around the QR journey
+   --------------------------------------------------------------------------
+   Four states, one design language (matching the `.entry-*` layer):
+     .qrstate-scanner / --resolving   "preparing your table" while the
+                                       table session is being created
+     --unavailable                    suspended / maintenance / onboarding
+     --error                          invalid QR / not found / no network
+     --required                       catalog opened in a browser, no QR
+   Fully isolated: every selector below is `.qrstate-*`, nothing existing is
+   redefined or depended upon. Palette is the tenant's own `--brand-*` tokens
+   on the same #0A0B0D canvas as the menu, so no state screen reads as a
+   foreign platform error. Mobile-first (360px) with clamp() caps, safe-area
+   aware, deterministic motion, and every animation lives inside
+   (prefers-reduced-motion: no-preference) — reduced-motion guests get the
+   same content, statically composed.
+   ========================================================================== */
+
+.qrstate-root {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #0a0b0d; /* identical to the customer menu canvas */
+  color: #f6f8fb;
+  font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(20px, env(safe-area-inset-top))
+    max(20px, env(safe-area-inset-right))
+    max(20px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Ambience — the venue's own photography, or the brand-built fallback
+   -------------------------------------------------------------------------- */
+.qrstate-ambient {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #0a0b0d;
+}
+
+.qrstate-ambient__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(1.02) contrast(1.01) brightness(0.86);
+  user-select: none;
+}
+
+/* Legibility scrim. The dimmed variant (unavailable screen) drops the photo
+   further so the status reads as a pause, not an alarm. */
+.qrstate-ambient__scrim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(76% 58% at 50% 52%, rgb(10 11 13 / 0.62) 0%, transparent 74%),
+    linear-gradient(to top, #0a0b0d 0%, rgb(10 11 13 / 0.92) 34%, rgb(10 11 13 / 0.5) 68%, rgb(10 11 13 / 0.66) 100%);
+}
+.qrstate-ambient__scrim--dimmed {
+  background:
+    radial-gradient(76% 58% at 50% 52%, rgb(10 11 13 / 0.8) 0%, transparent 76%),
+    linear-gradient(to top, #0a0b0d 0%, rgb(10 11 13 / 0.96) 38%, rgb(10 11 13 / 0.72) 70%, rgb(10 11 13 / 0.82) 100%);
+}
+
+.qrstate-ambient__fallback {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(118% 88% at 20% 10%, rgb(var(--brand-primary-rgb) / 0.44) 0%, transparent 62%),
+    radial-gradient(104% 78% at 84% 88%, rgb(var(--brand-accent-rgb) / 0.34) 0%, transparent 60%),
+    linear-gradient(158deg, #101319 0%, #0a0b0d 54%, #0d1016 100%);
+}
+.qrstate-ambient__fallback--dimmed {
+  opacity: 0.55;
+}
+
+.qrstate-ambient__vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(118% 88% at 50% 44%, transparent 36%, rgb(0 0 0 / 0.5) 100%);
+}
+
+/* Ambient motes — a fixed field of a dozen slow lights, never a particle system. */
+.qrstate-motes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.qrstate-mote {
+  position: absolute;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.55);
+  box-shadow: 0 0 10px 2px rgb(var(--brand-primary-rgb) / 0.3);
+  animation-name: qrstate-mote;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+/* --------------------------------------------------------------------------
+   Content stack
+   -------------------------------------------------------------------------- */
+.qrstate-stack {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 26rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+/* Crest — the venue's identity anchor (logo or monogram) in a brand ring. */
+.qrstate-crest {
+  position: relative;
+  display: inline-flex;
+}
+.qrstate-crest__halo {
+  position: absolute;
+  inset: -22%;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, rgb(var(--brand-primary-rgb) / 0.32), transparent 72%);
+  pointer-events: none;
+}
+.qrstate-crest__disc {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  background:
+    radial-gradient(120% 120% at 30% 18%, rgb(255 255 255 / 0.14), transparent 46%),
+    linear-gradient(160deg, #171a20 0%, #0e1014 100%);
+  border: 1px solid rgb(var(--brand-primary-rgb) / 0.5);
+  box-shadow:
+    0 0 0 5px rgb(var(--brand-primary-rgb) / 0.08),
+    0 18px 40px -18px rgb(0 0 0 / 0.9),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+  overflow: hidden;
+}
+.qrstate-crest--lg .qrstate-crest__disc {
+  width: 88px;
+  height: 88px;
+}
+.qrstate-crest__img {
+  width: 82%;
+  height: 82%;
+  border-radius: 999px;
+}
+.qrstate-crest__monogram {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--brand-primary-strong);
+  text-shadow: 0 2px 10px rgb(var(--brand-primary-rgb) / 0.4);
+}
+.qrstate-crest--lg .qrstate-crest__monogram {
+  font-size: 2.4rem;
+}
+
+/* The scanner — a decorative QR glyph inside four corner brackets, with a
+   slow light pass reading as "scanning" (motion only, no claim of decoding). */
+.qrstate-scanner {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.qrstate-scanner__corner {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border: 2.5px solid rgb(var(--brand-primary-rgb) / 0.9);
+  border-radius: 3px;
+}
+.qrstate-scanner__corner--tl { top: 0; inset-inline-start: 0; border-inline-end: 0; border-bottom: 0; }
+.qrstate-scanner__corner--tr { top: 0; inset-inline-end: 0; border-inline-start: 0; border-bottom: 0; }
+.qrstate-scanner__corner--bl { bottom: 0; inset-inline-start: 0; border-inline-end: 0; border-top: 0; }
+.qrstate-scanner__corner--br { bottom: 0; inset-inline-end: 0; border-inline-start: 0; border-top: 0; }
+.qrstate-scanner__glyph {
+  width: 84px;
+  height: 84px;
+  color: var(--brand-primary-strong);
+  filter: drop-shadow(0 0 14px rgb(var(--brand-primary-rgb) / 0.35));
+}
+.qrstate-scanner__line {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 8%;
+  height: 2.5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgb(var(--brand-primary-rgb) / 0.95) 30%, rgb(255 255 255 / 0.85) 50%, rgb(var(--brand-primary-rgb) / 0.95) 70%, transparent);
+  box-shadow: 0 0 16px 2px rgb(var(--brand-primary-rgb) / 0.5);
+  animation: qrstate-scan 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+/* The card — one composed glass surface every state shares. */
+.qrstate-card {
+  width: 100%;
+  text-align: center;
+  padding: 1.6rem 1.35rem 1.5rem;
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgb(20 23 29 / 0.88) 0%, rgb(12 13 17 / 0.94) 100%);
+  border: 1px solid rgb(var(--brand-primary-rgb) / 0.26);
+  box-shadow:
+    0 30px 70px -30px rgb(0 0 0 / 0.95),
+    0 0 46px -18px rgb(var(--brand-primary-rgb) / 0.35),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+}
+/* The resolving card reserves the hint's height so the slow-connection line
+   appearing never shifts the layout. */
+.qrstate-card--resolving {
+  min-height: 15.5rem;
+}
+
+.qrstate-venue {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--brand-primary-strong);
+}
+
+.qrstate-title {
+  margin: 0;
+  font-size: clamp(1.2rem, 4.8vw, 1.45rem);
+  font-weight: 800;
+  line-height: 1.45;
+  color: #f6f8fb;
+  max-width: 22rem;
+}
+
+.qrstate-sub {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.95;
+  color: #b2bccd;
+  max-width: 21rem;
+}
+
+.qrstate-servermsg {
+  margin: 0.15rem 0 0;
+  padding: 0.5rem 0.85rem;
+  border-radius: 12px;
+  background: rgb(10 11 13 / 0.6);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  font-size: 0.72rem;
+  line-height: 1.7;
+  color: #8590a5;
+  max-width: 21rem;
+}
+
+.qrstate-hint {
+  margin-top: 0.3rem;
+  font-size: 0.7rem;
+  line-height: 1.7;
+  color: #8590a5;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.qrstate-hint--on {
+  opacity: 1;
+}
+
+/* Indeterminate progress — pure decoration under the resolving copy. */
+.qrstate-progress {
+  margin-top: 0.9rem;
+  width: min(11rem, 80%);
+  height: 3px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.08);
+  overflow: hidden;
+  direction: ltr; /* the fill's travel direction is visual, not reading order */
+}
+.qrstate-progress__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 42%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--brand-primary-strong), var(--brand-accent-strong), transparent);
+  animation: qrstate-progress 1.7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+/* Status icon — one tinted disc per state. */
+.qrstate-statusicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  margin-bottom: 0.2rem;
+}
+.qrstate-statusicon__glyph {
+  width: 26px;
+  height: 26px;
+}
+.qrstate-statusicon__qr {
+  width: 28px;
+  height: 28px;
+}
+.qrstate-statusicon--brand {
+  background: rgb(var(--brand-primary-rgb) / 0.12);
+  border: 1px solid rgb(var(--brand-primary-rgb) / 0.4);
+  color: var(--brand-primary-strong);
+  box-shadow: 0 0 26px -8px rgb(var(--brand-primary-rgb) / 0.5);
+}
+.qrstate-statusicon--muted {
+  background: rgb(var(--brand-primary-rgb) / 0.08);
+  border: 1px solid rgb(var(--brand-primary-rgb) / 0.3);
+  color: var(--brand-primary-strong);
+}
+.qrstate-statusicon--error {
+  background: rgb(248 113 113 / 0.1);
+  border: 1px solid rgb(248 113 113 / 0.32);
+  color: #fca5a5;
+}
+
+/* Actions */
+.qrstate-actions {
+  margin-top: 0.85rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.qrstate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1.1rem;
+  border-radius: 15px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: filter 0.2s ease, transform 0.15s ease, background-color 0.2s ease;
+}
+.qrstate-btn__icon {
+  width: 15px;
+  height: 15px;
+}
+.qrstate-btn--primary {
+  background-image: var(--brand-fill);
+  color: var(--brand-ink);
+  box-shadow: 0 14px 30px -16px var(--brand-glow);
+}
+.qrstate-btn--primary:hover {
+  filter: brightness(1.08);
+}
+.qrstate-btn--primary:active {
+  transform: scale(0.97);
+}
+.qrstate-btn--ghost {
+  background: transparent;
+  border-color: rgb(var(--brand-primary-rgb) / 0.4);
+  color: var(--brand-primary-strong);
+}
+.qrstate-btn--ghost:hover {
+  background: rgb(var(--brand-primary-rgb) / 0.1);
+}
+.qrstate-btn:focus-visible {
+  outline: 2px solid var(--brand-primary-strong);
+  outline-offset: 2px;
+}
+
+/* Footer — platform credit + support, the smallest elements of the layer. */
+.qrstate-footer {
+  position: relative;
+  z-index: 10;
+  margin-top: auto;
+  padding-top: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+.qrstate-support {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  background: rgb(0 114 188 / 0.14);
+  border: 1px solid rgb(0 114 188 / 0.38);
+  color: #38bdf8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+.qrstate-support:hover {
+  background: rgb(0 114 188 / 0.24);
+}
+.qrstate-support__icon {
+  width: 12px;
+  height: 12px;
+}
+.qrstate-credit {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: #5a6478;
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   Motion — all of it, and only in the no-preference media query
+   -------------------------------------------------------------------------- */
+@keyframes qrstate-mote {
+  from {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.14;
+  }
+  50% {
+    opacity: 0.68;
+  }
+  to {
+    transform: translate3d(var(--qrstate-mote-drift, 8px), -26px, 0);
+    opacity: 0.18;
+  }
+}
+
+@keyframes qrstate-scan {
+  from {
+    top: 9%;
+  }
+  to {
+    top: 89%;
+  }
+}
+
+@keyframes qrstate-progress {
+  0% {
+    left: -42%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+@keyframes qrstate-drift {
+  from {
+    transform: scale(1.05) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.12) translate3d(1.2%, -1%, 0);
+  }
+}
+
+@keyframes qrstate-halo {
+  from {
+    opacity: 0.7;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .qrstate-ambient__img {
+    animation: qrstate-drift 34s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  }
+  .qrstate-crest__halo {
+    animation: qrstate-halo 3.4s ease-in-out infinite alternate;
+  }
+}
+
+/* Reduced motion: the composed content stays, the motion leaves. */
+@media (prefers-reduced-motion: reduce) {
+  .qrstate-mote {
+    animation: none;
+    opacity: 0.35;
+  }
+  .qrstate-scanner__line {
+    animation: none;
+    top: 49%;
+  }
+  .qrstate-progress__fill {
+    animation: none;
+    left: 29%;
+  }
+  .qrstate-hint {
+    transition: none;
+  }
+}
+
+/* ==========================================================================
+   CUSTOMER HERO — cinematic drift + hairline brand frame
+   --------------------------------------------------------------------------
+   The hero photograph breathes with a very slow Ken-Burns drift so the menu
+   page reads as a place, not a document; the frame is painted from the
+   tenant's `--brand-*` tokens (hairline + four corner ticks), so every venue
+   dresses its own hero in its own colour. Motion lives only in the
+   no-preference query; reduced-motion guests get a composed still.
+   ========================================================================== */
+
+.customer-hero__img {
+  filter: saturate(1.03) contrast(1.01);
+}
+
+.customer-hero__frame {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  border-radius: 1rem; /* matches the hero's rounded-2xl */
+  border: 1px solid rgb(var(--brand-primary-rgb) / 0.32);
+  box-shadow:
+    inset 0 0 44px -20px rgb(var(--brand-primary-rgb) / 0.4),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+.customer-hero__frame::before,
+.customer-hero__frame::after {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-color: rgb(var(--brand-primary-rgb) / 0.85);
+  border-style: solid;
+  border-width: 0;
+}
+.customer-hero__frame::before {
+  top: 9px;
+  inset-inline-start: 9px;
+  border-top-width: 2px;
+  border-inline-start-width: 2px;
+  border-top-start-radius: 8px;
+}
+.customer-hero__frame::after {
+  bottom: 9px;
+  inset-inline-end: 9px;
+  border-bottom-width: 2px;
+  border-inline-end-width: 2px;
+  border-bottom-end-radius: 8px;
+}
+
+@keyframes customer-hero-drift {
+  from {
+    transform: scale(1.05) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.13) translate3d(1.4%, -1.1%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .customer-hero__img {
+    animation: customer-hero-drift 26s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+  }
+}
+
+/* ==========================================================================
+   LUXURY MOTION LAYER — constellation, thread of light, menu turn
+   --------------------------------------------------------------------------
+   The signature motion of the post-QR journey, in one visual language:
+     - PlexusField (canvas, .entry-plexus / .qrstate-plexus) — a slow network
+       of light in the tenant's own colour ("شبكة النجوم").
+     - The Thread of Light (.entry-thread) — one luminous hairline that draws
+       itself across the base of the entry layer; the menu page continues the
+       same idea as the scroll thread (.customer-thread).
+     - Menu turn — cards settle in with a stagger as they enter the viewport,
+       and the section rule redraws itself on every category change.
+   Everything animates ONLY inside (prefers-reduced-motion: no-preference);
+   reduced-motion guests get the same composition, statically. The canvas
+   field itself renders one static frame under reduced motion (its JS checks
+   the same media query).
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Constellation field (canvas is drawn by PlexusField; these rules only
+   position it in the layer)
+   -------------------------------------------------------------------------- */
+.entry-plexus {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+.qrstate-plexus {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* --------------------------------------------------------------------------
+   The Thread of Light — the entry layer's signature line
+   -------------------------------------------------------------------------- */
+.entry-thread {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  height: 26px;
+  z-index: 6;
+  pointer-events: none;
+}
+.entry-thread__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.entry-thread__path {
+  fill: none;
+  stroke: url(#entry-thread-grad);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 120 80;
+  filter: drop-shadow(0 0 6px rgb(var(--brand-primary-rgb) / 0.55));
+  animation: entry-thread-draw 7.5s linear infinite;
+}
+
+@keyframes entry-thread-draw {
+  from {
+    stroke-dashoffset: 200;
+  }
+  to {
+    stroke-dashoffset: -200;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Menu turn — staggered card reveal + self-drawing section rule
+   The hidden state lives ONLY in the no-preference query, so reduced-motion
+   (and JS-less) paint is always the fully composed menu.
+   -------------------------------------------------------------------------- */
+@keyframes menu-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes menu-rule-draw {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes menu-head-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .menu-card--reveal {
+    opacity: 0;
+  }
+  /* 'backwards' (not 'both'): the from-state applies during the stagger
+     delay, and after the entrance the card is back on its normal styles —
+     so hover transforms keep working. */
+  .menu-card--in {
+    animation: menu-card-in 0.62s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--reveal-i, 0) * 55ms);
+  }
+  .menu-section-head {
+    animation: menu-head-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .menu-section-head__rule {
+    transform-origin: right center;
+    animation: menu-rule-draw 0.9s cubic-bezier(0.65, 0, 0.35, 1) 0.12s backwards;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Scroll thread — the reading-progress hairline of the venue's light
+   -------------------------------------------------------------------------- */
+.customer-thread {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  z-index: 70;
+  pointer-events: none;
+  background: rgb(var(--brand-primary-rgb) / 0.08);
+}
+.customer-thread__fill {
+  position: absolute;
+  inset: 0;
+  transform: scaleX(0);
+  transform-origin: right center; /* RTL: the thread grows from the reading start */
+  background: linear-gradient(
+    to left,
+    var(--brand-accent-strong),
+    var(--brand-primary-strong) 55%,
+    rgb(255 255 255 / 0.9)
+  );
+  box-shadow: 0 0 12px rgb(var(--brand-primary-rgb) / 0.6);
+}
+
+/* --------------------------------------------------------------------------
+   Hero depth parallax — the wrapper carries the scroll offset, the image
+   keeps its slow drift; the image is sized taller than the frame so the
+   offset never exposes an edge.
+   -------------------------------------------------------------------------- */
+.customer-hero__parallax {
+  position: absolute;
+  inset: 0;
+}
+.customer-hero__parallax .customer-hero__img {
+  position: absolute;
+  top: -12%;
+  left: 0;
+  width: 100%;
+  height: 124%;
+}
+
+/* --------------------------------------------------------------------------
+   Reduced motion — the constellation becomes a still, the thread rests
+   -------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .entry-thread__path {
+    animation: none;
+    stroke-dasharray: none;
+    opacity: 0.55;
   }
 }

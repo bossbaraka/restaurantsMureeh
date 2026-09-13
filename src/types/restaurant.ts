@@ -34,6 +34,14 @@ export interface Restaurant {
   logoPosition?: string;
   coverImage?: string;
   description: string;
+  /**
+   * Average guest rating (0–5), when the tenant has reviews. Optional —
+   * legacy API payloads and the DB schema predate the column, so screens
+   * must render fine without it (the rating line simply stays hidden).
+   */
+  rating?: number;
+  /** Number of guest reviews the rating is based on. */
+  reviewCount?: number;
   phone: string;
   address: string;
   latitude?: number;

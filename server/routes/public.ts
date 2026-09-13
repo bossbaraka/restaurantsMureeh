@@ -42,6 +42,54 @@ async function getQrSession(sessionToken: unknown, restaurantId: string, tableId
   });
 }
 
+/**
+ * The minimum public restaurant identity a guest device needs to render a
+ * *branded* state screen (unavailable / under maintenance / onboarding) when
+ * the tenant cannot serve orders. Every field here is already published by
+ * `GET /api/public/restaurants`, so nothing new leaks — but a suspended
+ * tenant's name, logo, cover and brand colours are what keep the guest from
+ * staring at a generic platform error after scanning their table QR.
+ */
+function publicRestaurantMeta(restaurant: {
+  id: string;
+  name: string;
+  nameEn: string | null;
+  slug: string;
+  logoUrl: string | null;
+  coverImageUrl: string | null;
+  description: string | null;
+  phone: string | null;
+  currency: string | null;
+  language: string | null;
+  timezone: string | null;
+  status: string;
+  businessType: string | null;
+  primaryColor: string | null;
+  accentColor: string | null;
+  logoFit: string | null;
+  logoPosition: string | null;
+}) {
+  return {
+    id: restaurant.id,
+    name: restaurant.name,
+    nameEn: restaurant.nameEn || undefined,
+    slug: restaurant.slug,
+    logoUrl: restaurant.logoUrl,
+    coverImageUrl: restaurant.coverImageUrl,
+    description: restaurant.description || undefined,
+    phone: restaurant.phone,
+    currency: restaurant.currency,
+    language: restaurant.language,
+    timezone: restaurant.timezone,
+    status: restaurant.status,
+    businessType: restaurant.businessType,
+    primaryColor: restaurant.primaryColor,
+    accentColor: restaurant.accentColor,
+    logoFit: restaurant.logoFit,
+    logoPosition: restaurant.logoPosition,
+  };
+}
+
 // GET /api/public/events (SSE Stream for Real-time Updates)
 router.get('/events', sseConnectionLimiter, async (req: Request, res: Response) => {
   const restaurantId = req.query.restaurantId as string;
@@ -247,9 +295,13 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
     }
 
     if (restaurant.status !== 'ACTIVE') {
+      // The guest's device still needs the venue's identity to render the
+      // branded "unavailable" screen — a raw error would strand the guest on
+      // the SaaS landing page with a generic toast instead.
       return res.status(403).json({
         success: false,
         error: 'هذا المطعم غير متاح للطلب حالياً',
+        data: { restaurant: publicRestaurantMeta(restaurant) },
         statusCode: 403,
       });
     }
@@ -385,6 +437,7 @@ router.get('/tables/qr/:qrToken', qrSessionLimiter, async (req: Request, res: Re
       return res.status(403).json({
         success: false,
         error: 'المطعم غير متاح حالياً',
+        data: { restaurant: publicRestaurantMeta(table.restaurant) },
         statusCode: 403,
       });
     }
@@ -459,7 +512,15 @@ router.post(
       }
 
       if (restaurant.status !== 'ACTIVE') {
-        return res.status(403).json({ success: false, error: 'المطعم غير متاح للطلب حالياً', statusCode: 403 });
+        // The QR is physically valid — the guest is at this table. Hand back
+        // the tenant's identity so the device can render the branded
+        // "unavailable" screen instead of a dead error.
+        return res.status(403).json({
+          success: false,
+          error: 'المطعم غير متاح للطلب حالياً',
+          data: { restaurant: publicRestaurantMeta(restaurant) },
+          statusCode: 403,
+        });
       }
 
       // Check for existing active session

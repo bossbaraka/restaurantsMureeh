@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Product } from '../../types/restaurant';
 import { formatAmount } from '../../utils/formatting';
 import { Plus, Minus, Sparkles, Clock, Flame, SlidersHorizontal, Ban, AlertTriangle } from 'lucide-react';
@@ -13,6 +13,11 @@ export interface ProductCardProps {
   priority?: boolean;
   /** Signature dish treatment (spans the grid, brand-tinted surface). */
   featured?: boolean;
+  /**
+   * Stagger index for the on-scroll reveal (0..7): cards entering the
+   * viewport settle in one after another, like a menu being turned.
+   */
+  revealIndex?: number;
   onSelect: (product: Product) => void;
   onQuickAdd: (product: Product) => void;
   onQuantityChange: (product: Product, nextQuantity: number) => void;
@@ -24,6 +29,7 @@ const MemoProductCard: React.FC<ProductCardProps> = ({
   cartQuantity = 0,
   priority = false,
   featured = false,
+  revealIndex = 0,
   onSelect,
   onQuickAdd,
   onQuantityChange,
@@ -40,8 +46,39 @@ const MemoProductCard: React.FC<ProductCardProps> = ({
   const startsFrom =
     sizes.length > 1 && sizes.some((s) => (s.priceModifier || s.price || 0) > 0);
 
+  // Scroll reveal: the card settles in once, the first time it enters the
+  // viewport. The hidden state + entrance animation live entirely in CSS
+  // behind (prefers-reduced-motion: no-preference), so reduced-motion guests
+  // see a fully composed, static card.
+  const cardRef = useRef<HTMLElement | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setRevealed(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setRevealed(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { rootMargin: '0px 0px -6% 0px', threshold: 0.08 }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   const cardClass = [
     'menu-card',
+    'menu-card--reveal',
+    revealed ? 'menu-card--in' : '',
     featured ? 'menu-card--featured' : '',
     available ? '' : 'menu-card--unavailable',
   ]
@@ -49,7 +86,11 @@ const MemoProductCard: React.FC<ProductCardProps> = ({
     .join(' ');
 
   return (
-    <article className={cardClass}>
+    <article
+      ref={cardRef}
+      className={cardClass}
+      style={{ ['--reveal-i' as string]: revealIndex % 8 }}
+    >
       {/* Media ---------------------------------------------------------------- */}
       <div className="menu-media">
         <ProductImage
