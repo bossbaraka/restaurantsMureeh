@@ -58,6 +58,8 @@ import {
 } from '../validation/schemas';
 import bcrypt from 'bcryptjs';
 import { OrderStatus, TableZone, TableStatus } from '@prisma/client';
+import { normalizePhoneNumber } from '../services/whatsapp/phone';
+import { triggerOrderNotificationAsync } from '../services/notifications/notificationService';
 
 const router = Router();
 
@@ -382,7 +384,7 @@ router.post(
       const restaurantId = getTenantId(req);
       if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
 
-      const { tableId, items, notes, clientRequestId } = req.body as {
+      const { tableId, items, notes, clientRequestId, customerName, customerPhone, whatsappOptIn } = req.body as {
         tableId: string;
         items: Array<{
           productId: string;
@@ -393,10 +395,24 @@ router.post(
         }>;
         notes?: string;
         clientRequestId?: string;
+        customerName?: string;
+        customerPhone?: string;
+        whatsappOptIn?: boolean;
       };
       // Optional only for rolling compatibility with already-open POS clients.
       // Current clients always supply one stable UUID per logical checkout.
       const effectiveClientRequestId = clientRequestId || randomUUID();
+
+      let normalizedPhone: string | null = null;
+      if (customerPhone) {
+        normalizedPhone = normalizePhoneNumber(customerPhone);
+        if (!normalizedPhone) {
+          return res.status(400).json({ success: false, error: 'رقم الهاتف غير صالح', statusCode: 400 });
+        }
+      }
+      if (whatsappOptIn === true && !customerPhone) {
+        return res.status(400).json({ success: false, error: 'رقم الهاتف مطلوب عند تفعيل إشعارات واتساب', statusCode: 400 });
+      }
 
       const isWalkIn = tableId === '__WALKIN__';
       if (!isWalkIn) {
@@ -515,6 +531,10 @@ router.post(
             subtotal,
             total: subtotal,
             notes: notes || undefined,
+            customerName: customerName || undefined,
+            customerPhone: customerPhone || undefined,
+            customerPhoneE164: normalizedPhone || undefined,
+            whatsappOptIn: whatsappOptIn === true,
             items: { create: pricedItems },
           },
           include: { items: true },
@@ -677,6 +697,18 @@ router.put(
         status,
         tableId: order.tableId,
       });
+
+      // WhatsApp READY notification – fire-and-forget, never breaks order flow.
+      // Only trigger on PREVIOUS != READY and new == READY to avoid duplicate sends.
+      if (order.status !== 'READY' && status === 'READY' && updated) {
+        // Best-effort async: isolate failures, do not await.
+        triggerOrderNotificationAsync({
+          orderId: updated.id,
+          restaurantId: targetRestId,
+          previousStatus: order.status,
+          newStatus: status,
+        });
+      }
 
       return res.json({ success: true, data: { order: updated }, statusCode: 200 });
     } catch (err) {

@@ -16,6 +16,8 @@ import publicRoutes from './routes/public';
 import managerRoutes from './routes/manager';
 import adminRoutes from './routes/admin';
 import uploadRoutes from './routes/uploads';
+import whatsappRoutes from './routes/whatsapp';
+import whatsappWebhookRoutes from './routes/webhooks/whatsapp';
 import { verifyStorageReady } from './services/storage';
 
 /** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
@@ -113,9 +115,16 @@ app.use(compression());
 
 // 1MB is plenty for JSON APIs (menu payloads are paged client-side);
 // the 10MB legacy limit invited trivial payload bombs.
+// rawBody capture is required for WhatsApp webhook HMAC verification (X-Hub-Signature-256)
 app.use(
   express.json({
     limit: '1mb',
+    verify: (req: any, _res, buf) => {
+      // Store raw body for webhook signature validation
+      if (buf && buf.length) {
+        req.rawBody = buf;
+      }
+    },
   })
 );
 
@@ -193,6 +202,9 @@ app.use('/api/auth', authenticateToken, authRoutes);
 
 app.use('/api/public', publicRoutes);
 
+// WhatsApp webhook — public but secured via HMAC signature, no JWT
+app.use('/api/webhooks/whatsapp', whatsappWebhookRoutes);
+
 // ============================================================
 // PROTECTED API ROUTES
 // ============================================================
@@ -201,6 +213,12 @@ app.use(
   '/api/manager',
   authenticateToken,
   managerRoutes
+);
+
+app.use(
+  '/api/manager/whatsapp',
+  authenticateToken,
+  whatsappRoutes
 );
 
 app.use(

@@ -53,6 +53,18 @@ const envSchema = z.object({
   STORAGE_ALLOW_LOCAL_IN_PROD: z
     .enum(['true', 'false'])
     .default('false'),
+
+  // WhatsApp Business Platform (Meta Cloud API)
+  WHATSAPP_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false'),
+  WHATSAPP_API_VERSION: z.string().min(1).default('v21.0'),
+  WHATSAPP_VERIFY_TOKEN: z.string().min(0).optional(),
+  WHATSAPP_APP_SECRET: z.string().min(0).optional(),
+  WHATSAPP_ACCESS_TOKEN: z.string().min(0).optional(),
+  WHATSAPP_PHONE_NUMBER_ID: z.string().min(0).optional(),
+  WHATSAPP_WABA_ID: z.string().min(0).optional(),
+  WHATSAPP_TOKEN_ENCRYPTION_KEY: z.string().min(0).optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -161,6 +173,14 @@ export const config = {
   supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   supabaseBucket: env.SUPABASE_STORAGE_BUCKET,
   storageAllowLocalInProd: env.STORAGE_ALLOW_LOCAL_IN_PROD === 'true',
+  whatsappEnabled: env.WHATSAPP_ENABLED === 'true',
+  whatsappApiVersion: env.WHATSAPP_API_VERSION,
+  whatsappVerifyToken: env.WHATSAPP_VERIFY_TOKEN || undefined,
+  whatsappAppSecret: env.WHATSAPP_APP_SECRET || undefined,
+  whatsappAccessToken: env.WHATSAPP_ACCESS_TOKEN || undefined,
+  whatsappPhoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID || undefined,
+  whatsappWabaId: env.WHATSAPP_WABA_ID || undefined,
+  whatsappTokenEncryptionKey: env.WHATSAPP_TOKEN_ENCRYPTION_KEY || undefined,
 } as const;
 
 export const JWT_ISSUER = 'mureeh-api';
