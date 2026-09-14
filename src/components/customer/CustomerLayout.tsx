@@ -11,6 +11,7 @@ import { ProductCard } from './ProductCard';
 import { ProductDetailModal } from './ProductDetailModal';
 import { CartDrawer } from './CartDrawer';
 import { OrderTrackingDrawer } from './OrderTrackingDrawer';
+import { TransferPaymentModal } from './TransferPaymentModal';
 import { WaiterCallModal } from './WaiterCallModal';
 import { DirectTableEntryModal } from './DirectTableEntryModal';
 import { ActiveOrdersFloatingBar } from './ActiveOrdersFloatingBar';
@@ -88,6 +89,8 @@ export const CustomerLayout: React.FC = () => {
     entryPhase,
     entryInvalidReason,
     retryEntry,
+    orderAwaitingPayment,
+    dismissPaymentStep,
   } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
@@ -499,6 +502,20 @@ export const CustomerLayout: React.FC = () => {
 
       <CartDrawer />
       <OrderTrackingDrawer />
+
+      {/* MANDATORY PAYMENT STEP: right after submitting an order the guest
+          lands on the payment confirmation screen (phone + transfer receipt).
+          The order stays out of the restaurant's operational workflow until
+          the cashier verifies the payment, so this screen is part of the
+          ordering flow, not an optional add-on. It closes by itself once the
+          order is released. */}
+      {orderAwaitingPayment && (
+        <TransferPaymentModal
+          isOpen
+          onClose={dismissPaymentStep}
+          order={orderAwaitingPayment}
+        />
+      )}
       <WaiterCallModal />
       <DirectTableEntryModal />
       <OrderCompletedModal />

@@ -4,6 +4,11 @@ import { Order } from '../../types/restaurant';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { CustomerRatingModal } from './CustomerRatingModal';
 import { TransferPaymentModal } from './TransferPaymentModal';
+import {
+  isAwaitingGuestPayment,
+  isPaymentRejected,
+  isPaymentVerificationPending,
+} from '../../utils/orderLifecycle';
 import { useDialog } from '../../hooks/useDialog';
 import {
   X,
@@ -215,14 +220,30 @@ export const OrderTrackingDrawer: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Transfer-payment state: the guest must always be able
-                        to tell whether their receipt is waiting, verified or
-                        refused — without opening the cashier's screens. */}
-                    {order.paymentStatus === 'PENDING_VERIFICATION' && (
+                    {/* Payment authorization boundary, guest side. The guest can
+                        always tell WHERE the order is without opening any other
+                        screen:
+                          awaiting payment  → the order is not a kitchen ticket yet
+                          verification      → the receipt is on the cashier's desk
+                          rejected          → the guest must act
+                          paid / released   → the kitchen is working on it */}
+                    {isAwaitingGuestPayment(order) && (
+                      <div className="p-3 bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border-b border-[rgb(var(--brand-primary-strong-rgb)/0.4)] space-y-1">
+                        <div className="flex items-center gap-2 text-xs text-[var(--brand-primary-strong)] font-bold">
+                          <CreditCard className="w-4 h-4 shrink-0" />
+                          <span>تم إرسال طلبك، يرجى تأكيد عملية الدفع لإتمام الطلب.</span>
+                        </div>
+                        <p className="text-[11px] text-luxury-300 leading-relaxed pr-6">
+                          لن يبدأ المطبخ بتحضير الطلب قبل تأكيد الدفع. أرسل إشعار التحويل (بنكي أو
+                          محفظة) مع رقم هاتفك وصورة الإشعار، أو ادفع عند الكاشير.
+                        </p>
+                      </div>
+                    )}
+                    {isPaymentVerificationPending(order) && (
                       <div className="p-3 bg-amber-500/15 border-b border-amber-500/30 space-y-1">
                         <div className="flex items-center gap-2 text-xs text-amber-200 font-bold">
                           <Clock className="w-4 h-4 shrink-0" />
-                          <span>إشعار الحوالة بانتظار تحقق الكاشير</span>
+                          <span>تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.</span>
                         </div>
                         <p className="text-[11px] text-amber-200/80 leading-relaxed pr-6">
                           وصل إشعار تحويلك إلى شاشة الكاشير مع تفاصيل الطلب. يبقى الطلب محجوزاً عن
@@ -230,7 +251,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                         </p>
                       </div>
                     )}
-                    {order.paymentRejected && order.paymentStatus !== 'PAID' && (
+                    {isPaymentRejected(order) && order.paymentStatus !== 'PAID' && (
                       <div className="p-3 bg-red-500/15 border-b border-red-500/30 flex items-center gap-2 text-xs text-red-300 font-bold">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
                         <span>
@@ -244,9 +265,10 @@ export const OrderTrackingDrawer: React.FC = () => {
                       <div className="p-3 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300 font-bold">
                         <CheckCircle2 className="w-4 h-4 shrink-0" />
                         <span>
-                          تم تأكيد الدفع
+                          {order.status === 'PENDING'
+                            ? 'تم تأكيد الدفع، وجارٍ تجهيز طلبك.'
+                            : 'تم تأكيد الدفع'}
                           {order.paymentMethod === 'TRANSFER' ? ' (تحويل بنكي/محفظة)' : ' (تسوية الكاشير)'}
-                          {order.status === 'PENDING' ? ' — طلبك انتقل إلى المطبخ' : ''}
                         </span>
                       </div>
                     )}
@@ -411,7 +433,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                           bank/wallet must send the notice, otherwise the
                           cashier has nothing to verify and the order never
                           reaches the kitchen. */}
-                      {order.status !== 'CANCELLED' && order.paymentStatus === 'UNPAID' && (
+                      {order.status !== 'CANCELLED' && isAwaitingGuestPayment(order) && (
                         <div className="p-3 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.35)] space-y-1">
                           <p className="text-xs font-bold text-[var(--brand-primary-strong)] flex items-center gap-1.5">
                             <CreditCard className="w-3.5 h-3.5" />
@@ -430,18 +452,18 @@ export const OrderTrackingDrawer: React.FC = () => {
                         <button
                           onClick={() => setTransferOrder(order)}
                           className={`w-full p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
-                            order.paymentStatus === 'PENDING_VERIFICATION'
+                            isPaymentVerificationPending(order)
                               ? 'bg-amber-500/15 border-amber-500/30 text-amber-200 hover:bg-amber-500/25'
                               : 'bg-luxury-950 border-luxury-750 text-[var(--brand-primary-strong)] hover:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]'
                           }`}
                         >
                           <CreditCard className="w-3.5 h-3.5" />
                           <span>
-                            {order.paymentStatus === 'PENDING_VERIFICATION'
+                            {isPaymentVerificationPending(order)
                               ? 'تحديث إشعار التحويل'
-                              : order.paymentRejected
+                              : isPaymentRejected(order)
                                 ? 'إرسال إشعار حوالة جديد'
-                                : 'الدفع عبر حوالة بنكية'}
+                                : 'الدفع عبر حوالة بنكية أو محفظة'}
                           </span>
                         </button>
                       )}

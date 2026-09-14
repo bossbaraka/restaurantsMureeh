@@ -6,6 +6,23 @@ export type RestaurantStatus = 'ACTIVE' | 'SUSPENDED' | 'ONBOARDING' | 'MAINTENA
 export type BusinessType = 'RESTAURANT' | 'CAFE' | 'BAKERY';
 export type SubscriptionStatus = 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED' | 'SUSPENDED';
 export type OrderStatus = 'PENDING' | 'PREPARING' | 'READY' | 'SERVED' | 'CANCELLED';
+
+/**
+ * Fulfillment gate — the payment authorization boundary of an order.
+ *
+ *   AWAITING_PAYMENT             guest submitted the order, no payment info yet
+ *   PAYMENT_VERIFICATION_PENDING a receipt is waiting for the cashier
+ *   PAYMENT_REJECTED             the cashier refused the receipt (guest must act)
+ *   RELEASED                     payment verified → the restaurant may execute it
+ *
+ * Only RELEASED orders appear on the operational screens (KDS / live floor) and
+ * only they may be advanced by the service API.
+ */
+export type FulfillmentState =
+  | 'AWAITING_PAYMENT'
+  | 'PAYMENT_VERIFICATION_PENDING'
+  | 'PAYMENT_REJECTED'
+  | 'RELEASED';
 export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'BILL_REQUESTED' | 'RESERVED' | 'MAINTENANCE';
 export type TableZone = 'MAIN_HALL' | 'TERRACE' | 'VIP_LOUNGE' | 'GARDEN';
 export type WaiterCallReason = 'ASSISTANCE' | 'WATER_REFILL' | 'CLEANING' | 'EXTRA_CUTLERY' | 'BILL' | 'WATER' | string;
@@ -257,6 +274,16 @@ export interface Order {
   //   PAID                 → settled (settledAt / cashierId)
   paymentStatus?: PaymentStatus;
   settledAt?: string;
+  /**
+   * Payment gate. Absent only on legacy payloads — the shared helper
+   * `isOrderOperational()` treats a missing value as RELEASED (pre-gate
+   * behaviour), never as held.
+   */
+  fulfillmentState?: FulfillmentState;
+  /** Server-derived predicate for `fulfillmentState === 'RELEASED'`. */
+  operational?: boolean;
+  /** When the gate opened (payment verified / collected). */
+  releasedAt?: string;
   // Transfer-receipt state (never the private storage path or the guest phone:
   // those stay server-side and are only exposed by the cashier queue).
   hasPaymentProof?: boolean;
@@ -317,6 +344,11 @@ export interface PaymentVerificationItem {
   paymentMethod: string;
   paymentStatus: PaymentStatus;
   hasPaymentProof: boolean;
+  /** WAITING_RECEIPT = nothing to confirm yet; WAITING_VERIFICATION = receipt attached. */
+  state?: 'WAITING_RECEIPT' | 'WAITING_VERIFICATION';
+  fulfillmentState?: FulfillmentState;
+  paymentRejected?: boolean;
+  paymentRejectedReason?: string;
   submittedAt: string;
   createdAt: string;
 }

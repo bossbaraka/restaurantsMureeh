@@ -389,6 +389,30 @@ model Order {
   paymentRejectedAt     DateTime?
   paymentRejectionReason String?
   // ---------------------------------------------------------------
+  // Fulfillment gate — THE payment authorization boundary.
+  // ---------------------------------------------------------------
+  // The single server-side answer to "may the restaurant execute this order?".
+  // While it is anything other than RELEASED the order is refused by the
+  // service API (PUT /orders/:id/status) and every operational screen (KDS,
+  // live floor) filters it out; it becomes operational only when a cashier
+  // verifies the money. Values (TEXT, application-level, like paymentStatus):
+  //   AWAITING_PAYMENT             → the guest submitted the order and has not
+  //                                  sent payment information yet
+  //   PAYMENT_VERIFICATION_PENDING → a receipt is queued for a cashier decision
+  //   PAYMENT_REJECTED             → the cashier refused the receipt; the guest
+  //                                  must respond (new receipt / pay in person)
+  //   RELEASED                     → payment verified (cashier confirmation or
+  //                                  collection at the till), or the order was
+  //                                  created by staff at the POS where the money
+  //                                  is taken in person
+  // Default RELEASED is deliberate: every pre-gate row (and any process still
+  // running the previous build) keeps exactly the operational behaviour it has
+  // today, so the migration cannot hide or strand existing orders.
+  fulfillmentState      String            @default("RELEASED")
+  // When the gate opened. Written in the SAME transaction as the payment claim
+  // that released the order, so "paid" and "released" can never disagree.
+  releasedAt            DateTime?
+  // ---------------------------------------------------------------
   // Daily archive / retention (financial history is NEVER removed).
   // ---------------------------------------------------------------
   // Set once the tenant-local business session this order belongs to has
@@ -416,6 +440,9 @@ model Order {
   @@index([createdAt])
   // Cashier "pending transfer verification" queue.
   @@index([restaurantId, paymentStatus])
+  // Operational screens ("what may the restaurant execute right now?") and the
+  // cashier's waiting-for-payment list.
+  @@index([restaurantId, fulfillmentState])
   // Retention sweep: global scan of archived, not-yet-purged orders.
   @@index([archivedAt])
 }

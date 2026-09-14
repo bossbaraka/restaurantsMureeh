@@ -1,38 +1,42 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
+import { isOrderOperational } from '../../utils/orderLifecycle';
 import { ChefHat, Clock, CheckCircle2, AlertCircle, Volume2, VolumeX, Sparkles, Filter, Utensils, ShieldCheck } from 'lucide-react';
 
 // ============================================================
 // Kitchen Display
 //
-// The KDS shows exactly what the kitchen may cook:
-//   - PENDING / PREPARING / READY tickets, and
-//   - NOTHING that is still waiting for a cashier decision on a bank/wallet
-//     transfer (PENDING_VERIFICATION). Those orders are held: the guest has
-//     announced the money but the cashier has not confirmed it yet, so cooking
-//     would be unpaid work. The cashier's confirmation releases the order and
-//     it appears here instantly as a new ticket ("جاهز للبدء").
-// An order the kitchen already started is never hidden, even if a receipt is
-// then uploaded — the ticket must not vanish from the board mid-cooking.
+// The KDS shows exactly what the kitchen may cook: PENDING / PREPARING / READY
+// tickets whose payment a cashier has VERIFIED. The authorization comes from
+// the server-derived `operational` flag (fulfillmentState === 'RELEASED'), not
+// from a local guess about the payment fields — an order that is still
+// AWAITING_PAYMENT, PAYMENT_VERIFICATION_PENDING or PAYMENT_REJECTED never
+// appears here, so the kitchen cannot cook money that has not been verified.
+//
+// The cashier's confirmation releases the order (same transaction as the
+// payment) and it appears here instantly as a new ticket ("جاهز للبدء"). An
+// order the kitchen already picked up keeps its RELEASED gate forever, so a
+// receipt uploaded mid-cooking can never make a live ticket vanish.
 // ============================================================
 
 export const KitchenDisplaySystem: React.FC = () => {
   const { orders, updateOrderStatus, isMutationPending, currentRestaurant, soundEnabled, toggleSound } = useRestaurant();
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'PREPARING' | 'READY'>('ALL');
 
-  // Held back until the cashier confirms the transfer.
+  // Held by the payment authorization boundary: the guest has not finished
+  // paying, or the cashier has not verified the receipt yet. The kitchen sees
+  // the COUNT (so it understands why an expected order is missing) but not the
+  // tickets themselves.
   const heldForPayment = orders.filter(
-    (o) =>
-      o.status !== 'CANCELLED' &&
-      o.paymentStatus === 'PENDING_VERIFICATION' &&
-      o.status === 'PENDING'
+    (o) => o.status !== 'CANCELLED' && !isOrderOperational(o)
   );
 
+  // The cookable board: ONLY orders released by the payment gate.
   const kitchenOrders = orders.filter(
     (o) =>
-      (o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY') &&
-      !(o.status === 'PENDING' && o.paymentStatus === 'PENDING_VERIFICATION')
+      isOrderOperational(o) &&
+      (o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY')
   );
 
   const filteredOrders = kitchenOrders.filter((o) => {
@@ -98,14 +102,15 @@ export const KitchenDisplaySystem: React.FC = () => {
         </div>
       </div>
 
-      {/* Transfer orders held for the cashier: visible as a count (the kitchen
-          knows why they are missing) but deliberately NOT cookable yet. */}
+      {/* Orders held by the payment gate: visible as a count (the kitchen knows
+          why they are missing) but deliberately NOT cookable yet — they enter
+          this board only when a cashier confirms the payment. */}
       {heldForPayment.length > 0 && (
         <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-xs font-bold text-amber-200">
           <ShieldCheck className="w-4 h-4 shrink-0" />
           <span>
-            {heldForPayment.length} طلب بانتظار تأكيد الكاشير لتحويل بنكي/محفظة — يُعرض هنا فوراً
-            بحالة «جاهز للبدء» بعد التأكيد.
+            {heldForPayment.length} طلب بانتظار تأكيد الكاشير للدفع (تحويل بنكي/محفظة أو دفع عند
+            الكاشير) — يُعرض هنا فوراً بحالة «جاهز للبدء» بعد التأكيد.
           </span>
         </div>
       )}

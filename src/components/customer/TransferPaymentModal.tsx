@@ -210,7 +210,9 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
             <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h4 className="text-base font-bold text-luxury-100">تم إرسال إشعار التحويل للكاشير</h4>
+            <h4 className="text-base font-bold text-luxury-100">
+              تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.
+            </h4>
             <p className="text-xs text-luxury-400 leading-relaxed max-w-sm mx-auto">
               ظهر إشعارك فوراً على شاشة الكاشير مع تفاصيل الطلب. بعد تأكيد الكاشير للعملية
               ينتقل طلبك إلى المطبخ مباشرة بحالة «جاهز للبدء». تابع الحالة من شاشة تتبع الطلبات.
@@ -234,7 +236,10 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
               </div>
               <p className="text-[11px] text-luxury-400 leading-relaxed">
                 حوّل المبلغ إلى حساب المطعم أو محفظته، ثم أرسل إشعار التحويل مع اسمك ورقم هاتفك
-                ليؤكده الكاشير. لا يبدأ المطبخ بتحضير الطلب قبل تأكيد الدفع.
+                ليؤكده الكاشير — يمكنك أيضاً الدفع نقداً عند الكاشير.
+              </p>
+              <p className="text-[11px] font-bold text-luxury-200 leading-relaxed">
+                لا يبدأ المطبخ بتحضير الطلب قبل تأكيد الدفع
               </p>
             </div>
 
@@ -376,6 +381,11 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                 <span>{error}</span>
               </div>
             )}
+
+            <p className="text-[11px] text-luxury-500 leading-relaxed">
+              لم تحوّل المبلغ بعد؟ يمكنك إغلاق هذه النافذة والعودة إليها من «تتبع الطلب» — مع
+              العلم أن الطلب يبقى بانتظار الدفع ولا يظهر في المطبخ حتى يؤكده الكاشير.
+            </p>
 
             <div className="flex gap-3 pt-1">
               <button

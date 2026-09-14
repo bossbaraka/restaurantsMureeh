@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { isAwaitingGuestPayment } from '../../utils/orderLifecycle';
 import { useAuth } from '../../context/AuthContext';
 import { api, newClientRequestId } from '../../services/api';
 import { escapeHtml, formatPrice, formatTableNumber } from '../../utils/formatting';
@@ -444,11 +445,15 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                     <div className="text-luxury-500 truncate mt-0.5">
                       {o.items.map((i) => `${i.productName || i.name} x${i.quantity}`).join(' • ')}
                     </div>
-                    {o.paymentStatus === 'PENDING_VERIFICATION' && (
+                    {o.paymentStatus === 'PENDING_VERIFICATION' ? (
                       <div className="text-[10px] font-bold text-amber-300 mt-0.5">
                         بانتظار تحقق الحوالة
                       </div>
-                    )}
+                    ) : isAwaitingGuestPayment(o) ? (
+                      <div className="text-[10px] font-bold text-sky-300 mt-0.5">
+                        بانتظار دفع الزبون — تحصيل الفاتورة يفرج عن الطلب للمطبخ
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>

@@ -20,6 +20,11 @@ uploads/*
 # static mount and never committed: it holds customer documents.
 private-uploads/*
 
+# Generated output of the live-preview harness (e2e/live-preview) — the scenes
+# are rebuilt by `npm run preview:gate` and the file carries the whole compiled
+# stylesheet, so it is a build artifact, not source.
+e2e/live-preview/scenes.html
+
 # Local design-preview harnesses (e.g. `preview/welcome` renders the QR splash
 # against stub tenant palettes so the theming can be eyeballed without a DB).
 # Local only — nothing in here is part of the shipped app.

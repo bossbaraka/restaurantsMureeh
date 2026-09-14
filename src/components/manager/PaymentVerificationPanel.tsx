@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { formatPrice } from '../../utils/formatting';
 import { PaymentVerificationItem, TransferChannel } from '../../types/restaurant';
+import { isOrderHeldForPayment } from '../../utils/orderLifecycle';
 import {
   BadgeCheck,
   XCircle,
@@ -29,9 +30,14 @@ import {
 //
 // A submission reaches this panel the moment the guest sends it (the existing
 // SSE + background refresh drive the queue — no polling loop of its own).
-// Confirming settles the money AND releases the order to the kitchen: an order
-// still waiting in PENDING is pushed to the KDS as a fresh "ready to start"
-// ticket by the server, so the confirmation is what starts the cooking.
+//
+// Two groups, because the cashier's two questions are different:
+//   1. "a receipt is attached — may I release the money?"  → confirm / reject
+//        (confirm settles the money AND opens the payment gate: the order is
+//         released to the KDS as a fresh "ready to start" ticket)
+//   2. "the guest placed an order but has not paid yet"      → waiting on the
+//        guest (no receipt to inspect, nothing to confirm; the order becomes
+//        collectable cash at the POS, which releases it)
 //
 // Receipt images are fetched as authenticated blobs and revoked on close.
 // ============================================================
@@ -75,15 +81,28 @@ export const PaymentVerificationPanel: React.FC = () => {
 
   const canVerify = currentUser?.role === 'CASHIER' || currentUser?.role === 'RESTAURANT_MANAGER';
 
-  // Identity of the pending set: refetch only when it actually changes.
+  // Identity of the queue: refetch only when the set actually changes. Both
+  // groups are watched — a new awaiting-payment order and a newly attached
+  // receipt both have to appear without a manual refresh.
   const pendingKey = useMemo(
     () =>
       orders
-        .filter((o) => o.paymentStatus === 'PENDING_VERIFICATION' && o.status !== 'CANCELLED')
-        .map((o) => o.id)
+        .filter((o) => o.status !== 'CANCELLED' && isOrderHeldForPayment(o))
+        .map((o) => `${o.id}:${o.fulfillmentState || o.paymentStatus}`)
         .sort()
         .join(','),
     [orders]
+  );
+
+  // Receipts waiting for a decision (actionable) vs orders the guest has not
+  // paid for yet (informational).
+  const verificationQueue = useMemo(
+    () => items.filter((item) => item.state !== 'WAITING_RECEIPT'),
+    [items]
+  );
+  const awaitingReceiptQueue = useMemo(
+    () => items.filter((item) => item.state === 'WAITING_RECEIPT'),
+    [items]
   );
 
   const releaseProof = useCallback(() => {
@@ -97,7 +116,9 @@ export const PaymentVerificationPanel: React.FC = () => {
   const loadQueue = useCallback(async () => {
     if (!currentUser || !tenantId || !canVerify) return;
     setIsLoading(true);
-    const res = await api.getPaymentVerifications(currentUser, tenantId);
+    const res = await api.getPaymentVerifications(currentUser, tenantId, {
+      includeAwaiting: true,
+    });
     setIsLoading(false);
     if (res.success && res.data) {
       setItems(res.data);
@@ -189,9 +210,14 @@ export const PaymentVerificationPanel: React.FC = () => {
         <h3 className="text-xs font-bold text-amber-200 flex items-center gap-2">
           <BadgeCheck className="w-4 h-4" />
           تحقق من إشعارات التحويلات
-          {items.length > 0 && (
+          {verificationQueue.length > 0 && (
             <span className="min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-luxury-950 text-[11px] font-bold flex items-center justify-center">
-              {items.length}
+              {verificationQueue.length}
+            </span>
+          )}
+          {awaitingReceiptQueue.length > 0 && (
+            <span className="min-w-5 h-5 px-1.5 rounded-full bg-luxury-700 text-luxury-100 text-[11px] font-bold flex items-center justify-center">
+              {awaitingReceiptQueue.length} بانتظار الدفع
             </span>
           )}
         </h3>
@@ -217,7 +243,7 @@ export const PaymentVerificationPanel: React.FC = () => {
         </p>
       ) : (
         <div className="divide-y divide-luxury-800 max-h-96 overflow-y-auto">
-          {items.map((item) => (
+          {verificationQueue.map((item) => (
             <div key={item.orderId} className="p-3 flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -287,6 +313,61 @@ export const PaymentVerificationPanel: React.FC = () => {
               </div>
             </div>
           ))}
+
+          {awaitingReceiptQueue.length > 0 && (
+            <div className="p-3 bg-luxury-950/60 space-y-2">
+              <p className="text-[11px] font-bold text-luxury-300 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-luxury-400" />
+                طلبات بانتظار دفع الزبون — لا يوجد إشعار للتحقق بعد
+              </p>
+              <p className="text-[10px] text-luxury-500 leading-relaxed">
+                الطلب محجوز عن المطبخ حتى يتم الدفع. إن دفع الزبون نقداً عند الصندوق، حصّل الفاتورة
+                من نقطة البيع — التحصيل يفرج عن الطلب للمطبخ تلقائياً. وإن أرسل إشعار تحويل فسيظهر
+                في الأعلى فوراً.
+              </p>
+              {awaitingReceiptQueue.map((item) => (
+                <div
+                  key={item.orderId}
+                  className="flex items-start justify-between gap-3 rounded-xl border border-luxury-800 bg-luxury-900/60 p-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono font-bold text-xs text-luxury-200">
+                        {item.numericId ? `#${item.numericId}` : item.orderId}
+                      </span>
+                      <span className="text-[11px] text-luxury-400">
+                        {item.tableNumber != null ? `طاولة ${item.tableNumber}` : item.tableName || '—'}
+                      </span>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                          item.fulfillmentState === 'PAYMENT_REJECTED'
+                            ? 'bg-red-500/15 text-red-300'
+                            : 'bg-luxury-800 text-luxury-300'
+                        }`}
+                      >
+                        {item.fulfillmentState === 'PAYMENT_REJECTED'
+                          ? 'رُفض الإشعار — بانتظار إجراء الزبون'
+                          : 'بانتظار دفع الزبون'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-luxury-500 mt-1">
+                      <span className="font-bold text-gold-300 font-mono">
+                        {formatPrice(item.total, currency)}
+                      </span>
+                      {item.itemsCount ? ` · ${item.itemsCount} صنف` : ''}
+                      {item.itemsSummary ? ` · ${item.itemsSummary}` : ''}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-luxury-500 shrink-0">
+                    {new Date(item.submittedAt).toLocaleTimeString('ar-EG', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,5 +1,6 @@
 import { getPrivateStorage, paymentProofKeyBelongsToRestaurant } from './storage';
 import { sniffImage, isWithinUploadSizeLimit, MAX_IMAGE_BYTES } from './storage/imageSniff';
+import { normalizeFulfillmentState } from './orderLifecycle';
 
 // ============================================================
 // Transfer payment proof — storage + state helpers.
@@ -169,12 +170,15 @@ export function customerPaymentProofView(order: {
   paymentRejectedAt?: Date | null;
   paymentRejectionReason?: string | null;
   settledAt?: Date | null;
+  /** Fulfillment gate — the guest tracker renders its banners from this. */
+  fulfillmentState?: string | null;
 }): {
   paymentStatus: string;
   hasPaymentProof: boolean;
   paymentRejected: boolean;
   paymentRejectedReason?: string;
   paymentRejectedAt?: string;
+  fulfillmentState: string;
 } {
   return {
     paymentStatus: order.paymentStatus,
@@ -182,5 +186,8 @@ export function customerPaymentProofView(order: {
     paymentRejected: Boolean(order.paymentRejectedAt),
     paymentRejectedReason: order.paymentRejectionReason || undefined,
     paymentRejectedAt: order.paymentRejectedAt?.toISOString(),
+    // Only the state: the guest never receives the storage key, the guest
+    // phone, or any verification actor.
+    fulfillmentState: normalizeFulfillmentState(order.fulfillmentState),
   };
 }
