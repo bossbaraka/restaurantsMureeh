@@ -110,6 +110,25 @@ export const paymentLimiter = rateLimit({
   message: limiterError('عمليات دفع كثيرة. يرجى الانتظار قليلاً.'),
 });
 
+// Guest transfer-receipt uploads: the receipt endpoint IS an upload endpoint,
+// so it must be bounded independently from the order-intake budget. Counted
+// per IP, like every other anonymous limiter in this file.
+export const paymentProofLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  message: limiterError('محاولات إرسال إشعار حوالة كثيرة. يرجى الانتظار قليلاً.'),
+});
+
+// Cashier receipt reads (private image bytes). Generous for a busy till,
+// bounded so a stolen staff token cannot be used to stream receipts.
+export const paymentProofReadLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  message: limiterError('طلبات كثيرة لصور الإشعارات. يرجى الانتظار قليلاً.'),
+});
+
 export const orderStatusLimiter = rateLimit({
   ...base,
   windowMs: 15 * 60 * 1000,

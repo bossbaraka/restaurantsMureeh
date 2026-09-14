@@ -30,9 +30,22 @@ import {
   keyBelongsToRestaurant,
   type NormalizedAsset,
 } from '../services/storage';
+import {
+  discardPaymentProof,
+  loadPaymentProof,
+  proofBelongsToTenant,
+  isAwaitingVerification,
+  TRANSFER_PAYMENT_METHOD,
+  PAYMENT_STATUS,
+} from '../services/paymentProofs';
 import { generateQrToken, csvField, roundMoney, parsePagination, reconcileCashPayment } from '../utils/security';
 import { startOfDayInTimezone } from '../utils/datetime';
-import { paymentLimiter, orderStatusLimiter, staffMutationLimiter } from '../middleware/rateLimit';
+import {
+  paymentLimiter,
+  paymentProofReadLimiter,
+  orderStatusLimiter,
+  staffMutationLimiter,
+} from '../middleware/rateLimit';
 import {
   validateBody,
   posOrderSchema,
@@ -55,9 +68,11 @@ import {
   branchUpdateSchema,
   assignTablesSchema,
   paymentCreateSchema,
+  paymentConfirmSchema,
+  paymentRejectSchema,
 } from '../validation/schemas';
 import bcrypt from 'bcryptjs';
-import { OrderStatus, TableZone, TableStatus } from '@prisma/client';
+import { OrderStatus, TableZone, TableStatus, TenantRole } from '@prisma/client';
 
 const router = Router();
 
@@ -346,6 +361,15 @@ router.get('/orders', async (req: Request, res: Response) => {
       total: o.total,
       status: o.status,
       paymentMethod: o.paymentMethod,
+      // Settlement state of the order (UNPAID | PENDING_VERIFICATION | PAID).
+      // Without it the cashier screen could not tell a bill awaiting transfer
+      // verification from a plain unpaid bill — and could not exclude it from
+      // a cash collection. The guest phone is intentionally NOT exposed here:
+      // it is only returned by the cashier verification queue.
+      paymentStatus: o.paymentStatus,
+      hasPaymentProof: Boolean(o.paymentProofPath),
+      paymentRejectedAt: o.paymentRejectedAt?.toISOString(),
+      settledAt: o.settledAt?.toISOString(),
       notes: o.notes || undefined,
       estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
       createdAt: o.createdAt.toISOString(),
@@ -846,6 +870,26 @@ router.post(
       tip?: number;
     };
     const paidMethod = paymentMethod || 'CASH';
+
+    // A transfer receipt is waiting for a cashier decision: closing the table
+    // now would end the guest's session while their payment is still unverified
+    // (and would hide the order from the verification queue). Refuse instead.
+    const pendingVerification = await prisma.order.count({
+      where: {
+        tableId: String(id),
+        restaurantId: table.restaurantId,
+        status: { not: 'CANCELLED' },
+        paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION,
+      },
+    });
+    if (pendingVerification > 0) {
+      return res.status(409).json({
+        success: false,
+        error:
+          'هناك إشعار حوالة بانتظار التحقق على هذه الطاولة. تحقق منه (قبول أو رفض) قبل تسوية الحساب.',
+        statusCode: 409,
+      });
+    }
 
     // Find active/unpaid orders on this table
     const unpaidOrders = await prisma.order.findMany({
@@ -3050,6 +3094,434 @@ router.post(
         meta: (err as any)?.meta,
       });
       return res.status(500).json({ success: false, error: 'تعذر إتمام الدفع', statusCode: 500 });
+    }
+  }
+);
+
+// ============================================================================
+// TRANSFER PAYMENT VERIFICATION (cashier)
+// ----------------------------------------------------------------------------
+// The guest uploads a bank-transfer receipt (POST /api/public/orders/:id/
+// payment-proof). These endpoints are the CASHIER side: see what is waiting,
+// look at the receipt, then accept (→ PAID + ledger receipt) or reject
+// (→ UNPAID again + rejection marker so the guest knows to pay at the till).
+//
+// Authorization model:
+//   - requireCashierOrManager() on every route (money + personal data),
+//   - tenant resolved from the JWT only (ownTenant on the order's row),
+//   - the storage key is read from the ORDER ROW, never from the request, and
+//     is re-checked against the tenant namespace before storage is touched,
+//   - no amount, status, receipt number, cashier id or tenant id is ever taken
+//     from the client.
+// ============================================================================
+
+/** Resolve an order the authenticated caller is allowed to act on. */
+async function resolveTenantOrder(req: Request, orderId: string) {
+  const restaurantId = getTenantId(req);
+  if (!restaurantId || !ownTenant(req, restaurantId)) return { error: 'forbidden' as const };
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { table: { select: { number: true, name: true, branchId: true } } },
+  });
+  if (!order || order.restaurantId !== restaurantId) return { error: 'not_found' as const };
+  return { order, restaurantId };
+}
+
+// GET /api/manager/payment-verifications — the cashier verification queue.
+// Deliberately its own endpoint (not a filter on /orders): it is the only place
+// that returns the guest phone, and it is restricted to cashier/manager roles.
+router.get('/payment-verifications', requireCashierOrManager(), async (req: Request, res: Response) => {
+  try {
+    const restaurantId = getTenantId(req);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+    const { take } = parsePagination(req.query as Record<string, unknown>);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        restaurantId,
+        paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION,
+        status: { not: 'CANCELLED' },
+      },
+      include: {
+        items: true,
+        table: { select: { number: true, name: true, zone: true, branchId: true } },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: Math.min(take, 100),
+    });
+
+    const data = orders.map((o) => ({
+      orderId: o.id,
+      numericId: o.numericId,
+      restaurantId: o.restaurantId,
+      branchId: o.table?.branchId || o.branchId || undefined,
+      tableId: o.tableId,
+      tableNumber: o.table?.number,
+      tableName: o.table?.name || undefined,
+      total: o.total,
+      subtotal: o.subtotal,
+      itemsCount: o.items.reduce((sum, i) => sum + i.quantity, 0),
+      itemsSummary: o.items
+        .map((i) => `${i.productNameSnapshot} ×${i.quantity}`)
+        .slice(0, 4)
+        .join('، '),
+      customerPhone: o.customerPhone || undefined,
+      paymentMethod: o.paymentMethod,
+      paymentStatus: o.paymentStatus,
+      hasPaymentProof: Boolean(o.paymentProofPath),
+      submittedAt: o.updatedAt.toISOString(),
+      createdAt: o.createdAt.toISOString(),
+    }));
+
+    return res.json({ success: true, data, statusCode: 200 });
+  } catch (err) {
+    console.error('[Payment Verification Error]', {
+      endpoint: 'GET /api/manager/payment-verifications',
+      tenantId: getTenantId(req),
+      message: (err as any)?.message || String(err),
+    });
+    return res.status(500).json({ success: false, error: 'تعذر استرجاع طلبات التحقق', statusCode: 500 });
+  }
+});
+
+// GET /api/manager/orders/:orderId/payment-proof — the receipt image itself.
+// Streams the bytes from the PRIVATE namespace after an authorization check, so
+// no public URL exists and no signature/token needs to leak into a URL.
+router.get(
+  '/orders/:orderId/payment-proof',
+  requireCashierOrManager(),
+  paymentProofReadLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const resolved = await resolveTenantOrder(req, String(req.params.orderId));
+      if (resolved.error === 'forbidden') return deny(req, res);
+      if (resolved.error === 'not_found') {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود في هذا المطعم', statusCode: 404 });
+      }
+      const { order } = resolved;
+      if (!order.paymentProofPath) {
+        return res.status(404).json({ success: false, error: 'لا يوجد إشعار حوالة لهذا الطلب', statusCode: 404 });
+      }
+      // Structural second check: the key must live in THIS tenant's namespace.
+      if (!proofBelongsToTenant(order.paymentProofPath, order.restaurantId)) {
+        await logAuditEvent({
+          restaurantId: order.restaurantId,
+          userId: req.user!.id,
+          actor: req.user!.name,
+          actorRole: req.user!.role as TenantRole,
+          action: 'PAYMENT_PROOF_ACCESS_DENIED',
+          entity: 'Order',
+          entityId: order.id,
+          // Data minimization: the suspected key itself is NOT written to the
+          // audit row (the order id already identifies the incident).
+          details: 'مفتاح تخزين إشعار لا ينتمي لنطاق هذا المطعم',
+          ipAddress: req.ip,
+        }).catch(() => undefined);
+        return res.status(403).json({ success: false, error: 'غير مصرح لك بالوصول لهذا الإشعار', statusCode: 403 });
+      }
+
+      const proof = await loadPaymentProof(order.paymentProofPath);
+      if (!proof) {
+        // The retention sweep may have removed it, or storage is unreachable.
+        return res.status(404).json({
+          success: false,
+          error: 'انتهت صلاحية إشعار الحوالة أو تم حذفه وفق سياسة الاحتفاظ',
+          statusCode: 404,
+        });
+      }
+
+      res.setHeader('Content-Type', proof.mimeType);
+      res.setHeader('Content-Length', String(proof.body.length));
+      res.setHeader('Content-Disposition', 'inline; filename="payment-proof"');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      return res.status(200).send(proof.body);
+    } catch (err) {
+      console.error('[Payment Proof Read Error]', {
+        endpoint: 'GET /api/manager/orders/:orderId/payment-proof',
+        orderId: req.params?.orderId,
+        tenantId: getTenantId(req),
+        message: (err as any)?.message || String(err),
+      });
+      return res.status(500).json({ success: false, error: 'تعذر تحميل صورة الإشعار', statusCode: 500 });
+    }
+  }
+);
+
+// POST /api/manager/orders/:orderId/payment/confirm — accept the transfer.
+// Creates the SAME immutable ledger receipt the cash/table flows create, with
+// method TRANSFER, and only within one atomic claim of the pending state, so
+// two cashiers can never double-post a payment.
+router.post(
+  '/orders/:orderId/payment/confirm',
+  requireCashierOrManager(),
+  paymentLimiter,
+  validateBody(paymentConfirmSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const resolved = await resolveTenantOrder(req, String(req.params.orderId));
+      if (resolved.error === 'forbidden') return deny(req, res);
+      if (resolved.error === 'not_found') {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود في هذا المطعم', statusCode: 404 });
+      }
+      const { order, restaurantId } = resolved;
+      const { note } = req.body as { note?: string };
+
+      if (order.status === 'CANCELLED') {
+        return res.status(409).json({ success: false, error: 'هذا الطلب ملغى ولا يمكن تأكيد دفعه.', statusCode: 409 });
+      }
+      if (order.paymentStatus === PAYMENT_STATUS.PAID) {
+        return res.status(409).json({
+          success: false,
+          error: 'تم تأكيد دفع هذا الطلب مسبقاً.',
+          statusCode: 409,
+        });
+      }
+      if (!isAwaitingVerification(order.paymentStatus)) {
+        return res.status(409).json({
+          success: false,
+          error: 'لا يوجد إشعار حوالة بانتظار التحقق لهذا الطلب.',
+          statusCode: 409,
+        });
+      }
+      if (!order.paymentProofPath) {
+        return res.status(409).json({
+          success: false,
+          error: 'إشعار الحوالة غير متوفر لهذا الطلب.',
+          statusCode: 409,
+        });
+      }
+
+      const now = new Date();
+      const tableLabel = order.table?.number
+        ? `طاولة ${order.table.number}`
+        : `طلب ${order.id}`;
+
+      let payment: Awaited<ReturnType<typeof prisma.payment.create>> | null = null;
+      let receiptError: unknown = null;
+      let settled = false;
+
+      for (let attempt = 0; attempt < 5 && !settled; attempt += 1) {
+        try {
+          const receiptNumber = await generateNextReceiptNumber(restaurantId, now, attempt);
+          payment = await prisma.$transaction(async (tx) => {
+            // Conditional claim: only an order that is STILL awaiting
+            // verification flips to PAID. A concurrent confirm/reject (or a
+            // cash settlement that got there first) claims zero rows and gets
+            // a 409 instead of a duplicate receipt.
+            const claimed = await tx.order.updateMany({
+              where: {
+                id: order.id,
+                restaurantId,
+                status: { not: 'CANCELLED' },
+                paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION,
+              },
+              data: {
+                paymentStatus: 'PAID',
+                paymentMethod: TRANSFER_PAYMENT_METHOD,
+                status: 'SERVED',
+                settledAt: now,
+                cashierId: req.user!.id,
+                paymentRejectedAt: null,
+                paymentRejectionReason: null,
+              },
+            });
+            if (claimed.count !== 1) {
+              throw Object.assign(new Error('VERIFY_RACE'), { code: 'VERIFY_RACE' });
+            }
+
+            return tx.payment.create({
+              data: {
+                id: `pay-${randomUUID()}`,
+                receiptNumber,
+                restaurantId,
+                branchId: order.table?.branchId || order.branchId || undefined,
+                tableId: order.tableId,
+                tableLabel,
+                orderIds: [order.id],
+                itemsSummary: undefined,
+                method: TRANSFER_PAYMENT_METHOD,
+                subtotal: order.subtotal,
+                tax: order.tax,
+                total: order.total,
+                cashierId: req.user!.id,
+                cashierName: req.user!.name,
+                note: note || 'تأكيد حوالة بنكية بعد التحقق من الإشعار',
+              },
+            });
+          });
+          settled = true;
+        } catch (txErr: unknown) {
+          receiptError = txErr;
+          const code = (txErr as { code?: string })?.code;
+          if (code === 'VERIFY_RACE') {
+            return res.status(409).json({
+              success: false,
+              error: 'تمت معالجة هذا الإشعار للتو من جهاز آخر. حدّث القائمة وحاول مجدداً.',
+              statusCode: 409,
+            });
+          }
+          if (code !== 'P2002') throw txErr;
+        }
+      }
+
+      if (!settled || !payment) {
+        console.error('[Payment Verify Error] Receipt allocation exhausted:', {
+          endpoint: 'POST /api/manager/orders/:orderId/payment/confirm',
+          tenantId: restaurantId,
+          orderId: order.id,
+          message: (receiptError as any)?.message || 'Failed to allocate unique receipt number after retries',
+          code: (receiptError as any)?.code,
+          meta: (receiptError as any)?.meta,
+        });
+        return res.status(500).json({ success: false, error: 'تعذر تأكيد الدفع، حاول مجدداً', statusCode: 500 });
+      }
+
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role as TenantRole,
+        action: 'PAYMENT_VERIFIED',
+        entity: 'Order',
+        entityId: order.id,
+        details: `تم تأكيد حوالة بنكية للطلب ${order.id} (إيصال ${payment.receiptNumber}) بقيمة ${order.total}`,
+        metadata: { method: TRANSFER_PAYMENT_METHOD, receiptNumber: payment.receiptNumber },
+        ipAddress: req.ip,
+      }).catch(() => undefined);
+
+      // Existing event name: every client (guest tracker + staff screens)
+      // already refreshes on PAYMENT_RECORDED — no second notification system.
+      realtimeService.broadcastToTable(restaurantId, order.tableId, 'PAYMENT_RECORDED', {
+        receiptNumber: payment.receiptNumber,
+        tableId: order.tableId,
+        orderId: order.id,
+        total: payment.total,
+      });
+      realtimeService.broadcastToTable(restaurantId, order.tableId, 'PAYMENT_PROOF_VERIFIED', {
+        orderId: order.id,
+        tableId: order.tableId,
+        receiptNumber: payment.receiptNumber,
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: { payment, orderId: order.id },
+        statusCode: 201,
+      });
+    } catch (err: unknown) {
+      console.error('[Payment Verify Error]', {
+        endpoint: 'POST /api/manager/orders/:orderId/payment/confirm',
+        orderId: req.params?.orderId,
+        tenantId: getTenantId(req),
+        message: (err as any)?.message || String(err),
+        code: (err as any)?.code,
+      });
+      return res.status(500).json({ success: false, error: 'تعذر تأكيد الدفع', statusCode: 500 });
+    }
+  }
+);
+
+// POST /api/manager/orders/:orderId/payment/reject — refuse the receipt.
+// The order returns to UNPAID (every existing collect path keeps working) and
+// carries a rejection marker so the guest is told to pay at the till. The
+// rejected receipt object is deleted: it serves no financial purpose.
+router.post(
+  '/orders/:orderId/payment/reject',
+  requireCashierOrManager(),
+  paymentLimiter,
+  validateBody(paymentRejectSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const resolved = await resolveTenantOrder(req, String(req.params.orderId));
+      if (resolved.error === 'forbidden') return deny(req, res);
+      if (resolved.error === 'not_found') {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود في هذا المطعم', statusCode: 404 });
+      }
+      const { order, restaurantId } = resolved;
+      const { reason } = req.body as { reason?: string };
+
+      if (order.paymentStatus === PAYMENT_STATUS.PAID) {
+        return res.status(409).json({
+          success: false,
+          error: 'تم تأكيد دفع هذا الطلب مسبقاً — لا يمكن رفضه.',
+          statusCode: 409,
+        });
+      }
+      if (!isAwaitingVerification(order.paymentStatus)) {
+        return res.status(409).json({
+          success: false,
+          error: 'لا يوجد إشعار حوالة بانتظار التحقق لهذا الطلب.',
+          statusCode: 409,
+        });
+      }
+
+      // Storage first: if the object cannot be removed we KEEP the pointer so
+      // the retention sweep retries it, instead of losing track of the file.
+      const proofDeleted = order.paymentProofPath
+        ? await discardPaymentProof(order.paymentProofPath)
+        : true;
+
+      const now = new Date();
+      const claimed = await prisma.order.updateMany({
+        where: {
+          id: order.id,
+          restaurantId,
+          status: { not: 'CANCELLED' },
+          paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION,
+        },
+        data: {
+          paymentStatus: PAYMENT_STATUS.UNPAID,
+          paymentRejectedAt: now,
+          paymentRejectionReason: reason || 'لم يتم التحقق من إشعار الحوالة',
+          ...(proofDeleted ? { paymentProofPath: null } : {}),
+        },
+      });
+
+      if (claimed.count !== 1) {
+        return res.status(409).json({
+          success: false,
+          error: 'تمت معالجة هذا الإشعار للتو من جهاز آخر. حدّث القائمة وحاول مجدداً.',
+          statusCode: 409,
+        });
+      }
+
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role as TenantRole,
+        action: 'PAYMENT_REJECTED',
+        entity: 'Order',
+        entityId: order.id,
+        details: `تم رفض إشعار الحوالة للطلب ${order.id}${reason ? ` — ${reason}` : ''}`,
+        metadata: { proofDeleted },
+        ipAddress: req.ip,
+      }).catch(() => undefined);
+
+      realtimeService.broadcastToTable(restaurantId, order.tableId, 'PAYMENT_PROOF_REJECTED', {
+        orderId: order.id,
+        tableId: order.tableId,
+        reason: reason || undefined,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          orderId: order.id,
+          paymentStatus: PAYMENT_STATUS.UNPAID,
+          proofDeleted,
+        },
+        statusCode: 200,
+      });
+    } catch (err: unknown) {
+      console.error('[Payment Reject Error]', {
+        endpoint: 'POST /api/manager/orders/:orderId/payment/reject',
+        orderId: req.params?.orderId,
+        tenantId: getTenantId(req),
+        message: (err as any)?.message || String(err),
+      });
+      return res.status(500).json({ success: false, error: 'تعذر رفض الإشعار', statusCode: 500 });
     }
   }
 );

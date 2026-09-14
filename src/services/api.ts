@@ -13,6 +13,8 @@ import {
   TableSession,
   AuditLog,
   PaymentRecord,
+  PaymentVerificationItem,
+  PaymentStatus,
   Branch,
   EntitlementKey,
 } from '../types/restaurant';
@@ -308,6 +310,13 @@ export function mapOrderRow(raw: any): Order {
     paymentMethod: raw.paymentMethod || 'PAY AT CASHIER',
     paymentStatus: raw.paymentStatus || 'UNPAID',
     settledAt: raw.settledAt ? toISO(raw.settledAt) : undefined,
+    // Proof state only — the private storage path and the guest phone never
+    // travel to the browser (the receipt image is fetched through an
+    // authenticated API call by the cashier screen).
+    hasPaymentProof: Boolean(raw.hasPaymentProof),
+    paymentRejected: Boolean(raw.paymentRejected),
+    paymentRejectedReason: raw.paymentRejectedReason || undefined,
+    paymentRejectedAt: raw.paymentRejectedAt ? toISO(raw.paymentRejectedAt) : undefined,
     notes: raw.notes || undefined,
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
@@ -367,6 +376,28 @@ export function mapPaymentRow(raw: any): PaymentRecord {
     cashierId: raw.cashierId || undefined,
     cashierName: raw.cashierName || '',
     note: raw.note || undefined,
+    createdAt: toISO(raw.createdAt),
+  };
+}
+
+export function mapPaymentVerificationRow(raw: any): PaymentVerificationItem {
+  return {
+    orderId: raw.orderId || raw.id,
+    numericId: raw.numericId !== undefined ? Number(raw.numericId) : undefined,
+    restaurantId: raw.restaurantId,
+    branchId: raw.branchId || undefined,
+    tableId: raw.tableId,
+    tableNumber: raw.tableNumber !== undefined ? Number(raw.tableNumber) : undefined,
+    tableName: raw.tableName || undefined,
+    total: Number(raw.total) || 0,
+    subtotal: Number(raw.subtotal) || 0,
+    itemsCount: Number(raw.itemsCount) || 0,
+    itemsSummary: raw.itemsSummary || undefined,
+    customerPhone: raw.customerPhone || undefined,
+    paymentMethod: raw.paymentMethod || 'TRANSFER',
+    paymentStatus: raw.paymentStatus || 'PENDING_VERIFICATION',
+    hasPaymentProof: Boolean(raw.hasPaymentProof),
+    submittedAt: toISO(raw.submittedAt || raw.updatedAt),
     createdAt: toISO(raw.createdAt),
   };
 }
@@ -1150,6 +1181,197 @@ class RestaurantApiService {
         success: true,
         data: { payment: mapPaymentRow({ ...res.data.payment, restaurantId }), message: res.data.message },
         statusCode: 201,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  // =========================================================================
+  // TRANSFER PAYMENT PROOF (guest upload + cashier verification)
+  // =========================================================================
+
+  /**
+   * Guest announces a bank transfer: uploads the receipt image (multipart)
+   * together with an OPTIONAL phone number.
+   *
+   * Uses XMLHttpRequest instead of fetch for one reason: only XHR exposes
+   * upload progress, which the UI needs to show a real progress bar (a failed
+   * or interrupted upload must be visible, not a frozen button). Everything
+   * else — auth header, error mapping — mirrors `request()`.
+   */
+  public submitPaymentProof(
+    params: {
+      restaurantId: string;
+      tableId: string;
+      sessionToken: string;
+      orderId: string;
+      phone?: string;
+      file: File | Blob;
+      fileName?: string;
+    },
+    onProgress?: (percent: number) => void
+  ): Promise<ApiResponse<{ orderId: string; paymentStatus: PaymentStatus }>> {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || typeof XMLHttpRequest === 'undefined') {
+        resolve({ success: false, error: 'الرفع متاح من المتصفح فقط', statusCode: 503 });
+        return;
+      }
+      try {
+        const form = new FormData();
+        // The server derives the stored type from the magic bytes and ignores
+        // this name entirely; it is normalized anyway so a hostile filename
+        // (path separators, control characters, absurd length) never travels.
+        const safeName =
+          (params.fileName || 'receipt.jpg')
+            .replace(/[^A-Za-z0-9._-]/g, '_')
+            .slice(0, 80) || 'receipt.jpg';
+        form.append('proof', params.file, safeName);
+        form.append('restaurantId', params.restaurantId);
+        form.append('tableId', params.tableId);
+        form.append('sessionToken', params.sessionToken);
+        if (params.phone) form.append('customerPhone', params.phone);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open(
+          'POST',
+          `${API_BASE}/public/orders/${encodeURIComponent(params.orderId)}/payment-proof`,
+          true
+        );
+        // Guests are anonymous: no manager JWT is ever attached to this call.
+        xhr.timeout = 60_000;
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && onProgress) {
+            onProgress(Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100))));
+          }
+        };
+
+        const finish = (status: number, body: any) => {
+          if (body && typeof body === 'object' && body.success) {
+            resolve({
+              success: true,
+              data: {
+                orderId: body.data?.order?.id || params.orderId,
+                paymentStatus: body.data?.order?.paymentStatus || 'PENDING_VERIFICATION',
+              },
+              statusCode: status || 200,
+            });
+            return;
+          }
+          if (body && typeof body === 'object' && 'error' in body) {
+            resolve(body as ApiResponse<never>);
+            return;
+          }
+          resolve({ success: false, error: 'تعذر إرسال إشعار الحوالة', statusCode: status || 500 });
+        };
+
+        xhr.onload = () => {
+          let body: any = null;
+          try {
+            body = JSON.parse(xhr.responseText);
+          } catch {
+            body = null;
+          }
+          finish(xhr.status, body);
+        };
+        xhr.onerror = () =>
+          resolve({ success: false, error: 'تعذر الاتصال بالخادم، تحقق من الشبكة', statusCode: 503 });
+        xhr.ontimeout = () =>
+          resolve({ success: false, error: 'انتهت مهلة الرفع — حاول مجدداً', statusCode: 408 });
+        xhr.onabort = () => resolve({ success: false, error: 'تم إلغاء الرفع', statusCode: 499 });
+
+        xhr.send(form);
+      } catch {
+        resolve({ success: false, error: 'تعذر رفع الصورة', statusCode: 500 });
+      }
+    });
+  }
+
+  /** Cashier queue: orders whose transfer receipt waits for a decision. */
+  public async getPaymentVerifications(
+    user: RestaurantUser,
+    restaurantId: string
+  ): Promise<ApiResponse<PaymentVerificationItem[]>> {
+    const res = await this.request<any>(
+      'GET',
+      `/manager/payment-verifications?restaurantId=${encodeURIComponent(restaurantId)}`
+    );
+    if (res.success && Array.isArray(res.data)) {
+      return { success: true, data: res.data.map(mapPaymentVerificationRow), statusCode: 200 };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  /** Fetch the PRIVATE receipt image as an object URL (Bearer-authenticated). */
+  public async fetchPaymentProofObjectUrl(
+    restaurantId: string,
+    orderId: string
+  ): Promise<ApiResponse<{ objectUrl: string }>> {
+    if (typeof window === 'undefined') {
+      return { success: false, error: 'غير متاح خارج المتصفح', statusCode: 503 };
+    }
+    try {
+      const res = await fetch(
+        `${API_BASE}/manager/orders/${encodeURIComponent(orderId)}/payment-proof?restaurantId=${encodeURIComponent(restaurantId)}`,
+        { headers: this.getAuthHeader(), signal: AbortSignal.timeout(30_000) }
+      );
+      if (!res.ok) {
+        const json: any = await res.json().catch(() => null);
+        return (
+          (json && typeof json === 'object' && 'error' in json
+            ? (json as ApiResponse<never>)
+            : { success: false, error: 'تعذر تحميل صورة الإشعار', statusCode: res.status }) as ApiResponse<never>
+        );
+      }
+      const blob = await res.blob();
+      return { success: true, data: { objectUrl: URL.createObjectURL(blob) }, statusCode: 200 };
+    } catch {
+      return { success: false, error: 'تعذر تحميل صورة الإشعار', statusCode: 503 };
+    }
+  }
+
+  /** Confirm a verified transfer: the order becomes PAID + a receipt is issued. */
+  public async confirmTransferPayment(
+    user: RestaurantUser,
+    restaurantId: string,
+    orderId: string,
+    note?: string
+  ): Promise<ApiResponse<{ payment: PaymentRecord }>> {
+    const res = await this.request<any>(
+      'POST',
+      `/manager/orders/${encodeURIComponent(orderId)}/payment/confirm`,
+      { body: { restaurantId, ...(note ? { note } : {}) } }
+    );
+    if (res.success && res.data?.payment) {
+      return {
+        success: true,
+        data: { payment: mapPaymentRow({ ...res.data.payment, restaurantId }) },
+        statusCode: 201,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  /** Reject a transfer receipt: the order returns to UNPAID (cash at till). */
+  public async rejectTransferPayment(
+    user: RestaurantUser,
+    restaurantId: string,
+    orderId: string,
+    reason?: string
+  ): Promise<ApiResponse<{ orderId: string; paymentStatus: PaymentStatus }>> {
+    const res = await this.request<any>(
+      'POST',
+      `/manager/orders/${encodeURIComponent(orderId)}/payment/reject`,
+      { body: { restaurantId, ...(reason ? { reason } : {}) } }
+    );
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          orderId: res.data.orderId || orderId,
+          paymentStatus: res.data.paymentStatus || 'UNPAID',
+        },
+        statusCode: 200,
       };
     }
     return res as ApiResponse<never>;

@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { Order } from '../../types/restaurant';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { CustomerRatingModal } from './CustomerRatingModal';
+import { TransferPaymentModal } from './TransferPaymentModal';
 import { useDialog } from '../../hooks/useDialog';
 import {
   X,
@@ -18,6 +19,9 @@ import {
   ChevronUp,
   Share2,
   Star,
+  CreditCard,
+  Clock,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const OrderTrackingDrawer: React.FC = () => {
@@ -40,6 +44,8 @@ export const OrderTrackingDrawer: React.FC = () => {
   const [editingNotesOrderId, setEditingNotesOrderId] = useState<string | null>(null);
   const [editingNotesText, setEditingNotesText] = useState<string>('');
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
+  // Order whose transfer receipt is being submitted (null = modal closed).
+  const [transferOrder, setTransferOrder] = useState<Order | null>(null);
 
   useDialog({ isOpen: isOrderTrackingOpen, onClose: () => setIsOrderTrackingOpen(false) });
 
@@ -209,6 +215,32 @@ export const OrderTrackingDrawer: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Transfer-payment state: the guest must always be able
+                        to tell whether their receipt is waiting, verified or
+                        refused — without opening the cashier's screens. */}
+                    {order.paymentStatus === 'PENDING_VERIFICATION' && (
+                      <div className="p-3 bg-amber-500/15 border-b border-amber-500/30 flex items-center gap-2 text-xs text-amber-200 font-bold">
+                        <Clock className="w-4 h-4 shrink-0" />
+                        <span>إشعار الحوالة بانتظار تحقق الكاشير</span>
+                      </div>
+                    )}
+                    {order.paymentRejected && order.paymentStatus !== 'PAID' && (
+                      <div className="p-3 bg-red-500/15 border-b border-red-500/30 flex items-center gap-2 text-xs text-red-300 font-bold">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        <span>
+                          لم يتم التحقق من إشعار الحوالة
+                          {order.paymentRejectedReason ? ` — ${order.paymentRejectedReason}` : ''}. يمكنك
+                          إرسال إشعار جديد أو الدفع عند الكاشير.
+                        </span>
+                      </div>
+                    )}
+                    {order.paymentStatus === 'PAID' && (
+                      <div className="p-3 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300 font-bold">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        <span>تم تأكيد الدفع — {order.paymentMethod === 'TRANSFER' ? 'حوالة بنكية' : 'تسوية الكاشير'}</span>
+                      </div>
+                    )}
+
                     {/* Completion Alert Banner if Ready/Served */}
                     {(isReady || isServed) && (
                       <div className="p-3 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300 font-bold">
@@ -333,7 +365,11 @@ export const OrderTrackingDrawer: React.FC = () => {
 
                       {/* Total & Payment method */}
                       <div className="flex items-center justify-between pt-2 border-t border-luxury-800 text-xs">
-                        <span className="text-luxury-400">طريقة الدفع: الدفع عند الكاشير</span>
+                        <span className="text-luxury-400">
+                          {order.paymentStatus === 'PAID'
+                            ? 'طريقة الدفع: تم الدفع'
+                            : 'طريقة الدفع: نقداً عند الكاشير أو حوالة بنكية'}
+                        </span>
                         <div className="text-left">
                           <span className="text-xs text-luxury-400 ml-2">الإجمالي:</span>
                           <span className="text-sm font-bold text-[var(--brand-primary-strong)]">
@@ -360,6 +396,28 @@ export const OrderTrackingDrawer: React.FC = () => {
                           <span>تقييم الوجبة</span>
                         </button>
                       </div>
+
+                      {/* Transfer payment: only for an order that is not
+                          settled yet. The server re-validates everything. */}
+                      {order.status !== 'CANCELLED' && order.paymentStatus !== 'PAID' && (
+                        <button
+                          onClick={() => setTransferOrder(order)}
+                          className={`w-full p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                            order.paymentStatus === 'PENDING_VERIFICATION'
+                              ? 'bg-amber-500/15 border-amber-500/30 text-amber-200 hover:bg-amber-500/25'
+                              : 'bg-luxury-950 border-luxury-750 text-[var(--brand-primary-strong)] hover:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]'
+                          }`}
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>
+                            {order.paymentStatus === 'PENDING_VERIFICATION'
+                              ? 'تحديث إشعار الحوالة'
+                              : order.paymentRejected
+                                ? 'إرسال إشعار حوالة جديد'
+                                : 'الدفع عبر حوالة بنكية'}
+                          </span>
+                        </button>
+                      )}
 
                       {/* Customer Actions & Rules Enforcement */}
                       <div className="pt-2 border-t border-luxury-800 flex items-center justify-between gap-2">
@@ -438,6 +496,15 @@ export const OrderTrackingDrawer: React.FC = () => {
         isOpen={isRatingModalOpen}
         onClose={() => setIsRatingModalOpen(false)}
       />
+
+      {/* Transfer payment proof (phone + receipt upload) */}
+      {transferOrder && (
+        <TransferPaymentModal
+          isOpen={Boolean(transferOrder)}
+          onClose={() => setTransferOrder(null)}
+          order={transferOrder}
+        />
+      )}
     </div>
   );
 };

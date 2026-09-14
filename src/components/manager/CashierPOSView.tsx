@@ -9,6 +9,7 @@ import {
   OrderItem,
 } from '../../types/restaurant';
 import { computeSalesKpis, METHOD_LABELS, ZONE_LABELS } from '../../services/analytics';
+import { PaymentVerificationPanel } from './PaymentVerificationPanel';
 import {
   Search,
   ShoppingBasket,
@@ -81,10 +82,16 @@ export const CashierPOSView: React.FC = () => {
     return list.slice().sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
   }, [tables, branchFilter]);
 
+  // Bills that can still be collected at the till. An order whose transfer
+  // receipt awaits verification is NOT collectable: it has its own queue above
+  // (collecting it would double-charge once the transfer is confirmed).
+  const isCollectable = (o: Order): boolean =>
+    o.status !== 'CANCELLED' &&
+    o.paymentStatus !== 'PAID' &&
+    o.paymentStatus !== 'PENDING_VERIFICATION';
+
   const openOrdersFor = (tableId: string): Order[] =>
-    orders.filter(
-      (o) => o.tableId === tableId && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID'
-    );
+    orders.filter((o) => o.tableId === tableId && isCollectable(o));
 
   const activeTable = selectedTableId
     ? tables.find((t) => t.id === selectedTableId) || null
@@ -225,10 +232,16 @@ export const CashierPOSView: React.FC = () => {
         createdOrderId = orderRes.data.order.id;
       }
 
-      // 2) Collect every open order for the bill (existing + newly created)
-      const openOrders = orders.filter(
+      // 2) Collect every open order for the bill (existing + newly created).
+      //    Orders awaiting transfer verification are skipped: they are handled
+      //    in the verification panel above, and including them would make the
+      //    server reject the whole collection request.
+      const openOrders = orders.filter((o) => o.tableId === tableId && isCollectable(o));
+      const awaitingVerification = orders.filter(
         (o) =>
-          o.tableId === tableId && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID'
+          o.tableId === tableId &&
+          o.status !== 'CANCELLED' &&
+          o.paymentStatus === 'PENDING_VERIFICATION'
       );
       const orderIds = openOrders.map((o) => o.id);
       if (createdOrderId && !orderIds.includes(createdOrderId)) orderIds.push(createdOrderId);
@@ -253,6 +266,13 @@ export const CashierPOSView: React.FC = () => {
       setCart([]);
       setCheckoutOpen(false);
       setReceipt(payRes.data.payment);
+      if (awaitingVerification.length > 0) {
+        showToast(
+          'info',
+          'طلبات بانتظار تحقق الحوالة',
+          `${awaitingVerification.length} طلب على هذه الطاولة لم يُحصّل — بانتظار تأكيد إشعار الحوالة أعلاه.`
+        );
+      }
       setSelectedTableId(null);
       refreshTenantData();
       showToast('success', 'تم تحصيل الفاتورة بنجاح', `الإيصال ${payRes.data.payment.receiptNumber} — ${payRes.data.payment.total}₪`);
@@ -337,6 +357,11 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
         </div>
       </div>
 
+      {/* Transfer receipts waiting for a cashier decision — always visible,
+          above the table grid, so the answer to "which order needs
+          verification?" never requires navigating to another page. */}
+      <PaymentVerificationPanel />
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* ============ RIGHT: TABLE & BILL CONTEXT ============ */}
         <div className="lg:col-span-3 space-y-3 order-3 lg:order-1">
@@ -419,6 +444,11 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                     <div className="text-luxury-500 truncate mt-0.5">
                       {o.items.map((i) => `${i.productName || i.name} x${i.quantity}`).join(' • ')}
                     </div>
+                    {o.paymentStatus === 'PENDING_VERIFICATION' && (
+                      <div className="text-[10px] font-bold text-amber-300 mt-0.5">
+                        بانتظار تحقق الحوالة
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

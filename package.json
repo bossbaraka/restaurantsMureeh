@@ -16,6 +16,7 @@
     "db:seed": "tsx server/db/seed.ts",
     "db:provision-admins": "tsx server/db/provision-admins.ts",
     "subscriptions:expire": "tsx server/db/expire-subscriptions.ts",
+    "retention:cleanup": "tsx server/scripts/retention-cleanup.ts",
     "storage:migrate": "tsx server/scripts/storage-migrate.ts",
     "test": "vitest run",
     "lint": "oxlint"

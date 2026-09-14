@@ -160,6 +160,12 @@ describe('SupabaseStorageDriver', () => {
       async listNames() {
         return [] as string[];
       },
+      // Private-namespace contract (transfer receipts) — these fakes only
+      // exercise the public driver paths.
+      async download() {
+        return null;
+      },
+      async ensureBucket() {},
     };
     const driver = new SupabaseStorageDriver(
       { url: 'https://proj.supabase.co', serviceRoleKey: 'key', bucket: 'bucket' },
@@ -197,6 +203,12 @@ describe('SupabaseStorageDriver', () => {
       async listNames() {
         return [] as string[];
       },
+      // Private-namespace contract (transfer receipts) — these fakes only
+      // exercise the public driver paths.
+      async download() {
+        return null;
+      },
+      async ensureBucket() {},
     };
     const driver = new SupabaseStorageDriver(
       { url: 'https://proj.supabase.co', serviceRoleKey: 'key', bucket: 'bucket' },
@@ -219,6 +231,12 @@ describe('SupabaseStorageDriver', () => {
       async listNames() {
         return [] as string[];
       },
+      // Private-namespace contract (transfer receipts) — these fakes only
+      // exercise the public driver paths.
+      async download() {
+        return null;
+      },
+      async ensureBucket() {},
     };
     const driver = new SupabaseStorageDriver(
       { url: 'https://proj.supabase.co', serviceRoleKey: 'key', bucket: 'bucket' },

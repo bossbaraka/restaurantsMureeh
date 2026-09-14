@@ -1,5 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import {
+  MAX_PHONE_INPUT_LENGTH,
+  normalizeCustomerPhone,
+} from '../utils/phone';
 
 // ============================================================
 // Central input validation (OWASP API3/API4, CWE-20).
@@ -766,6 +770,59 @@ export const paymentCreateSchema = z
     cashReceived: moneySchema.optional(),
     tip: moneySchema.optional(),
     note: optionalText(500),
+  })
+  .strict();
+
+// ---------------------------------------------------------------------------
+// Transfer payment proof (customer) + cashier verification
+// ---------------------------------------------------------------------------
+
+/**
+ * Optional guest phone. Normalized through the SAME function that the storage
+ * layer uses (server/utils/phone.ts), so a value can never be persisted in a
+ * shape the retention/validation contract would reject. An empty/omitted value
+ * is valid: the transfer receipt alone is enough to verify a payment.
+ */
+export const customerPhoneSchema = z
+  .string()
+  .trim()
+  .max(
+    MAX_PHONE_INPUT_LENGTH,
+    'رقم الهاتف طويل جداً — أدخل رقماً صحيحاً بحد أقصى 15 خانة'
+  )
+  .refine(
+    (value) => value === '' || normalizeCustomerPhone(value) !== null,
+    { message: 'رقم الهاتف غير صالح — أدخل رقماً حقيقياً (مثال: 0599123456)' }
+  )
+  .optional();
+
+/**
+ * Multipart body of POST /api/public/orders/:orderId/payment-proof.
+ * The receipt image travels as the `proof` file part (validated by magic
+ * bytes); these fields are the text parts. Every field is a hint the server
+ * re-resolves against the QR session and the order — none of them is trusted
+ * for authorization, tenancy or money.
+ */
+export const paymentProofSchema = z
+  .object({
+    restaurantId: idSchema,
+    tableId: idSchema,
+    sessionToken: z.string().trim().min(1, 'جلسة الطاولة مطلوبة').max(200),
+    customerPhone: customerPhoneSchema,
+  })
+  .strict();
+
+/** Cashier confirmation of a transfer receipt (body is optional/empty). */
+export const paymentConfirmSchema = z
+  .object({
+    note: optionalText(300),
+  })
+  .strict();
+
+/** Cashier rejection of a transfer receipt. */
+export const paymentRejectSchema = z
+  .object({
+    reason: optionalText(300),
   })
   .strict();
 
