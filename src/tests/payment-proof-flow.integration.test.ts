@@ -9,10 +9,12 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
  * the guard. No PrismaClient is constructed unless the gate passes.
  *
  * The scenario mirrors the shipped routes step by step:
- *   order created (UNPAID) → guest uploads receipt + phone → PENDING_VERIFICATION
- *   → cashier queue (tenant-scoped) → confirm (atomic claim + ledger receipt)
- *   → PAID → business session closes → archived → temporary data purge-eligible
- *   → purge clears phone + receipt key only.
+ *   order created (UNPAID, held out of the KDS by the guest's own action once
+ *   the notice exists) → guest uploads receipt + name + phone + channel →
+ *   PENDING_VERIFICATION → cashier queue (tenant-scoped) → confirm (atomic
+ *   claim + ledger receipt, kitchen status NOT rewritten) → PAID → business
+ *   session closes → archived → temporary data purge-eligible → purge clears
+ *   name + phone + receipt key only.
  *
  * Every mutation below uses the SAME conditional-update pattern as the routes,
  * so a regression in the pattern itself is caught here.
@@ -52,6 +54,7 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
     status?: string;
     settledAt?: Date | null;
     total?: number;
+    customerName?: string;
   } = {}) {
     const id = `ord-${runTag}-${orders.length + 1}`;
     orders.push(id);
@@ -68,6 +71,7 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
         subtotal: 68,
         tax: 0,
         total: opts.total ?? 68,
+        customerName: opts.customerName ?? null,
         createdAt: opts.createdAt ?? new Date(),
       },
     });
@@ -148,14 +152,18 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
         paymentStatus: 'PENDING_VERIFICATION',
         paymentRejectedAt: null,
         paymentRejectionReason: null,
+        customerName: 'أحمد سالم',
         customerPhone: '0599123456',
+        transferChannel: 'BANK',
       },
     });
     expect(claimed.count).toBe(1);
 
     const row = await prisma.order.findUnique({ where: { id: orderId } });
     expect(row.paymentStatus).toBe('PENDING_VERIFICATION');
+    expect(row.customerName).toBe('أحمد سالم');
     expect(row.customerPhone).toBe('0599123456');
+    expect(row.transferChannel).toBe('BANK');
     expect(row.paymentProofPath).toBe(key);
     // The receipt lives in the PRIVATE namespace, never under the public prefix.
     expect(row.paymentProofPath.startsWith('payment-proofs/')).toBe(true);
@@ -195,7 +203,8 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
           data: {
             paymentStatus: 'PAID',
             paymentMethod: 'TRANSFER',
-            status: 'SERVED',
+            // The kitchen status is deliberately NOT rewritten: confirming the
+            // money must not skip or serve the ticket — the KDS starts it.
             settledAt: now,
             cashierId,
             paymentRejectedAt: null,
@@ -234,6 +243,8 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
     expect(settled.paymentMethod).toBe('TRANSFER');
     expect(settled.cashierId).toBe(cashierId);
     expect(settled.settledAt).toBeInstanceOf(Date);
+    // Confirming settles the money; it never advances (or skips) the kitchen.
+    expect(settled.status).toBe(pending.status);
 
     const ledger = await prisma.payment.findMany({ where: { orderIds: { has: pending.id } } });
     expect(ledger).toHaveLength(1);
@@ -282,11 +293,15 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
       createdAt: new Date(Date.now() - 3 * day),
       settledAt: new Date(Date.now() - 3 * day),
       paymentStatus: 'PAID',
+      customerName: 'سمير خليل',
       customerPhone: '0599111111',
     });
     await prisma.order.update({
       where: { id: oldPaid },
-      data: { paymentProofPath: `payment-proofs/restaurant/${restA}/order/${oldPaid}/u.png` },
+      data: {
+        paymentProofPath: `payment-proofs/restaurant/${restA}/order/${oldPaid}/u.png`,
+        transferChannel: 'WALLET',
+      },
     });
     const recentPaid = await createOrder(restA, tableA, sessions[0], {
       paymentStatus: 'PAID',
@@ -334,6 +349,8 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
     expect(purged.purged).toBeGreaterThanOrEqual(1);
 
     const after = await prisma.order.findUnique({ where: { id: oldPaid.id } });
+    // Name + phone + receipt are the temporary operational data; all three go.
+    expect(after.customerName).toBeNull();
     expect(after.customerPhone).toBeNull();
     expect(after.paymentProofPath).toBeNull();
     expect(after.retentionPurgedAt).toBeInstanceOf(Date);
@@ -356,6 +373,7 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
     await prisma.order.update({
       where: { id: orderId },
       data: {
+        customerName: 'ليلى ناصر',
         customerPhone: '0509999999',
         paymentProofPath: `payment-proofs/restaurant/${restB}/order/${orderId}/u.png`,
         // Simulate an archived marker that a buggy sweep might have set.

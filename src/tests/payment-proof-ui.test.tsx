@@ -22,6 +22,7 @@ const read = (p: string) => readFileSync(resolve(repoRoot, p), 'utf8');
 const transferModalTsx = read('src/components/customer/TransferPaymentModal.tsx');
 const trackingDrawerTsx = read('src/components/customer/OrderTrackingDrawer.tsx');
 const verificationPanelTsx = read('src/components/manager/PaymentVerificationPanel.tsx');
+const kitchenDisplayTsx = read('src/components/manager/KitchenDisplaySystem.tsx');
 const cashierPosTsx = read('src/components/manager/CashierPOSView.tsx');
 const apiTs = read('src/services/api.ts');
 const contextTsx = read('src/context/RestaurantContext.tsx');
@@ -81,23 +82,40 @@ describe('guest transfer modal — rendered', () => {
     expect(html).toContain('الدفع عبر حوالة بنكية');
     expect(html).toContain('المبلغ المطلوب تحويله');
     expect(html).toContain('68');
+    expect(html).toContain('محفظة إلكترونية');
     // There is exactly one amount surface and no editable amount field.
     expect(html).not.toMatch(/type="number"/);
   });
 
-  it('asks for the phone as an OPTIONAL field with a hard length cap', () => {
+  it('requires the guest NAME and mobile number (the cashier must attribute the money)', () => {
+    expect(html).toContain('id="transfer-name"');
     expect(html).toContain('id="transfer-phone"');
     expect(html).toContain('type="tel"');
     expect(html).toContain('inputMode="tel"');
-    expect(html).toContain('اختياري');
+    expect(html).toContain('type="text"');
+    // Required fields, not hints: no "اختياري" label on the identity inputs.
+    expect(transferModalTsx).toContain('اسم العميل');
+    expect(transferModalTsx).toContain('رقم الهاتف المحمول');
+    expect(transferModalTsx).not.toContain('اختياري');
     expect(transferModalTsx).toContain('maxLength={24}');
+    expect(transferModalTsx).toContain('maxLength={60}');
+    // Both are validated before any upload starts.
+    expect(transferModalTsx).toContain("customerName.trim().length < 2");
+    expect(transferModalTsx).toContain("phone.replace(/\\D/g, '').length < 7");
+  });
+
+  it('lets the guest pick the transfer channel (bank or e-wallet)', () => {
+    expect(html).toContain('طريقة التحويل');
+    expect(html).toContain('role="radiogroup"');
+    expect(transferModalTsx).toContain("useState<TransferChannel>('BANK')");
+    expect(transferModalTsx).toContain('setChannel(option.id)');
   });
 
   it('offers the receipt upload with an image-only picker', () => {
     expect(html).toContain('id="transfer-proof-file"');
     expect(html).toContain('type="file"');
     expect(html).toContain('accept="image/png,image/jpeg,image/webp,image/gif"');
-    expect(html).toContain('إرسال إشعار الحوالة');
+    expect(html).toContain('إرسال إشعار التحويل');
   });
 
   it('renders a modal dialog with an accessible name', () => {
@@ -127,10 +145,15 @@ describe('guest modal — upload behaviour contracts', () => {
   });
 
   it('offers validation, success and retry states', () => {
-    expect(transferModalTsx).toContain('يرجى إرفاق صورة إشعار الحوالة');
-    expect(transferModalTsx).toContain('تم إرسال إشعار الحوالة');
+    expect(transferModalTsx).toContain('يرجى إرفاق صورة إشعار التحويل');
+    expect(transferModalTsx).toContain('تم إرسال إشعار التحويل للكاشير');
     expect(transferModalTsx).toContain('إعادة المحاولة');
     expect(transferModalTsx).toContain('role="alert"');
+  });
+
+  it('tells the guest the kitchen starts only after the cashier confirms', () => {
+    expect(transferModalTsx).toContain('لا يبدأ المطبخ بتحضير الطلب قبل تأكيد الدفع');
+    expect(transferModalTsx).toContain('بعد تأكيد الكاشير للعملية');
   });
 
   it('shrinks the photo with the existing shared pipeline', () => {
@@ -153,6 +176,12 @@ describe('order tracking — the guest always knows the payment state', () => {
     expect(trackingDrawerTsx).toContain("order.paymentStatus === 'PAID'");
   });
 
+  it('prompts the guest to SEND the notice and explains the kitchen hold', () => {
+    expect(trackingDrawerTsx).toContain('دفعت عبر البنك أو المحفظة؟ أرسل إشعار التحويل');
+    expect(trackingDrawerTsx).toContain('يبقى الطلب محجوزاً عن');
+    expect(trackingDrawerTsx).toContain('«جاهز للبدء»');
+  });
+
   it('offers the transfer CTA only while the order is unsettled', () => {
     expect(trackingDrawerTsx).toContain("order.status !== 'CANCELLED' && order.paymentStatus !== 'PAID'");
     expect(trackingDrawerTsx).toContain('الدفع عبر حوالة بنكية');
@@ -169,12 +198,23 @@ describe('cashier verification panel', () => {
     expect(verificationPanelTsx).toContain('if (!canVerify) return null;');
   });
 
-  it('shows order #, table, amount, method and phone for each pending receipt', () => {
+  it('shows order #, table, amount, method, name and phone for each pending receipt', () => {
     expect(verificationPanelTsx).toContain('item.numericId');
     expect(verificationPanelTsx).toContain('item.tableNumber');
     expect(verificationPanelTsx).toContain('formatPrice(item.total, currency)');
     expect(verificationPanelTsx).toContain('حوالة بنكية');
+    expect(verificationPanelTsx).toContain('item.customerName');
     expect(verificationPanelTsx).toContain('item.customerPhone');
+  });
+
+  it('shows the ORDER ITSELF with the notice (items the transfer must cover)', () => {
+    expect(verificationPanelTsx).toContain('openItem.items');
+    expect(verificationPanelTsx).toContain('line.productName');
+    expect(verificationPanelTsx).toContain('أصناف الطلب');
+    // The cashier is told that confirming is what sends the order to the KDS.
+    expect(verificationPanelTsx).toContain('لا يُرسل إلى المطبخ إلا بعد تأكيدك');
+    expect(verificationPanelTsx).toContain('جاهز للبدء');
+    expect(verificationPanelTsx).toContain('kitchenReleased');
   });
 
   it('loads the receipt through the authenticated API and frees it on close', () => {
@@ -218,6 +258,29 @@ describe('cashier POS integration — a pending receipt is not collectable cash'
   });
 });
 
+describe('kitchen display — a transfer order cooks only after confirmation', () => {
+  it('hides an order whose transfer still awaits the cashier', () => {
+    expect(kitchenDisplayTsx).toContain("o.paymentStatus === 'PENDING_VERIFICATION'");
+    expect(kitchenDisplayTsx).toContain("!(o.status === 'PENDING' && o.paymentStatus === 'PENDING_VERIFICATION')");
+  });
+
+  it('never hides a ticket the kitchen already started', () => {
+    // The hold applies to the PENDING state only: PREPARING/READY tickets stay
+    // on the board even if a receipt arrives mid-cooking.
+    expect(kitchenDisplayTsx).toContain("o.status === 'PENDING' && o.paymentStatus === 'PENDING_VERIFICATION'");
+  });
+
+  it('tells the kitchen why those orders are missing and when they appear', () => {
+    expect(kitchenDisplayTsx).toContain('بانتظار تأكيد الكاشير');
+    expect(kitchenDisplayTsx).toContain('جاهز للبدء');
+  });
+
+  it('flags a released (paid transfer) ticket as immediately cookable', () => {
+    expect(kitchenDisplayTsx).toContain("order.paymentStatus === 'PAID' && order.paymentMethod === 'TRANSFER'");
+    expect(kitchenDisplayTsx).toContain('جاهز للبدء فوراً');
+  });
+});
+
 describe('API client contracts', () => {
   it('uploads the receipt to the guest endpoint with progress (no auth header)', () => {
     const method = apiTs.slice(
@@ -228,6 +291,11 @@ describe('API client contracts', () => {
     expect(method).toContain('xhr.upload.onprogress');
     expect(method).toContain('/public/orders/${encodeURIComponent(params.orderId)}/payment-proof');
     expect(method).toContain("form.append('proof'");
+    // The guest identity travels with the file: name + mobile are required and
+    // the channel is a BANK|WALLET hint (never an amount).
+    expect(method).toContain("form.append('customerName', params.customerName)");
+    expect(method).toContain("form.append('customerPhone', params.phone)");
+    expect(method).toContain("form.append('transferChannel', params.channel || 'BANK')");
     // Guests are anonymous on this path: no Authorization header is attached.
     expect(method).not.toContain('getAuthHeader');
   });
@@ -247,6 +315,9 @@ describe('API client contracts', () => {
     expect(apiTs).toContain('hasPaymentProof: Boolean(raw.hasPaymentProof)');
     expect(apiTs).toContain('paymentRejected: Boolean(raw.paymentRejected)');
     expect(apiTs).toContain('export function mapPaymentVerificationRow');
+    // The queue row carries the verified identity + the order lines.
+    expect(apiTs).toContain('customerName: raw.customerName');
+    expect(apiTs).toContain('transferChannel: raw.transferChannel');
   });
 });
 
@@ -255,6 +326,24 @@ describe('frontend state wiring', () => {
     expect(contextTsx).toContain('submitTransferPaymentProof');
     expect(contextTsx).toContain('currentTableSession?.sessionToken');
     expect(contextTsx).toContain('لإرسال إشعار الحوالة يرجى مسح رمز QR');
+  });
+
+  it('carries the guest identity + channel through the context action', () => {
+    expect(contextTsx).toContain('customerName: details.customerName.trim()');
+    expect(contextTsx).toContain('phone: details.phone.trim()');
+    expect(contextTsx).toContain('channel: details.channel');
+    // The guest is told what happens next (cashier → kitchen).
+    expect(contextTsx).toContain('سيبدأ المطبخ بتحضير طلبك فور التأكيد');
+    // Placing an order prompts the guest to announce a bank/wallet transfer.
+    expect(contextTsx).toContain('هل ستدفع بتحويل بنكي أو محفظة؟');
+  });
+
+  it('chimes the kitchen when a paid transfer ticket is released', () => {
+    expect(contextTsx).toContain("data.status !== 'PENDING' || !data.kitchenReleased");
+  });
+
+  it('tells the guest when the cashier confirmed and cooking started', () => {
+    expect(contextTsx).toContain('أُرسل طلبك إلى المطبخ فوراً بعد التحقق من إشعار التحويل.');
   });
 
   it('reacts to the three payment-proof SSE events on both streams', () => {

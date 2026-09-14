@@ -13,9 +13,11 @@ import {
   normalizeCustomerPhone,
 } from '../../server/utils/phone';
 import {
+  MAX_CUSTOMER_NAME_LENGTH,
   paymentConfirmSchema,
   paymentProofSchema,
   paymentRejectSchema,
+  TRANSFER_CHANNELS,
 } from '../../server/validation/schemas';
 // Drivers/helpers are imported from their concrete modules (never the barrel):
 // the barrel pulls server/config.ts, which is only importable after the test
@@ -74,6 +76,9 @@ const schemaPrisma = read('prisma/schema.prisma');
 const migrationSql = read(
   'prisma/migrations/20260914120000_add_payment_proof_and_archive/migration.sql'
 );
+const identityMigrationSql = read(
+  'prisma/migrations/20260914160000_add_transfer_customer_identity/migration.sql'
+);
 
 // A minimal 1×1 PNG and a JPEG header — real magic bytes, no image decoder.
 const PNG = Buffer.from(
@@ -90,7 +95,7 @@ describe('customer phone — optional, normalized, never a credential', () => {
     expect(normalizeCustomerPhone('(059) 912.3456')).toBe('0599123456');
   });
 
-  it('treats "not provided" as valid (the phone is optional)', () => {
+  it('maps empty input to "no phone given" (the transfer form requires it)', () => {
     expect(normalizeCustomerPhone(undefined)).toBeNull();
     expect(normalizeCustomerPhone(null)).toBeNull();
     expect(normalizeCustomerPhone('')).toBeNull();
@@ -124,32 +129,46 @@ describe('customer phone — optional, normalized, never a credential', () => {
 });
 
 describe('request contracts (zod)', () => {
-  it('accepts a proof submission without a phone', () => {
-    const parsed = paymentProofSchema.safeParse({
-      restaurantId: 'rest-1',
-      tableId: 'table-1',
-      sessionToken: 'session-token',
-    });
-    expect(parsed.success).toBe(true);
+  const validBody = {
+    restaurantId: 'rest-1',
+    tableId: 'table-1',
+    sessionToken: 'session-token',
+    customerName: 'أحمد سالم',
+    customerPhone: '0599123456',
+  };
+
+  it('requires the guest name and mobile number on a transfer notice', () => {
+    // Without an attributable person the cashier cannot verify anything.
+    expect(paymentProofSchema.safeParse({ ...validBody, customerName: undefined }).success).toBe(false);
+    expect(paymentProofSchema.safeParse({ ...validBody, customerPhone: undefined }).success).toBe(false);
+    expect(paymentProofSchema.safeParse(validBody).success).toBe(true);
   });
 
-  it('accepts a proof submission with a valid phone and rejects an invalid one', () => {
+  it('bounds the name and refuses control characters / markup', () => {
+    expect(paymentProofSchema.safeParse({ ...validBody, customerName: 'أ' }).success).toBe(false);
     expect(
-      paymentProofSchema.safeParse({
-        restaurantId: 'rest-1',
-        tableId: 'table-1',
-        sessionToken: 'session-token',
-        customerPhone: '0599123456',
-      }).success
-    ).toBe(true);
-    expect(
-      paymentProofSchema.safeParse({
-        restaurantId: 'rest-1',
-        tableId: 'table-1',
-        sessionToken: 'session-token',
-        customerPhone: 'not-a-phone',
-      }).success
+      paymentProofSchema.safeParse({ ...validBody, customerName: 'x'.repeat(MAX_CUSTOMER_NAME_LENGTH + 1) })
+        .success
     ).toBe(false);
+    expect(paymentProofSchema.safeParse({ ...validBody, customerName: '<script>alert(1)</script>' }).success).toBe(
+      false
+    );
+    expect(paymentProofSchema.safeParse({ ...validBody, customerName: 'أحمد\nسالم' }).success).toBe(false);
+  });
+
+  it('accepts a valid phone and rejects an invalid one', () => {
+    expect(paymentProofSchema.safeParse(validBody).success).toBe(true);
+    expect(paymentProofSchema.safeParse({ ...validBody, customerPhone: 'not-a-phone' }).success).toBe(false);
+    expect(paymentProofSchema.safeParse({ ...validBody, customerPhone: '' }).success).toBe(false);
+  });
+
+  it('defaults the transfer channel to BANK and refuses unknown channels', () => {
+    expect(TRANSFER_CHANNELS).toEqual(['BANK', 'WALLET']);
+    const parsed = paymentProofSchema.safeParse(validBody);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.transferChannel).toBe('BANK');
+    expect(paymentProofSchema.safeParse({ ...validBody, transferChannel: 'WALLET' }).success).toBe(true);
+    expect(paymentProofSchema.safeParse({ ...validBody, transferChannel: 'CRYPTO' }).success).toBe(false);
   });
 
   it('rejects unknown fields on the money-adjacent endpoints', () => {
@@ -535,6 +554,16 @@ describe('cashier routes contract', () => {
     expect(queue).toContain('take: Math.min(take, 100)');
   });
 
+  it('carries the guest identity and the order items the cashier must verify', () => {
+    // Name + phone + channel + every item line travel in ONE response, so the
+    // cashier never leaves the card to check what the transfer is paying for.
+    expect(queue).toContain('customerName: o.customerName');
+    expect(queue).toContain('transferChannel: o.transferChannel');
+    expect(queue).toContain('orderStatus: o.status');
+    expect(queue).toContain('items: o.items.map');
+    expect(queue).toContain('productName: i.productNameSnapshot');
+  });
+
   it('is the only endpoint that returns the guest phone', () => {
     expect(queue).toContain('customerPhone: o.customerPhone');
     // Exactly one line in the whole router exposes the phone.
@@ -576,6 +605,25 @@ describe('cashier routes contract', () => {
     expect(confirm).toContain("'PAYMENT_PROOF_VERIFIED'");
   });
 
+  it('releases the order to the kitchen instead of skipping it to SERVED', () => {
+    // The old behaviour marked the order SERVED, which removed it from the KDS
+    // before anything was cooked. Confirming now settles the money and leaves
+    // the kitchen status alone: a still-PENDING order appears on the KDS as a
+    // fresh "ready to start" ticket.
+    const claimData = confirm.slice(
+      confirm.indexOf('tx.order.updateMany'),
+      confirm.indexOf('if (claimed.count !== 1)')
+    );
+    expect(claimData).not.toContain("status: 'SERVED'");
+    expect(claimData).toContain("paymentStatus: 'PAID'");
+    expect(confirm).toContain('const releasedStatus = order.status;');
+    expect(confirm).toContain("const kitchenReleased = releasedStatus === 'PENDING';");
+    // The KDS learns about the release on the existing status event.
+    expect(confirm).toContain("'ORDER_STATUS_UPDATED'");
+    expect(confirm).toContain('kitchenReleased,');
+    expect(confirm).toContain('orderStatus: releasedStatus');
+  });
+
   it('derives every trusted value server-side (never from the request body)', () => {
     expect(confirm).toContain('total: order.total');
     expect(confirm).toContain('subtotal: order.subtotal');
@@ -609,7 +657,9 @@ describe('database schema + migration (additive, non-destructive)', () => {
       schemaPrisma.indexOf('model OrderItem')
     );
     for (const column of [
+      'customerName',
       'customerPhone',
+      'transferChannel',
       'paymentProofPath',
       'paymentRejectedAt',
       'paymentRejectionReason',
@@ -630,6 +680,25 @@ describe('database schema + migration (additive, non-destructive)', () => {
     expect(migrationSql).not.toMatch(/DROP COLUMN/i);
     expect(migrationSql).not.toMatch(/DELETE FROM/i);
     expect(migrationSql).not.toMatch(/TRUNCATE/i);
+  });
+
+  it('adds the guest identity columns in their own additive migration', () => {
+    expect(identityMigrationSql).toContain('ADD COLUMN IF NOT EXISTS "customerName" TEXT');
+    expect(identityMigrationSql).toContain('ADD COLUMN IF NOT EXISTS "transferChannel" TEXT');
+    // Purely additive: no column/enum/table is dropped or rewritten.
+    expect(identityMigrationSql).not.toMatch(/DROP TABLE/i);
+    expect(identityMigrationSql).not.toMatch(/DROP COLUMN/i);
+    expect(identityMigrationSql).not.toMatch(/DELETE FROM/i);
+    expect(identityMigrationSql).not.toMatch(/TRUNCATE/i);
+    expect(identityMigrationSql).not.toMatch(/ALTER COLUMN/i);
+  });
+
+  it('purges the guest name with the other temporary operational data', () => {
+    const retentionTs = read('server/services/retention.ts');
+    const policyTs = read('server/services/retentionPolicy.ts');
+    expect(retentionTs).toContain('customerName: null');
+    expect(retentionTs).toContain('{ customerName: { not: null } }');
+    expect(policyTs).toContain('order.customerName || order.customerPhone');
   });
 
   it('indexes the two real query patterns without indexing PII', () => {

@@ -147,7 +147,11 @@ export async function purgeTemporaryOperationalData(options: {
       retentionPurgedAt: null,
       ...(options.restaurantId ? { restaurantId: options.restaurantId } : {}),
       // Something temporary left to remove…
-      OR: [{ customerPhone: { not: null } }, { paymentProofPath: { not: null } }],
+      OR: [
+        { customerName: { not: null } },
+        { customerPhone: { not: null } },
+        { paymentProofPath: { not: null } },
+      ],
       // A receipt awaiting a cashier decision is never purged.
       paymentStatus: { not: PAYMENT_STATUS.PENDING_VERIFICATION },
     },
@@ -157,6 +161,7 @@ export async function purgeTemporaryOperationalData(options: {
       paymentStatus: true,
       archivedAt: true,
       paymentRejectedAt: true,
+      customerName: true,
       customerPhone: true,
       paymentProofPath: true,
       retentionPurgedAt: true,
@@ -203,6 +208,9 @@ export async function purgeTemporaryOperationalData(options: {
           retentionPurgedAt: null,
         },
         data: {
+          // Temporary operational data only (name + phone + receipt). Every
+          // financial attribute stays untouched for reconciliation.
+          customerName: null,
           customerPhone: null,
           paymentProofPath: null,
           retentionPurgedAt: now,

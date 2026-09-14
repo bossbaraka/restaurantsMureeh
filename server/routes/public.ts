@@ -24,6 +24,7 @@ import {
   storePaymentProof,
   MAX_PAYMENT_PROOF_BYTES,
   PAYMENT_STATUS,
+  normalizeTransferChannel,
 } from '../services/paymentProofs';
 import { generateSessionToken, roundMoney } from '../utils/security';
 import { normalizeCustomerPhone } from '../utils/phone';
@@ -1206,9 +1207,14 @@ router.put(
 );
 
 // POST /api/public/orders/:orderId/payment-proof
-// The guest announces a bank transfer by uploading the receipt image and an
-// OPTIONAL phone number. Authorization is the same QR-session capability used
-// by cancel/notes: the order must belong to the caller's own table session.
+// The guest announces a bank/wallet transfer by uploading the receipt image
+// together with the REQUIRED name + mobile number (and the BANK|WALLET hint).
+// Authorization is the same QR-session capability used by cancel/notes: the
+// order must belong to the caller's own table session.
+//
+// The submission is what puts a transfer order on hold in the kitchen: while
+// paymentStatus is PENDING_VERIFICATION the KDS does not show the order, and
+// the cashier's confirmation releases it as a fresh "ready to start" ticket.
 //
 // Security properties (see docs/PAYMENT-PROOF-ARCHITECTURE-ANALYSIS.md):
 //  - restaurantId / tableId / sessionToken are treated as untrusted hints and
@@ -1227,12 +1233,15 @@ router.post(
     try {
       // Express 5 types all route params as `string | string[]`; bind once.
       const orderId = String(req.params.orderId);
-      const { restaurantId, tableId, sessionToken, customerPhone } = req.body as {
-        restaurantId: string;
-        tableId: string;
-        sessionToken: string;
-        customerPhone?: string;
-      };
+      const { restaurantId, tableId, sessionToken, customerName, customerPhone, transferChannel } =
+        req.body as {
+          restaurantId: string;
+          tableId: string;
+          sessionToken: string;
+          customerName: string;
+          customerPhone: string;
+          transferChannel?: string;
+        };
 
       if (!req.file || !req.file.buffer) {
         return res.status(400).json({
@@ -1312,6 +1321,11 @@ router.post(
       uploadedKey = stored.key;
 
       const phone = normalizeCustomerPhone(customerPhone);
+      // The name is stored as typed (bounded/sanitized by the schema) because
+      // the cashier reads it against the transfer notice; the phone is stored
+      // normalized so every surface shows the same canonical number.
+      const name = customerName.trim();
+      const channel = normalizeTransferChannel(transferChannel);
       const previousPath = order.paymentProofPath;
       const now = new Date();
 
@@ -1332,6 +1346,8 @@ router.post(
           // responded to the cashier's request for a new receipt.
           paymentRejectedAt: null,
           paymentRejectionReason: null,
+          customerName: name,
+          transferChannel: channel,
           ...(phone ? { customerPhone: phone } : {}),
         },
       });
@@ -1362,18 +1378,20 @@ router.post(
         action: 'PAYMENT_PROOF_SUBMITTED',
         entity: 'Order',
         entityId: order.id,
-        details: `إشعار حوالة بنكية للطلب ${order.id} (طاولة ${order.tableId})`,
-        metadata: { hasPhone: Boolean(phone) },
+        details: `إشعار تحويل للطلب ${order.id} (طاولة ${order.tableId})`,
+        metadata: { hasPhone: Boolean(phone), hasName: Boolean(name), channel },
         ipAddress: req.ip,
       }).catch(() => undefined);
 
       // Staff streams (no tableId) see every table event; the guest's own
-      // stream sees its table. The payload carries NO personal data.
+      // stream sees its table. The payload carries NO personal data: the
+      // cashier screen reads the name/phone from its authenticated queue.
       realtimeService.broadcastToTable(order.restaurantId, order.tableId, 'PAYMENT_PROOF_SUBMITTED', {
         orderId: order.id,
         tableId: order.tableId,
         numericId: order.numericId,
         total: order.total,
+        channel,
         at: now.toISOString(),
       });
 
@@ -1389,7 +1407,7 @@ router.post(
                 ...customerPaymentProofView(updated),
               }
             : null,
-          message: 'تم إرسال إشعار الحوالة — سيتحقق الكاشير منه قريباً',
+          message: 'تم إرسال إشعار التحويل — سيتحقق منه الكاشير وينتقل طلبك للمطبخ فور التأكيد',
         },
         statusCode: 201,
       });

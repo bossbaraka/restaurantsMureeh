@@ -15,6 +15,7 @@ import {
   PaymentRecord,
   PaymentVerificationItem,
   PaymentStatus,
+  TransferChannel,
   Branch,
   EntitlementKey,
 } from '../types/restaurant';
@@ -389,11 +390,26 @@ export function mapPaymentVerificationRow(raw: any): PaymentVerificationItem {
     tableId: raw.tableId,
     tableNumber: raw.tableNumber !== undefined ? Number(raw.tableNumber) : undefined,
     tableName: raw.tableName || undefined,
+    orderStatus: raw.orderStatus || undefined,
     total: Number(raw.total) || 0,
     subtotal: Number(raw.subtotal) || 0,
     itemsCount: Number(raw.itemsCount) || 0,
     itemsSummary: raw.itemsSummary || undefined,
+    items: Array.isArray(raw.items)
+      ? raw.items.map((i: any) => ({
+          productName: i.productName || i.name || '',
+          quantity: Number(i.quantity) || 1,
+          unitPrice: i.unitPrice !== undefined ? Number(i.unitPrice) : undefined,
+          totalPrice: i.totalPrice !== undefined ? Number(i.totalPrice) : undefined,
+          selectedSize: i.selectedSize || undefined,
+          selectedAddOns: Array.isArray(i.selectedAddOns) ? i.selectedAddOns : [],
+          removedIngredients: Array.isArray(i.removedIngredients) ? i.removedIngredients : [],
+          specialInstructions: i.specialInstructions || undefined,
+        }))
+      : undefined,
+    customerName: raw.customerName || undefined,
     customerPhone: raw.customerPhone || undefined,
+    transferChannel: raw.transferChannel === 'WALLET' ? 'WALLET' : raw.transferChannel === 'BANK' ? 'BANK' : undefined,
     paymentMethod: raw.paymentMethod || 'TRANSFER',
     paymentStatus: raw.paymentStatus || 'PENDING_VERIFICATION',
     hasPaymentProof: Boolean(raw.hasPaymentProof),
@@ -1205,7 +1221,11 @@ class RestaurantApiService {
       tableId: string;
       sessionToken: string;
       orderId: string;
-      phone?: string;
+      /** Required by the server: a notice must be attributable to a person. */
+      customerName: string;
+      phone: string;
+      /** BANK | WALLET — a display hint for the cashier. */
+      channel?: TransferChannel;
       file: File | Blob;
       fileName?: string;
     },
@@ -1229,7 +1249,9 @@ class RestaurantApiService {
         form.append('restaurantId', params.restaurantId);
         form.append('tableId', params.tableId);
         form.append('sessionToken', params.sessionToken);
-        if (params.phone) form.append('customerPhone', params.phone);
+        form.append('customerName', params.customerName);
+        form.append('customerPhone', params.phone);
+        form.append('transferChannel', params.channel || 'BANK');
 
         const xhr = new XMLHttpRequest();
         xhr.open(
@@ -1330,13 +1352,24 @@ class RestaurantApiService {
     }
   }
 
-  /** Confirm a verified transfer: the order becomes PAID + a receipt is issued. */
+  /**
+   * Confirm a verified transfer: the order becomes PAID + a receipt is issued.
+   * The response also reports the kitchen release — `kitchenReleased` is true
+   * when this confirmation is what pushed the order into the KDS as a fresh
+   * "ready to start" ticket.
+   */
   public async confirmTransferPayment(
     user: RestaurantUser,
     restaurantId: string,
     orderId: string,
     note?: string
-  ): Promise<ApiResponse<{ payment: PaymentRecord }>> {
+  ): Promise<
+    ApiResponse<{
+      payment: PaymentRecord;
+      orderStatus?: OrderStatus;
+      kitchenReleased?: boolean;
+    }>
+  > {
     const res = await this.request<any>(
       'POST',
       `/manager/orders/${encodeURIComponent(orderId)}/payment/confirm`,
@@ -1345,7 +1378,11 @@ class RestaurantApiService {
     if (res.success && res.data?.payment) {
       return {
         success: true,
-        data: { payment: mapPaymentRow({ ...res.data.payment, restaurantId }) },
+        data: {
+          payment: mapPaymentRow({ ...res.data.payment, restaurantId }),
+          orderStatus: res.data.orderStatus || undefined,
+          kitchenReleased: Boolean(res.data.kitchenReleased),
+        },
         statusCode: 201,
       };
     }

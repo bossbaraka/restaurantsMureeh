@@ -219,9 +219,15 @@ export const OrderTrackingDrawer: React.FC = () => {
                         to tell whether their receipt is waiting, verified or
                         refused — without opening the cashier's screens. */}
                     {order.paymentStatus === 'PENDING_VERIFICATION' && (
-                      <div className="p-3 bg-amber-500/15 border-b border-amber-500/30 flex items-center gap-2 text-xs text-amber-200 font-bold">
-                        <Clock className="w-4 h-4 shrink-0" />
-                        <span>إشعار الحوالة بانتظار تحقق الكاشير</span>
+                      <div className="p-3 bg-amber-500/15 border-b border-amber-500/30 space-y-1">
+                        <div className="flex items-center gap-2 text-xs text-amber-200 font-bold">
+                          <Clock className="w-4 h-4 shrink-0" />
+                          <span>إشعار الحوالة بانتظار تحقق الكاشير</span>
+                        </div>
+                        <p className="text-[11px] text-amber-200/80 leading-relaxed pr-6">
+                          وصل إشعار تحويلك إلى شاشة الكاشير مع تفاصيل الطلب. يبقى الطلب محجوزاً عن
+                          المطبخ حتى يؤكد الكاشير استلام المبلغ، ثم يبدأ التحضير فوراً.
+                        </p>
                       </div>
                     )}
                     {order.paymentRejected && order.paymentStatus !== 'PAID' && (
@@ -237,7 +243,11 @@ export const OrderTrackingDrawer: React.FC = () => {
                     {order.paymentStatus === 'PAID' && (
                       <div className="p-3 bg-emerald-500/15 border-b border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300 font-bold">
                         <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        <span>تم تأكيد الدفع — {order.paymentMethod === 'TRANSFER' ? 'حوالة بنكية' : 'تسوية الكاشير'}</span>
+                        <span>
+                          تم تأكيد الدفع
+                          {order.paymentMethod === 'TRANSFER' ? ' (تحويل بنكي/محفظة)' : ' (تسوية الكاشير)'}
+                          {order.status === 'PENDING' ? ' — طلبك انتقل إلى المطبخ' : ''}
+                        </span>
                       </div>
                     )}
 
@@ -397,6 +407,23 @@ export const OrderTrackingDrawer: React.FC = () => {
                         </button>
                       </div>
 
+                      {/* Prompt to announce the transfer: a guest who paid by
+                          bank/wallet must send the notice, otherwise the
+                          cashier has nothing to verify and the order never
+                          reaches the kitchen. */}
+                      {order.status !== 'CANCELLED' && order.paymentStatus === 'UNPAID' && (
+                        <div className="p-3 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.35)] space-y-1">
+                          <p className="text-xs font-bold text-[var(--brand-primary-strong)] flex items-center gap-1.5">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            دفعت عبر البنك أو المحفظة؟ أرسل إشعار التحويل
+                          </p>
+                          <p className="text-[11px] text-luxury-300 leading-relaxed">
+                            سيظهر إشعارك فوراً على شاشة الكاشير مع طلبك، وبعد تأكيد العملية ينتقل
+                            طلبك إلى المطبخ بحالة «جاهز للبدء».
+                          </p>
+                        </div>
+                      )}
+
                       {/* Transfer payment: only for an order that is not
                           settled yet. The server re-validates everything. */}
                       {order.status !== 'CANCELLED' && order.paymentStatus !== 'PAID' && (
@@ -411,7 +438,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                           <CreditCard className="w-3.5 h-3.5" />
                           <span>
                             {order.paymentStatus === 'PENDING_VERIFICATION'
-                              ? 'تحديث إشعار الحوالة'
+                              ? 'تحديث إشعار التحويل'
                               : order.paymentRejected
                                 ? 'إرسال إشعار حوالة جديد'
                                 : 'الدفع عبر حوالة بنكية'}
@@ -431,13 +458,19 @@ export const OrderTrackingDrawer: React.FC = () => {
                               <span>تعديل الملاحظات</span>
                             </button>
 
-                            <button
-                              onClick={() => cancelCustomerOrder(order.id)}
-                              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>إلغاء هذا الطلب</span>
-                            </button>
+                            {/* A notice awaiting the cashier freezes the
+                                cancel action: the cashier is holding a
+                                transfer for this order and the money question
+                                must not be silently deleted. */}
+                            {order.paymentStatus !== 'PENDING_VERIFICATION' && (
+                              <button
+                                onClick={() => cancelCustomerOrder(order.id)}
+                                className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>إلغاء هذا الطلب</span>
+                              </button>
+                            )}
                           </>
                         ) : (
                           <div className="w-full flex items-center gap-2 p-2 rounded-xl bg-luxury-950/70 border border-luxury-800 text-luxury-400 text-[11px]">
