@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { Order } from '../types/restaurant';
+import { isOrderOperational } from '../utils/orderLifecycle';
 
 /**
  * Transfer payment proof — UI/source-contract tests.
@@ -27,6 +28,7 @@ const cashierPosTsx = read('src/components/manager/CashierPOSView.tsx');
 const apiTs = read('src/services/api.ts');
 const contextTsx = read('src/context/RestaurantContext.tsx');
 const typesTs = read('src/types/restaurant.ts');
+const orderLifecycleTs = read('src/utils/orderLifecycle.ts');
 
 const order: Order = {
   id: 'order-1',
@@ -146,7 +148,8 @@ describe('guest modal — upload behaviour contracts', () => {
 
   it('offers validation, success and retry states', () => {
     expect(transferModalTsx).toContain('يرجى إرفاق صورة إشعار التحويل');
-    expect(transferModalTsx).toContain('تم إرسال إشعار التحويل للكاشير');
+    // The success state states the gate explicitly (required copy).
+    expect(transferModalTsx).toContain('تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.');
     expect(transferModalTsx).toContain('إعادة المحاولة');
     expect(transferModalTsx).toContain('role="alert"');
   });
@@ -169,11 +172,20 @@ describe('guest modal — upload behaviour contracts', () => {
 
 describe('order tracking — the guest always knows the payment state', () => {
   it('shows a pending, rejected and paid state on the order card', () => {
-    expect(trackingDrawerTsx).toContain("order.paymentStatus === 'PENDING_VERIFICATION'");
-    expect(trackingDrawerTsx).toContain('إشعار الحوالة بانتظار تحقق الكاشير');
+    expect(trackingDrawerTsx).toContain('isPaymentVerificationPending(order)');
+    expect(trackingDrawerTsx).toContain('تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.');
     expect(trackingDrawerTsx).toContain('order.paymentRejected');
     expect(trackingDrawerTsx).toContain('لم يتم التحقق من إشعار الحوالة');
     expect(trackingDrawerTsx).toContain("order.paymentStatus === 'PAID'");
+    // The gate predicate itself lives in the client mirror of the server
+    // policy the KDS/floor screens share (see utils/orderLifecycle).
+    expect(orderLifecycleTs).toContain("order.fulfillmentState === 'PAYMENT_VERIFICATION_PENDING'");
+    expect(orderLifecycleTs).toContain("order.paymentStatus === 'PENDING_VERIFICATION'");
+  });
+
+  it('carries the required payment-step copy of the gate flow', () => {
+    expect(trackingDrawerTsx).toContain('تم إرسال طلبك، يرجى تأكيد عملية الدفع لإتمام الطلب.');
+    expect(trackingDrawerTsx).toContain('تم تأكيد الدفع، وجارٍ تجهيز طلبك.');
   });
 
   it('prompts the guest to SEND the notice and explains the kitchen hold', () => {
@@ -259,15 +271,30 @@ describe('cashier POS integration — a pending receipt is not collectable cash'
 });
 
 describe('kitchen display — a transfer order cooks only after confirmation', () => {
-  it('hides an order whose transfer still awaits the cashier', () => {
-    expect(kitchenDisplayTsx).toContain("o.paymentStatus === 'PENDING_VERIFICATION'");
-    expect(kitchenDisplayTsx).toContain("!(o.status === 'PENDING' && o.paymentStatus === 'PENDING_VERIFICATION')");
+  it('hides every order still held by the payment gate', () => {
+    // The board renders the shared authorization predicate, never a local
+    // payment-status guess: held orders are excluded and counted only.
+    expect(kitchenDisplayTsx).toContain('isOrderOperational(o)');
+    expect(kitchenDisplayTsx).toContain("o.status !== 'CANCELLED' && !isOrderOperational(o)");
+    expect(kitchenDisplayTsx).toContain('heldForPayment.length');
   });
 
   it('never hides a ticket the kitchen already started', () => {
-    // The hold applies to the PENDING state only: PREPARING/READY tickets stay
-    // on the board even if a receipt arrives mid-cooking.
-    expect(kitchenDisplayTsx).toContain("o.status === 'PENDING' && o.paymentStatus === 'PENDING_VERIFICATION'");
+    // A release is terminal, so a ticket the kitchen picked up stays on the
+    // board even if a receipt arrives mid-cooking; an unpaid PENDING ticket is
+    // held until a cashier verifies the payment.
+    const started = {
+      status: 'PREPARING',
+      paymentStatus: 'PENDING_VERIFICATION',
+      fulfillmentState: 'RELEASED' as const,
+    };
+    expect(isOrderOperational(started)).toBe(true);
+    expect(isOrderOperational({ ...started, status: 'READY' })).toBe(true);
+    expect(
+      isOrderOperational({ status: 'PENDING', paymentStatus: 'UNPAID', fulfillmentState: 'AWAITING_PAYMENT' })
+    ).toBe(false);
+    expect(isOrderOperational({ status: 'PENDING', paymentStatus: 'PENDING_VERIFICATION' })).toBe(false);
+    expect(isOrderOperational({ status: 'PENDING', paymentStatus: 'PAID' })).toBe(true);
   });
 
   it('tells the kitchen why those orders are missing and when they appear', () => {
@@ -305,7 +332,8 @@ describe('API client contracts', () => {
     expect(apiTs).toContain('fetchPaymentProofObjectUrl');
     expect(apiTs).toContain('confirmTransferPayment');
     expect(apiTs).toContain('rejectTransferPayment');
-    expect(apiTs).toContain('/manager/payment-verifications?restaurantId=');
+    expect(apiTs).toContain('/manager/payment-verifications?${query.toString()}');
+    expect(apiTs).toContain("query.set('include', 'awaiting')");
     expect(apiTs).toContain('/payment/confirm');
     expect(apiTs).toContain('/payment/reject');
     expect(apiTs).toContain('API_BASE}/manager/orders/${encodeURIComponent(orderId)}/payment-proof');

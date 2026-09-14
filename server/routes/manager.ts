@@ -39,7 +39,27 @@ import {
   TRANSFER_PAYMENT_METHOD,
   PAYMENT_STATUS,
 } from '../services/paymentProofs';
+import {
+  FULFILLMENT_STATE,
+  RELEASE_REASON,
+  isOperational,
+  normalizeFulfillmentState,
+  releaseFields,
+} from '../services/orderLifecycle';
 import { generateQrToken, csvField, roundMoney, parsePagination, reconcileCashPayment } from '../utils/security';
+
+/**
+ * The shape the till needs from an order that ONLY the cash collection
+ * releases (it was held by the payment gate until this moment). Declared
+ * structurally so the two collection paths spell out what they touch.
+ */
+type CollectionReleasedOrder = {
+  id: string;
+  numericId: number;
+  total: number;
+  status: string;
+  fulfillmentState: string | null;
+};
 import { startOfDayInTimezone } from '../utils/datetime';
 import {
   paymentLimiter,
@@ -339,8 +359,30 @@ router.get('/orders', async (req: Request, res: Response) => {
     if (!ownTenant(req, restaurantId)) return deny(req, res);
 
     const { take, skip } = parsePagination(req.query as Record<string, unknown>);
+    // Optional server-side scope for the operational screens: `?operational=true`
+    // returns only orders whose payment was verified (the KDS/floor set), while
+    // `?operational=false` returns exactly the held ones (the cashier's
+    // "waiting for payment" list). Absent/other values keep the historical
+    // "all orders" behaviour for existing clients.
+    const operationalParam = req.query.operational;
+    const operationalFilter =
+      operationalParam === 'true' || operationalParam === '1'
+        ? { operationalOnly: true }
+        : operationalParam === 'false' || operationalParam === '0'
+          ? { operationalOnly: false }
+          : null;
+
     const orders = await prisma.order.findMany({
-      where: { restaurantId },
+      where: {
+        restaurantId,
+        ...(operationalFilter
+          ? {
+              fulfillmentState: operationalFilter.operationalOnly
+                ? FULFILLMENT_STATE.RELEASED
+                : { not: FULFILLMENT_STATE.RELEASED },
+            }
+          : {}),
+      },
       include: {
         items: true,
         table: true,
@@ -371,6 +413,12 @@ router.get('/orders', async (req: Request, res: Response) => {
       hasPaymentProof: Boolean(o.paymentProofPath),
       paymentRejectedAt: o.paymentRejectedAt?.toISOString(),
       settledAt: o.settledAt?.toISOString(),
+      // Payment authorization boundary, computed HERE (never from the client):
+      // `fulfillmentState` is the stored gate and `operational` is the single
+      // predicate the KDS/floor screens may act on.
+      fulfillmentState: normalizeFulfillmentState(o.fulfillmentState),
+      operational: isOperational(o.fulfillmentState),
+      releasedAt: o.releasedAt?.toISOString(),
       notes: o.notes || undefined,
       estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
       createdAt: o.createdAt.toISOString(),
@@ -537,6 +585,10 @@ router.post(
             clientRequestId: effectiveClientRequestId,
             status: 'PENDING',
             paymentMethod: 'PAY AT CASHIER',
+            // Staff-created order: money is taken in person at the counter, so
+            // the order is operational immediately (the payment gate exists for
+            // guest self-service orders, not for the till).
+            ...releaseFields(new Date()),
             subtotal,
             total: subtotal,
             notes: notes || undefined,
@@ -609,6 +661,12 @@ router.post(
         entity: 'Order',
         entityId: newOrder.id,
         details: `فاتورة كاشير ${newOrder.id} بقيمة ${subtotal} (${isWalkIn ? 'عميل مباشر' : 'طاولة ' + tableId})`,
+        metadata: {
+          // Staff orders are the third (and only pre-authorized) way through
+          // the payment gate: the money is taken in person at the counter.
+          releaseReason: RELEASE_REASON.STAFF_ORDER,
+          fulfillmentState: FULFILLMENT_STATE.RELEASED,
+        },
       });
 
       realtimeService.broadcastToTable(restaurantId, tableId, 'ORDER_CREATED', {
@@ -649,6 +707,19 @@ router.put(
       const order = await prisma.order.findUnique({ where: { id: orderId } });
       if (!order || order.restaurantId !== targetRestId) {
         return res.status(404).json({ success: false, error: 'الطلب غير موجود في هذا المطعم', statusCode: 404 });
+      }
+
+      // PAYMENT AUTHORIZATION BOUNDARY (server-enforced, not a UI filter): an
+      // order whose payment the cashier has not verified must not be started,
+      // plated or served. The KDS never renders it, so a transition here could
+      // only come from a crafted request or a stale bundle — both are refused.
+      if (status !== 'CANCELLED' && !isOperational(order.fulfillmentState)) {
+        return res.status(409).json({
+          success: false,
+          error:
+            'هذا الطلب بانتظار التحقق من الدفع من قبل الكاشير — لا يمكن بدء تحضيره قبل تأكيد الدفع.',
+          statusCode: 409,
+        });
       }
 
       // Enforce the operational state machine at the authority boundary, not
@@ -903,6 +974,14 @@ router.post(
       include: { items: true },
     });
 
+    // Which of these bills never passed the payment gate? Collecting them in
+    // person IS the verification, so this same transaction opens the gate for
+    // them. Because the kitchen never received those orders, they keep their
+    // PENDING status and arrive as fresh tickets instead of being marked
+    // SERVED without ever having been cooked.
+    const releasedByCollection = unpaidOrders.filter((o) => !isOperational(o.fulfillmentState));
+    const closingOperational = unpaidOrders.filter((o) => isOperational(o.fulfillmentState));
+
     let paymentRecord: Awaited<ReturnType<typeof prisma.payment.create>> | null = null;
 
     if (unpaidOrders.length > 0) {
@@ -939,22 +1018,49 @@ router.post(
             // concurrent settle/payment (double click, two cashiers) claims
             // zero rows here and gets a 409 instead of producing a duplicate
             // receipt and a double-posted ledger entry.
-            const claimed = await tx.order.updateMany({
-              where: {
-                id: { in: unpaidOrders.map((o) => o.id) },
-                restaurantId: table.restaurantId,
-                status: { not: 'CANCELLED' },
-                paymentStatus: 'UNPAID',
-              },
-              data: {
-                status: 'SERVED',
-                paymentStatus: 'PAID',
-                paymentMethod: paidMethod,
-                settledAt: now,
-                cashierId: req.user!.id,
-              },
-            });
-            if (claimed.count !== unpaidOrders.length) {
+            let claimedCount = 0;
+
+            if (closingOperational.length > 0) {
+              const claimed = await tx.order.updateMany({
+                where: {
+                  id: { in: closingOperational.map((o) => o.id) },
+                  restaurantId: table.restaurantId,
+                  status: { not: 'CANCELLED' },
+                  paymentStatus: 'UNPAID',
+                },
+                data: {
+                  status: 'SERVED',
+                  paymentStatus: 'PAID',
+                  paymentMethod: paidMethod,
+                  settledAt: now,
+                  cashierId: req.user!.id,
+                },
+              });
+              claimedCount += claimed.count;
+            }
+
+            if (releasedByCollection.length > 0) {
+              const claimed = await tx.order.updateMany({
+                where: {
+                  id: { in: releasedByCollection.map((o) => o.id) },
+                  restaurantId: table.restaurantId,
+                  status: { not: 'CANCELLED' },
+                  paymentStatus: 'UNPAID',
+                },
+                data: {
+                  // Kitchen status stays PENDING (fresh ticket) and the gate
+                  // opens in the SAME statement as the money.
+                  ...releaseFields(now),
+                  paymentStatus: 'PAID',
+                  paymentMethod: paidMethod,
+                  settledAt: now,
+                  cashierId: req.user!.id,
+                },
+              });
+              claimedCount += claimed.count;
+            }
+
+            if (claimedCount !== unpaidOrders.length) {
               throw Object.assign(new Error('SETTLE_RACE'), { code: 'SETTLE_RACE' });
             }
 
@@ -1061,6 +1167,53 @@ router.post(
       details: `تمت تسوية ودفع طلبات الطاولة ${table.number} ${paymentRecord ? `(إيصال ${paymentRecord.receiptNumber})` : ''}`,
       ipAddress: req.ip,
     });
+
+    // Orders that only NOW became operational (paid in person at the till
+    // while still held by the gate) are announced to the kitchen explicitly:
+    // the floor/KDS screens must show them instantly, exactly like a verified
+    // transfer. Nothing is announced for orders the kitchen already had.
+    if (releasedByCollection.length > 0) {
+      await Promise.all(
+        releasedByCollection.map((released: CollectionReleasedOrder) =>
+          logAuditEvent({
+            restaurantId: table.restaurantId,
+            userId: req.user!.id,
+            actor: req.user!.name,
+            actorRole: req.user!.role as TenantRole,
+            action: 'ORDER_RELEASED_TO_KDS',
+            entity: 'Order',
+            entityId: released.id,
+            details: `تم الإفراج عن الطلب ${released.id} للمطبخ بعد تحصيل الدفع (${paidMethod})`,
+            metadata: {
+              orderId: released.id,
+              paymentId: paymentRecord?.id,
+              restaurantId: table.restaurantId,
+              previousFulfillmentState: normalizeFulfillmentState(released.fulfillmentState),
+              fulfillmentState: FULFILLMENT_STATE.RELEASED,
+              releaseReason: RELEASE_REASON.CASH_COLLECTED,
+              paymentMethod: paidMethod,
+            },
+            ipAddress: req.ip,
+          }).catch(() => undefined)
+        )
+      );
+      for (const released of releasedByCollection) {
+        realtimeService.broadcastToTable(
+          table.restaurantId,
+          id,
+          'ORDER_RELEASED_TO_KITCHEN',
+          {
+            orderId: released.id,
+            tableId: id,
+            numericId: released.numericId,
+            total: released.total,
+            orderStatus: released.status,
+            releasedAt: now.toISOString(),
+            releaseReason: RELEASE_REASON.CASH_COLLECTED,
+          }
+        );
+      }
+    }
 
     realtimeService.broadcastToTable(table.restaurantId, id, 'TABLE_SETTLED', { tableId: id });
     if (paymentRecord) {
@@ -2935,6 +3088,12 @@ router.post(
       if (ordersToPay.length !== [...new Set(orderIds)].length) {
         return res.status(409).json({ success: false, error: 'بعض الفواتير المحددة غير صالحة للدفع (مدفوعة أو ملغاة أو من مطعم آخر)', statusCode: 409 });
       }
+      // Orders still held by the payment gate are RELEASED by this collection:
+      // money taken in person is a verified payment, and because the kitchen
+      // never received them they keep PENDING status and arrive as new tickets.
+      const releasedByCollection = ordersToPay.filter((o) => !isOperational(o.fulfillmentState));
+      const closingOperational = ordersToPay.filter((o) => isOperational(o.fulfillmentState));
+
       // Every billed order must belong to the billed table (no mixed-table bills).
       const foreignOrder = ordersToPay.find((o) => o.tableId !== tableId);
       if (foreignOrder) {
@@ -2977,22 +3136,49 @@ router.post(
           payment = await prisma.$transaction(async (tx) => {
             // Conditional claim: only still-UNPAID rows flip; the count
             // check below turns a lost double-submit race into a 409.
-            const claimed = await tx.order.updateMany({
-              where: {
-                id: { in: ordersToPay.map((o) => o.id) },
-                restaurantId,
-                paymentStatus: 'UNPAID',
-                status: { not: 'CANCELLED' },
-              },
-              data: {
-                status: 'SERVED',
-                paymentStatus: 'PAID',
-                paymentMethod: paidMethod,
-                settledAt: now,
-                cashierId: req.user!.id,
-              },
-            });
-            if (claimed.count !== ordersToPay.length) {
+            let claimedCount = 0;
+
+            if (closingOperational.length > 0) {
+              const claimed = await tx.order.updateMany({
+                where: {
+                  id: { in: closingOperational.map((o) => o.id) },
+                  restaurantId,
+                  paymentStatus: 'UNPAID',
+                  status: { not: 'CANCELLED' },
+                },
+                data: {
+                  status: 'SERVED',
+                  paymentStatus: 'PAID',
+                  paymentMethod: paidMethod,
+                  settledAt: now,
+                  cashierId: req.user!.id,
+                },
+              });
+              claimedCount += claimed.count;
+            }
+
+            if (releasedByCollection.length > 0) {
+              const claimed = await tx.order.updateMany({
+                where: {
+                  id: { in: releasedByCollection.map((o) => o.id) },
+                  restaurantId,
+                  paymentStatus: 'UNPAID',
+                  status: { not: 'CANCELLED' },
+                },
+                data: {
+                  // Gate opens in the same statement as the money; the kitchen
+                  // status stays PENDING so the order is cooked as a new ticket.
+                  ...releaseFields(now),
+                  paymentStatus: 'PAID',
+                  paymentMethod: paidMethod,
+                  settledAt: now,
+                  cashierId: req.user!.id,
+                },
+              });
+              claimedCount += claimed.count;
+            }
+
+            if (claimedCount !== ordersToPay.length) {
               throw Object.assign(new Error('PAYMENT_RACE'), { code: 'PAYMENT_RACE' });
             }
 
@@ -3076,6 +3262,44 @@ router.post(
         ipAddress: req.ip,
       });
 
+      if (releasedByCollection.length > 0) {
+        await Promise.all(
+          releasedByCollection.map((released: CollectionReleasedOrder) =>
+            logAuditEvent({
+              restaurantId,
+              userId: req.user!.id,
+              actor: req.user!.name,
+              actorRole: req.user!.role as TenantRole,
+              action: 'ORDER_RELEASED_TO_KDS',
+              entity: 'Order',
+              entityId: released.id,
+              details: `تم الإفراج عن الطلب ${released.id} للمطبخ بعد تحصيل الدفع (${paidMethod})`,
+              metadata: {
+                orderId: released.id,
+                paymentId: payment.id,
+                restaurantId,
+                previousFulfillmentState: normalizeFulfillmentState(released.fulfillmentState),
+                fulfillmentState: FULFILLMENT_STATE.RELEASED,
+                releaseReason: RELEASE_REASON.CASH_COLLECTED,
+                paymentMethod: paidMethod,
+              },
+              ipAddress: req.ip,
+            }).catch(() => undefined)
+          )
+        );
+        for (const released of releasedByCollection) {
+          realtimeService.broadcastToTable(restaurantId, tableId, 'ORDER_RELEASED_TO_KITCHEN', {
+            orderId: released.id,
+            tableId,
+            numericId: released.numericId,
+            total: released.total,
+            orderStatus: released.status,
+            releasedAt: now.toISOString(),
+            releaseReason: RELEASE_REASON.CASH_COLLECTED,
+          });
+        }
+      }
+
       realtimeService.broadcastToTable(restaurantId, tableId, 'PAYMENT_RECORDED', {
         receiptNumber: payment.receiptNumber,
         tableId,
@@ -3137,11 +3361,33 @@ router.get('/payment-verifications', requireCashierOrManager(), async (req: Requ
     if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
     const { take } = parsePagination(req.query as Record<string, unknown>);
 
+    // The verification queue itself is defined by the MONEY state
+    // (PENDING_VERIFICATION), so a receipt that was already queued before the
+    // fulfillment gate shipped is still verifiable. `?include=awaiting` adds
+    // the orders that have not completed their payment step yet — they carry a
+    // different `state`, have no receipt, and cannot be confirmed from here.
+    const includeAwaiting =
+      req.query.include === 'awaiting' || req.query.include === 'all';
+
     const orders = await prisma.order.findMany({
       where: {
         restaurantId,
-        paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION,
         status: { not: 'CANCELLED' },
+        OR: [
+          { paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION },
+          ...(includeAwaiting
+            ? [
+                {
+                  fulfillmentState: {
+                    in: [
+                      FULFILLMENT_STATE.AWAITING_PAYMENT,
+                      FULFILLMENT_STATE.PAYMENT_REJECTED,
+                    ],
+                  },
+                },
+              ]
+            : []),
+        ],
       },
       include: {
         items: true,
@@ -3188,6 +3434,15 @@ router.get('/payment-verifications', requireCashierOrManager(), async (req: Requ
       paymentMethod: o.paymentMethod,
       paymentStatus: o.paymentStatus,
       hasPaymentProof: Boolean(o.paymentProofPath),
+      // Gate state as the cashier's card must read it: WAITING_RECEIPT
+      // (AWAITING_PAYMENT / PAYMENT_REJECTED → nothing to confirm yet) vs
+      // WAITING_VERIFICATION (a receipt is attached → confirm or reject).
+      fulfillmentState: normalizeFulfillmentState(o.fulfillmentState),
+      state: isAwaitingVerification(o.paymentStatus)
+        ? 'WAITING_VERIFICATION'
+        : 'WAITING_RECEIPT',
+      paymentRejected: Boolean(o.paymentRejectedAt),
+      paymentRejectedReason: o.paymentRejectionReason || undefined,
       submittedAt: o.updatedAt.toISOString(),
       createdAt: o.createdAt.toISOString(),
     }));
@@ -3328,6 +3583,9 @@ router.post(
       const releasedStatus = order.status;
       const kitchenReleased = releasedStatus === 'PENDING';
       const channelLabel = transferChannelLabel(order.transferChannel);
+      // Authorization boundary, before/after: the confirmation is exactly the
+      // transition that opens the gate, and both values are audited.
+      const previousFulfillmentState = normalizeFulfillmentState(order.fulfillmentState);
 
       let payment: Awaited<ReturnType<typeof prisma.payment.create>> | null = null;
       let receiptError: unknown = null;
@@ -3354,6 +3612,11 @@ router.post(
                 // The order's kitchen status is intentionally NOT rewritten:
                 // a paid-but-not-started order must stay PENDING so the KDS
                 // shows it as a fresh, immediately cookable ticket.
+                //
+                // THE GATE OPENS IN THE SAME STATEMENT AS THE MONEY: there is
+                // no reachable state where paymentStatus is PAID while the
+                // order is still withheld from the kitchen (or the reverse).
+                ...releaseFields(now),
                 settledAt: now,
                 cashierId: req.user!.id,
                 paymentRejectedAt: null,
@@ -3389,6 +3652,32 @@ router.post(
           receiptError = txErr;
           const code = (txErr as { code?: string })?.code;
           if (code === 'VERIFY_RACE') {
+            // Lost the claim. Two very different situations:
+            //  (a) someone (this cashier on a second tab, the other cashier)
+            //      already CONFIRMED it — that is an idempotent replay: read the
+            //      authoritative row + its single ledger receipt and answer 200
+            //      with `alreadyConfirmed`, never a second receipt;
+            //  (b) the order moved to any other state (rejected, cancelled,
+            //      settled in cash) — a genuine conflict, answered with 409.
+            const current = await prisma.order.findUnique({ where: { id: order.id } });
+            if (current?.paymentStatus === PAYMENT_STATUS.PAID) {
+              const existingReceipt = await prisma.payment.findFirst({
+                where: { restaurantId, orderIds: { has: order.id } },
+                orderBy: { createdAt: 'desc' },
+              });
+              return res.status(200).json({
+                success: true,
+                data: {
+                  payment: existingReceipt,
+                  orderId: order.id,
+                  orderStatus: current.status,
+                  kitchenReleased: current.status === 'PENDING',
+                  fulfillmentState: FULFILLMENT_STATE.RELEASED,
+                  alreadyConfirmed: true,
+                },
+                statusCode: 200,
+              });
+            }
             return res.status(409).json({
               success: false,
               error: 'تمت معالجة هذا الإشعار للتو من جهاز آخر. حدّث القائمة وحاول مجدداً.',
@@ -3421,9 +3710,37 @@ router.post(
         entityId: order.id,
         details: `تم تأكيد ${channelLabel} للطلب ${order.id} (إيصال ${payment.receiptNumber}) بقيمة ${order.total}`,
         metadata: {
+          paymentEvent: 'PAYMENT_CONFIRMED',
           method: TRANSFER_PAYMENT_METHOD,
           receiptNumber: payment.receiptNumber,
           kitchenReleased,
+          orderId: order.id,
+          paymentId: payment.id,
+          previousFulfillmentState,
+          fulfillmentState: FULFILLMENT_STATE.RELEASED,
+        },
+        ipAddress: req.ip,
+      }).catch(() => undefined);
+
+      // Explicit audit of the authorization boundary itself: "this order was
+      // released to the KDS, by whom, on the strength of which receipt".
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role as TenantRole,
+        action: 'ORDER_RELEASED_TO_KDS',
+        entity: 'Order',
+        entityId: order.id,
+        details: `تم الإفراج عن الطلب ${order.id} إلى المطبخ بعد التحقق من الدفع (إيصال ${payment.receiptNumber})`,
+        metadata: {
+          orderId: order.id,
+          paymentId: payment.id,
+          restaurantId,
+          previousFulfillmentState,
+          fulfillmentState: FULFILLMENT_STATE.RELEASED,
+          releaseReason: RELEASE_REASON.TRANSFER_VERIFIED,
+          receiptNumber: payment.receiptNumber,
         },
         ipAddress: req.ip,
       }).catch(() => undefined);
@@ -3452,6 +3769,18 @@ router.post(
         receiptNumber: payment.receiptNumber,
         kitchenReleased,
       });
+      // THE operational event: payment verified → the restaurant may work on
+      // this order. KDS/floor screens act on THIS (and on the derived
+      // `operational` flag), never on the submission event.
+      realtimeService.broadcastToTable(restaurantId, order.tableId, 'ORDER_RELEASED_TO_KITCHEN', {
+        orderId: order.id,
+        tableId: order.tableId,
+        numericId: order.numericId,
+        total: order.total,
+        orderStatus: releasedStatus,
+        releasedAt: now.toISOString(),
+        releaseReason: RELEASE_REASON.TRANSFER_VERIFIED,
+      });
 
       return res.status(201).json({
         success: true,
@@ -3460,6 +3789,7 @@ router.post(
           orderId: order.id,
           orderStatus: releasedStatus,
           kitchenReleased,
+          fulfillmentState: FULFILLMENT_STATE.RELEASED,
         },
         statusCode: 201,
       });
@@ -3526,6 +3856,10 @@ router.post(
         },
         data: {
           paymentStatus: PAYMENT_STATUS.UNPAID,
+          // The gate stays CLOSED and now says why: the guest must act (send a
+          // new receipt or pay in person). A rejected order never reaches the
+          // kitchen, and the order itself is preserved (never deleted).
+          fulfillmentState: FULFILLMENT_STATE.PAYMENT_REJECTED,
           paymentRejectedAt: now,
           paymentRejectionReason: reason || 'لم يتم التحقق من إشعار الحوالة',
           ...(proofDeleted ? { paymentProofPath: null } : {}),
@@ -3549,7 +3883,14 @@ router.post(
         entity: 'Order',
         entityId: order.id,
         details: `تم رفض إشعار الحوالة للطلب ${order.id}${reason ? ` — ${reason}` : ''}`,
-        metadata: { proofDeleted },
+        metadata: {
+          paymentEvent: 'PAYMENT_REJECTED',
+          proofDeleted,
+          orderId: order.id,
+          restaurantId,
+          previousFulfillmentState: normalizeFulfillmentState(order.fulfillmentState),
+          fulfillmentState: FULFILLMENT_STATE.PAYMENT_REJECTED,
+        },
         ipAddress: req.ip,
       }).catch(() => undefined);
 
@@ -3564,6 +3905,7 @@ router.post(
         data: {
           orderId: order.id,
           paymentStatus: PAYMENT_STATUS.UNPAID,
+          fulfillmentState: FULFILLMENT_STATE.PAYMENT_REJECTED,
           proofDeleted,
         },
         statusCode: 200,

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { isOrderOperational } from '../../utils/orderLifecycle';
 import { formatPrice } from '../../utils/formatting';
 import { computeSalesKpis, ZONE_LABELS } from '../../services/analytics';
 import {
@@ -61,8 +62,12 @@ export const LiveRestaurantScreen: React.FC = () => {
 
   const kpis = useMemo(() => computeSalesKpis(orders, payments), [orders, payments]);
 
+  // The floor screen is an OPERATIONAL screen: it shows the orders the
+  // restaurant may serve, i.e. only those whose payment the cashier verified.
+  // Orders held by the payment gate are listed in the cashier's verification
+  // queue instead (see utils/orderLifecycle.ts).
   const liveOrders = orders
-    .filter((o) => ['PENDING', 'PREPARING', 'READY'].includes(o.status))
+    .filter((o) => isOrderOperational(o) && ['PENDING', 'PREPARING', 'READY'].includes(o.status))
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   const pendingWaiterCalls = waiterRequests.filter((w) => w.status === 'PENDING');
   const occupiedTables = tables.filter(

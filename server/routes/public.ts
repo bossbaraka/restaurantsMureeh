@@ -26,6 +26,11 @@ import {
   PAYMENT_STATUS,
   normalizeTransferChannel,
 } from '../services/paymentProofs';
+import {
+  FULFILLMENT_STATE,
+  isHeldForPayment,
+  normalizeFulfillmentState,
+} from '../services/orderLifecycle';
 import { generateSessionToken, roundMoney } from '../utils/security';
 import { normalizeCustomerPhone } from '../utils/phone';
 import {
@@ -675,6 +680,11 @@ router.get(
         hasPaymentProof: Boolean(o.paymentProofPath),
         paymentRejected: Boolean(o.paymentRejectedAt),
         paymentRejectedReason: o.paymentRejectionReason || undefined,
+        // Fulfillment gate: the guest's tracker renders the payment step from
+        // this state (waiting for payment / waiting for the cashier / released
+        // to the kitchen). Released orders carry when the gate opened.
+        fulfillmentState: normalizeFulfillmentState(o.fulfillmentState),
+        releasedAt: o.releasedAt?.toISOString(),
         notes: o.notes || undefined,
         estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
         createdAt: o.createdAt.toISOString(),
@@ -959,6 +969,12 @@ router.post(
               clientRequestId: effectiveClientRequestId,
               status: 'PENDING',
               paymentMethod: 'PAY AT CASHIER',
+              // THE AUTHORIZATION BOUNDARY: a guest order is created OUTSIDE
+              // the restaurant's operational workflow. It only becomes a
+              // kitchen ticket when a cashier verifies the payment (see
+              // services/orderLifecycle.ts). Nothing here trusts the client.
+              fulfillmentState: FULFILLMENT_STATE.AWAITING_PAYMENT,
+              releasedAt: null,
               subtotal,
               total: subtotal,
               notes: notes || undefined,
@@ -1001,6 +1017,12 @@ router.post(
               clientRequestId: effectiveClientRequestId,
               status: 'PENDING',
               paymentMethod: 'PAY AT CASHIER',
+              // THE AUTHORIZATION BOUNDARY: a guest order is created OUTSIDE
+              // the restaurant's operational workflow. It only becomes a
+              // kitchen ticket when a cashier verifies the payment (see
+              // services/orderLifecycle.ts). Nothing here trusts the client.
+              fulfillmentState: FULFILLMENT_STATE.AWAITING_PAYMENT,
+              releasedAt: null,
               subtotal,
               total: subtotal,
               notes: notes || undefined,
@@ -1040,14 +1062,24 @@ router.post(
         entity: 'Order',
         entityId: newOrder.id,
         details: `طلب زبون ${newOrder.id} بقيمة ${subtotal} (طاولة ${tableId})`,
+        metadata: {
+          fulfillmentState: FULFILLMENT_STATE.AWAITING_PAYMENT,
+          previousFulfillmentState: null,
+        },
       }).catch(() => undefined);
 
-      // Broadcast new order (table-scoped: only this table + staff see it)
-      realtimeService.broadcastToTable(restaurantId, tableId, 'ORDER_CREATED', {
+      // NOT `ORDER_CREATED`: a guest submission is not a kitchen ticket. This
+      // event tells the guest device and the cashier surfaces that an order is
+      // waiting for its payment step; the KDS/floor screens deliberately do not
+      // subscribe to it. The order reaches the kitchen only through
+      // `ORDER_RELEASED_TO_KITCHEN` after a cashier verifies the payment.
+      realtimeService.broadcastToTable(restaurantId, tableId, 'ORDER_AWAITING_PAYMENT', {
         orderId: newOrder.id,
         tableId,
+        numericId: newOrder.numericId,
         total: newOrder.total,
         status: newOrder.status,
+        fulfillmentState: FULFILLMENT_STATE.AWAITING_PAYMENT,
         itemsCount: newOrder.items.length,
       });
 
@@ -1096,6 +1128,23 @@ router.post(
         return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
       }
 
+      // Money already committed (or under verification) freezes cancellation:
+      // a guest must not be able to delete an order the cashier just verified
+      // or is currently reviewing. Unpaid orders stay cancellable.
+      if (
+        order.paymentStatus === PAYMENT_STATUS.PAID ||
+        order.paymentStatus === PAYMENT_STATUS.PENDING_VERIFICATION
+      ) {
+        return res.status(409).json({
+          success: false,
+          error:
+            order.paymentStatus === PAYMENT_STATUS.PAID
+              ? 'تم تأكيد دفع هذا الطلب — يرجى التواصل مع طاقم المطعم للإلغاء.'
+              : 'إشعار الحوالة قيد التحقق من قبل الكاشير، لذلك لا يمكن إلغاء الطلب حالياً.',
+          statusCode: 409,
+        });
+      }
+
       if (order.status !== 'PENDING') {
         return res.status(403).json({
           success: false,
@@ -1104,8 +1153,18 @@ router.post(
         });
       }
 
+      // Compare-and-set: the money state is part of the condition, so a cashier
+      // confirming the transfer in the same instant wins the race (this update
+      // matches zero rows → 409) instead of the order being cancelled after
+      // payment.
       const cancelled = await prisma.order.updateMany({
-        where: { id: orderId, restaurantId: order.restaurantId, sessionId: session.id, status: 'PENDING' },
+        where: {
+          id: orderId,
+          restaurantId: order.restaurantId,
+          sessionId: session.id,
+          status: 'PENDING',
+          paymentStatus: PAYMENT_STATUS.UNPAID,
+        },
         data: { status: 'CANCELLED' },
       });
       if (cancelled.count !== 1) {
@@ -1327,7 +1386,16 @@ router.post(
       const name = customerName.trim();
       const channel = normalizeTransferChannel(transferChannel);
       const previousPath = order.paymentProofPath;
+      const previousGate = normalizeFulfillmentState(order.fulfillmentState);
       const now = new Date();
+
+      // The gate moves only while the order is still PRE-authorization. An
+      // already-released order (a legacy row, or a receipt sent while the
+      // kitchen is cooking) keeps its RELEASED gate: verifying the money must
+      // never pull a live ticket back out of the operational screens.
+      const gateUpdate = isHeldForPayment(order.fulfillmentState)
+        ? { fulfillmentState: FULFILLMENT_STATE.PAYMENT_VERIFICATION_PENDING }
+        : {};
 
       // Conditional claim: only an unpaid or already-pending order can move to
       // PENDING_VERIFICATION. A concurrent cashier confirmation wins and this
@@ -1342,6 +1410,7 @@ router.post(
         data: {
           paymentProofPath: stored.key,
           paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION,
+          ...gateUpdate,
           // A fresh upload clears a previous rejection: the guest has
           // responded to the cashier's request for a new receipt.
           paymentRejectedAt: null,
@@ -1379,7 +1448,16 @@ router.post(
         entity: 'Order',
         entityId: order.id,
         details: `إشعار تحويل للطلب ${order.id} (طاولة ${order.tableId})`,
-        metadata: { hasPhone: Boolean(phone), hasName: Boolean(name), channel },
+        metadata: {
+          // Canonical payment-lifecycle event name (this repo's audit action
+          // taxonomy keeps the established PAYMENT_PROOF_* actions).
+          paymentEvent: 'PAYMENT_SUBMITTED',
+          hasPhone: Boolean(phone),
+          hasName: Boolean(name),
+          channel,
+          previousFulfillmentState: previousGate,
+          fulfillmentState: gateUpdate.fulfillmentState || previousGate,
+        },
         ipAddress: req.ip,
       }).catch(() => undefined);
 

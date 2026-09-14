@@ -36,6 +36,7 @@ import { soundFX } from '../utils/audio';
 import { applyBrandTheme } from '../theme/brandTheme';
 import { resolveTableDisplayNumber } from '../utils/formatting';
 import { openEventSourceWithBackoff } from '../utils/sse';
+import { isOrderOperational } from '../utils/orderLifecycle';
 
 export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
 
@@ -136,6 +137,15 @@ interface RestaurantContextType {
   editCustomerOrderNotes: (orderId: string, notes: string) => Promise<{ success: boolean; message: string }>;
   callWaiter: (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => Promise<{ success: boolean; error?: string }>;
   activeTableOrders: Order[];
+  /**
+   * MANDATORY PAYMENT STEP: the order the guest must settle right after
+   * submitting it (the payment authorization boundary). Non-null while the
+   * guest still owes the payment step for a freshly placed order; the customer
+   * layout renders the transfer/receipt screen for it.
+   */
+  orderAwaitingPayment: Order | null;
+  /** Close the payment step (the guest may reopen it from the order tracker). */
+  dismissPaymentStep: () => void;
   /**
    * Announce a bank/wallet transfer: uploads the receipt together with the
    * guest's name + mobile number for one of the guest's own orders and moves it
@@ -347,6 +357,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [activeTableId, tables, activeTableNumber]);
   const [orders, setOrders] = useState<Order[]>([]);
+  // The order whose mandatory payment step is on screen. Re-resolved against
+  // `orders` on every render so the screen always shows server state, and it
+  // disappears by itself the moment the order is released (paid/verified).
+  const [paymentStepOrder, setPaymentStepOrder] = useState<Order | null>(null);
   const [waiterRequests, setWaiterRequests] = useState<WaiterRequest[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -832,6 +846,9 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             }
           },
           ORDER_CREATED: () => refreshTenantData(),
+          // The guest's own submission: the order exists but is NOT a kitchen
+          // ticket yet — the payment step is what releases it.
+          ORDER_AWAITING_PAYMENT: () => refreshTenantData(),
           ORDER_CANCELLED: () => refreshTenantData(),
           WAITER_STATUS_UPDATED: (event: MessageEvent) => {
             try {
@@ -884,6 +901,16 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               showToast('warning', 'لم يتم التحقق من إشعار الحوالة');
             }
           },
+          // THE release event: payment verified → the restaurant may start.
+          ORDER_RELEASED_TO_KITCHEN: () => {
+            refreshTenantData();
+            showToast(
+              'success',
+              'تم تأكيد الدفع، وجارٍ تجهيز طلبك.',
+              'انتقل طلبك إلى المطبخ بعد التحقق من الدفع.'
+            );
+            soundFX.playBell();
+          },
         }
       );
     } catch {
@@ -909,6 +936,46 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           ORDER_CREATED: () => {
             refreshTenantData();
             soundFX.playChime();
+          },
+          // A guest order arrived but is NOT operational yet: cashier surfaces
+          // need to know (it sits in their payment queue), the kitchen must NOT
+          // be alerted — it is not a ticket until the payment is verified.
+          ORDER_AWAITING_PAYMENT: (event: MessageEvent) => {
+            refreshTenantData();
+            if (currentUser?.role !== 'CASHIER' && currentUser?.role !== 'RESTAURANT_MANAGER') return;
+            try {
+              const data = JSON.parse(event.data as string) as {
+                numericId?: number;
+                total?: number;
+              };
+              showToast(
+                'info',
+                'طلب جديد بانتظار دفع الزبون',
+                `الطلب ${data.numericId ? `#${data.numericId}` : ''} — ${data.total ?? ''} ${
+                  currentRestaurant?.currency || '₪'
+                }`.trim() + ' · لن يظهر في المطبخ قبل تأكيد الدفع.'
+              );
+            } catch {
+              showToast('info', 'طلب جديد بانتظار دفع الزبون');
+            }
+          },
+          // Payment verified → the order is released to the restaurant. This is
+          // the event that makes a newly authorized ticket appear (and chime on
+          // the kitchen board); the submission event above never does.
+          ORDER_RELEASED_TO_KITCHEN: (event: MessageEvent) => {
+            refreshTenantData();
+            try {
+              const data = JSON.parse(event.data as string) as { orderStatus?: string };
+              const watchingKitchen =
+                viewMode === 'KITCHEN_KDS' ||
+                viewMode === 'LIVE_SCREEN' ||
+                currentUser?.role === 'KITCHEN';
+              if (watchingKitchen && (data.orderStatus === undefined || data.orderStatus === 'PENDING')) {
+                soundFX.playChime();
+              }
+            } catch {
+              /* ignore malformed real-time payloads */
+            }
           },
           ORDER_STATUS_UPDATED: (event: MessageEvent) => {
             refreshTenantData();
@@ -1124,6 +1191,19 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const clearCart = useCallback(() => setCartItems([]), []);
 
+  /**
+   * The payment step is shown ONLY while the order is still held by the payment
+   * gate (awaiting payment / awaiting cashier): once it is RELEASED there is
+   * nothing left to confirm, so the screen closes on its own.
+   */
+  const orderAwaitingPayment = useMemo(() => {
+    if (!paymentStepOrder) return null;
+    const fresh = orders.find((o) => o.id === paymentStepOrder.id) || paymentStepOrder;
+    return isOrderOperational(fresh) ? null : fresh;
+  }, [orders, paymentStepOrder]);
+
+  const dismissPaymentStep = useCallback(() => setPaymentStepOrder(null), []);
+
   // The customer only ever sees orders that belong to their own session —
   // never orders from another table or another customer at the same table.
   const activeTableOrders = useMemo(() => {
@@ -1251,13 +1331,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         soundFX.playChime();
         setIsCartOpen(false);
         setIsOrderTrackingOpen(true);
-        // Prompt the guest to announce a bank/wallet transfer: without the
-        // notice the cashier has nothing to verify and the kitchen never
-        // receives the (paid) order.
+        // THE AUTHORIZATION BOUNDARY, guest side: the order was accepted but is
+        // NOT part of the restaurant's workflow yet. The guest goes straight to
+        // the payment confirmation screen (phone + receipt); the order only
+        // reaches the kitchen after the cashier verifies that payment.
+        setPaymentStepOrder(res.data.order);
         showToast(
           'info',
-          'هل ستدفع بتحويل بنكي أو محفظة؟',
-          'أرسل إشعار التحويل من تتبع الطلب — بعد تأكيد الكاشير ينتقل طلبك للمطبخ فوراً.'
+          'تم إرسال طلبك، يرجى تأكيد عملية الدفع لإتمام الطلب.',
+          'هل ستدفع بتحويل بنكي أو محفظة؟ أرسل إشعار التحويل الآن — بعد تأكيد الكاشير ينتقل طلبك للمطبخ فوراً، أو ادفع عند الكاشير.'
         );
         return { success: true, order: res.data.order };
       }
@@ -1302,7 +1384,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (res.success) {
         showToast(
           'success',
-          'تم إرسال إشعار التحويل للكاشير',
+          'تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.',
           'بانتظار تأكيد الكاشير — سيبدأ المطبخ بتحضير طلبك فور التأكيد.'
         );
         refreshTenantData();
@@ -1745,6 +1827,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isTableSelectorOpen,
         setIsTableSelectorOpen,
         createOrder,
+        orderAwaitingPayment,
+        dismissPaymentStep,
         submitTransferPaymentProof,
         cancelCustomerOrder,
         editCustomerOrderNotes,

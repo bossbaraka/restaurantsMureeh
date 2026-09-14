@@ -174,7 +174,12 @@ describe('Cashier Payment Hotfix & Contract Verification', () => {
     });
 
     it('j) Concurrent payment race condition is detected via conditional update count and returns 409', () => {
-      expect(managerTs).toContain('if (claimed.count !== ordersToPay.length) {');
+      // Both halves of the bill (operational rows + rows the payment gate was
+      // holding) are claimed conditionally; the summed count is what detects
+      // the lost race.
+      expect(managerTs).toContain('let claimedCount = 0;');
+      expect(managerTs).toContain('claimedCount += claimed.count;');
+      expect(managerTs).toContain('if (claimedCount !== ordersToPay.length) {');
       expect(managerTs).toContain("throw Object.assign(new Error('PAYMENT_RACE'), { code: 'PAYMENT_RACE' });");
       expect(managerTs).toContain("error: 'تم تحصيل إحدى هذه الفواتير للتو من جهاز آخر. حدّث الصفحة وحاول مجدداً.'");
     });

@@ -15,6 +15,7 @@ import {
   PaymentRecord,
   PaymentVerificationItem,
   PaymentStatus,
+  FulfillmentState,
   TransferChannel,
   Branch,
   EntitlementKey,
@@ -310,6 +311,11 @@ export function mapOrderRow(raw: any): Order {
     status: raw.status,
     paymentMethod: raw.paymentMethod || 'PAY AT CASHIER',
     paymentStatus: raw.paymentStatus || 'UNPAID',
+    // Payment authorization boundary. `operational` is computed server-side;
+    // a payload without it is a legacy payload (see utils/orderLifecycle.ts).
+    fulfillmentState: raw.fulfillmentState || undefined,
+    operational: typeof raw.operational === 'boolean' ? raw.operational : undefined,
+    releasedAt: raw.releasedAt ? toISO(raw.releasedAt) : undefined,
     settledAt: raw.settledAt ? toISO(raw.settledAt) : undefined,
     // Proof state only — the private storage path and the guest phone never
     // travel to the browser (the receipt image is fetched through an
@@ -412,6 +418,10 @@ export function mapPaymentVerificationRow(raw: any): PaymentVerificationItem {
     transferChannel: raw.transferChannel === 'WALLET' ? 'WALLET' : raw.transferChannel === 'BANK' ? 'BANK' : undefined,
     paymentMethod: raw.paymentMethod || 'TRANSFER',
     paymentStatus: raw.paymentStatus || 'PENDING_VERIFICATION',
+    state: raw.state === 'WAITING_RECEIPT' ? 'WAITING_RECEIPT' : 'WAITING_VERIFICATION',
+    fulfillmentState: raw.fulfillmentState || undefined,
+    paymentRejected: Boolean(raw.paymentRejected),
+    paymentRejectedReason: raw.paymentRejectedReason || undefined,
     hasPaymentProof: Boolean(raw.hasPaymentProof),
     submittedAt: toISO(raw.submittedAt || raw.updatedAt),
     createdAt: toISO(raw.createdAt),
@@ -931,8 +941,20 @@ class RestaurantApiService {
     };
   }
 
-  public async getManagerOrders(restaurantId: string): Promise<ApiResponse<Order[]>> {
-    const res = await this.request<any>('GET', `/manager/orders?restaurantId=${encodeURIComponent(restaurantId)}`);
+  /**
+   * Tenant orders. `opts.operational` asks the SERVER to scope the result to
+   * the operational set (payment verified → the kitchen may work on it) or to
+   * exactly the held set; omitting it returns every order (history/admin).
+   */
+  public async getManagerOrders(
+    restaurantId: string,
+    opts?: { operational?: boolean }
+  ): Promise<ApiResponse<Order[]>> {
+    const query = new URLSearchParams({ restaurantId });
+    if (typeof opts?.operational === 'boolean') {
+      query.set('operational', opts.operational ? 'true' : 'false');
+    }
+    const res = await this.request<any>('GET', `/manager/orders?${query.toString()}`);
     if (res.success && Array.isArray(res.data)) {
       return { success: true, data: res.data.map(mapOrderRow), statusCode: 200 };
     }
@@ -1312,11 +1334,16 @@ class RestaurantApiService {
   /** Cashier queue: orders whose transfer receipt waits for a decision. */
   public async getPaymentVerifications(
     user: RestaurantUser,
-    restaurantId: string
+    restaurantId: string,
+    opts?: { includeAwaiting?: boolean }
   ): Promise<ApiResponse<PaymentVerificationItem[]>> {
+    const query = new URLSearchParams({ restaurantId });
+    // `include=awaiting` adds the orders whose guest has not completed the
+    // payment step yet (no receipt to verify, `state: 'WAITING_RECEIPT'`).
+    if (opts?.includeAwaiting) query.set('include', 'awaiting');
     const res = await this.request<any>(
       'GET',
-      `/manager/payment-verifications?restaurantId=${encodeURIComponent(restaurantId)}`
+      `/manager/payment-verifications?${query.toString()}`
     );
     if (res.success && Array.isArray(res.data)) {
       return { success: true, data: res.data.map(mapPaymentVerificationRow), statusCode: 200 };
@@ -1368,6 +1395,8 @@ class RestaurantApiService {
       payment: PaymentRecord;
       orderStatus?: OrderStatus;
       kitchenReleased?: boolean;
+      /** True when this call was an idempotent replay of an earlier confirmation. */
+      alreadyConfirmed?: boolean;
     }>
   > {
     const res = await this.request<any>(
@@ -1382,8 +1411,9 @@ class RestaurantApiService {
           payment: mapPaymentRow({ ...res.data.payment, restaurantId }),
           orderStatus: res.data.orderStatus || undefined,
           kitchenReleased: Boolean(res.data.kitchenReleased),
+          alreadyConfirmed: Boolean(res.data.alreadyConfirmed),
         },
-        statusCode: 201,
+        statusCode: res.statusCode || 201,
       };
     }
     return res as ApiResponse<never>;
@@ -1395,7 +1425,9 @@ class RestaurantApiService {
     restaurantId: string,
     orderId: string,
     reason?: string
-  ): Promise<ApiResponse<{ orderId: string; paymentStatus: PaymentStatus }>> {
+  ): Promise<
+    ApiResponse<{ orderId: string; paymentStatus: PaymentStatus; fulfillmentState?: FulfillmentState }>
+  > {
     const res = await this.request<any>(
       'POST',
       `/manager/orders/${encodeURIComponent(orderId)}/payment/reject`,
@@ -1407,6 +1439,7 @@ class RestaurantApiService {
         data: {
           orderId: res.data.orderId || orderId,
           paymentStatus: res.data.paymentStatus || 'UNPAID',
+          fulfillmentState: res.data.fulfillmentState || undefined,
         },
         statusCode: 200,
       };
