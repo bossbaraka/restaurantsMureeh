@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { useDialog } from '../../hooks/useDialog';
+import { isOrderOperational, isPaymentVerificationPending } from '../../utils/orderLifecycle';
 import { DashboardOverview } from './DashboardOverview';
 import { OrderManagement } from './OrderManagement';
 import { TableManagement } from './TableManagement';
@@ -74,7 +75,18 @@ export const ManagerLayout: React.FC = () => {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const pendingWaiters = waiterRequests.filter((w) => w.status === 'PENDING').length;
-  const activeOrdersCount = orders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING').length;
+  // The «شاشة الطلبات والمطبخ» badge is the kitchen's workload, so it counts
+  // ONLY orders the payment gate has released. A held order must not appear as
+  // pending kitchen work anywhere the kitchen looks (its own screen hides it).
+  const activeOrdersCount = orders.filter(
+    (o) => (o.status === 'PENDING' || o.status === 'PREPARING') && isOrderOperational(o)
+  ).length;
+  // A transfer receipt the guest sent is a task with a deadline: without a
+  // badge on the till, it waits unnoticed while the kitchen correctly does
+  // nothing. Same server-derived gate state, no second source of truth.
+  const pendingVerificationCount = orders.filter(
+    (o) => o.status !== 'CANCELLED' && isPaymentVerificationPending(o)
+  ).length;
   const totalAlerts = pendingWaiters + activeOrdersCount;
 
   // Mobile nav sheet: Escape-to-close + body scroll lock (see hooks/useDialog).
@@ -89,7 +101,14 @@ export const ManagerLayout: React.FC = () => {
   };
   const navConfig: Array<{ id: ManagerTab; label: string; icon: React.ReactNode; badge?: number; badgeColor?: string; section: keyof typeof sectionLabels }> = [
     { id: 'OVERVIEW', label: 'لوحة العمليات', icon: <LayoutDashboard className="w-4 h-4" />, section: 'OPERATIONS' },
-    { id: 'POS', label: 'الكاشير (POS)', icon: <Calculator className="w-4 h-4" />, section: 'OPERATIONS' },
+    {
+      id: 'POS',
+      label: 'الكاشير (POS)',
+      icon: <Calculator className="w-4 h-4" />,
+      badge: pendingVerificationCount > 0 ? pendingVerificationCount : undefined,
+      badgeColor: 'bg-violet-500 text-white animate-pulse',
+      section: 'OPERATIONS',
+    },
     {
       id: 'ORDERS',
       label: 'شاشة الطلبات والمطبخ',

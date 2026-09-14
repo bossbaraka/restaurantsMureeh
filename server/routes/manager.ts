@@ -278,11 +278,29 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
       ? Math.round(totalRevenue / allTimeOrdersCount)
       : 0;
 
+    // Kitchen workload = RELEASED work only. A guest order the payment gate is
+    // still holding is not a ticket, so counting it as «new/preparing/ready»
+    // would advertise pending kitchen work for money nobody has verified (and
+    // make the dashboard disagree with the KDS, which filters on the same
+    // predicate). `heldForPaymentCount` reports that held set as what it is:
+    // the cashier's queue, not the kitchen's.
+    const kitchenOrderWhere = (status: string) => ({
+      restaurantId,
+      status,
+      fulfillmentState: FULFILLMENT_STATE.RELEASED,
+    });
     const [pendingOrdersCount, preparingOrdersCount, readyOrdersCount,
-      totalTablesCount, activeTablesCount, pendingWaitersCount] = await Promise.all([
-      prisma.order.count({ where: { restaurantId, status: 'PENDING' } }),
-      prisma.order.count({ where: { restaurantId, status: 'PREPARING' } }),
-      prisma.order.count({ where: { restaurantId, status: 'READY' } }),
+      heldForPaymentCount, totalTablesCount, activeTablesCount, pendingWaitersCount] = await Promise.all([
+      prisma.order.count({ where: kitchenOrderWhere('PENDING') }),
+      prisma.order.count({ where: kitchenOrderWhere('PREPARING') }),
+      prisma.order.count({ where: kitchenOrderWhere('READY') }),
+      prisma.order.count({
+        where: {
+          restaurantId,
+          status: { not: 'CANCELLED' },
+          fulfillmentState: { not: FULFILLMENT_STATE.RELEASED },
+        },
+      }),
       prisma.table.count({ where: { restaurantId } }),
       prisma.table.count({
         where: { restaurantId, status: { in: ['OCCUPIED', 'BILL_REQUESTED'] } },
@@ -338,6 +356,9 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
         pendingOrdersCount,
         preparingOrdersCount,
         readyOrdersCount,
+        // Orders the payment gate is holding (never kitchen work, always the
+        // cashier's queue): the manager sees the number, not the tickets.
+        heldForPaymentCount,
         pendingWaitersCount,
         averageOrderValue,
         popularProducts,
@@ -412,6 +433,12 @@ router.get('/orders', async (req: Request, res: Response) => {
       paymentStatus: o.paymentStatus,
       hasPaymentProof: Boolean(o.paymentProofPath),
       paymentRejectedAt: o.paymentRejectedAt?.toISOString(),
+      // A held order must be explainable where it is absent: the operational
+      // screens show "rejected — the guest must act" instead of silently
+      // dropping the ticket. Derived from the stored marker, never from the
+      // gate value the client sends (there is no such thing).
+      paymentRejected: Boolean(o.paymentRejectedAt),
+      paymentRejectedReason: o.paymentRejectionReason || undefined,
       settledAt: o.settledAt?.toISOString(),
       // Payment authorization boundary, computed HERE (never from the client):
       // `fulfillmentState` is the stored gate and `operational` is the single

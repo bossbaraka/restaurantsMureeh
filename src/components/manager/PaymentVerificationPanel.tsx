@@ -163,20 +163,41 @@ export const PaymentVerificationPanel: React.FC = () => {
     setBusyOrderId(item.orderId);
     const res = await api.confirmTransferPayment(currentUser, tenantId, item.orderId);
     setBusyOrderId(null);
-    if (res.success && res.data) {
-      const released = res.data.kitchenReleased;
+    // `res.success` is the whole test: the server accepted the confirmation.
+    // A replay can legitimately carry no receipt row (`payment: null`) and the
+    // previous `res.success && res.data` + unguarded `payment.receiptNumber`
+    // read turned that success into «تعذر تأكيد الدفع» — over money that had
+    // already been settled and a gate that had already opened.
+    if (res.success) {
+      const receipt = res.data?.payment || null;
+      const released = res.data?.kitchenReleased;
+      const receiptLine = receipt
+        ? `إيصال ${receipt.receiptNumber} — ${formatPrice(receipt.total, currency)}`
+        : 'الإيصال مسجّل مسبقاً لدى الصندوق';
       showToast(
         'success',
-        released ? 'تم تأكيد الدفع وإرسال الطلب للمطبخ' : 'تم تأكيد الدفع',
-        released
-          ? `إيصال ${res.data.payment.receiptNumber} — ${formatPrice(res.data.payment.total, currency)} · الطلب الآن في المطبخ جاهز للبدء`
-          : `إيصال ${res.data.payment.receiptNumber} — ${formatPrice(res.data.payment.total, currency)}`
+        res.data?.alreadyConfirmed
+          ? 'كان هذا الإشعار مؤكداً مسبقاً'
+          : released
+            ? 'تم تأكيد الدفع وإرسال الطلب للمطبخ'
+            : 'تم تأكيد الدفع',
+        res.data?.alreadyConfirmed
+          ? `${receiptLine} — لم يُنشأ إيصال مزدوج، وحالة المطبخ كما هي.`
+          : released
+            ? `${receiptLine} · الطلب الآن في المطبخ جاهز للبدء`
+            : receiptLine
       );
       closeProof();
       void loadQueue();
       return;
     }
-    showToast('error', 'تعذر تأكيد الدفع', res.error);
+    // The server's own Arabic reason (already paid / no receipt attached /
+    // another device got there first) is the actionable part.
+    showToast(
+      'error',
+      'تعذر تأكيد الدفع',
+      res.error || 'لم يقبل الخادم التأكيد. حدّث القائمة وحاول مجدداً.'
+    );
     // Someone else may have processed it first: resync the queue.
     void loadQueue();
   };
@@ -192,12 +213,16 @@ export const PaymentVerificationPanel: React.FC = () => {
     );
     setBusyOrderId(null);
     if (res.success) {
-      showToast('info', 'تم رفض الإشعار', 'أصبح بإمكان الزبون الدفع عند الكاشير.');
+      showToast('info', 'تم رفض الإشعار', 'الطلب بقي خارج المطبخ؛ يمكن للزبون إرسال إشعار جديد أو الدفع عند الكاشير.');
       closeProof();
       void loadQueue();
       return;
     }
-    showToast('error', 'تعذر رفض الإشعار', res.error);
+    showToast(
+      'error',
+      'تعذر رفض الإشعار',
+      res.error || 'لم يقبل الخادم الرفض. حدّث القائمة وحاول مجدداً.'
+    );
     void loadQueue();
   };
 

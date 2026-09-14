@@ -14,8 +14,9 @@
  *          language/UX copy, and — imported straight from the product —
  *          `server/services/orderLifecycle.ts` for every gate decision,
  *          `server/services/storage/imageSniff.ts` for the receipt validation
- *          and `server/validation/schemas.ts` is not needed (the client sends
- *          only what the schemas accept).
+ *          and `server/validation/schemas.ts` for EVERY request body (see
+ *          BODY_CONTRACTS below — skipping that layer once let a client/server
+ *          shape mismatch ship as a broken "تأكيد الدفع" button).
  *
  *   fake:  HTTP transport (an in-memory router that reproduces the routes'
  *          conditional-claim semantics, audit actions and SSE broadcasts),
@@ -34,6 +35,19 @@ import {
   releaseFields,
 } from '../../server/services/orderLifecycle';
 import { sniffImage, isWithinUploadSizeLimit } from '../../server/services/storage/imageSniff';
+import {
+  publicOrderSchema,
+  orderCancelSchema,
+  orderNotesSchema,
+  waiterCallSchema,
+  paymentProofSchema,
+  posOrderSchema,
+  orderStatusSchema,
+  paymentConfirmSchema,
+  paymentRejectSchema,
+  paymentCreateSchema,
+  tableSettleSchema,
+} from '../../server/validation/schemas';
 
 // ============================================================================
 // Fixtures — one tenant, one table, one menu, three devices
@@ -181,6 +195,39 @@ export interface HttpResult {
 }
 
 // ============================================================================
+// Request-body contract — the real zod schemas of the routes this world fakes.
+//
+// Keyed by METHOD + the path pattern the Express route registers. Anything the
+// client sends that the production route would reject must fail HERE too, or the
+// preview is not a preview.
+// ============================================================================
+
+interface BodyContract {
+  method: string;
+  pattern: RegExp;
+  name: string;
+  schema: { safeParse(value: unknown): { success: boolean; error?: { issues: Array<{ message?: string; path?: unknown[] }> } } };
+}
+
+const BODY_CONTRACTS: BodyContract[] = [
+  { method: 'POST', pattern: /^\/public\/orders$/, name: 'publicOrderSchema', schema: publicOrderSchema },
+  { method: 'POST', pattern: /^\/public\/orders\/[^/]+\/cancel$/, name: 'orderCancelSchema', schema: orderCancelSchema },
+  { method: 'PUT', pattern: /^\/public\/orders\/[^/]+\/notes$/, name: 'orderNotesSchema', schema: orderNotesSchema },
+  { method: 'POST', pattern: /^\/public\/orders\/[^/]+\/payment-proof$/, name: 'paymentProofSchema', schema: paymentProofSchema },
+  { method: 'POST', pattern: /^\/public\/waiter-requests$/, name: 'waiterCallSchema', schema: waiterCallSchema },
+  { method: 'POST', pattern: /^\/manager\/orders$/, name: 'posOrderSchema', schema: posOrderSchema },
+  { method: 'PUT', pattern: /^\/manager\/orders\/[^/]+\/status$/, name: 'orderStatusSchema', schema: orderStatusSchema },
+  { method: 'POST', pattern: /^\/manager\/orders\/[^/]+\/payment\/confirm$/, name: 'paymentConfirmSchema', schema: paymentConfirmSchema },
+  { method: 'POST', pattern: /^\/manager\/orders\/[^/]+\/payment\/reject$/, name: 'paymentRejectSchema', schema: paymentRejectSchema },
+  { method: 'POST', pattern: /^\/manager\/payments$/, name: 'paymentCreateSchema', schema: paymentCreateSchema },
+  { method: 'POST', pattern: /^\/manager\/tables\/[^/]+\/settle$/, name: 'tableSettleSchema', schema: tableSettleSchema },
+];
+
+function findBodyContract(method: string, path: string): BodyContract | null {
+  return BODY_CONTRACTS.find((contract) => contract.method === method && contract.pattern.test(path)) || null;
+}
+
+// ============================================================================
 // The world
 // ============================================================================
 
@@ -260,6 +307,8 @@ export function createWorld() {
     tableName: 'الصالة الرئيسية',
     hasPaymentProof: Boolean(order.paymentProofPath),
     paymentRejectedAt: order.paymentRejectedAt || undefined,
+    // Mirrors the real /manager/orders payload: the hold must be explainable.
+    paymentRejected: Boolean(order.paymentRejectedAt),
     settledAt: order.settledAt || undefined,
     fulfillmentState: order.fulfillmentState,
     operational: isOperational(order.fulfillmentState),
@@ -331,6 +380,32 @@ export function createWorld() {
     });
 
     say(`[http]    ${method} ${url.pathname}${url.search ? url.search : ''}${meta.hasAuth ? '  (Bearer ✓)' : ''}`);
+
+    // ------------------------------------------------- request-body contract
+    // THE REAL schemas run against the REAL client bodies. They used to be left
+    // out ("the client sends only what the schemas accept") — and that assumption
+    // is precisely how a `.strict()` server body and the client's always-present
+    // `restaurantId` drifted apart with every check still green: the till then
+    // reported «تعذر تأكيد الدفع» / «تعذر رفض الإشعار» for a 400 no one could see.
+    // A contract violation here fails the preview exactly like the route would.
+    const contract = findBodyContract(method, path);
+    if (contract) {
+      const fields =
+        rawBody instanceof FormData
+          ? Object.fromEntries(
+              [...(rawBody as FormData).entries()].filter(([, value]) => typeof value === 'string')
+            )
+          : body;
+      const parsed = contract.schema.safeParse(fields);
+      if (!parsed.success) {
+        const issue = parsed.error.issues[0];
+        const message = `${issue?.message || 'بيانات غير صالحة'}${
+          issue?.path?.length ? ` (${issue.path.join('.')})` : ''
+        }`;
+        say(`[contract] ✗ ${method} ${path} — ${contract.name} رفض الجسم: ${message}`);
+        return fail(400, message);
+      }
+    }
 
     // ------------------------------------------------------------- auth
     if (path === '/auth/me') {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api } from '../../services/api';
 import { formatPrice, formatRelativeMinutes, getOrderStatusConfig } from '../../utils/formatting';
+import { isOrderHeldForPayment, isOrderOperational } from '../../utils/orderLifecycle';
 import {
   TrendingUp,
   ShoppingBag,
@@ -66,10 +67,21 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     .reduce((sum, o) => sum + o.total, 0);
   const totalRevenue = serverStats?.todayRevenue ?? localRevenue;
 
-  const pendingOrders = orders.filter((o) => o.status === 'PENDING');
-  const preparingOrders = orders.filter((o) => o.status === 'PREPARING');
-  const readyOrders = orders.filter((o) => o.status === 'READY');
-  const servedOrders = orders.filter((o) => o.status === 'SERVED');
+  // ---------------------------------------------------------------------
+  // THE PAYMENT GATE.
+  //
+  // The kitchen pipeline shown here is the SAME set the KDS may cook: an order
+  // whose payment no cashier has confirmed is not a ticket, so it is counted
+  // neither as «طلبات جديدة» nor as «قيد المطبخ» — and it never gets a
+  // «بدء التحضير» button the server would answer with a 409.
+  // Held orders are reported on their own line instead, so a missing ticket
+  // reads as "waiting for the cashier", never as a lost order.
+  // ---------------------------------------------------------------------
+  const pendingOrders = orders.filter((o) => o.status === 'PENDING' && isOrderOperational(o));
+  const preparingOrders = orders.filter((o) => o.status === 'PREPARING' && isOrderOperational(o));
+  const readyOrders = orders.filter((o) => o.status === 'READY' && isOrderOperational(o));
+  const servedOrders = orders.filter((o) => o.status === 'SERVED' && isOrderOperational(o));
+  const heldForPayment = orders.filter((o) => o.status !== 'CANCELLED' && isOrderHeldForPayment(o));
 
   const occupiedTablesLocal = tables.filter((t) => t.status === 'OCCUPIED' || t.status === 'BILL_REQUESTED');
   const occupiedTablesCount = serverStats?.activeTablesCount ?? occupiedTablesLocal.length;
@@ -138,20 +150,35 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
             </h3>
             <p className="text-[11px] text-luxury-400 mt-0.5">اختصارات مباشرة للمهام التشغيلية المعلّقة</p>
           </div>
-          {pendingOrders.length + readyOrders.length + pendingWaiters.length === 0 && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-              <CheckCheck className="w-4 h-4" /> لا توجد مهام عاجلة
-            </span>
-          )}
+          {pendingOrders.length + readyOrders.length + pendingWaiters.length === 0 &&
+            heldForPayment.length === 0 && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                <CheckCheck className="w-4 h-4" /> لا توجد مهام عاجلة
+              </span>
+            )}
         </div>
 
-        {pendingOrders.length + readyOrders.length + pendingWaiters.length > 0 && (
+        {(pendingOrders.length + readyOrders.length + pendingWaiters.length > 0 ||
+          heldForPayment.length > 0) && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {pendingOrders.length > 0 && (
               <button onClick={() => onNavigateTab('ORDERS')} className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-right hover:border-amber-500/60 transition-colors">
                 <span className="block text-sm font-bold text-amber-300">{pendingOrders.length} طلبات جديدة</span>
                 <span className="block text-[11px] text-luxury-300 mt-0.5">فتح الطلبات وبدء التحضير ←</span>
               </button>
+            )}
+            {/* Held by the payment gate: an informational row on purpose. This is
+                not kitchen work yet — the cashier's verification queue (POS) is,
+                and the kitchen must not be tempted to start it from here. */}
+            {heldForPayment.length > 0 && (
+              <div className="p-3 rounded-xl bg-violet-500/10 border border-violet-500/30 text-right">
+                <span className="block text-sm font-bold text-violet-300">
+                  {heldForPayment.length} طلب بانتظار تأكيد الدفع
+                </span>
+                <span className="block text-[11px] text-luxury-300 mt-0.5">
+                  لا يظهر في المطبخ إلا بعد تأكيد الكاشير للإشعار أو التحصيل من الصندوق
+                </span>
+              </div>
             )}
             {readyOrders.length > 0 && (
               <button onClick={() => onNavigateTab('ORDERS')} className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-right hover:border-emerald-500/60 transition-colors">
