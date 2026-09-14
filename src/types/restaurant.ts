@@ -251,18 +251,57 @@ export interface Order {
   total: number;
   status: OrderStatus;
   paymentMethod: string; // e.g. 'PAY AT CASHIER' | PaymentMethod
-  paymentStatus?: 'UNPAID' | 'PAID'; // POS payment lifecycle flag
+  // POS payment lifecycle:
+  //   UNPAID               → collectable at the cashier
+  //   PENDING_VERIFICATION → guest uploaded a transfer receipt, cashier decides
+  //   PAID                 → settled (settledAt / cashierId)
+  paymentStatus?: PaymentStatus;
   settledAt?: string;
+  // Transfer-receipt state (never the private storage path or the guest phone:
+  // those stay server-side and are only exposed by the cashier queue).
+  hasPaymentProof?: boolean;
+  paymentRejected?: boolean;
+  paymentRejectedReason?: string;
+  paymentRejectedAt?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
   estimatedPrepMinutes?: number;
 }
 
+/**
+ * Payment lifecycle of an order. Kept as a string union (the DB column is a
+ * TEXT column) so older rows and older clients keep working unchanged.
+ */
+export type PaymentStatus = 'UNPAID' | 'PENDING_VERIFICATION' | 'PAID';
+
+/** One order waiting for a cashier decision on its transfer receipt. */
+export interface PaymentVerificationItem {
+  orderId: string;
+  numericId?: number;
+  restaurantId: string;
+  branchId?: string;
+  tableId: string;
+  tableNumber?: number;
+  tableName?: string;
+  total: number;
+  subtotal: number;
+  itemsCount: number;
+  itemsSummary?: string;
+  customerPhone?: string;
+  paymentMethod: string;
+  paymentStatus: PaymentStatus;
+  hasPaymentProof: boolean;
+  submittedAt: string;
+  createdAt: string;
+}
+
 // ============================================
 // 6.1. Cashier / POS Payment System
 // ============================================
-export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE' | 'SPLIT' | 'PAY AT CASHIER';
+// TRANSFER is produced only by the cashier's transfer-verification flow (the
+// POS input enum deliberately stays cash/card/wallet/split).
+export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE' | 'SPLIT' | 'TRANSFER' | 'PAY AT CASHIER';
 
 // A settled cashier transaction (source of truth for collected revenue)
 export interface PaymentRecord {

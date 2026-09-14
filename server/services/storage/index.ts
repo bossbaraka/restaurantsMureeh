@@ -42,13 +42,65 @@ export interface StorageService {
   keyFromUrl(url: string): string | null;
 }
 
+// ============================================================
+// Private storage capability (transfer payment receipts).
+//
+// Same storage subsystem, same tenant-scoped key contract, but a
+// namespace that is NEVER publicly readable: a private object has no
+// public URL at all. Reads go through an authenticated, tenant-checked
+// API route, so knowing an order id or an object key grants nothing.
+//
+// Both concrete drivers implement it, so no second storage system,
+// SDK or dependency is introduced.
+// ============================================================
+
+export interface PrivateUploadParams {
+  restaurantId: string;
+  orderId: string;
+  buffer: Buffer;
+  /** Server-derived MIME type (magic-byte sniffed), never a client value. */
+  mimeType: string;
+  /** Server-derived extension (".jpg" …), never the client filename. */
+  ext: string;
+  size: number;
+}
+
+export interface StoredPrivateObject {
+  /** Object key inside the private namespace. */
+  key: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface PrivateObjectBody {
+  body: Buffer;
+  /** Content type as stored; callers re-sniff the bytes before serving. */
+  mimeType: string;
+}
+
+export interface PrivateStorageService {
+  readonly driver: 'local' | 'supabase';
+  /** Human-readable destination (bucket name / directory) for logs. */
+  readonly destination: string;
+  uploadPrivate(params: PrivateUploadParams): Promise<StoredPrivateObject>;
+  /** Returns null when the object no longer exists (idempotent reads). */
+  readPrivate(key: string): Promise<PrivateObjectBody | null>;
+  /** Idempotent: deleting a missing object is not an error. */
+  deletePrivate(key: string): Promise<void>;
+  /** Best-effort readiness check (never throws). */
+  ensureReady(): Promise<{ ok: boolean; error?: string }>;
+}
+
 export type { StorageKind } from './helpers';
 export {
   STORAGE_KINDS,
+  PAYMENT_PROOF_KEY_PREFIX,
+  buildPaymentProofKey,
   buildStorageKey,
   keyBelongsToRestaurant,
   localKeyFromUrl,
   normalizeKind,
+  paymentProofKeyBelongsToRestaurant,
   sanitizePathSegment,
   supabaseKeyFromUrl,
 } from './helpers';
@@ -152,6 +204,56 @@ export async function verifyStorageReady(): Promise<{ ok: boolean; error?: strin
     const storage = getStorage();
     await storage.exists('__healthcheck__/readiness-probe');
     return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+let privateStorageSingleton: PrivateStorageService | null = null;
+
+/**
+ * Lazy singleton for the private namespace. The concrete driver is the SAME
+ * provider selected for public assets — only the destination (private bucket /
+ * non-served directory) differs — so there is still exactly one storage
+ * subsystem to configure, observe and operate.
+ */
+export function getPrivateStorage(): PrivateStorageService {
+  if (privateStorageSingleton) return privateStorageSingleton;
+
+  if (config.storageDriver === 'supabase') {
+    privateStorageSingleton = new SupabaseStorageDriver(
+      {
+        url: config.supabaseUrl!,
+        serviceRoleKey: config.supabaseServiceRoleKey!,
+        bucket: config.supabaseBucket,
+      },
+      undefined,
+      config.supabasePrivateBucket
+    );
+  } else {
+    privateStorageSingleton = new LocalStorageDriver({
+      baseDir: config.uploadDir,
+      privateBaseDir: config.privateUploadDir,
+    });
+  }
+  return privateStorageSingleton;
+}
+
+/** Test hook: drop the cached private instance alongside the public one. */
+export function resetPrivateStorageForTests(): void {
+  privateStorageSingleton = null;
+}
+
+/**
+ * Readiness probe for the private namespace. Mirrors the public probe: it
+ * never throws and reports an actionable error, so a missing private bucket is
+ * visible in the deploy logs instead of surfacing as the first failed guest
+ * receipt upload. `ensureReady()` is allowed to create a missing bucket with
+ * the service-role key (idempotent), which removes a manual setup step.
+ */
+export async function verifyPrivateStorageReady(): Promise<{ ok: boolean; error?: string }> {
+  try {
+    return await getPrivateStorage().ensureReady();
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -44,15 +44,39 @@ const envSchema = z.object({
     .enum(['local', 'supabase', 'object'])
     .default('local'),
   UPLOAD_DIR: z.string().min(1).default('./uploads'),
+  // PRIVATE namespace for transfer-receipt images (never statically served).
+  PRIVATE_UPLOAD_DIR: z.string().min(1).default('./private-uploads'),
   SUPABASE_URL: z.string().min(1).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   SUPABASE_STORAGE_BUCKET: z.string().min(1).default('restaurant-assets'),
+  // PRIVATE (non-public) bucket for transfer receipts. Created automatically
+  // with the service-role key on boot when it does not exist yet.
+  SUPABASE_PRIVATE_BUCKET: z.string().min(1).default('payment-proofs'),
   // Explicit opt-out for SELF-HOSTED deployments with a mounted persistent
   // volume. Without this, `local` storage is refused in production because
   // it would otherwise silently store images on an ephemeral filesystem.
   STORAGE_ALLOW_LOCAL_IN_PROD: z
     .enum(['true', 'false'])
     .default('false'),
+  // ------------------------------------------------------------------
+  // Daily archive / retention of TEMPORARY operational data only.
+  // Financial order + payment records are never deleted by this feature.
+  // ------------------------------------------------------------------
+  // Hours added to the tenant-local midnight before a business session is
+  // considered closed. Venues serving past midnight (e.g. 02:30) keep a whole
+  // calendar day inside ONE session with the default 6h grace window.
+  RETENTION_ARCHIVE_GRACE_HOURS: z.coerce.number().min(0).max(23).default(6),
+  // How long the private receipt image and the optional guest phone stay
+  // readable AFTER the order was archived. 0 is refused: a destructive
+  // cleanup without a retention window is a data-loss bug.
+  RETENTION_PROOF_HOURS: z.coerce.number().min(1).max(24 * 365).default(48),
+  // Safety bound on how many orders one sweep may touch (bounded work per run).
+  RETENTION_BATCH_SIZE: z.coerce.number().int().min(1).max(5000).default(500),
+  // Opt-in in-process scheduler (same pattern as BACKUP_ENABLED). Off by
+  // default: the supported automation is the `retention:cleanup` CLI driven by
+  // an external scheduler / Render cron job.
+  RETENTION_ENABLED: z.enum(['true', 'false']).default('false'),
+  RETENTION_INTERVAL_HOURS: z.coerce.number().min(1).max(168).default(6),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -156,11 +180,19 @@ export const config = {
   frameAncestors: env.FRAME_ANCESTORS,
   storageDriver: resolvedStorageDriver,
   uploadDir: env.UPLOAD_DIR,
+  privateUploadDir: env.PRIVATE_UPLOAD_DIR,
   appUrl: env.APP_URL.replace(/\/+$/, ''),
   supabaseUrl: env.SUPABASE_URL,
   supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   supabaseBucket: env.SUPABASE_STORAGE_BUCKET,
+  supabasePrivateBucket: env.SUPABASE_PRIVATE_BUCKET,
   storageAllowLocalInProd: env.STORAGE_ALLOW_LOCAL_IN_PROD === 'true',
+  // Retention of temporary operational data (never of financial history).
+  archiveGraceHours: env.RETENTION_ARCHIVE_GRACE_HOURS,
+  proofRetentionHours: env.RETENTION_PROOF_HOURS,
+  retentionBatchSize: env.RETENTION_BATCH_SIZE,
+  retentionEnabled: env.RETENTION_ENABLED === 'true',
+  retentionIntervalHours: env.RETENTION_INTERVAL_HOURS,
 } as const;
 
 export const JWT_ISSUER = 'mureeh-api';

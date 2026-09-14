@@ -1,6 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
-import type { StoredObject, StorageService, StorageUploadParams } from './index';
-import { buildStorageKey, supabaseKeyFromUrl } from './helpers';
+import type {
+  PrivateObjectBody,
+  PrivateStorageService,
+  PrivateUploadParams,
+  StoredObject,
+  StoredPrivateObject,
+  StorageService,
+  StorageUploadParams,
+} from './index';
+import { buildPaymentProofKey, buildStorageKey, supabaseKeyFromUrl } from './helpers';
 
 // ============================================================
 // SupabaseStorageDriver — production object storage.
@@ -29,6 +37,10 @@ export interface SupabaseStorageAdapter {
   remove(keys: string[]): Promise<void>;
   getPublicUrl(key: string): string;
   listNames(folder: string, search: string): Promise<string[]>;
+  /** Authenticated (service-role) download — used for the PRIVATE namespace. */
+  download(key: string): Promise<{ body: Buffer; contentType: string } | null>;
+  /** Idempotent bucket creation (private buckets are never public-read). */
+  ensureBucket(bucket: string): Promise<void>;
 }
 
 export function createSupabaseAdapter(
@@ -61,19 +73,56 @@ export function createSupabaseAdapter(
       if (error) throw new Error(error.message || 'storage list failed');
       return (data ?? []).map((f) => f.name);
     },
+    async download(key) {
+      const { data, error } = await bucket.download(key);
+      if (error || !data) return null;
+      return {
+        body: Buffer.from(await data.arrayBuffer()),
+        contentType: data.type || 'application/octet-stream',
+      };
+    },
+    async ensureBucket(name) {
+      // createBucket is idempotent in practice: an existing bucket answers with
+      // an error we deliberately ignore. Private receipts must never live in a
+      // public-read bucket, so `public: false` is explicit and non-negotiable.
+      const { error } = await client.storage.createBucket(name, { public: false });
+      if (error && !/exist/i.test(error.message || '')) {
+        throw new Error(error.message || 'bucket creation failed');
+      }
+    },
   };
 }
 
-export class SupabaseStorageDriver implements StorageService {
+export class SupabaseStorageDriver implements StorageService, PrivateStorageService {
   readonly driver = 'supabase' as const;
   readonly persistent = true;
 
   private readonly bucket: string;
   private readonly adapter: SupabaseStorageAdapter;
+  /**
+   * PRIVATE bucket for transfer receipts. It is a distinct bucket from the
+   * public asset bucket, so a receipt object can never be reached through the
+   * public `/object/public/...` URL shape — not even by guessing its key.
+   */
+  private readonly privateBucket: string;
+  private readonly privateAdapter: SupabaseStorageAdapter;
 
-  constructor(options: SupabaseStorageOptions, adapter?: SupabaseStorageAdapter) {
+  constructor(
+    options: SupabaseStorageOptions,
+    adapter?: SupabaseStorageAdapter,
+    privateBucket?: string,
+    privateAdapter?: SupabaseStorageAdapter
+  ) {
     this.bucket = options.bucket;
     this.adapter = adapter ?? createSupabaseAdapter(options);
+    this.privateBucket = privateBucket || `${options.bucket}-private`;
+    this.privateAdapter =
+      privateAdapter ??
+      createSupabaseAdapter({ ...options, bucket: this.privateBucket });
+  }
+
+  get destination(): string {
+    return this.privateBucket;
   }
 
   getUrl(key: string): string {
@@ -122,6 +171,46 @@ export class SupabaseStorageDriver implements StorageService {
       key.startsWith('/')
     ) {
       throw new Error('invalid storage key');
+    }
+  }
+
+  // ==========================================================
+  // PRIVATE namespace (transfer receipts)
+  // ==========================================================
+
+  async uploadPrivate(params: PrivateUploadParams): Promise<StoredPrivateObject> {
+    const key = buildPaymentProofKey({
+      restaurantId: params.restaurantId,
+      orderId: params.orderId,
+      ext: params.ext,
+    });
+    await this.privateAdapter.upload(key, params.buffer, params.mimeType);
+    return { key, mimeType: params.mimeType, size: params.size };
+  }
+
+  async readPrivate(key: string): Promise<PrivateObjectBody | null> {
+    this.assertSafeKey(key);
+    const stored = await this.privateAdapter.download(key);
+    if (!stored) return null;
+    // Normalized to a plain Buffer so callers (and the response writer) never
+    // depend on the SDK's Blob/ArrayBuffer view type.
+    return { body: Buffer.from(stored.body), mimeType: stored.contentType };
+  }
+
+  async deletePrivate(key: string): Promise<void> {
+    this.assertSafeKey(key);
+    // Removing a missing object is a no-op for Supabase Storage, which keeps
+    // the retention sweep idempotent.
+    await this.privateAdapter.remove([key]);
+  }
+
+  async ensureReady(): Promise<{ ok: boolean; error?: string }> {
+    try {
+      await this.privateAdapter.ensureBucket(this.privateBucket);
+      await this.privateAdapter.listNames('__healthcheck__', 'readiness-probe');
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
   }
 }

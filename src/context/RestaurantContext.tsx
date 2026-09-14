@@ -135,6 +135,18 @@ interface RestaurantContextType {
   editCustomerOrderNotes: (orderId: string, notes: string) => Promise<{ success: boolean; message: string }>;
   callWaiter: (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => Promise<{ success: boolean; error?: string }>;
   activeTableOrders: Order[];
+  /**
+   * Announce a bank transfer: uploads the receipt + optional phone for one of
+   * the guest's own orders and moves it to PENDING_VERIFICATION. Prices and
+   * tenant are resolved server-side; the client only supplies the file.
+   */
+  submitTransferPaymentProof: (
+    orderId: string,
+    phone: string | undefined,
+    file: File | Blob,
+    onProgress?: (percent: number) => void,
+    fileName?: string
+  ) => Promise<{ success: boolean; error?: string }>;
 
   // Manager Actions
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<boolean>;
@@ -838,6 +850,20 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             }
           },
           TABLE_SETTLED: () => refreshTenantData(),
+          PAYMENT_PROOF_VERIFIED: () => refreshTenantData(),
+          PAYMENT_PROOF_REJECTED: (event: MessageEvent) => {
+            refreshTenantData();
+            try {
+              const data = JSON.parse(event.data as string) as { reason?: string };
+              showToast(
+                'warning',
+                'لم يتم التحقق من إشعار الحوالة',
+                data.reason || 'يرجى الدفع عند الكاشير أو إرسال إشعار جديد.'
+              );
+            } catch {
+              showToast('warning', 'لم يتم التحقق من إشعار الحوالة');
+            }
+          },
         }
       );
     } catch {
@@ -868,6 +894,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           ORDER_CANCELLED: () => refreshTenantData(),
           TABLE_SETTLED: () => refreshTenantData(),
           PAYMENT_RECORDED: () => refreshTenantData(),
+          // A transfer receipt needs a cashier decision: cashier/manager only
+          // (waiters and kitchen have no verification screen or permission).
+          PAYMENT_PROOF_SUBMITTED: (event: MessageEvent) => {
+            refreshTenantData();
+            if (currentUser?.role !== 'CASHIER' && currentUser?.role !== 'RESTAURANT_MANAGER') return;
+            try {
+              const data = JSON.parse(event.data as string) as { numericId?: number; total?: number };
+              showToast(
+                'info',
+                'إشعار حوالة بانتظار التحقق',
+                `الطلب ${data.numericId ? `#${data.numericId}` : ''} — ${data.total ?? ''} ${currentRestaurant?.currency || '₪'}`.trim()
+              );
+            } catch {
+              showToast('info', 'إشعار حوالة بانتظار التحقق');
+            }
+            soundFX.playChime();
+          },
+          PAYMENT_PROOF_VERIFIED: () => refreshTenantData(),
+          PAYMENT_PROOF_REJECTED: () => refreshTenantData(),
         }
       );
     } catch {
@@ -1173,6 +1218,44 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentRestaurant, activeTableId, currentTableSession, cartItems, cartSubtotal, clearCart, refreshTenantData, showToast, recoverExpiredSession]
+  );
+
+  // Transfer payment proof: the guest's own device uploads the receipt for one
+  // of its orders. The server re-derives tenant/table/session and the amount —
+  // this call only carries the file, the optional phone and the QR session.
+  const submitTransferPaymentProof = useCallback(
+    async (
+      orderId: string,
+      phone: string | undefined,
+      file: File | Blob,
+      onProgress?: (percent: number) => void,
+      fileName?: string
+    ): Promise<{ success: boolean; error?: string }> => {
+      if (!currentRestaurant) return { success: false, error: 'المطعم غير محدد' };
+      if (!activeTableId || !currentTableSession?.sessionToken) {
+        return { success: false, error: 'لإرسال إشعار الحوالة يرجى مسح رمز QR الموجود على طاولتك' };
+      }
+      const res = await api.submitPaymentProof(
+        {
+          restaurantId: currentRestaurant.id,
+          tableId: activeTableId,
+          sessionToken: currentTableSession.sessionToken,
+          orderId,
+          phone: phone?.trim() ? phone.trim() : undefined,
+          file,
+          fileName,
+        },
+        onProgress
+      );
+      if (res.success) {
+        showToast('success', 'تم إرسال إشعار الحوالة', 'سيتحقق الكاشير منه ويؤكد الدفع.');
+        refreshTenantData();
+        return { success: true };
+      }
+      showToast('error', 'تعذر إرسال إشعار الحوالة', res.error || 'حاول مجدداً');
+      return { success: false, error: res.error };
+    },
+    [currentRestaurant, activeTableId, currentTableSession, refreshTenantData, showToast]
   );
 
   const updateOrderStatus = useCallback(
@@ -1606,6 +1689,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         isTableSelectorOpen,
         setIsTableSelectorOpen,
         createOrder,
+        submitTransferPaymentProof,
         cancelCustomerOrder,
         editCustomerOrderNotes,
         callWaiter,

@@ -16,6 +16,9 @@ dist-ssr
 !.env.example
 backups/*.sql
 uploads/*
+# PRIVATE transfer-receipt namespace (local driver). Never served by the API's
+# static mount and never committed: it holds customer documents.
+private-uploads/*
 
 # Local design-preview harnesses (e.g. `preview/welcome` renders the QR splash
 # against stub tenant palettes so the theming can be eyeballed without a DB).

@@ -89,6 +89,50 @@ export function keyBelongsToRestaurant(
   return key.startsWith(`restaurants/${restaurantId}/`);
 }
 
+// ============================================================
+// PRIVATE namespace (transfer payment receipts).
+//
+// Private objects live in a SEPARATE, non-public location — a private
+// Supabase bucket or a directory that is never mounted on
+// `express.static` — so knowing a key is never enough to read the file.
+// The layout is therefore independent from the public assets and is
+// prefixed with its own segment, which makes an accidental cross-use of
+// the public delete/serve paths impossible:
+//
+//   payment-proofs/restaurant/{restaurantId}/order/{orderId}/{uuid}{ext}
+//
+// Every segment is server-generated and sanitized; the client never
+// supplies a path segment (same guarantee as the public namespace).
+// ============================================================
+
+/** Prefix that unambiguously identifies a private payment-proof object. */
+export const PAYMENT_PROOF_KEY_PREFIX = 'payment-proofs/';
+
+/** Build the tenant- and order-scoped private key for a transfer receipt. */
+export function buildPaymentProofKey(params: {
+  restaurantId: string;
+  orderId: string;
+  ext: string;
+}): string {
+  const safeExt = params.ext.startsWith('.') ? params.ext : `.${params.ext}`;
+  return (
+    `${PAYMENT_PROOF_KEY_PREFIX}restaurant/${sanitizePathSegment(params.restaurantId)}` +
+    `/order/${sanitizePathSegment(params.orderId)}/${randomUUID()}${safeExt}`
+  );
+}
+
+/** True only when a private key lives under the given tenant's own namespace. */
+export function paymentProofKeyBelongsToRestaurant(
+  key: string | null | undefined,
+  restaurantId: string | null | undefined
+): boolean {
+  if (!restaurantId || typeof key !== 'string' || !key) return false;
+  if (key.includes('..') || key.includes('\\') || key.startsWith('/')) return false;
+  return key.startsWith(
+    `${PAYMENT_PROOF_KEY_PREFIX}restaurant/${sanitizePathSegment(restaurantId)}/`
+  );
+}
+
 /** Extract the object key from a local `/uploads/{key}` public URL. */
 export function localKeyFromUrl(url: string): string | null {
   if (typeof url !== 'string') return null;

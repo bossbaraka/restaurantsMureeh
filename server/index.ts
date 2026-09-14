@@ -16,16 +16,18 @@ import publicRoutes from './routes/public';
 import managerRoutes from './routes/manager';
 import adminRoutes from './routes/admin';
 import uploadRoutes from './routes/uploads';
-import { verifyStorageReady } from './services/storage';
+import { verifyStorageReady, verifyPrivateStorageReady } from './services/storage';
 
 /** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
-async function verifyStorageReadyWithRetry(): Promise<{ ok: boolean; error?: string }> {
+async function verifyStorageReadyWithRetry(
+  probe: () => Promise<{ ok: boolean; error?: string }> = verifyStorageReady
+): Promise<{ ok: boolean; error?: string }> {
   let last: { ok: boolean; error?: string } = { ok: false, error: 'not attempted' };
   for (const delayMs of [0, 1500]) {
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
-    last = await verifyStorageReady();
+    last = await probe();
     if (last.ok) return last;
   }
   return last;
@@ -416,11 +418,65 @@ if (process.env.NODE_ENV !== 'test') {
         );
       }
 
+      // PRIVATE namespace (transfer receipts). Never public-read: it is a
+      // separate bucket / non-served directory, and reads go through an
+      // authenticated route. A missing bucket is created here with the
+      // service-role key (idempotent), so the only operator action left is
+      // nothing at all; a failure is loud but non-fatal (receipts fail, money
+      // and orders keep working).
+      const privateReady = await verifyStorageReadyWithRetry(verifyPrivateStorageReady);
+      if (!privateReady.ok) {
+        console.error(
+          `❌ [STORAGE] PRIVATE receipt storage "${config.supabasePrivateBucket}" / ` +
+            `"${config.privateUploadDir}" is NOT ready (${privateReady.error}). Guest transfer ` +
+            'receipts will fail until this is fixed — check SUPABASE_URL, ' +
+            'SUPABASE_SERVICE_ROLE_KEY and SUPABASE_PRIVATE_BUCKET.'
+        );
+      } else {
+        console.log(
+          `✅ [STORAGE] Private receipt namespace ready ("${config.supabasePrivateBucket}" / "${config.privateUploadDir}").`
+        );
+      }
+
       // Opt-in scheduled database backups (crash/restart resilience). Off by
       // default; enable with BACKUP_ENABLED=true and DB_PASSWORD. Backups are
       // written to ./backups (chmod 600) — mount a persistent volume there or
       // ship the .sql dumps off-instance, otherwise a disk failure takes the
       // backups down with the server. Failures are logged loudly (never silent).
+      // Retention sweep (daily archive marker + temporary-data cleanup).
+      //
+      // OFF by default: the supported automation is the `retention:cleanup` CLI
+      // driven by an external scheduler / Render cron job (the project's
+      // existing pattern). Deployments without a cron can opt into this
+      // in-process timer, exactly like BACKUP_ENABLED above. The sweep is
+      // idempotent and safe to overlap with a manual/cron run.
+      if (config.retentionEnabled) {
+        const retentionMs = Math.max(1, config.retentionIntervalHours) * 3_600_000;
+        console.log(
+          `🧹 Retention sweep enabled: every ${config.retentionIntervalHours}h ` +
+            `(archive grace ${config.archiveGraceHours}h, receipt/phone retention ${config.proofRetentionHours}h). ` +
+            'Financial records are never deleted.'
+        );
+        const runRetention = async () => {
+          try {
+            const { runRetentionSweep } = await import('./services/retention');
+            const result = await runRetentionSweep();
+            if (result.archive.archived || result.purge.purged || result.purge.purgeFailures) {
+              console.log(
+                `🧹 [RETENTION] archived=${result.archive.archived} purged=${result.purge.purged} ` +
+                  `failures=${result.purge.purgeFailures}`
+              );
+            }
+          } catch (err: any) {
+            // Loud, never silent: a failing sweep is how temporary data would
+            // silently outlive its retention window.
+            console.error(`❌ [RETENTION] sweep failed: ${err?.message || err}`);
+          }
+        };
+        void runRetention();
+        setInterval(() => void runRetention(), retentionMs).unref();
+      }
+
       if (process.env.BACKUP_ENABLED === 'true') {
         const backupHours = Math.max(
           1,

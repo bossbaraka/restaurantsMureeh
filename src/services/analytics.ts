@@ -202,6 +202,8 @@ export const METHOD_LABELS: Record<string, string> = {
   CARD: 'بطاقة',
   MOBILE: 'محفظة إلكترونية',
   SPLIT: 'تجزئة',
+  // Bank transfer verified by the cashier from the guest's receipt.
+  TRANSFER: 'حوالة بنكية',
   'PAY AT CASHIER': 'عند الكاشير',
 };
 

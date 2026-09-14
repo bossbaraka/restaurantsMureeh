@@ -411,6 +411,8 @@ describe('storage readiness probe', () => {
       listNames: async () => {
         throw new Error('bucket not found');
       },
+      download: async () => null,
+      ensureBucket: async () => {},
     };
     const driver = new SupabaseStorageDriver(
       { url: 'https://project.supabase.co', serviceRoleKey: 'k', bucket: 'b' },

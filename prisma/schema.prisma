@@ -352,10 +352,43 @@ model Order {
   clientRequestId       String             @default(dbgenerated("gen_random_uuid()"))
   status                OrderStatus       @default(PENDING)
   paymentMethod         String            @default("PAY AT CASHIER")
-  paymentStatus         String            @default("UNPAID") // UNPAID | PAID
+  // UNPAID | PENDING_VERIFICATION | PAID
+  //   UNPAID               → collectable at the cashier (default)
+  //   PENDING_VERIFICATION → the guest uploaded a transfer receipt; a cashier
+  //                          must confirm or reject it (still not money)
+  //   PAID                 → settled; `settledAt`/`cashierId` say when/by whom
+  // Rejection deliberately returns the order to UNPAID (with paymentRejectedAt
+  // set) instead of introducing a fourth *collectable-adjacent* state: every
+  // existing collect query in the POS filters on 'UNPAID', so a rejected order
+  // stays collectable in cash with zero changes to the money paths.
+  paymentStatus         String            @default("UNPAID")
   settledAt             DateTime?
   cashierId             String?
   branchId              String?
+  // ---------------------------------------------------------------
+  // Transfer payment proof (temporary operational data — see docs).
+  // ---------------------------------------------------------------
+  // Optional guest phone. OPERATIONAL ONLY: never an account, never a
+  // credential, purged with the receipt after the retention window.
+  customerPhone         String?
+  // Object key in the PRIVATE storage namespace (never a public URL):
+  // `restaurants/{restaurantId}/payment-proofs/{orderId}/{uuid}{ext}`.
+  paymentProofPath      String?
+  // Rejection marker: the guest sees "receipt rejected" while the order itself
+  // is UNPAID again. Never used for authorization or for money.
+  paymentRejectedAt     DateTime?
+  paymentRejectionReason String?
+  // ---------------------------------------------------------------
+  // Daily archive / retention (financial history is NEVER removed).
+  // ---------------------------------------------------------------
+  // Set once the tenant-local business session this order belongs to has
+  // closed (see server/services/retention.ts). A marker, not a copy: the
+  // order keeps every financial attribute for reconciliation and reporting.
+  archivedAt            DateTime?
+  // Set when the temporary operational data of an archived order (phone +
+  // private receipt image) has been purged. Makes cleanup idempotent and
+  // answers "was this order's temporary data already removed?".
+  retentionPurgedAt     DateTime?
   subtotal              Float
   tax                   Float             @default(0)
   total                 Float
@@ -371,6 +404,10 @@ model Order {
   @@index([tableId])
   @@index([status])
   @@index([createdAt])
+  // Cashier "pending transfer verification" queue.
+  @@index([restaurantId, paymentStatus])
+  // Retention sweep: global scan of archived, not-yet-purged orders.
+  @@index([archivedAt])
 }
 
 model OrderItem {

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/prisma';
 import { realtimeService } from '../services/realtime';
@@ -17,12 +18,21 @@ import {
   resolveRestaurantAssets,
   resolveAssetReference,
 } from '../services/storage';
+import {
+  discardPaymentProof,
+  customerPaymentProofView,
+  storePaymentProof,
+  MAX_PAYMENT_PROOF_BYTES,
+  PAYMENT_STATUS,
+} from '../services/paymentProofs';
 import { generateSessionToken, roundMoney } from '../utils/security';
+import { normalizeCustomerPhone } from '../utils/phone';
 import {
   publicOrderLimiter,
   waiterCallLimiter,
   qrSessionLimiter,
   customerOrdersLimiter,
+  paymentProofLimiter,
   sseConnectionLimiter,
 } from '../middleware/rateLimit';
 import {
@@ -32,9 +42,29 @@ import {
   orderNotesSchema,
   waiterCallSchema,
   qrSessionSchema,
+  paymentProofSchema,
 } from '../validation/schemas';
 
 const router = Router();
+
+// Transfer-receipt upload: memory storage so the bytes are inspected before
+// anything is persisted, with the SAME 5 MB cap and image-only prefilter as the
+// tenant upload route. Magic-byte validation happens in the handler.
+const proofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: MAX_PAYMENT_PROOF_BYTES,
+    files: 1,
+    fields: 10,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('إشعار الحوالة يجب أن يكون صورة بصيغة JPG أو PNG أو WEBP'));
+    }
+  },
+});
 
 // One shared instance of the asset-reference contract for every public
 // response: stable stored reference -> renderable URL (and back).
@@ -638,6 +668,12 @@ router.get(
         status: o.status,
         paymentMethod: o.paymentMethod,
         paymentStatus: o.paymentStatus,
+        // Proof state for the guest's own tracker. The storage key and the
+        // phone are deliberately NOT part of this payload: the guest device
+        // needs a state, not a path into private storage.
+        hasPaymentProof: Boolean(o.paymentProofPath),
+        paymentRejected: Boolean(o.paymentRejectedAt),
+        paymentRejectedReason: o.paymentRejectionReason || undefined,
         notes: o.notes || undefined,
         estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
         createdAt: o.createdAt.toISOString(),
@@ -1165,6 +1201,207 @@ router.put(
       return res.json({ success: true, data: { order: updated }, statusCode: 200 });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر تعديل الملاحظات', statusCode: 500 });
+    }
+  }
+);
+
+// POST /api/public/orders/:orderId/payment-proof
+// The guest announces a bank transfer by uploading the receipt image and an
+// OPTIONAL phone number. Authorization is the same QR-session capability used
+// by cancel/notes: the order must belong to the caller's own table session.
+//
+// Security properties (see docs/PAYMENT-PROOF-ARCHITECTURE-ANALYSIS.md):
+//  - restaurantId / tableId / sessionToken are treated as untrusted hints and
+//    re-resolved against the DB; the tenant is taken from the order row.
+//  - the image is validated by magic bytes (never the client MIME/filename),
+//    size-capped, and stored in the PRIVATE namespace (no public URL exists).
+//  - the amount is NEVER supplied by the client: the cashier sees the order's
+//    own total. A proof only ever moves the order into PENDING_VERIFICATION.
+router.post(
+  '/orders/:orderId/payment-proof',
+  paymentProofLimiter,
+  proofUpload.single('proof'),
+  validateBody(paymentProofSchema),
+  async (req: Request, res: Response) => {
+    let uploadedKey: string | null = null;
+    try {
+      // Express 5 types all route params as `string | string[]`; bind once.
+      const orderId = String(req.params.orderId);
+      const { restaurantId, tableId, sessionToken, customerPhone } = req.body as {
+        restaurantId: string;
+        tableId: string;
+        sessionToken: string;
+        customerPhone?: string;
+      };
+
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({
+          success: false,
+          error: 'يرجى إرفاق صورة إشعار الحوالة',
+          statusCode: 400,
+        });
+      }
+
+      const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
+      if (!restaurant || restaurant.status !== 'ACTIVE') {
+        return res.status(403).json({
+          success: false,
+          error: 'المطعم غير متاح حالياً',
+          statusCode: 403,
+        });
+      }
+
+      const order = await prisma.order.findUnique({ where: { id: orderId } });
+      // One indistinguishable response for "unknown order" and "someone else's
+      // order": never confirm the existence of another tenant's data.
+      if (
+        !order ||
+        order.restaurantId !== restaurantId ||
+        order.tableId !== tableId
+      ) {
+        return res.status(404).json({ success: false, error: 'الطلب غير موجود', statusCode: 404 });
+      }
+
+      const session = await getQrSession(sessionToken, order.restaurantId, order.tableId);
+      if (!session || !order.sessionId || order.sessionId !== session.id) {
+        return res.status(403).json({
+          success: false,
+          error: 'جلسة QR غير صالحة أو منتهية الصلاحية',
+          statusCode: 403,
+        });
+      }
+
+      if (order.status === 'CANCELLED') {
+        return res.status(409).json({
+          success: false,
+          error: 'تم إلغاء هذا الطلب، لا يمكن إرفاق إشعار حوالة له.',
+          statusCode: 409,
+        });
+      }
+      if (order.paymentStatus === PAYMENT_STATUS.PAID) {
+        return res.status(409).json({
+          success: false,
+          error: 'هذا الطلب مدفوع بالفعل — لا حاجة لإرسال إشعار الحوالة.',
+          statusCode: 409,
+        });
+      }
+
+      // Validate + store FIRST (nothing is written to the DB yet), so a
+      // rejected file never leaves a half-updated order behind.
+      const stored = await storePaymentProof({
+        restaurantId: order.restaurantId,
+        orderId: order.id,
+        buffer: req.file.buffer,
+        size: req.file.size,
+      });
+      if (!stored.ok) {
+        const messageByReason: Record<typeof stored.reason, string> = {
+          too_large: `حجم الصورة يتجاوز الحد المسموح (${Math.round(
+            MAX_PAYMENT_PROOF_BYTES / 1024 / 1024
+          )}MB)`,
+          not_an_image: 'الملف ليس صورة حقيقية بصيغة JPG أو PNG أو WEBP أو GIF',
+          storage_unavailable: 'تعذر رفع صورة الإشعار حالياً، حاول مجدداً',
+        };
+        // HTTP status and body statusCode MUST agree: the UI branches on the
+        // body value when it renders the retry/validation message.
+        const failureStatus = stored.reason === 'storage_unavailable' ? 503 : 400;
+        return res
+          .status(failureStatus)
+          .json({ success: false, error: messageByReason[stored.reason], statusCode: failureStatus });
+      }
+      uploadedKey = stored.key;
+
+      const phone = normalizeCustomerPhone(customerPhone);
+      const previousPath = order.paymentProofPath;
+      const now = new Date();
+
+      // Conditional claim: only an unpaid or already-pending order can move to
+      // PENDING_VERIFICATION. A concurrent cashier confirmation wins and this
+      // update matches zero rows instead of overwriting a settled order.
+      const claimed = await prisma.order.updateMany({
+        where: {
+          id: order.id,
+          restaurantId: order.restaurantId,
+          status: { not: 'CANCELLED' },
+          paymentStatus: { in: [PAYMENT_STATUS.UNPAID, PAYMENT_STATUS.PENDING_VERIFICATION] },
+        },
+        data: {
+          paymentProofPath: stored.key,
+          paymentStatus: PAYMENT_STATUS.PENDING_VERIFICATION,
+          // A fresh upload clears a previous rejection: the guest has
+          // responded to the cashier's request for a new receipt.
+          paymentRejectedAt: null,
+          paymentRejectionReason: null,
+          ...(phone ? { customerPhone: phone } : {}),
+        },
+      });
+
+      if (claimed.count !== 1) {
+        // Roll back the object we just stored — never leave an orphan receipt
+        // (or a receipt attached to an order that is no longer awaiting one).
+        await discardPaymentProof(stored.key);
+        uploadedKey = null;
+        return res.status(409).json({
+          success: false,
+          error: 'تغيرت حالة الطلب قبل استلام الإشعار. حدّث الصفحة وحاول مجدداً.',
+          statusCode: 409,
+        });
+      }
+
+      // Best-effort: drop the replaced receipt so only one object per order
+      // ever exists. A failure here is logged and harmless (the DB points at
+      // the new object).
+      if (previousPath && previousPath !== stored.key) {
+        await discardPaymentProof(previousPath);
+      }
+
+      await logAuditEvent({
+        restaurantId: order.restaurantId,
+        actor: 'QR Guest',
+        actorRole: 'STAFF',
+        action: 'PAYMENT_PROOF_SUBMITTED',
+        entity: 'Order',
+        entityId: order.id,
+        details: `إشعار حوالة بنكية للطلب ${order.id} (طاولة ${order.tableId})`,
+        metadata: { hasPhone: Boolean(phone) },
+        ipAddress: req.ip,
+      }).catch(() => undefined);
+
+      // Staff streams (no tableId) see every table event; the guest's own
+      // stream sees its table. The payload carries NO personal data.
+      realtimeService.broadcastToTable(order.restaurantId, order.tableId, 'PAYMENT_PROOF_SUBMITTED', {
+        orderId: order.id,
+        tableId: order.tableId,
+        numericId: order.numericId,
+        total: order.total,
+        at: now.toISOString(),
+      });
+
+      const updated = await prisma.order.findUnique({ where: { id: order.id } });
+      return res.status(201).json({
+        success: true,
+        data: {
+          order: updated
+            ? {
+                id: updated.id,
+                numericId: updated.numericId,
+                total: updated.total,
+                ...customerPaymentProofView(updated),
+              }
+            : null,
+          message: 'تم إرسال إشعار الحوالة — سيتحقق الكاشير منه قريباً',
+        },
+        statusCode: 201,
+      });
+    } catch (err) {
+      console.error('Payment proof submission error:', err);
+      // Never leave an upload without a DB reference.
+      if (uploadedKey) await discardPaymentProof(uploadedKey);
+      return res.status(500).json({
+        success: false,
+        error: 'تعذر إرسال إشعار الحوالة، حاول مجدداً',
+        statusCode: 500,
+      });
     }
   }
 );
