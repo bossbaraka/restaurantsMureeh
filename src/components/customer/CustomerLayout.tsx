@@ -3,7 +3,10 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { CartItem, Product } from '../../types/restaurant';
 import { useBrandTheme } from '../../theme/brandTheme';
 import { useMenuPreferences } from '../../hooks/useMenuPreferences';
+import { useMenuPageFlip } from '../../hooks/useMenuPageFlip';
+import { useTenantDocumentIdentity } from '../../hooks/useTenantDocumentIdentity';
 import { CustomerHeader } from './CustomerHeader';
+import { MenuPager, type MenuPage } from './MenuPager';
 import { CustomerHero } from './CustomerHero';
 import { CategoryScrollNav } from './CategoryScrollNav';
 import { MenuToolbar, type MenuLayout, type MenuSortKey } from './MenuToolbar';
@@ -21,7 +24,7 @@ import { OrderCompletedModal } from './OrderCompletedModal';
 import { CustomerLoadingExperience } from './CustomerLoadingExperience';
 import { RestaurantEntryExperience } from './RestaurantEntryExperience';
 import { DisplayMenu } from './DisplayMenu';
-import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
+import { UtensilsCrossed, AlertTriangle, MapPin, Phone } from 'lucide-react';
 
 /** Cards rendered above the fold get eager loading + network priority. */
 const PRIORITY_CARDS = 4;
@@ -84,7 +87,6 @@ export const CustomerLayout: React.FC = () => {
     updateCartItemQuantity,
     currentRestaurant,
     activeTableId,
-    setViewMode,
     displayMode,
     entryPhase,
     entryInvalidReason,
@@ -96,6 +98,12 @@ export const CustomerLayout: React.FC = () => {
 
   // Tenant palette -> CSS custom properties consumed by the whole menu.
   useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
+
+  // The guest's browser chrome (tab title, favicon, share description, status
+  // bar colour) belongs to the restaurant they scanned — never to the
+  // platform. Runs before every early return so the read-only TV board gets
+  // the same treatment as the ordering menu.
+  useTenantDocumentIdentity(currentRestaurant);
 
   const [preferences, updatePreferences] = useMenuPreferences(currentRestaurant?.slug || 'default');
   const { sort, layout, availableOnly } = preferences;
@@ -224,6 +232,38 @@ export const CustomerLayout: React.FC = () => {
   }, [categories, effectiveCategoryId]);
   const isSearching = deferredSearch.trim().length > 0;
 
+  // -------------------------------------------------------------------------
+  // Page turn — sections are the pages of a booklet. "Everything" is page one,
+  // then the kitchen's own category order. Turning a page (chip, pager button
+  // or a horizontal swipe) plays the flip; a search suspends it, because
+  // results are not pages and a flip per keystroke is noise, not feedback.
+  // -------------------------------------------------------------------------
+  const menuPages = useMemo<MenuPage[]>(
+    () => [
+      { id: 'all', name: 'كافة الأطباق' },
+      ...categories.map((category) => ({ id: category.id, name: category.name })),
+    ],
+    [categories]
+  );
+  const menuPageIds = useMemo(() => menuPages.map((page) => page.id), [menuPages]);
+  const {
+    attachPageNode,
+    direction: flipDirection,
+    pageIndex: flipPageIndex,
+    pageCount: flipPageCount,
+    canTurnPrev,
+    canTurnNext,
+    turnBy: turnMenuPage,
+    dragHandlers: menuDragHandlers,
+    swipeEnabled: menuSwipeEnabled,
+  } = useMenuPageFlip({
+    pages: menuPageIds,
+    activePageId: isSearching ? 'all' : effectiveCategoryId || 'all',
+    onTurn: setSelectedCategoryId,
+    enabled: !isSearching,
+    swipe: true,
+  });
+
   // The signature dish anchors the grid — only when a grid can give it room.
   const featuredProductId = useMemo(() => {
     if (layout !== 'grid') return undefined;
@@ -288,6 +328,12 @@ export const CustomerLayout: React.FC = () => {
   );
 
   const currency = currentRestaurant?.currency || '₪';
+
+  // Footer identity: the restaurant's own words, phone and address. Empty
+  // values are omitted rather than replaced with invented copy.
+  const footerDescription = (currentRestaurant?.description || '').trim();
+  const restaurantPhone = (currentRestaurant?.phone || '').trim();
+  const footerYear = new Date().getFullYear();
 
   // Read-only board (TV / social media): rendered before any gate so it never
   // asks for a table and never mounts a cart or an ordering drawer.
@@ -372,120 +418,160 @@ export const CustomerLayout: React.FC = () => {
           />
         </div>
 
-        {/* Section Title when browsing by category */}
-        {!isSearching && activeCategoryObj && (
-          <div className="menu-section-head">
-            <div>
-              <h3 className="menu-section-head__title">{activeCategoryObj.name}</h3>
-              {activeCategoryObj.nameEn && (
-                <p className="menu-section-head__sub">{activeCategoryObj.nameEn}</p>
-              )}
-            </div>
-            <span className="menu-section-head__rule" aria-hidden="true" />
-            <span className="text-[11px] font-semibold text-luxury-500 whitespace-nowrap pb-1">
-              {visibleProducts.length} أطباق
-            </span>
-          </div>
-        )}
+        {/* --------------------------------------------------------------- */}
+        {/* Menu page — one booklet page per section. Turning a page (chip,   */}
+        {/* pager button or horizontal swipe) plays the page-flip motion;     */}
+        {/* `data-flip` is declarative, `data-turning` is written by the hook  */}
+        {/* so a second turn in the same direction restarts the animation.    */}
+        {/* --------------------------------------------------------------- */}
+        <div
+          ref={attachPageNode}
+          className="menu-page"
+          data-flip={flipDirection || 'none'}
+          data-page={flipPageIndex}
+          data-pages={flipPageCount}
+          {...menuDragHandlers}
+        >
+          <div className="menu-page__sheet">
+            {/* Section Title when browsing by category */}
+            {!isSearching && activeCategoryObj && (
+              <div className="menu-section-head">
+                <div>
+                  <h3 className="menu-section-head__title">{activeCategoryObj.name}</h3>
+                  {activeCategoryObj.nameEn && (
+                    <p className="menu-section-head__sub">{activeCategoryObj.nameEn}</p>
+                  )}
+                </div>
+                <span className="menu-section-head__rule" aria-hidden="true" />
+                <span className="text-[11px] font-semibold text-luxury-500 whitespace-nowrap pb-1">
+                  {visibleProducts.length} أطباق
+                </span>
+              </div>
+            )}
 
-        {/* Products Grid */}
-        {visibleProducts.length === 0 ? (
-          <div className="menu-empty my-8 p-6 sm:p-8 text-center rounded-2xl bg-luxury-900/60 border border-luxury-800">
-            <div className="menu-empty__icon mx-auto mb-3 w-12 h-12 rounded-full bg-luxury-800/80 flex items-center justify-center text-luxury-400">
-              <UtensilsCrossed className="w-6 h-6 stroke-1" />
-            </div>
-            <h4 className="text-base font-bold text-luxury-200">
-              {isSearching ? `لا توجد نتائج بحث عن "${deferredSearch}"` : 'لا توجد أطباق في هذا القسم حالياً'}
-            </h4>
-            <p className="text-xs text-luxury-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
-              {isSearching
-                ? 'جرّب البحث بكلمات أخرى أو تصفح الأقسام المختلفة في القائمة.'
-                : 'يمكنك استعراض كامل قائمة الطعام أو تصفح الأقسام المتوفرة الأخرى.'}
-            </p>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-              {isSearching && (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
-                >
-                  مسح البحث
-                </button>
-              )}
-              {availableOnly && (
-                <button
-                  type="button"
-                  onClick={() => updatePreferences({ availableOnly: false })}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
-                >
-                  إلغاء فلتر المتوفر فقط
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => setSelectedCategoryId('all')}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--brand-primary)] text-luxury-950 hover:brightness-110 transition-all shadow-md cursor-pointer"
-              >
-                تصفح كامل القائمة
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="menu-grid" data-layout={layout}>
-            {visibleProducts.map((product, index) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                currency={currency}
-                cartQuantity={cartIndex.get(product.id)?.quantity || 0}
-                priority={index < PRIORITY_CARDS}
-                featured={product.id === featuredProductId}
-                onSelect={handleSelect}
-                onQuickAdd={handleQuickAdd}
-                onQuantityChange={handleQuantityChange}
+            {/* Products Grid */}
+            {visibleProducts.length === 0 ? (
+              <div className="menu-empty my-8 p-6 sm:p-8 text-center rounded-2xl bg-luxury-900/60 border border-luxury-800">
+                <div className="menu-empty__icon mx-auto mb-3 w-12 h-12 rounded-full bg-luxury-800/80 flex items-center justify-center text-luxury-400">
+                  <UtensilsCrossed className="w-6 h-6 stroke-1" />
+                </div>
+                <h4 className="text-base font-bold text-luxury-200">
+                  {isSearching ? `لا توجد نتائج بحث عن "${deferredSearch}"` : 'لا توجد أطباق في هذا القسم حالياً'}
+                </h4>
+                <p className="text-xs text-luxury-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                  {isSearching
+                    ? 'جرّب البحث بكلمات أخرى أو تصفح الأقسام المختلفة في القائمة.'
+                    : 'يمكنك استعراض كامل قائمة الطعام أو تصفح الأقسام المتوفرة الأخرى.'}
+                </p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                  {isSearching && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
+                    >
+                      مسح البحث
+                    </button>
+                  )}
+                  {availableOnly && (
+                    <button
+                      type="button"
+                      onClick={() => updatePreferences({ availableOnly: false })}
+                      className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
+                    >
+                      إلغاء فلتر المتوفر فقط
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategoryId('all')}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--brand-primary)] text-luxury-950 hover:brightness-110 transition-all shadow-md cursor-pointer"
+                  >
+                    تصفح كامل القائمة
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="menu-grid" data-layout={layout}>
+                {visibleProducts.map((product, index) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    currency={currency}
+                    cartQuantity={cartIndex.get(product.id)?.quantity || 0}
+                    priority={index < PRIORITY_CARDS}
+                    featured={product.id === featuredProductId}
+                    onSelect={handleSelect}
+                    onQuickAdd={handleQuickAdd}
+                    onQuantityChange={handleQuantityChange}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Light catching the paper mid-turn, and the shadow at the spine.
+                Pure ornament: never focusable, never in the a11y tree. */}
+            <span className="menu-page__sheen" aria-hidden="true" />
+            <span className="menu-page__spine" aria-hidden="true" />
+
+            {/* Turn the page without hunting for a chip: names the section
+                that comes next, so the flip is never a surprise. */}
+            {!isSearching && (
+              <MenuPager
+                pages={menuPages}
+                activeIndex={flipPageIndex}
+                canTurnPrev={canTurnPrev}
+                canTurnNext={canTurnNext}
+                onTurn={turnMenuPage}
+                swipeHint={menuSwipeEnabled}
               />
-            ))}
+            )}
           </div>
-        )}
+        </div>
       </main>
 
-      {/* Customer Footer */}
+      {/* Customer Footer — the restaurant's own closing line.
+          White-label by design: a guest who scanned THIS restaurant's QR code
+          must not be handed somebody else's name, logo or support channel.
+          Everything below is read from the tenant record. */}
       <footer className="mt-16 border-t border-luxury-850 py-8 px-4 text-center text-xs text-luxury-500 bg-luxury-950">
         <div className="max-w-md mx-auto space-y-3">
           <div className="font-serif text-sm font-bold brand-text tracking-widest uppercase">
-            {currentRestaurant?.name} · {currentRestaurant?.nameEn}
+            {currentRestaurant?.name}
+            {currentRestaurant?.nameEn ? ` · ${currentRestaurant.nameEn}` : ''}
           </div>
+          {footerDescription && (
+            <p className="text-[11px] text-luxury-400 leading-relaxed">{footerDescription}</p>
+          )}
           <p className="text-[11px] text-luxury-400">
             جميع الأسعار تشمل ضريبة القيمة المضافة · المحاسبة عند الكاشير
           </p>
 
-          {/* Platform Branding & WhatsApp Support */}
-          <div className="pt-3 border-t border-luxury-850/80 space-y-2">
-            <p className="text-xs font-semibold text-luxury-300">
-              الخدمة تعمل بوساطة <strong className="text-[#38BDF8]">منصة مريح MUREEH</strong>
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
-              <button
-                onClick={() => setViewMode('SAAS_LANDING')}
-                className="text-[11px] text-[#38BDF8]/90 hover:text-[#38BDF8] hover:underline font-semibold transition-colors cursor-pointer"
-                title="التعرف على خدمات المنصة واشتراكات المطاعم"
-              >
-                هل تملك مطعماً؟ احصل على نظام مريح الذكي ⚡
-              </button>
-              <a
-                href="https://t.me/Mureeh_tech_bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0072BC]/20 border border-[#0072BC]/40 text-[#38BDF8] text-[11px] font-bold hover:bg-[#0072BC]/30 transition-colors"
-              >
-                <span>تليجرام الدعم الفني:</span>
-                <span className="font-mono text-[#38BDF8] font-bold direction-ltr">@Mureeh_tech_bot</span>
-              </a>
+          {/* The restaurant's own channels — reached through the number and
+              address it registered, so support stays the venue's. */}
+          {(restaurantPhone || currentRestaurant?.address) && (
+            <div className="pt-3 border-t border-luxury-850/80 flex flex-col items-center gap-2">
+              {restaurantPhone && (
+                <a
+                  href={`tel:${restaurantPhone}`}
+                  dir="ltr"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-luxury-900 border border-luxury-800 text-[11px] font-bold text-[var(--brand-primary-strong)] hover:border-[rgb(var(--brand-primary-strong-rgb)/0.4)] transition-colors"
+                >
+                  <Phone className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{restaurantPhone}</span>
+                </a>
+              )}
+              {currentRestaurant?.address && (
+                <p className="text-[11px] text-luxury-500 inline-flex items-start gap-1.5 max-w-sm">
+                  <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>{currentRestaurant.address}</span>
+                </p>
+              )}
             </div>
-          </div>
+          )}
 
           <p className="text-[10px] text-luxury-600">
-            MUREEH Digital Dining & Smart Hospitality Platform © 2026
+            © {footerYear} {currentRestaurant?.name || currentRestaurant?.nameEn} · جميع الحقوق محفوظة
           </p>
         </div>
       </footer>

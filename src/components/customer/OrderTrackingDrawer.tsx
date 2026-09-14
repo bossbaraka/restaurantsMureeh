@@ -27,6 +27,7 @@ import {
   CreditCard,
   Clock,
   AlertTriangle,
+  Phone,
 } from 'lucide-react';
 
 export const OrderTrackingDrawer: React.FC = () => {
@@ -44,6 +45,9 @@ export const OrderTrackingDrawer: React.FC = () => {
     showToast,
   } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
+  // White-label: a guest with a question about an order reaches the restaurant
+  // itself — no platform support channel is offered from this drawer.
+  const restaurantPhone = (currentRestaurant?.phone || '').trim();
 
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [editingNotesOrderId, setEditingNotesOrderId] = useState<string | null>(null);
@@ -512,18 +516,23 @@ export const OrderTrackingDrawer: React.FC = () => {
         )}
       </div>
 
-        {/* Sticky Footer: Order More, Call Waiter & Telegram Bot Support */}
+        {/* Sticky Footer: Order More & Call Waiter */}
         <div className="p-4 bg-luxury-950 border-t border-luxury-800 space-y-2 shrink-0">
           <div className="flex items-center gap-2 text-xs justify-between">
-            <a
-              href="https://t.me/Mureeh_tech_bot"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 py-2 px-3 rounded-xl bg-sky-950/80 hover:bg-sky-900 border border-sky-500/40 text-sky-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <span>تليجرام الخدمة الدعم الفني:</span>
-              <span className="font-mono direction-ltr">@Mureeh_tech_bot</span>
-            </a>
+            {restaurantPhone ? (
+              <a
+                href={`tel:${restaurantPhone}`}
+                className="flex-1 py-2 px-3 rounded-xl bg-luxury-900 hover:bg-luxury-850 border border-luxury-800 text-[var(--brand-primary-strong)] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Phone className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>استفسار عن الطلب؟ اتصل بالمطعم</span>
+                <span className="font-mono direction-ltr">{restaurantPhone}</span>
+              </a>
+            ) : (
+              <p className="flex-1 py-2 px-3 rounded-xl bg-luxury-900 border border-luxury-800 text-luxury-400 text-[11px] text-center">
+                لأي استفسار حول طلبك، تواصل مع طاقم المطعم أو الكاشير.
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
