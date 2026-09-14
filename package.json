@@ -19,6 +19,7 @@
     "retention:cleanup": "tsx server/scripts/retention-cleanup.ts",
     "storage:migrate": "tsx server/scripts/storage-migrate.ts",
     "test": "vitest run",
+    "preview:gate": "vitest run --config e2e/live-preview/vitest.live.config.ts",
     "lint": "oxlint"
   },
   "dependencies": {

@@ -5,7 +5,7 @@ floor / service API) until a cashier has verified and confirmed the payment.
 
 **Branch:** `arena/01a09ee6-restaurantsmureeh` · **Base:** `0ab2b42`
 **Deliverable status:** implemented, tested, build-verified; DB-backed manual QA listed as
-environment-blocked (see §7.4 and §8).
+environment-blocked (see §7.5 and §8); the full UI flow is executed by the live preview (§7.4).
 
 ---
 
@@ -191,7 +191,34 @@ floor / POS / cashier-panel filtering, API shape, required Arabic copy, receipt 
   unchanged and still green (confirms POS, waiter calls, table sessions, QR menus, subscriptions,
   admin, SSE and the pre-gate transfer flow keep working).
 
-### 7.4 Environment limitations (honest status)
+### 7.4 Live preview — the flow played on the real UI (`npm run preview:gate`)
+
+`e2e/live-preview/` boots the **real application** (contexts, shipped components, the API
+client including its XHR multipart upload, the SSE helper, `server/services/orderLifecycle.ts`
+and `server/services/storage/imageSniff.ts`) in jsdom against an in-memory stand-in for
+Express/Postgres, and plays the whole story while asserting the exact Arabic copy:
+
+| # | Scene | Assertion that passed |
+|---|-------|----------------------|
+| 1 | guest submits | order row `PENDING · UNPAID · AWAITING_PAYMENT`, `releasedAt=null`, payment step on screen («تم إرسال طلبك، يرجى تأكيد عملية الدفع لإتمام الطلب.»), event `ORDER_AWAITING_PAYMENT` (no `ORDER_CREATED`) |
+| 2 | kitchen board | held-count banner only, `#1001` absent, `PUT /orders/:id/status` → **409** with «لا يمكن بدء تحضيره قبل تأكيد الدفع», status unchanged |
+| 3 | cashier queue | group «بانتظار دفع الزبون», row `state=WAITING_RECEIPT`, no confirm button |
+| 4 | guest uploads receipt (real modal submit → XHR) | size + magic-byte validation, row `PENDING_VERIFICATION + PAYMENT_VERIFICATION_PENDING`, audit `PAYMENT_PROOF_SUBMITTED`, copy «تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.» |
+| 5 | cashier | row `state=WAITING_VERIFICATION` with name/phone/items + receipt object URL (Bearer fetch) |
+| 6 | kitchen | still no ticket (the receipt alone releases nothing) |
+| 7 | cashier confirms | `PAID + RELEASED + releasedAt` in one statement, kitchen status still `PENDING`, one TRANSFER receipt, audits `PAYMENT_VERIFIED` + `ORDER_RELEASED_TO_KDS`, SSE `ORDER_RELEASED_TO_KITCHEN` → guest toast «تم تأكيد الدفع، وجارٍ تجهيز طلبك.» with **no refresh** |
+| 8 | kitchen | ticket appears instantly («تحويل مؤكد — جاهز للبدء فوراً») and `PREPARING` succeeds |
+| 9 | two concurrent confirms | exactly `201` + `200 alreadyConfirmed`, **one** receipt |
+| 10 | cashier rejects | `UNPAID + PAYMENT_REJECTED`, proof object deleted, audit `PAYMENT_REJECTED`, guest banner «لم يتم التحقق من إشعار الحوالة …» + «إرسال إشعار حوالة جديد», KDS still hides it |
+| 11 | cancel after confirm | **409** «تم تأكيد دفع هذا الطلب…», status untouched |
+| 12 | summary | every row's `status/paymentStatus/fulfillmentState/releasedAt` + full audit + event log |
+
+The run also writes `e2e/live-preview/scenes.html` (laptops the screenshots of all 12 scenes with
+the production stylesheet inlined, plus the HTTP/SSE/audit transcript). It is generated output —
+regenerate with `npm run preview:gate`. Result: **1/1 passed**; the harness does not participate in
+`npm test` (it runs through `e2e/live-preview/vitest.live.config.ts`).
+
+### 7.5 Environment limitations (honest status)
 
 * `prisma generate` / `prisma validate` / `prisma migrate deploy` cannot run here: the sandbox
   cannot reach `binaries.prisma.sh` (TLS) and no engine binary exists anywhere on the image.
@@ -216,7 +243,7 @@ floor / POS / cashier-panel filtering, API shape, required Arabic copy, receipt 
 3. **Cash settlement of held orders** keeps `status=PENDING` (correct: never cooked) and closes the
    table — the ticket appears as a new KDS ticket on a now-`AVAILABLE` table; operators should
    treat a fresh ticket after settlement as expected. No functional impact.
-4. **Migration not executed here** (see §7.4). It is additive/idempotent; run `npm run db:migrate`
+4. **Migration not executed here** (see §7.5). It is additive/idempotent; run `npm run db:migrate`
    in a staging database first, then verify `SELECT "fulfillmentState", count(*) FROM "Order"
    GROUP BY 1;` before production.
 5. **Receipt object deletion on reject is best-effort** — if storage refuses, the DB pointer is kept
@@ -274,9 +301,9 @@ floor / POS / cashier-panel filtering, API shape, required Arabic copy, receipt 
 | No duplication of payment/order-status/upload/SSE/auth/tenant systems | ✅ | extended existing modules only |
 | Extend existing endpoints, no new APIs/infrastructure | ✅ | §4 |
 | Normalized schema + justified indexes | ✅ | §3 |
-| Proper migration (no `db push`), reversible, data-preserving | ✅ | §3 (execution pending a DB, §7.4) |
+| Proper migration (no `db push`), reversible, data-preserving | ✅ | §3 (execution pending a DB, §7.5) |
 | Unrelated features/branding/auth/deployment untouched | ✅ | only gate-related files changed; POS/waiter/sessions/QR/subscriptions/admin green |
-| TS checks, lint, tests, build, migration validation, manual scenarios | ⚠️ | tests/lint/tsc/build verified; migration + live manual QA blocked by the sandbox (no DB, no Prisma engine) — commands below |
+| TS checks, lint, tests, build, migration validation, manual scenarios | ⚠️ | tests/lint/tsc/build verified; migration + a real DB-backed run blocked by the sandbox (no DB, no Prisma engine); the UI flow itself is executed by the live preview (§7.4) — commands below |
 | 9-part report + checklist | ✅ | this document |
 
 ### Commands to finish verification where a database exists
