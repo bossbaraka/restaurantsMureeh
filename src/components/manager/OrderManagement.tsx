@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Order, OrderStatus } from '../../types/restaurant';
 import { escapeHtml, formatPrice, formatTime, formatRelativeMinutes, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
+import { isOrderHeldForPayment, isOrderOperational } from '../../utils/orderLifecycle';
 import { TableAggregationModal } from './TableAggregationModal';
 import {
   ChefHat,
@@ -45,9 +46,32 @@ export const OrderManagement: React.FC = () => {
     };
   };
 
+  // -----------------------------------------------------------------------
+  // THE PAYMENT GATE.
+  //
+  // This tab is the kitchen's OWN landing screen (a KITCHEN account starts on
+  // it), so it obeys exactly the rule the KDS obeys: an order whose payment no
+  // cashier has confirmed is not work, and it is not shown as work.
+  //
+  // Held tickets are still counted in a banner — "an order the kitchen cannot
+  // see" must never read as a lost order — and their status buttons are absent,
+  // which also removes the guaranteed 409 the server would answer to
+  // «بدء التحضير» on a held order (PUT /orders/:id/status enforces the gate).
+  // A CANCELLED held order stays visible: cancellation is the one action the
+  // gate never blocks.
+  // -----------------------------------------------------------------------
+  const heldForPayment = useMemo(
+    () => orders.filter((order) => order.status !== 'CANCELLED' && isOrderHeldForPayment(order)),
+    [orders]
+  );
+  const gateVisibleOrders = useMemo(
+    () => orders.filter((order) => isOrderOperational(order) || order.status === 'CANCELLED'),
+    [orders]
+  );
+
   // Filter orders
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
+    return gateVisibleOrders.filter((order) => {
       // Status filter
       if (statusFilter !== 'ALL' && order.status !== statusFilter) {
         return false;
@@ -66,16 +90,17 @@ export const OrderManagement: React.FC = () => {
       }
       return true;
     });
-  }, [orders, statusFilter, searchQuery]);
+  }, [gateVisibleOrders, statusFilter, searchQuery]);
 
-  // Status Counts
+  // Status Counts — over the gate-visible set only. A held order is not a
+  // kitchen ticket, so it must not appear in «تم الاستلام (Pending)» either.
   const counts = {
-    ALL: orders.length,
-    PENDING: orders.filter((o) => o.status === 'PENDING').length,
-    PREPARING: orders.filter((o) => o.status === 'PREPARING').length,
-    READY: orders.filter((o) => o.status === 'READY').length,
-    SERVED: orders.filter((o) => o.status === 'SERVED').length,
-    CANCELLED: orders.filter((o) => o.status === 'CANCELLED').length,
+    ALL: gateVisibleOrders.length,
+    PENDING: gateVisibleOrders.filter((o) => o.status === 'PENDING').length,
+    PREPARING: gateVisibleOrders.filter((o) => o.status === 'PREPARING').length,
+    READY: gateVisibleOrders.filter((o) => o.status === 'READY').length,
+    SERVED: gateVisibleOrders.filter((o) => o.status === 'SERVED').length,
+    CANCELLED: gateVisibleOrders.filter((o) => o.status === 'CANCELLED').length,
   };
 
   return (
@@ -140,19 +165,42 @@ export const OrderManagement: React.FC = () => {
         })}
       </div>
 
+      {/* Orders held by the payment gate: a count only, exactly like the KDS.
+          The kitchen learns WHY a ticket is missing without being handed work it
+          is not allowed to start. */}
+      {heldForPayment.length > 0 && (
+        <div
+          role="status"
+          className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2 text-xs font-bold text-amber-200"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>
+            {heldForPayment.length} طلب لا يظهر هنا ولا في المطبخ لأنه بانتظار
+            تأكيد الدفع من الكاشير (إشعار تحويل أو دفع عند الصندوق). يُعرض فور
+            التأكيد كطلب جديد «جاهز للبدء».
+          </span>
+        </div>
+      )}
+
       {/* Orders Grid / Cards */}
       {filteredOrders.length === 0 ? (
         <div className="p-12 text-center rounded-2xl bg-luxury-900/50 border border-luxury-800">
           <ChefHat className="w-12 h-12 text-luxury-600 mx-auto mb-3" />
           <h4 className="text-base font-bold text-luxury-200">
-            {orders.length === 0 ? 'لا توجد طلبات حتى الآن' : 'لا توجد طلبات تطابق البحث أو الفلتر'}
+            {orders.length === 0
+              ? 'لا توجد طلبات حتى الآن'
+              : gateVisibleOrders.length === 0
+                ? 'لا طلبات مطبوخة حالياً — كل ما ورد بانتظار تأكيد الدفع'
+                : 'لا توجد طلبات تطابق البحث أو الفلتر'}
           </h4>
           <p className="text-xs text-luxury-400 mt-1">
             {orders.length === 0
-              ? 'ستظهر طلبات العملاء هنا فور إرسالها من الطاولات.'
-              : 'الطلبات موجودة، لكن لا يطابق أي منها الاختيارات الحالية.'}
+              ? 'ستظهر طلبات العملاء هنا بعد إرسالها من الطاولات وتأكيد الكاشير للدفع.'
+              : gateVisibleOrders.length === 0
+                ? 'الطلبات مُرَتَّبة عند الزبون لكنها لم تُفرَج بعد: تظهر هنا وبحالة «جاهز للبدء» فور تأكيد الدفع.'
+                : 'الطلبات موجودة، لكن لا يطابق أي منها الاختيارات الحالية.'}
           </p>
-          {orders.length > 0 && (statusFilter !== 'ALL' || searchQuery.trim()) && (
+          {gateVisibleOrders.length > 0 && (statusFilter !== 'ALL' || searchQuery.trim()) && (
             <button
               type="button"
               onClick={() => { setStatusFilter('ALL'); setSearchQuery(''); }}

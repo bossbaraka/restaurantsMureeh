@@ -377,7 +377,9 @@ it('plays the whole fulfilment-gate flow (guest → cashier → KDS) on the real
   expect(confirm.statusCode).toBe(201);
   expect(confirm.data?.kitchenReleased).toBe(true);
   expect(confirm.data?.orderStatus).toBe('PENDING');
-  expect(confirm.data?.payment.receiptNumber).toBe('R-5001');
+  // `payment` is nullable in the client contract (a replay may not resend the
+  // ledger row), so the receipt number is read defensively here too.
+  expect(confirm.data?.payment?.receiptNumber).toBe('R-5001');
   expect(row1().paymentStatus).toBe('PAID');
   expect(row1().fulfillmentState).toBe('RELEASED');
   expect(row1().releasedAt).toBeTruthy();

@@ -896,6 +896,13 @@ class RestaurantApiService {
     pendingOrdersCount: number;
     preparingOrdersCount: number;
     readyOrdersCount: number;
+    /**
+     * Orders the payment gate is holding (awaiting payment / awaiting cashier
+     * verification / rejected receipt). Deliberately NOT part of the three
+     * kitchen counters above: those count released work only, exactly like the
+     * KDS board.
+     */
+    heldForPaymentCount: number;
     pendingWaitersCount: number;
     averageOrderValue: number;
     popularProducts: { name: string; count: number; revenue: number }[];
@@ -916,6 +923,7 @@ class RestaurantApiService {
           pendingOrdersCount: Number(res.data.pendingOrdersCount) || 0,
           preparingOrdersCount: Number(res.data.preparingOrdersCount) || 0,
           readyOrdersCount: Number(res.data.readyOrdersCount) || 0,
+          heldForPaymentCount: Number(res.data.heldForPaymentCount) || 0,
           pendingWaitersCount: Number(res.data.pendingWaitersCount) || 0,
           averageOrderValue: Number(res.data.averageOrderValue) || 0,
           popularProducts: res.data.popularProducts || [],
@@ -1392,9 +1400,18 @@ class RestaurantApiService {
     note?: string
   ): Promise<
     ApiResponse<{
-      payment: PaymentRecord;
+      orderId?: string;
+      /**
+       * The ledger receipt. `null` ONLY on the idempotent replay of a
+       * confirmation whose receipt row the server did not resend — the money IS
+       * settled then, so the caller must never read a missing receipt as a
+       * failure (that mistake reported «تعذر تأكيد الدفع» over a paid order).
+       */
+      payment: PaymentRecord | null;
       orderStatus?: OrderStatus;
       kitchenReleased?: boolean;
+      /** Fulfillment gate after this call (always RELEASED on success). */
+      fulfillmentState?: FulfillmentState;
       /** True when this call was an idempotent replay of an earlier confirmation. */
       alreadyConfirmed?: boolean;
     }>
@@ -1404,14 +1421,21 @@ class RestaurantApiService {
       `/manager/orders/${encodeURIComponent(orderId)}/payment/confirm`,
       { body: { restaurantId, ...(note ? { note } : {}) } }
     );
-    if (res.success && res.data?.payment) {
+    // Success is the SERVER's verdict alone. Requiring a payment row in the
+    // payload used to turn `200 {success:true, alreadyConfirmed:true}` into the
+    // caller's generic «تعذر تأكيد الدفع» branch — a confirmed payment reported
+    // as failed, inviting a duplicate settlement attempt.
+    if (res.success) {
+      const row = res.data?.payment;
       return {
         success: true,
         data: {
-          payment: mapPaymentRow({ ...res.data.payment, restaurantId }),
-          orderStatus: res.data.orderStatus || undefined,
-          kitchenReleased: Boolean(res.data.kitchenReleased),
-          alreadyConfirmed: Boolean(res.data.alreadyConfirmed),
+          orderId: res.data?.orderId || orderId,
+          payment: row ? mapPaymentRow({ ...row, restaurantId }) : null,
+          orderStatus: res.data?.orderStatus || undefined,
+          kitchenReleased: Boolean(res.data?.kitchenReleased),
+          fulfillmentState: res.data?.fulfillmentState || undefined,
+          alreadyConfirmed: Boolean(res.data?.alreadyConfirmed),
         },
         statusCode: res.statusCode || 201,
       };

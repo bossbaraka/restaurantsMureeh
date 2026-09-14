@@ -109,8 +109,9 @@ export const KitchenDisplaySystem: React.FC = () => {
         <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-xs font-bold text-amber-200">
           <ShieldCheck className="w-4 h-4 shrink-0" />
           <span>
-            {heldForPayment.length} طلب بانتظار تأكيد الكاشير للدفع (تحويل بنكي/محفظة أو دفع عند
-            الكاشير) — يُعرض هنا فوراً بحالة «جاهز للبدء» بعد التأكيد.
+            {heldForPayment.length} طلب محجوز عن المطبخ: بانتظار تأكيد الكاشير للدفع (إشعار تحويل
+            بنكي/محفظة أو دفع عند الصندوق) — يظهر هنا فوراً بحالة «جاهز للبدء» لحظة التأكيد، ولا يبدأ
+            أي تحضير قبله.
           </span>
         </div>
       )}
@@ -122,7 +123,11 @@ export const KitchenDisplaySystem: React.FC = () => {
             <CheckCircle2 className="w-8 h-8 text-emerald-400" />
           </div>
           <h2 className="text-lg font-bold text-luxury-100">المطبخ جاهز بالكامل</h2>
-          <p className="text-xs text-luxury-400 mt-1">لا توجد طلبات معلقة حالياً. ستظهر الطلبات هنا فور إرسالها من الطاولات.</p>
+          <p className="text-xs text-luxury-400 mt-1">
+            لا توجد طلبات معلقة حالياً. تظهر الطلبات هنا بعد إرسالها من الطاولات
+            <strong className="text-amber-300"> وبعد تأكيد الكاشير للدفع</strong> — قبل التأكيد لا يبدأ
+            أي تحضير.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

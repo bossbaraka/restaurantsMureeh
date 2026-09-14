@@ -731,6 +731,13 @@ export const brandingSchema = z
  */
 export const tableSettleSchema = z
   .object({
+    // Every manager call in `src/services/api.ts` carries the tenant id in its
+    // body. It is DECLARED-OPTIONAL here (never rejected) and IGNORED by the
+    // route: the tenant of a settlement is the table's own `restaurantId`
+    // checked against the JWT (`ownTenant`), so this key can neither widen nor
+    // redirect the operation. Leaving it out of a `.strict()` body instead makes
+    // the whole endpoint unusable — which is how «تصفية الطاولة» broke.
+    restaurantId: idSchema.optional(),
     // Reuse the canonical ledger enum so settlement and the payments
     // endpoint can never drift apart in reconciliation reports.
     paymentMethod: z
@@ -851,16 +858,34 @@ export const paymentProofSchema = z
   })
   .strict();
 
-/** Cashier confirmation of a transfer receipt (body is optional/empty). */
+/**
+ * Cashier confirmation of a transfer receipt.
+ *
+ * `restaurantId` is part of this schema for ONE reason: the shared API client
+ * (`src/services/api.ts`) appends the tenant id to every manager body, and a
+ * `.strict()` object rejects unknown keys — not declaring it here turned every
+ * «تأكيد الدفع» click at the till into an HTTP 400 that the panel surfaced as
+ * «تعذر تأكيد الدفع», with the guest notification left neither confirmed nor
+ * rejected. The value is accepted and IGNORED: the route resolves the order
+ * through `getTenantId(req)` + `ownTenant(...)`, so a body can never choose or
+ * widen a tenant. Same convention as every other manager schema.
+ */
 export const paymentConfirmSchema = z
   .object({
+    restaurantId: idSchema.optional(),
     note: optionalText(300),
   })
   .strict();
 
-/** Cashier rejection of a transfer receipt. */
+/**
+ * Cashier rejection of a transfer receipt. `restaurantId` is accepted for the
+ * same reason as above (client convention) and never read by the route — its
+ * absence made «رفض الإشعار» fail with «تعذر رفض الإشعار» and left the order
+ * held by the payment gate forever.
+ */
 export const paymentRejectSchema = z
   .object({
+    restaurantId: idSchema.optional(),
     reason: optionalText(300),
   })
   .strict();

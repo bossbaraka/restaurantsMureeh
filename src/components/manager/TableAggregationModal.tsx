@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
+import { isOrderHeldForPayment, isOrderOperational } from '../../utils/orderLifecycle';
 import { X, CheckCircle, Layers } from 'lucide-react';
 
 interface TableAggregationModalProps {
@@ -156,7 +157,15 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
                     </span>
 
                     <div className="flex gap-1.5">
-                      {ord.status === 'PENDING' && (
+                      {/* Payment gate first: a held order is not kitchen work, so
+                          its status controls are not offered at all (the server
+                          would reject them with a 409 anyway). */}
+                      {isOrderHeldForPayment(ord) && ord.status !== 'CANCELLED' && (
+                        <span className="text-[11px] font-bold text-violet-300">
+                          بانتظار تأكيد الدفع — لا يبدأ التحضير قبله
+                        </span>
+                      )}
+                      {ord.status === 'PENDING' && isOrderOperational(ord) && (
                         <button
                           onClick={() => updateOrderStatus(ord.id, 'PREPARING')}
                           className="px-2.5 py-1 bg-gold-500 text-luxury-950 rounded-lg text-[11px] font-bold"
@@ -164,7 +173,7 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
                           بدء التحضير
                         </button>
                       )}
-                      {ord.status === 'PREPARING' && (
+                      {ord.status === 'PREPARING' && isOrderOperational(ord) && (
                         <button
                           onClick={() => updateOrderStatus(ord.id, 'READY')}
                           className="px-2.5 py-1 bg-emerald-500 text-luxury-950 rounded-lg text-[11px] font-bold"
@@ -172,7 +181,7 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
                           وسم كجاهز
                         </button>
                       )}
-                      {ord.status === 'READY' && (
+                      {ord.status === 'READY' && isOrderOperational(ord) && (
                         <button
                           onClick={() => updateOrderStatus(ord.id, 'SERVED')}
                           className="px-2.5 py-1 bg-luxury-750 text-luxury-100 rounded-lg text-[11px] font-bold border border-luxury-650"

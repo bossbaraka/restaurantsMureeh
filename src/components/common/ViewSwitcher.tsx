@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { BrandMark } from '../brand/BrandLogo';
+import { isOrderOperational } from '../../utils/orderLifecycle';
 import {
   Smartphone,
   LayoutDashboard,
@@ -47,7 +48,11 @@ export const ViewSwitcher: React.FC = () => {
   const isPlatformManager = !!currentUser && isSuperAdmin;
   const isConsoleUser = !!currentUser;
   const pendingWaiterCount = waiterRequests.filter((w) => w.status === 'PENDING').length;
-  const activeOrdersCount = orders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING').length;
+  // Kitchen badge on the KDS entry: released work only. A guest order the cashier
+  // has not confirmed yet is not a ticket, so it must not light the KDS counter.
+  const activeOrdersCount = orders.filter(
+    (o) => (o.status === 'PENDING' || o.status === 'PREPARING') && isOrderOperational(o)
+  ).length;
 
   const allowedViewModes = [
     { id: 'CUSTOMER', label: 'المنيو (الزبون)', icon: Smartphone, show: canAccessView('CUSTOMER') },
