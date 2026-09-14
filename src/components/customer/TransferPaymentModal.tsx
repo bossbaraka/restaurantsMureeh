@@ -3,7 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useDialog } from '../../hooks/useDialog';
 import { formatPrice } from '../../utils/formatting';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { Order } from '../../types/restaurant';
+import { Order, TransferChannel } from '../../types/restaurant';
 import {
   X,
   Smartphone,
@@ -13,15 +13,22 @@ import {
   CreditCard,
   Loader2,
   RefreshCw,
+  User,
+  Landmark,
+  Wallet,
 } from 'lucide-react';
 
 // ============================================================
 // Guest transfer-payment proof
 //
-// "Transfer Payment → phone (optional) → receipt image → submit"
-// After a successful upload the order is PENDING_VERIFICATION and the cashier
-// decides. The order's own total is shown — the guest never types an amount,
-// and nothing here is trusted by the server.
+// "Transfer channel (bank / wallet) → name → mobile → receipt image → submit"
+// After a successful upload the order is PENDING_VERIFICATION, the cashier is
+// notified instantly, and the order is HELD out of the kitchen until that
+// cashier confirms the money arrived (see OrderTrackingDrawer for the state).
+//
+// Name and mobile are REQUIRED: a transfer notice the cashier cannot attribute
+// to a person is not verifiable. The order's own total is shown — the guest
+// never types an amount, and nothing here is trusted by the server.
 //
 // Uses the shared client-side image pipeline (optimizeImageFile) so a phone
 // photo is downscaled before the upload instead of being rejected by the
@@ -36,6 +43,21 @@ interface TransferPaymentModalProps {
 
 type Phase = 'idle' | 'uploading' | 'success' | 'error';
 
+const CHANNELS: Array<{ id: TransferChannel; label: string; hint: string; icon: React.ReactNode }> = [
+  {
+    id: 'BANK',
+    label: 'حوالة بنكية',
+    hint: 'تحويل من حسابك البنكي إلى حساب المطعم',
+    icon: <Landmark className="w-4 h-4" />,
+  },
+  {
+    id: 'WALLET',
+    label: 'محفظة إلكترونية',
+    hint: 'تحويل من محفظتك الإلكترونية إلى محفظة المطعم',
+    icon: <Wallet className="w-4 h-4" />,
+  },
+];
+
 export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
   isOpen,
   onClose,
@@ -44,6 +66,8 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
   const { currentRestaurant, submitTransferPaymentProof } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
 
+  const [channel, setChannel] = useState<TransferChannel>('BANK');
+  const [customerName, setCustomerName] = useState('');
   const [phone, setPhone] = useState('');
   const [file, setFile] = useState<File | Blob | null>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -95,8 +119,18 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
 
   const handleSubmit = async () => {
     if (phase === 'uploading') return; // double-submit guard
+    // Client-side validation mirrors the server contract (the server re-checks):
+    // the cashier must be able to attribute and reach the person who paid.
+    if (customerName.trim().length < 2) {
+      setError('يرجى كتابة اسم العميل كما هو على إشعار التحويل');
+      return;
+    }
+    if (phone.replace(/\D/g, '').length < 7) {
+      setError('يرجى إدخال رقم هاتف محمول صحيح للتواصل عند الحاجة');
+      return;
+    }
     if (!file) {
-      setError('يرجى إرفاق صورة إشعار الحوالة');
+      setError('يرجى إرفاق صورة إشعار التحويل');
       return;
     }
     setPhase('uploading');
@@ -121,7 +155,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
     // before it is sent).
     const result = await submitTransferPaymentProof(
       order.id,
-      phone.trim() || undefined,
+      { customerName: customerName.trim(), phone: phone.trim(), channel },
       upload,
       setProgress,
       fileName || undefined
@@ -134,7 +168,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
     }
     // Retry state: keep the chosen file so the guest can resend with one tap.
     setPhase('error');
-    setError(result.error || 'تعذر إرسال إشعار الحوالة — حاول مجدداً');
+    setError(result.error || 'تعذر إرسال إشعار التحويل — حاول مجدداً');
   };
 
   return (
@@ -155,7 +189,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
             </div>
             <div>
               <h3 id="transfer-payment-title" className="text-base font-bold text-luxury-50 font-serif">
-                الدفع عبر حوالة بنكية
+                الدفع عبر حوالة بنكية أو محفظة
               </h3>
               <p className="text-xs text-luxury-400">
                 الطلب {order.id} · {formatPrice(order.total, currency)}
@@ -176,10 +210,10 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
             <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h4 className="text-base font-bold text-luxury-100">تم إرسال إشعار الحوالة</h4>
+            <h4 className="text-base font-bold text-luxury-100">تم إرسال إشعار التحويل للكاشير</h4>
             <p className="text-xs text-luxury-400 leading-relaxed max-w-sm mx-auto">
-              سيتحقق الكاشير من الإشعار ويؤكد الدفع. تابع حالة طلبك من شاشة تتبع الطلبات —
-              ستظهر «بانتظار التحقق» حتى التأكيد.
+              ظهر إشعارك فوراً على شاشة الكاشير مع تفاصيل الطلب. بعد تأكيد الكاشير للعملية
+              ينتقل طلبك إلى المطبخ مباشرة بحالة «جاهز للبدء». تابع الحالة من شاشة تتبع الطلبات.
             </p>
             <button
               onClick={onClose}
@@ -199,34 +233,93 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                 </span>
               </div>
               <p className="text-[11px] text-luxury-400 leading-relaxed">
-                حوّل المبلغ إلى حساب المطعم ثم ارفع صورة إشعار الحوالة ليؤكدها الكاشير.
+                حوّل المبلغ إلى حساب المطعم أو محفظته، ثم أرسل إشعار التحويل مع اسمك ورقم هاتفك
+                ليؤكده الكاشير. لا يبدأ المطبخ بتحضير الطلب قبل تأكيد الدفع.
               </p>
             </div>
 
-            {/* Step 2 — optional phone */}
+            {/* Step 2 — how the money was sent (display hint for the cashier) */}
             <div>
-              <label htmlFor="transfer-phone" className="block text-xs font-bold text-luxury-300 mb-1.5">
-                رقم الهاتف <span className="text-luxury-500 font-normal">(اختياري — للتواصل عند الحاجة)</span>
-              </label>
-              <div className="relative">
-                <Smartphone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-luxury-500" />
-                <input
-                  id="transfer-phone"
-                  type="tel"
-                  inputMode="tel"
-                  dir="ltr"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  maxLength={24}
-                  placeholder="0599123456"
-                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl pr-10 pl-3 py-2.5 text-sm text-luxury-100 placeholder-luxury-600 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] text-left font-mono"
-                />
+              <label className="block text-xs font-bold text-luxury-300 mb-1.5">طريقة التحويل</label>
+              <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="طريقة التحويل">
+                {CHANNELS.map((option) => {
+                  const active = channel === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setChannel(option.id)}
+                      className={`p-2.5 rounded-2xl border text-right transition-colors cursor-pointer ${
+                        active
+                          ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border-[rgb(var(--brand-primary-strong-rgb)/0.6)]'
+                          : 'bg-luxury-950 border-luxury-800 hover:border-luxury-700'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-luxury-100">
+                        {option.icon}
+                        {option.label}
+                      </span>
+                      <span className="block text-[10px] text-luxury-500 mt-1 leading-relaxed">
+                        {option.hint}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Step 3 — receipt image */}
+            {/* Step 3 — guest identity (required) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="transfer-name" className="block text-xs font-bold text-luxury-300 mb-1.5">
+                  اسم العميل <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-luxury-500" />
+                  <input
+                    id="transfer-name"
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    maxLength={60}
+                    autoComplete="name"
+                    placeholder="الاسم كما هو على إشعار التحويل"
+                    className="w-full bg-luxury-950 border border-luxury-800 rounded-xl pr-10 pl-3 py-2.5 text-sm text-luxury-100 placeholder-luxury-600 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="transfer-phone" className="block text-xs font-bold text-luxury-300 mb-1.5">
+                  رقم الهاتف المحمول <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <Smartphone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-luxury-500" />
+                  <input
+                    id="transfer-phone"
+                    type="tel"
+                    inputMode="tel"
+                    dir="ltr"
+                    required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    maxLength={24}
+                    autoComplete="tel"
+                    placeholder="0599123456"
+                    className="w-full bg-luxury-950 border border-luxury-800 rounded-xl pr-10 pl-3 py-2.5 text-sm text-luxury-100 placeholder-luxury-600 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] text-left font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+            <p className="text-[11px] text-luxury-500 -mt-2">
+              يُستخدم الاسم ورقم الهاتف لمطابقة التحويل مع الطلب والتواصل عند الحاجة فقط.
+            </p>
+
+            {/* Step 4 — receipt image */}
             <div>
-              <label className="block text-xs font-bold text-luxury-300 mb-1.5">صورة إشعار الحوالة</label>
+              <label className="block text-xs font-bold text-luxury-300 mb-1.5">صورة إشعار التحويل</label>
               <div className="flex items-center gap-3">
                 <label
                   htmlFor="transfer-proof-file"
@@ -245,7 +338,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                 {previewUrl && (
                   <img
                     src={previewUrl}
-                    alt="معاينة إشعار الحوالة"
+                    alt="معاينة إشعار التحويل"
                     className="w-16 h-16 rounded-xl object-cover border border-luxury-800"
                   />
                 )}
@@ -260,7 +353,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
               <div className="space-y-2" role="status" aria-live="polite">
                 <div className="flex justify-between text-[11px] text-luxury-300">
                   <span className="flex items-center gap-1.5">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري رفع الإشعار...
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري إرسال الإشعار للكاشير...
                   </span>
                   <span className="font-mono">{progress}%</span>
                 </div>
@@ -299,7 +392,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                 className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 {phase === 'error' ? <RefreshCw className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-                <span>{phase === 'error' ? 'إعادة المحاولة' : 'إرسال إشعار الحوالة'}</span>
+                <span>{phase === 'error' ? 'إعادة المحاولة' : 'إرسال إشعار التحويل'}</span>
               </button>
             </div>
           </>

@@ -368,9 +368,19 @@ model Order {
   // ---------------------------------------------------------------
   // Transfer payment proof (temporary operational data — see docs).
   // ---------------------------------------------------------------
-  // Optional guest phone. OPERATIONAL ONLY: never an account, never a
-  // credential, purged with the receipt after the retention window.
+  // Guest name as typed on the transfer notice. OPERATIONAL ONLY: it exists so
+  // the cashier can match the receipt to the order (and reach the guest), it is
+  // never an account/credential, and it is purged with the receipt after the
+  // retention window. Never returned by the generic orders list — only by the
+  // cashier verification queue.
+  customerName          String?
+  // Guest phone. OPERATIONAL ONLY: never an account, never a credential,
+  // purged with the receipt after the retention window.
   customerPhone         String?
+  // How the guest says they moved the money: BANK (bank transfer) or WALLET
+  // (e-wallet). A display/operational hint for the cashier checking the
+  // receipt — never a financial value and never trusted for settlement.
+  transferChannel       String?
   // Object key in the PRIVATE storage namespace (never a public URL):
   // `restaurants/{restaurantId}/payment-proofs/{orderId}/{uuid}{ext}`.
   paymentProofPath      String?

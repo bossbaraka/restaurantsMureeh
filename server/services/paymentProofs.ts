@@ -34,6 +34,31 @@ export const PAYMENT_STATUS = {
  */
 export const TRANSFER_PAYMENT_METHOD = 'TRANSFER' as const;
 
+/**
+ * How the guest says they moved the money. A DISPLAY hint on the cashier's
+ * verification card — it never changes the ledger method (still TRANSFER), the
+ * amount or the settlement path. Unknown/absent values fall back to BANK.
+ */
+export const TRANSFER_CHANNEL = {
+  BANK: 'BANK',
+  WALLET: 'WALLET',
+} as const;
+
+export type TransferChannelValue =
+  (typeof TRANSFER_CHANNEL)[keyof typeof TRANSFER_CHANNEL];
+
+/** Normalize a stored/typed channel value to the closed set (never throws). */
+export function normalizeTransferChannel(value: unknown): TransferChannelValue {
+  return value === TRANSFER_CHANNEL.WALLET ? TRANSFER_CHANNEL.WALLET : TRANSFER_CHANNEL.BANK;
+}
+
+/** Cashier-facing label for a channel hint. */
+export function transferChannelLabel(value: unknown): string {
+  return normalizeTransferChannel(value) === TRANSFER_CHANNEL.WALLET
+    ? 'محفظة إلكترونية'
+    : 'حوالة بنكية';
+}
+
 /** Reuse the platform-wide image cap (5 MB) — no second limit to maintain. */
 export const MAX_PAYMENT_PROOF_BYTES = MAX_IMAGE_BYTES;
 

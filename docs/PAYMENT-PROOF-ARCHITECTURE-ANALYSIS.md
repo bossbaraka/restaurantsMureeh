@@ -205,14 +205,38 @@ cash/card flows write, with `method = 'TRANSFER'` (server-produced only — the 
 unchanged). Rejection deliberately returns the order to `UNPAID`, so every pre-existing collect
 query keeps working with zero changes.
 
+### Kitchen release (as of the bank/wallet transfer revision)
+
+A transfer is settled BEFORE cooking, so the confirmation is the trigger that makes the order
+cookable. Two rules implement this and nothing else in the order lifecycle moves:
+
+* while `paymentStatus = PENDING_VERIFICATION` and `status = PENDING`, the KDS does **not** show
+  the order (the kitchen must not cook money that has not been verified);
+* confirming settles the money and leaves the kitchen status ALONE — the order was never pushed
+  to `SERVED`, so it appears on the KDS as a fresh "ready to start" ticket and advances through
+  the normal `PENDING → PREPARING → READY → SERVED` machine.
+  `ORDER_STATUS_UPDATED` (with `kitchenReleased: true`) is the event that surfaces it instantly;
+  the staff stream plays the new-ticket chime for it.
+
+An order the kitchen already picked up (`PREPARING`/`READY`) is never hidden and never rewound —
+if a guest announces a transfer mid-cooking, the ticket stays on the board and the confirmation
+only settles the money.
+
+### Guest identity on the notice
+
+`customerName` + `customerPhone` are **required** for a transfer notice (a receipt the cashier
+cannot attribute to a person/phone is not verifiable) and `transferChannel` (`BANK | WALLET`) is
+a display hint. All three live on the `Order` row, are only ever returned by the cashier queue,
+and are purged by the retention sweep together with the private receipt.
+
 ## Endpoints (all additive)
 
 | Method | Path | Auth | Notes |
 | --- | --- | --- | --- |
-| POST | `/api/public/orders/:orderId/payment-proof` | QR session capability | multipart `proof` + optional `customerPhone`; `paymentProofLimiter` (30/15min); magic-byte validated; guest never supplies an amount |
-| GET | `/api/manager/payment-verifications` | `requireCashierOrManager()` | the verification queue; the ONLY endpoint that returns `customerPhone` |
+| POST | `/api/public/orders/:orderId/payment-proof` | QR session capability | multipart `proof` + required `customerName`/`customerPhone` + `transferChannel` (BANK/WALLET, default BANK); `paymentProofLimiter` (30/15min); magic-byte validated; guest never supplies an amount |
+| GET | `/api/manager/payment-verifications` | `requireCashierOrManager()` | the verification queue; the ONLY endpoint that returns `customerName`/`customerPhone`; each row also carries the order's item lines and kitchen status |
 | GET | `/api/manager/orders/:orderId/payment-proof` | `requireCashierOrManager()` + `paymentProofReadLimiter` (300/15min) | streams private bytes; tenant re-check (`proofBelongsToTenant`), `Cache-Control: private, no-store`, `nosniff` |
-| POST | `/api/manager/orders/:orderId/payment/confirm` | `requireCashierOrManager()` + `paymentLimiter` | ONE atomic conditional claim + ledger row; 409 on a lost race |
+| POST | `/api/manager/orders/:orderId/payment/confirm` | `requireCashierOrManager()` + `paymentLimiter` | ONE atomic conditional claim + ledger row; 409 on a lost race; settles the money and raises `kitchenReleased` for an order still in `PENDING` |
 | POST | `/api/manager/orders/:orderId/payment/reject` | `requireCashierOrManager()` + `paymentLimiter` | discards the object, returns to `UNPAID`, keeps the reason marker |
 
 There is no public URL for a receipt, no signed-URL leak, and no way for a body field to set an

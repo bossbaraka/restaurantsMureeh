@@ -778,23 +778,56 @@ export const paymentCreateSchema = z
 // ---------------------------------------------------------------------------
 
 /**
- * Optional guest phone. Normalized through the SAME function that the storage
- * layer uses (server/utils/phone.ts), so a value can never be persisted in a
- * shape the retention/validation contract would reject. An empty/omitted value
- * is valid: the transfer receipt alone is enough to verify a payment.
+ * Guest phone. Normalized through the SAME function that the storage layer
+ * uses (server/utils/phone.ts), so a value can never be persisted in a shape
+ * the retention/validation contract would reject. REQUIRED for a transfer
+ * notice: the cashier must be able to reach the guest about the transfer
+ * (a receipt the cashier cannot match is not verifiable).
  */
 export const customerPhoneSchema = z
   .string()
   .trim()
+  .min(1, 'رقم الهاتف المحمول مطلوب')
   .max(
     MAX_PHONE_INPUT_LENGTH,
     'رقم الهاتف طويل جداً — أدخل رقماً صحيحاً بحد أقصى 15 خانة'
   )
   .refine(
-    (value) => value === '' || normalizeCustomerPhone(value) !== null,
+    (value) => normalizeCustomerPhone(value) !== null,
     { message: 'رقم الهاتف غير صالح — أدخل رقماً حقيقياً (مثال: 0599123456)' }
-  )
-  .optional();
+  );
+
+/**
+ * Guest name as typed on the transfer notice. Free text, but bounded: it is
+ * stored (operational PII, purged by retention) and shown to the cashier, so
+ * control characters / markup / absurd lengths are refused instead of stored.
+ */
+export const MAX_CUSTOMER_NAME_LENGTH = 60;
+
+export const customerNameSchema = z
+  .string()
+  .trim()
+  .min(2, 'اسم العميل مطلوب (حرفان على الأقل)')
+  .max(MAX_CUSTOMER_NAME_LENGTH, 'الاسم طويل جداً — بحد أقصى 60 حرفاً')
+  // Control characters (newlines/tabs/NUL) and angle brackets are refused by
+  // code point instead of a regex: the value is stored and later rendered in
+  // the cashier's screen, so it must not be able to smuggle markup or layout.
+  .refine(
+    (value) =>
+      [...value].every((char) => {
+        const code = char.codePointAt(0) ?? 0;
+        return code >= 0x20 && code !== 0x7f && char !== '<' && char !== '>';
+      }),
+    { message: 'اسم العميل يحتوي محارف غير صالحة' }
+  );
+
+/** How the guest says the money was moved. Never a financial value. */
+export const TRANSFER_CHANNELS = ['BANK', 'WALLET'] as const;
+
+export const transferChannelSchema = z
+  .enum(TRANSFER_CHANNELS, 'قناة التحويل غير صالحة')
+  .optional()
+  .default('BANK');
 
 /**
  * Multipart body of POST /api/public/orders/:orderId/payment-proof.
@@ -802,13 +835,19 @@ export const customerPhoneSchema = z
  * bytes); these fields are the text parts. Every field is a hint the server
  * re-resolves against the QR session and the order — none of them is trusted
  * for authorization, tenancy or money.
+ *
+ * `customerName` + `customerPhone` are REQUIRED: a transfer notice the cashier
+ * cannot attribute to a person/phone is not verifiable. `transferChannel`
+ * (BANK | WALLET) is a display hint for the cashier and defaults to BANK.
  */
 export const paymentProofSchema = z
   .object({
     restaurantId: idSchema,
     tableId: idSchema,
     sessionToken: z.string().trim().min(1, 'جلسة الطاولة مطلوبة').max(200),
+    customerName: customerNameSchema,
     customerPhone: customerPhoneSchema,
+    transferChannel: transferChannelSchema,
   })
   .strict();
 

@@ -1,13 +1,39 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
-import { ChefHat, Clock, CheckCircle2, AlertCircle, Volume2, VolumeX, Sparkles, Filter, Utensils } from 'lucide-react';
+import { ChefHat, Clock, CheckCircle2, AlertCircle, Volume2, VolumeX, Sparkles, Filter, Utensils, ShieldCheck } from 'lucide-react';
+
+// ============================================================
+// Kitchen Display
+//
+// The KDS shows exactly what the kitchen may cook:
+//   - PENDING / PREPARING / READY tickets, and
+//   - NOTHING that is still waiting for a cashier decision on a bank/wallet
+//     transfer (PENDING_VERIFICATION). Those orders are held: the guest has
+//     announced the money but the cashier has not confirmed it yet, so cooking
+//     would be unpaid work. The cashier's confirmation releases the order and
+//     it appears here instantly as a new ticket ("جاهز للبدء").
+// An order the kitchen already started is never hidden, even if a receipt is
+// then uploaded — the ticket must not vanish from the board mid-cooking.
+// ============================================================
 
 export const KitchenDisplaySystem: React.FC = () => {
   const { orders, updateOrderStatus, isMutationPending, currentRestaurant, soundEnabled, toggleSound } = useRestaurant();
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'PREPARING' | 'READY'>('ALL');
 
-  const kitchenOrders = orders.filter((o) => o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY');
+  // Held back until the cashier confirms the transfer.
+  const heldForPayment = orders.filter(
+    (o) =>
+      o.status !== 'CANCELLED' &&
+      o.paymentStatus === 'PENDING_VERIFICATION' &&
+      o.status === 'PENDING'
+  );
+
+  const kitchenOrders = orders.filter(
+    (o) =>
+      (o.status === 'PENDING' || o.status === 'PREPARING' || o.status === 'READY') &&
+      !(o.status === 'PENDING' && o.paymentStatus === 'PENDING_VERIFICATION')
+  );
 
   const filteredOrders = kitchenOrders.filter((o) => {
     if (filter === 'ALL') return true;
@@ -72,6 +98,18 @@ export const KitchenDisplaySystem: React.FC = () => {
         </div>
       </div>
 
+      {/* Transfer orders held for the cashier: visible as a count (the kitchen
+          knows why they are missing) but deliberately NOT cookable yet. */}
+      {heldForPayment.length > 0 && (
+        <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2 text-xs font-bold text-amber-200">
+          <ShieldCheck className="w-4 h-4 shrink-0" />
+          <span>
+            {heldForPayment.length} طلب بانتظار تأكيد الكاشير لتحويل بنكي/محفظة — يُعرض هنا فوراً
+            بحالة «جاهز للبدء» بعد التأكيد.
+          </span>
+        </div>
+      )}
+
       {/* Orders Grid */}
       {filteredOrders.length === 0 ? (
         <div className="p-16 text-center rounded-3xl bg-luxury-900/40 border border-luxury-800/80 my-8">
@@ -121,6 +159,14 @@ export const KitchenDisplaySystem: React.FC = () => {
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs font-mono font-bold">
+                    {order.paymentStatus === 'PAID' && order.paymentMethod === 'TRANSFER' && (
+                      <span
+                        className="mr-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold flex items-center gap-1"
+                        title="تم تأكيد التحويل من الكاشير — ابدأ التحضير فوراً"
+                      >
+                        <ShieldCheck className="w-3 h-3" /> تحويل مؤكد — جاهز للبدء فوراً
+                      </span>
+                    )}
                     <Clock className="w-3.5 h-3.5" />
                     <span>{formatTime(order.createdAt)}</span>
                   </div>

@@ -81,6 +81,7 @@ export function isPurgeEligible(
     archivedAt?: Date | null;
     paymentStatus: string;
     paymentRejectedAt?: Date | null;
+    customerName?: string | null;
     customerPhone?: string | null;
     paymentProofPath?: string | null;
     retentionPurgedAt?: Date | null;
@@ -93,7 +94,9 @@ export function isPurgeEligible(
   if (!(TERMINAL_PAYMENT_STATUSES as readonly string[]).includes(order.paymentStatus)) {
     return false;
   }
-  const hasTemporaryData = Boolean(order.customerPhone || order.paymentProofPath);
+  const hasTemporaryData = Boolean(
+    order.customerName || order.customerPhone || order.paymentProofPath
+  );
   if (!hasTemporaryData) return false;
 
   const windowMs = retentionHours * 3_600_000;

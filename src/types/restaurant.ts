@@ -275,6 +275,24 @@ export interface Order {
  */
 export type PaymentStatus = 'UNPAID' | 'PENDING_VERIFICATION' | 'PAID';
 
+/**
+ * Where the guest says the transfer was sent from. Display-only: it never
+ * changes the ledger method (always TRANSFER) or the settlement path.
+ */
+export type TransferChannel = 'BANK' | 'WALLET';
+
+/** One item of a transfer notice, as the cashier must verify it. */
+export interface PaymentVerificationItemLine {
+  productName: string;
+  quantity: number;
+  unitPrice?: number;
+  totalPrice?: number;
+  selectedSize?: string;
+  selectedAddOns?: string[];
+  removedIngredients?: string[];
+  specialInstructions?: string;
+}
+
 /** One order waiting for a cashier decision on its transfer receipt. */
 export interface PaymentVerificationItem {
   orderId: string;
@@ -284,11 +302,18 @@ export interface PaymentVerificationItem {
   tableId: string;
   tableNumber?: number;
   tableName?: string;
+  /** Kitchen state: whether confirming releases a fresh ticket or settles. */
+  orderStatus?: OrderStatus;
   total: number;
   subtotal: number;
   itemsCount: number;
   itemsSummary?: string;
+  /** Full item list so the cashier verifies without a second request. */
+  items?: PaymentVerificationItemLine[];
+  /** Guest identity on the notice (cashier queue only — never the KDS/POS). */
+  customerName?: string;
   customerPhone?: string;
+  transferChannel?: TransferChannel;
   paymentMethod: string;
   paymentStatus: PaymentStatus;
   hasPaymentProof: boolean;

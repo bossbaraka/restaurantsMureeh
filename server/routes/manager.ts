@@ -35,6 +35,7 @@ import {
   loadPaymentProof,
   proofBelongsToTenant,
   isAwaitingVerification,
+  transferChannelLabel,
   TRANSFER_PAYMENT_METHOD,
   PAYMENT_STATUS,
 } from '../services/paymentProofs';
@@ -3158,6 +3159,10 @@ router.get('/payment-verifications', requireCashierOrManager(), async (req: Requ
       tableId: o.tableId,
       tableNumber: o.table?.number,
       tableName: o.table?.name || undefined,
+      // Kitchen state of the order (PENDING | PREPARING | READY | SERVED):
+      // tells the cashier whether confirming will RELEASE a fresh ticket to
+      // the kitchen or merely settle an order already being prepared.
+      orderStatus: o.status,
       total: o.total,
       subtotal: o.subtotal,
       itemsCount: o.items.reduce((sum, i) => sum + i.quantity, 0),
@@ -3165,7 +3170,21 @@ router.get('/payment-verifications', requireCashierOrManager(), async (req: Requ
         .map((i) => `${i.productNameSnapshot} ×${i.quantity}`)
         .slice(0, 4)
         .join('، '),
+      // Full item list so the cashier verifies the transfer against the actual
+      // order without leaving the verification card (no second request).
+      items: o.items.map((i) => ({
+        productName: i.productNameSnapshot,
+        quantity: i.quantity,
+        unitPrice: i.priceSnapshot,
+        totalPrice: i.totalPrice,
+        selectedSize: i.selectedSize || undefined,
+        selectedAddOns: i.selectedAddOns,
+        removedIngredients: i.removedIngredients,
+        specialInstructions: i.specialInstructions || undefined,
+      })),
+      customerName: o.customerName || undefined,
       customerPhone: o.customerPhone || undefined,
+      transferChannel: o.transferChannel || undefined,
       paymentMethod: o.paymentMethod,
       paymentStatus: o.paymentStatus,
       hasPaymentProof: Boolean(o.paymentProofPath),
@@ -3252,6 +3271,12 @@ router.get(
 // Creates the SAME immutable ledger receipt the cash/table flows create, with
 // method TRANSFER, and only within one atomic claim of the pending state, so
 // two cashiers can never double-post a payment.
+//
+// Kitchen release: confirming a transfer is the moment the order becomes
+// cookable. The order is deliberately NOT pushed to SERVED — an order still
+// waiting in PENDING is released to the KDS as a fresh ticket ("ready to
+// start"), and an order the kitchen already picked up keeps its current
+// state (PREPARING/READY/SERVED) instead of being rewound.
 router.post(
   '/orders/:orderId/payment/confirm',
   requireCashierOrManager(),
@@ -3297,6 +3322,13 @@ router.post(
         ? `طاولة ${order.table.number}`
         : `طلب ${order.id}`;
 
+      // Kitchen state this confirmation releases to. PENDING = the guest
+      // ordered and paid before cooking started, so the ticket enters the KDS
+      // as new ("جاهز للبدء فوراً"); any later state is preserved as-is.
+      const releasedStatus = order.status;
+      const kitchenReleased = releasedStatus === 'PENDING';
+      const channelLabel = transferChannelLabel(order.transferChannel);
+
       let payment: Awaited<ReturnType<typeof prisma.payment.create>> | null = null;
       let receiptError: unknown = null;
       let settled = false;
@@ -3319,7 +3351,9 @@ router.post(
               data: {
                 paymentStatus: 'PAID',
                 paymentMethod: TRANSFER_PAYMENT_METHOD,
-                status: 'SERVED',
+                // The order's kitchen status is intentionally NOT rewritten:
+                // a paid-but-not-started order must stay PENDING so the KDS
+                // shows it as a fresh, immediately cookable ticket.
                 settledAt: now,
                 cashierId: req.user!.id,
                 paymentRejectedAt: null,
@@ -3346,7 +3380,7 @@ router.post(
                 total: order.total,
                 cashierId: req.user!.id,
                 cashierName: req.user!.name,
-                note: note || 'تأكيد حوالة بنكية بعد التحقق من الإشعار',
+                note: note || `تأكيد ${channelLabel} بعد التحقق من الإشعار`,
               },
             });
           });
@@ -3385,8 +3419,12 @@ router.post(
         action: 'PAYMENT_VERIFIED',
         entity: 'Order',
         entityId: order.id,
-        details: `تم تأكيد حوالة بنكية للطلب ${order.id} (إيصال ${payment.receiptNumber}) بقيمة ${order.total}`,
-        metadata: { method: TRANSFER_PAYMENT_METHOD, receiptNumber: payment.receiptNumber },
+        details: `تم تأكيد ${channelLabel} للطلب ${order.id} (إيصال ${payment.receiptNumber}) بقيمة ${order.total}`,
+        metadata: {
+          method: TRANSFER_PAYMENT_METHOD,
+          receiptNumber: payment.receiptNumber,
+          kitchenReleased,
+        },
         ipAddress: req.ip,
       }).catch(() => undefined);
 
@@ -3398,15 +3436,31 @@ router.post(
         orderId: order.id,
         total: payment.total,
       });
+      // Kitchen release: when the paid order was still waiting (PENDING), the
+      // KDS did not show it. This event is what makes it appear instantly as a
+      // new ticket — the staff stream plays a chime for a PENDING status.
+      realtimeService.broadcastToTable(restaurantId, order.tableId, 'ORDER_STATUS_UPDATED', {
+        orderId: order.id,
+        tableId: order.tableId,
+        status: releasedStatus,
+        kitchenReleased,
+        paymentStatus: PAYMENT_STATUS.PAID,
+      });
       realtimeService.broadcastToTable(restaurantId, order.tableId, 'PAYMENT_PROOF_VERIFIED', {
         orderId: order.id,
         tableId: order.tableId,
         receiptNumber: payment.receiptNumber,
+        kitchenReleased,
       });
 
       return res.status(201).json({
         success: true,
-        data: { payment, orderId: order.id },
+        data: {
+          payment,
+          orderId: order.id,
+          orderStatus: releasedStatus,
+          kitchenReleased,
+        },
         statusCode: 201,
       });
     } catch (err: unknown) {

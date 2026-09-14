@@ -3,7 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { formatPrice } from '../../utils/formatting';
-import { PaymentVerificationItem } from '../../types/restaurant';
+import { PaymentVerificationItem, TransferChannel } from '../../types/restaurant';
 import {
   BadgeCheck,
   XCircle,
@@ -14,18 +14,46 @@ import {
   Loader2,
   AlertCircle,
   Banknote,
+  User,
+  Landmark,
+  Wallet,
+  ChefHat,
 } from 'lucide-react';
 
 // ============================================================
 // Cashier — transfer payment verification
 //
 // Answers ONE question in the cashier's own screen: "which order needs
-// verification?" List → view the private receipt → confirm / reject.
+// verification?" List → guest identity + the order's own items + the private
+// receipt → confirm / reject.
 //
-// The queue is refetched only when the SET of pending orders changes (driven by
-// the existing SSE + background refresh), never on a polling loop of its own.
+// A submission reaches this panel the moment the guest sends it (the existing
+// SSE + background refresh drive the queue — no polling loop of its own).
+// Confirming settles the money AND releases the order to the kitchen: an order
+// still waiting in PENDING is pushed to the KDS as a fresh "ready to start"
+// ticket by the server, so the confirmation is what starts the cooking.
+//
 // Receipt images are fetched as authenticated blobs and revoked on close.
 // ============================================================
+
+/**
+ * Display hint only — the ledger method is always TRANSFER. Local to this
+ * screen on purpose: the channel label is a cashier-facing string, not a
+ * shared domain value.
+ */
+const TRANSFER_CHANNEL_LABEL: Record<TransferChannel, string> = {
+  BANK: 'حوالة بنكية',
+  WALLET: 'محفظة إلكترونية',
+};
+
+const channelLabel = (channel?: TransferChannel): string =>
+  channel === 'WALLET' ? TRANSFER_CHANNEL_LABEL.WALLET : TRANSFER_CHANNEL_LABEL.BANK;
+
+const ChannelIcon: React.FC<{ channel?: TransferChannel; className?: string }> = ({
+  channel,
+  className = 'w-3.5 h-3.5',
+}) =>
+  channel === 'WALLET' ? <Wallet className={className} /> : <Landmark className={className} />;
 
 export const PaymentVerificationPanel: React.FC = () => {
   const { currentRestaurant, orders, showToast } = useRestaurant();
@@ -115,7 +143,14 @@ export const PaymentVerificationPanel: React.FC = () => {
     const res = await api.confirmTransferPayment(currentUser, tenantId, item.orderId);
     setBusyOrderId(null);
     if (res.success && res.data) {
-      showToast('success', 'تم تأكيد الدفع', `إيصال ${res.data.payment.receiptNumber} — ${formatPrice(res.data.payment.total, currency)}`);
+      const released = res.data.kitchenReleased;
+      showToast(
+        'success',
+        released ? 'تم تأكيد الدفع وإرسال الطلب للمطبخ' : 'تم تأكيد الدفع',
+        released
+          ? `إيصال ${res.data.payment.receiptNumber} — ${formatPrice(res.data.payment.total, currency)} · الطلب الآن في المطبخ جاهز للبدء`
+          : `إيصال ${res.data.payment.receiptNumber} — ${formatPrice(res.data.payment.total, currency)}`
+      );
       closeProof();
       void loadQueue();
       return;
@@ -153,7 +188,7 @@ export const PaymentVerificationPanel: React.FC = () => {
       <div className="p-3 border-b border-luxury-800 bg-amber-500/5 flex items-center justify-between">
         <h3 className="text-xs font-bold text-amber-200 flex items-center gap-2">
           <BadgeCheck className="w-4 h-4" />
-          تحقق من إشعارات الحوالات
+          تحقق من إشعارات التحويلات
           {items.length > 0 && (
             <span className="min-w-5 h-5 px-1.5 rounded-full bg-amber-500 text-luxury-950 text-[11px] font-bold flex items-center justify-center">
               {items.length}
@@ -178,13 +213,13 @@ export const PaymentVerificationPanel: React.FC = () => {
 
       {items.length === 0 && !loadError ? (
         <p className="p-3 text-[11px] text-luxury-500">
-          لا توجد إشعارات بانتظار التحقق. ستظهر هنا تلقائياً عند إرسال الزبون إشعار حوالة.
+          لا توجد إشعارات بانتظار التحقق. ستظهر هنا تلقائياً عند إرسال الزبون إشعار تحويل.
         </p>
       ) : (
-        <div className="divide-y divide-luxury-800 max-h-72 overflow-y-auto">
+        <div className="divide-y divide-luxury-800 max-h-96 overflow-y-auto">
           {items.map((item) => (
-            <div key={item.orderId} className="p-3 flex items-center justify-between gap-3">
-              <div className="min-w-0">
+            <div key={item.orderId} className="p-3 flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono font-bold text-xs text-luxury-100">
                     {item.numericId ? `#${item.numericId}` : item.orderId}
@@ -192,12 +227,19 @@ export const PaymentVerificationPanel: React.FC = () => {
                   <span className="text-[11px] text-luxury-400">
                     {item.tableNumber != null ? `طاولة ${item.tableNumber}` : item.tableName || '—'}
                   </span>
-                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-300 font-bold">
-                    حوالة بنكية
+                  <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-300 font-bold flex items-center gap-1">
+                    <ChannelIcon channel={item.transferChannel} className="w-3 h-3" />
+                    {channelLabel(item.transferChannel)}
                   </span>
                 </div>
-                <div className="text-[11px] text-luxury-500 flex items-center gap-2 mt-0.5 flex-wrap">
-                  <span className="font-bold text-gold-300 font-mono">{formatPrice(item.total, currency)}</span>
+
+                {/* Guest identity — the cashier matches it against the notice. */}
+                <div className="text-[11px] text-luxury-400 flex items-center gap-2 mt-0.5 flex-wrap">
+                  {item.customerName && (
+                    <span className="flex items-center gap-1 text-luxury-200 font-bold">
+                      <User className="w-3 h-3" /> {item.customerName}
+                    </span>
+                  )}
                   {item.customerPhone && (
                     <span className="flex items-center gap-1 font-mono" dir="ltr">
                       <Phone className="w-3 h-3" /> {item.customerPhone}
@@ -208,6 +250,13 @@ export const PaymentVerificationPanel: React.FC = () => {
                     {new Date(item.submittedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
+
+                {/* The order itself: the cashier verifies the money against it. */}
+                <div className="text-[11px] text-luxury-500 mt-1 leading-relaxed">
+                  <span className="font-bold text-gold-300 font-mono">{formatPrice(item.total, currency)}</span>
+                  {item.itemsCount ? ` · ${item.itemsCount} صنف` : ''}
+                  {item.itemsSummary ? ` · ${item.itemsSummary}` : ''}
+                </div>
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
@@ -215,7 +264,7 @@ export const PaymentVerificationPanel: React.FC = () => {
                   onClick={() => void openProof(item)}
                   className="px-2.5 py-1.5 rounded-lg bg-luxury-850 hover:bg-luxury-800 border border-luxury-750 text-luxury-200 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  <ImageIcon className="w-3.5 h-3.5" /> الإشعار
+                  <ImageIcon className="w-3.5 h-3.5" /> الطلب والإشعار
                 </button>
                 <button
                   onClick={() => void handleConfirm(item)}
@@ -241,7 +290,7 @@ export const PaymentVerificationPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Receipt preview + decision */}
+      {/* Order details + receipt + decision */}
       {openItem && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4">
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={closeProof} />
@@ -255,11 +304,14 @@ export const PaymentVerificationPanel: React.FC = () => {
               <div>
                 <h4 id="payment-proof-title" className="text-sm font-bold text-luxury-50 flex items-center gap-2">
                   <Banknote className="w-4 h-4 text-gold-400" />
-                  إشعار حوالة — الطلب {openItem.numericId ? `#${openItem.numericId}` : openItem.orderId}
+                  إشعار تحويل — الطلب {openItem.numericId ? `#${openItem.numericId}` : openItem.orderId}
                 </h4>
                 <p className="text-[11px] text-luxury-400 mt-0.5">
                   {formatPrice(openItem.total, currency)} ·{' '}
                   {openItem.tableNumber != null ? `طاولة ${openItem.tableNumber}` : openItem.tableName || '—'}
+                  {' · '}
+                  {channelLabel(openItem.transferChannel)}
+                  {openItem.customerName ? ` · ${openItem.customerName}` : ''}
                   {openItem.customerPhone ? ` · ${openItem.customerPhone}` : ''}
                 </p>
               </div>
@@ -270,6 +322,52 @@ export const PaymentVerificationPanel: React.FC = () => {
               >
                 <XCircle className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* The order the transfer must cover (same numbers the guest sees). */}
+            <div className="rounded-2xl bg-luxury-950 border border-luxury-800 p-3 space-y-2">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-luxury-300">
+                <ChefHat className="w-3.5 h-3.5 text-gold-400" /> أصناف الطلب
+                <span className="text-luxury-500 font-normal">
+                  (لا يُرسل إلى المطبخ إلا بعد تأكيدك)
+                </span>
+              </div>
+              {(openItem.items && openItem.items.length > 0 ? openItem.items : []).map((line, idx) => (
+                <div key={idx} className="text-[11px] border-b border-luxury-850 last:border-0 pb-1.5 last:pb-0">
+                  <div className="flex justify-between text-luxury-100 font-bold">
+                    <span>
+                      {line.quantity} × {line.productName}
+                    </span>
+                    {line.totalPrice !== undefined && (
+                      <span className="font-mono">{formatPrice(line.totalPrice, currency)}</span>
+                    )}
+                  </div>
+                  {(line.selectedSize ||
+                    (line.selectedAddOns && line.selectedAddOns.length > 0) ||
+                    (line.removedIngredients && line.removedIngredients.length > 0) ||
+                    line.specialInstructions) && (
+                    <div className="text-luxury-500 mt-0.5 space-y-0.5">
+                      {line.selectedSize && <div>الحجم: {line.selectedSize}</div>}
+                      {line.selectedAddOns && line.selectedAddOns.length > 0 && (
+                        <div className="text-emerald-400">+ {line.selectedAddOns.join('، ')}</div>
+                      )}
+                      {line.removedIngredients && line.removedIngredients.length > 0 && (
+                        <div className="text-red-400">- بدون: {line.removedIngredients.join('، ')}</div>
+                      )}
+                      {line.specialInstructions && <div className="text-amber-300">ملاحظة: {line.specialInstructions}</div>}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {(!openItem.items || openItem.items.length === 0) && (
+                <p className="text-[11px] text-luxury-500">
+                  {openItem.itemsSummary || 'لم يتم تحميل أصناف الطلب — حدّث القائمة.'}
+                </p>
+              )}
+              <div className="flex justify-between border-t border-luxury-800 pt-2 text-xs font-bold text-luxury-100">
+                <span>الإجمالي المطلوب تحويله</span>
+                <span className="font-mono text-gold-300">{formatPrice(openItem.total, currency)}</span>
+              </div>
             </div>
 
             <div className="rounded-2xl bg-luxury-950 border border-luxury-800 p-2 min-h-40 flex items-center justify-center">
@@ -284,7 +382,7 @@ export const PaymentVerificationPanel: React.FC = () => {
               ) : proofUrl ? (
                 <img
                   src={proofUrl}
-                  alt="إشعار الحوالة"
+                  alt="إشعار التحويل"
                   className="max-h-[50vh] w-auto rounded-xl object-contain"
                 />
               ) : null}
@@ -316,12 +414,13 @@ export const PaymentVerificationPanel: React.FC = () => {
                   ) : (
                     <BadgeCheck className="w-4 h-4" />
                   )}
-                  تأكيد الدفع
+                  تأكيد الدفع وإرسال للمطبخ
                 </button>
               </div>
               <p className="text-[10px] text-luxury-500 leading-relaxed">
-                التأكيد يسجّل إيصالاً بقيمة الطلب ({formatPrice(openItem.total, currency)}) ويحوّل حالته إلى
-                مدفوع. لا يمكن تأكيد الطلب مرتين — أي محاولة ثانية ستُرفض من الخادم.
+                التأكيد يسجّل إيصالاً بقيمة الطلب ({formatPrice(openItem.total, currency)})، يحوّل حالته إلى
+                مدفوع، ويُظهر الطلب فوراً في شاشة المطبخ بحالة «جاهز للبدء». لا يمكن تأكيد الطلب مرتين — أي
+                محاولة ثانية ستُرفض من الخادم.
               </p>
             </div>
           </div>

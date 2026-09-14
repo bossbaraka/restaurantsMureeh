@@ -195,6 +195,19 @@ describe('purge eligibility — temporary data only, never mid-verification', ()
     ).toBe(false);
   });
 
+  it('treats a name-only notice as temporary data too', () => {
+    const nameOnly = {
+      archivedAt,
+      paymentStatus: 'PAID',
+      customerName: 'أحمد سالم',
+      customerPhone: null,
+      paymentProofPath: null,
+      retentionPurgedAt: null,
+    };
+    expect(isPurgeEligible(nameOnly, after(48), 48)).toBe(true);
+    expect(isPurgeEligible({ ...nameOnly, customerName: null }, after(48), 48)).toBe(false);
+  });
+
   it('is a no-op for an order with nothing temporary left, or already purged', () => {
     expect(
       isPurgeEligible({ ...base, customerPhone: null, paymentProofPath: null }, after(240), 48)
@@ -204,11 +217,12 @@ describe('purge eligibility — temporary data only, never mid-verification', ()
     ).toBe(false);
   });
 
-  it('leaves financial records alone: the purge writes exactly two fields', () => {
+  it('leaves financial records alone: the purge writes only the temporary fields', () => {
     const purge = retentionTs.slice(
       retentionTs.indexOf('export async function purgeTemporaryOperationalData')
     );
     const dataBlock = purge.slice(purge.indexOf('data: {'), purge.indexOf('},', purge.indexOf('data: {')));
+    expect(dataBlock).toContain('customerName: null');
     expect(dataBlock).toContain('customerPhone: null');
     expect(dataBlock).toContain('paymentProofPath: null');
     expect(dataBlock).toContain('retentionPurgedAt: now');
@@ -258,7 +272,9 @@ describe('sweep implementation — idempotent, tenant-scoped, failure-safe', () 
     expect(retentionTs).toContain('orderBy: { createdAt: \'asc\' }');
     expect(retentionTs).toContain('orderBy: { archivedAt: \'asc\' }');
     // Only orders that still carry temporary data are candidates.
-    expect(retentionTs).toContain('OR: [{ customerPhone: { not: null } }, { paymentProofPath: { not: null } }]');
+    expect(retentionTs).toContain('{ customerName: { not: null } }');
+    expect(retentionTs).toContain('{ customerPhone: { not: null } }');
+    expect(retentionTs).toContain('{ paymentProofPath: { not: null } }');
   });
 
   it('supports a dry run so an operator can inspect before any write', () => {
