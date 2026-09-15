@@ -165,8 +165,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* SIZES SELECTOR */}
           {product.sizes && product.sizes.length > 0 && (
-            <div>
-              <p className="block text-xs font-bold text-luxury-200 mb-2">
+            <div role="radiogroup" aria-label="اختر الحجم">
+              <p className="block text-xs font-bold text-luxury-200 mb-2" id="product-size-label">
                 اختر الحجم
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -177,6 +177,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                     <button
                       key={size.id}
                       type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={`الحجم ${size.name}${mod > 0 ? ` — زيادة ${formatPrice(mod, currency)}` : ''}`}
                       onClick={() => setSelectedSize(size)}
                       className={`p-3 rounded-xl border text-xs font-medium transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
                         isSelected
@@ -206,10 +209,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* ADD-ONS SELECTOR */}
           {product.addOns && product.addOns.length > 0 && (
-            <div>
-              <label className="block text-xs font-bold text-luxury-200 mb-2">
+            <div role="group" aria-label="إضافات فاخرة اختيارية">
+              <p className="block text-xs font-bold text-luxury-200 mb-2">
                 إضافات فاخرة (اختياري)
-              </label>
+              </p>
               <div className="space-y-2">
                 {product.addOns.map((addOn) => {
                   const isChecked = selectedAddOns.some((a) => a.id === addOn.id);
@@ -217,6 +220,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                     <button
                       key={addOn.id}
                       type="button"
+                      role="checkbox"
+                      aria-checked={isChecked}
+                      aria-label={`${isChecked ? 'إزالة' : 'إضافة'} ${addOn.name} مقابل ${formatPrice(addOn.price, currency)}`}
                       onClick={() => toggleAddOn(addOn)}
                       className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                         isChecked
@@ -245,10 +251,10 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* REMOVABLE INGREDIENTS */}
           {((product.removableIngredients && product.removableIngredients.length > 0) ||
             (product.ingredients && product.ingredients.length > 0)) && (
-            <div>
-              <label className="block text-xs font-bold text-luxury-200 mb-2">
+            <div role="group" aria-label="استبعاد مكونات حسب تفضيلك">
+              <p className="block text-xs font-bold text-luxury-200 mb-2">
                 استبعاد مكونات (حسب تفضيلك)
-              </label>
+              </p>
               <div className="flex flex-wrap gap-2">
                 {(product.removableIngredients || product.ingredients || []).map((ing) => {
                   const isRemoved = removedIngredients.includes(ing);
@@ -256,6 +262,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                     <button
                       key={ing}
                       type="button"
+                      role="checkbox"
+                      aria-checked={isRemoved}
+                      aria-label={`${isRemoved ? 'إعادة' : 'استبعاد'} ${ing}`}
                       onClick={() => toggleRemoveIngredient(ing)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                         isRemoved
@@ -289,19 +298,22 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         {/* Fixed Footer with Quantity & Add to Cart Button */}
         <div className="p-4 sm:p-5 bg-luxury-950 border-t border-luxury-800 flex items-center justify-between gap-4 shrink-0">
           {/* Quantity Controls */}
-          <div className="flex items-center gap-2 bg-luxury-900 border border-luxury-800 rounded-xl p-1 shrink-0">
+          <div className="flex items-center gap-2 bg-luxury-900 border border-luxury-800 rounded-xl p-1 shrink-0" role="group" aria-label="الكمية">
             <button
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-8 h-8 rounded-lg bg-luxury-800 hover:bg-luxury-750 text-luxury-200 flex items-center justify-center transition-colors cursor-pointer"
+              disabled={quantity <= 1}
+              aria-label="إنقاص الكمية"
+              className="touch-target w-9 h-9 rounded-lg bg-luxury-800 hover:bg-luxury-750 disabled:opacity-40 text-luxury-200 flex items-center justify-center transition-colors cursor-pointer"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
-            <span className="w-7 text-center font-bold text-sm font-mono text-luxury-100">
+            <span className="w-7 text-center font-bold text-sm font-mono text-luxury-100" aria-live="polite">
               {quantity}
             </span>
             <button
               onClick={() => setQuantity((q) => q + 1)}
-              className="w-8 h-8 rounded-lg brand-cta flex items-center justify-center transition-colors cursor-pointer font-bold"
+              aria-label="زيادة الكمية"
+              className="touch-target w-9 h-9 rounded-lg brand-cta flex items-center justify-center transition-colors cursor-pointer font-bold"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>

@@ -7,19 +7,16 @@ import { TableAggregationModal } from './TableAggregationModal';
 import { api } from '../../services/api';
 import {
   MapPin,
-  Users,
   Bell,
   Receipt,
-  CheckCircle,
   ExternalLink,
   Layers,
-  Sparkles,
   Search,
   Plus,
   Edit2,
   X,
-  Power,
 } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 export const TableManagement: React.FC = () => {
   const { tables, orders, currentRestaurant, refreshTenantData, setActiveTableId, setViewMode, showToast } = useRestaurant();
@@ -39,6 +36,9 @@ export const TableManagement: React.FC = () => {
   const [tableNumInput, setTableNumInput] = useState<number>(1);
   const [capacityInput, setCapacityInput] = useState<number>(4);
   const [zoneInput, setZoneInput] = useState<TableZone>('MAIN_HALL');
+
+  // Table create/edit dialog: Escape, scroll lock and focus management.
+  useDialog({ isOpen: isTableModalOpen, onClose: () => setIsTableModalOpen(false) });
 
   const filteredTables = tables
     .filter((t) => {
@@ -308,19 +308,66 @@ export const TableManagement: React.FC = () => {
             </div>
           );
         })}
+
+        {/* Distinguish a genuinely empty restaurant layout from a filter that
+            hides everything, with a one-tap recovery action for each. */}
+        {filteredTables.length === 0 && (
+          <div className="col-span-full flex flex-col items-center justify-center text-center py-14 px-6 rounded-2xl border border-dashed border-luxury-750 bg-luxury-900/50">
+            <div className="w-12 h-12 rounded-2xl bg-luxury-850 border border-luxury-800 flex items-center justify-center mb-3 text-luxury-400">
+              <Layers className="w-5 h-5" />
+            </div>
+            {tables.length === 0 ? (
+              <>
+                <p className="text-sm font-bold text-luxury-100">لا توجد طاولات بعد</p>
+                <p className="text-xs text-luxury-400 mt-1 max-w-sm leading-relaxed">
+                  أضف تخطيط طاولات مطعمك ليتمكن الضيوف من تصفّح القائمة حسب الطاولة وتتبّع طلباتهم.
+                </p>
+                {canManageTables && (
+                  <button
+                    onClick={handleOpenAddTable}
+                    className="mt-4 px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    إضافة أول طاولة
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-bold text-luxury-100">لا توجد طاولات تطابق التصفية الحالية</p>
+                <p className="text-xs text-luxury-400 mt-1">جرّب صالة أخرى أو امسح رقم البحث.</p>
+                <button
+                  onClick={() => {
+                    setSelectedZone('ALL');
+                    setSearchTableNum('');
+                  }}
+                  className="mt-4 px-4 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 border border-luxury-750 text-luxury-100 font-bold text-xs cursor-pointer"
+                >
+                  إعادة تعيين التصفية
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Table Create / Edit Modal */}
       {isTableModalOpen && (
         <div className="fixed inset-0 z-60 overflow-y-auto flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={() => setIsTableModalOpen(false)} />
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={() => setIsTableModalOpen(false)} aria-hidden="true" tabIndex={-1} />
 
-          <div className="relative w-full max-w-md bg-luxury-900 border border-luxury-700 rounded-2xl p-5 z-10 space-y-4 text-xs" dir="rtl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="table-form-title"
+            className="relative w-full max-w-md bg-luxury-900 border border-luxury-700 rounded-2xl p-5 z-10 space-y-4 text-xs my-4"
+            dir="rtl"
+          >
             <div className="flex items-center justify-between border-b border-luxury-800 pb-3">
-              <h3 className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="table-form-title" className="text-base font-bold text-luxury-50 font-serif">
                 {editingTable ? `تعديل طاولة ${editingTable.tableNumber}` : 'إضافة طاولة جديدة'}
               </h3>
-              <button onClick={() => setIsTableModalOpen(false)} className="text-luxury-400 hover:text-white">
+              <button onClick={() => setIsTableModalOpen(false)} className="p-1.5 -ml-1.5 text-luxury-400 hover:text-white rounded-lg hover:bg-luxury-800" aria-label="إغلاق">
                 <X className="w-5 h-5" />
               </button>
             </div>

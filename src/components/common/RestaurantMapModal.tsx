@@ -1,6 +1,7 @@
 import React from 'react';
 import { Restaurant } from '../../types/restaurant';
 import { MapPin, Phone, ExternalLink, X, Navigation, Compass } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 interface RestaurantMapModalProps {
   restaurant: Restaurant | null;
@@ -47,6 +48,9 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  // Escape-to-close, scroll lock and focus management (see hooks/useDialog).
+  useDialog({ isOpen: isOpen && !!restaurant, onClose });
+
   if (!isOpen || !restaurant) return null;
 
   const { lat, lng, hasCoords, mapImage, embedUrl, openUrl } = resolveMapSources(restaurant);
@@ -55,10 +59,16 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
       {/* Backdrop */}
-      <div className="fixed inset-0" onClick={onClose} />
+      <div className="fixed inset-0" onClick={onClose} aria-hidden="true" tabIndex={-1} />
 
       {/* Modal Card */}
-      <div className="relative w-full max-w-2xl bg-luxury-950 border border-luxury-800 rounded-3xl shadow-2xl overflow-hidden z-10 text-right flex flex-col max-h-[90vh]" dir="rtl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="restaurant-map-title"
+        className="relative w-full max-w-2xl bg-luxury-950 border border-luxury-800 rounded-3xl shadow-2xl overflow-hidden z-10 text-right flex flex-col max-h-[90vh]"
+        dir="rtl"
+      >
         {/* Modal Header */}
         <div className="p-5 bg-luxury-900 border-b border-luxury-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -69,7 +79,7 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
               <MapPin className="w-5 h-5 text-black" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="restaurant-map-title" className="text-base font-bold text-luxury-50 font-serif">
                 موقع وخريطة الوصول — {restaurant.name}
               </h3>
               <p className="text-xs text-luxury-400">

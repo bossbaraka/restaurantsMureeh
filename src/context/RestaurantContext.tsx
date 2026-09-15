@@ -81,6 +81,13 @@ interface RestaurantContextType {
   soundEnabled: boolean;
   toggleSound: () => void;
   refreshTenantData: () => void;
+  /**
+   * Lifecycle of the current tenant's first data load for the authenticated
+   * workspace ('idle' before any fetch, 'loading' until the first request
+   * settles, 'ready' afterwards). Lets staff screens render structural
+   * skeletons instead of flashing misleading empty states.
+   */
+  tenantDataStatus: 'idle' | 'loading' | 'ready';
 
   // Active Customer Table Session
   activeTableId: string | null;
@@ -364,6 +371,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [waiterRequests, setWaiterRequests] = useState<WaiterRequest[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [tenantDataStatus, setTenantDataStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
   const [availableRestaurants, setAvailableRestaurants] = useState<Restaurant[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -414,6 +422,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!currentRestaurant?.id || isFetchingRef.current) return;
     isFetchingRef.current = true;
     const tenantId = currentRestaurant.id;
+    setTenantDataStatus('loading');
 
     try {
       if (currentUser) {
@@ -517,9 +526,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
       }
     } catch {
-      /* ignore transient background errors */
+      /* ignore transient background errors — human-readable retry surfaces
+         live in the individual views; the poll/SSE retries the data. */
     } finally {
       isFetchingRef.current = false;
+      setTenantDataStatus('ready');
     }
   }, [currentRestaurant?.id, currentRestaurant?.slug, currentUser?.id, currentTableSession?.sessionToken, activeTableId, displayMode]);
 
@@ -1792,6 +1803,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         soundEnabled,
         toggleSound,
         refreshTenantData,
+        tenantDataStatus,
         activeTableId,
         setActiveTableId,
         activeTableNumber,

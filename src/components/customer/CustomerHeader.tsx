@@ -6,6 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import { RestaurantMapModal } from '../common/RestaurantMapModal';
 import { openCustomerGuide } from './guideBus';
 import { optimizeImageUrl } from './ProductImage';
+import { useDialog } from '../../hooks/useDialog';
 
 export const CustomerHeader: React.FC = () => {
   const {
@@ -25,6 +26,9 @@ export const CustomerHeader: React.FC = () => {
   const { setIsLoginModalOpen, currentUser } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMapOpen, setIsMapOpen] = useState(false);
+
+  // Mobile options sheet: Escape-to-close, scroll lock, focus management.
+  useDialog({ isOpen: isMobileMenuOpen, onClose: () => setIsMobileMenuOpen(false) });
 
   const tableNumberStr =
     activeTableNumber != null
@@ -219,9 +223,14 @@ export const CustomerHeader: React.FC = () => {
           <div
             className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
             onClick={() => setIsMobileMenuOpen(false)}
+            aria-hidden="true"
+            tabIndex={-1}
           />
 
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={`خيارات ${restName}`}
             className="relative bg-luxury-900 border-t border-luxury-800 rounded-t-3xl p-5 space-y-4 text-right text-luxury-50 shadow-2xl z-10 animate-in slide-in-from-bottom duration-300"
             dir="rtl"
           >
@@ -233,7 +242,8 @@ export const CustomerHeader: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-1.5 rounded-lg bg-luxury-850 text-luxury-400 hover:text-white"
+                className="p-2 rounded-lg bg-luxury-850 text-luxury-400 hover:text-white"
+                aria-label="إغلاق القائمة"
               >
                 <X className="w-4 h-4" />
               </button>

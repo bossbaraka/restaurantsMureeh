@@ -11,6 +11,7 @@ import {
 } from '../../types/restaurant';
 import { computeSalesKpis, METHOD_LABELS, ZONE_LABELS } from '../../services/analytics';
 import { PaymentVerificationPanel } from './PaymentVerificationPanel';
+import { useDialog } from '../../hooks/useDialog';
 import {
   Search,
   ShoppingBasket,
@@ -74,6 +75,10 @@ export const CashierPOSView: React.FC = () => {
   const [receipt, setReceipt] = useState<PaymentRecord | null>(null);
   const [processing, setProcessing] = useState(false);
   const checkoutRequestRef = useRef<{ fingerprint: string; id: string } | null>(null);
+
+  // Checkout dialog and the receipt success dialog: Escape/scroll-lock/focus.
+  useDialog({ isOpen: checkoutOpen, onClose: () => setCheckoutOpen(false) });
+  useDialog({ isOpen: !!receipt, onClose: () => setReceipt(null) });
 
   // --- Derived data ---
   const branchTables = useMemo(() => {
@@ -596,10 +601,16 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
       {/* ============ CHECKOUT MODAL ============ */}
       {checkoutOpen && (
         <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md shadow-2xl p-5 max-h-[90vh] overflow-y-auto">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pos-checkout-title"
+            className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md shadow-2xl p-5 max-h-[90vh] overflow-y-auto"
+            dir="rtl"
+          >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-luxury-50 text-sm">إتمام الدفع</h3>
-              <button onClick={() => setCheckoutOpen(false)} className="text-luxury-400 hover:text-luxury-100 cursor-pointer"><X className="w-4 h-4" /></button>
+              <h3 id="pos-checkout-title" className="font-bold text-luxury-50 text-sm">إتمام الدفع</h3>
+              <button onClick={() => setCheckoutOpen(false)} className="p-1.5 -ml-1.5 text-luxury-400 hover:text-luxury-100 cursor-pointer rounded-lg hover:bg-luxury-800" aria-label="إغلاق"><X className="w-4 h-4" /></button>
             </div>
             <div className="bg-luxury-950 rounded-xl p-3 mb-3 text-xs space-y-1">
               <div className="flex justify-between text-luxury-300">
@@ -694,6 +705,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
             <button
               onClick={handleConfirmPayment}
               disabled={processing}
+              aria-busy={processing}
               className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-emerald-950 font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <CheckCircle2 className="w-4 h-4" />
@@ -706,11 +718,17 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
       {/* ============ RECEIPT SUCCESS ============ */}
       {receipt && (
         <div className="fixed inset-0 z-[90] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-luxury-900 border border-gold-500/40 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pos-receipt-title"
+            className="bg-luxury-900 border border-gold-500/40 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center"
+            dir="rtl"
+          >
             <div className="w-14 h-14 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center mx-auto mb-3">
               <CheckCircle2 className="w-7 h-7" />
             </div>
-            <h3 className="font-bold text-luxury-50 text-base mb-1">تم الدفع بنجاح</h3>
+            <h3 id="pos-receipt-title" className="font-bold text-luxury-50 text-base mb-1">تم الدفع بنجاح</h3>
             <div className="font-mono text-gold-400 text-sm font-bold mb-4">{receipt.receiptNumber}</div>
             <div className="bg-luxury-950 rounded-xl p-4 text-xs space-y-1.5 text-right">
               <div className="flex justify-between"><span className="text-luxury-400">الطاولة</span><span className="text-luxury-100 font-bold">{receipt.tableLabel}</span></div>

@@ -55,8 +55,28 @@ export type ManagerTab =
   | 'BRANDING'
   | 'SUBSCRIPTION';
 
+/** Structural placeholder shown once, before the workspace's first server
+ *  response — never a blank screen or a misleading "nothing here" empty state. */
+const ManagerBootSkeleton: React.FC = () => (
+  <div className="space-y-6 text-right animate-pulse" aria-busy="true" aria-label="جارٍ تحميل لوحة العمل">
+    <div className="h-28 rounded-2xl bg-luxury-900 border border-luxury-800" />
+    <div className="h-20 rounded-2xl bg-luxury-900/80 border border-luxury-800" />
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="h-28 rounded-2xl bg-luxury-900 border border-luxury-800" />
+      ))}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="h-72 rounded-2xl bg-luxury-900/80 border border-luxury-800" />
+      ))}
+    </div>
+    <span className="sr-only" role="status">جارٍ تحميل بيانات المطعم من الخادم…</span>
+  </div>
+);
+
 export const ManagerLayout: React.FC = () => {
-  const { orders, waiterRequests, setViewMode, currentRestaurant, tenantsList, setCurrentTenantBySlug, setIsOnboardingOpen } = useRestaurant();
+  const { orders, tables, products, waiterRequests, setViewMode, currentRestaurant, tenantsList, setCurrentTenantBySlug, setIsOnboardingOpen, tenantDataStatus } = useRestaurant();
   const { isSuperAdmin, canAccessManagerTab, switchManagerRestaurant, currentUser } = useAuth();
   // Multi-tenant (shared restaurants) switching is reserved for the platform
   // manager; a tenant manager only ever operates inside his own restaurant.
@@ -138,6 +158,30 @@ export const ManagerLayout: React.FC = () => {
 
   const navItems = navConfig.filter((item) => canAccessManagerTab(item.id));
   const activeNavItem = navItems.find((item) => item.id === activeTab);
+
+  // First-load guard: until the tenant's first refresh settles AND any core
+  // data arrived, show a structural skeleton instead of empty-state copy that
+  // falsely implies the restaurant has no orders/tables/menu.
+  const isBooting =
+    !!currentUser &&
+    tenantDataStatus !== 'ready' &&
+    orders.length === 0 &&
+    tables.length === 0 &&
+    products.length === 0;
+
+  // Preserve desktop section grouping inside the mobile sheet so staff scan
+  // by responsibility instead of reading one flat 13-item list.
+  const mobileSections = (['OPERATIONS', 'RESTAURANT', 'TEAM', 'GROWTH', 'SETTINGS'] as const)
+    .map((section) => ({
+      section,
+      items: navItems.filter((item) => item.section === section),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  // Operational roles carry 1–4 destinations (waiter: calls/orders/tables,
+  // cashier: POS/orders/tables). On phones they get a persistent bottom tab
+  // bar so common actions are one tap away; managers keep the grouped sheet.
+  const showMobileBottomNav = navItems.length >= 2 && navItems.length <= 4;
 
   React.useEffect(() => {
     if (navItems.length > 0 && !navItems.some((item) => item.id === activeTab)) {
@@ -241,7 +285,10 @@ export const ManagerLayout: React.FC = () => {
             )}
           </div>
 
-          {/* Mobile trigger for the creative button-list sheet (phones only) */}
+          {/* Mobile trigger for the creative button-list sheet (phones only).
+              Operational roles with ≤4 destinations get the persistent bottom
+              tab bar instead, so the trigger is for managers' many sections. */}
+          {!showMobileBottomNav && (
           <button
             onClick={() => setIsMobileNavOpen(true)}
             aria-label="فتح قائمة أقسام لوحة التحكم"
@@ -267,6 +314,7 @@ export const ManagerLayout: React.FC = () => {
               </span>
             </div>
           </button>
+          )}
 
           {/* Navigation Items — desktop sidebar (phones use the sheet above) */}
           <nav className="hidden md:flex md:flex-col gap-1 overflow-x-auto no-scrollbar py-1 md:py-0">
@@ -342,7 +390,15 @@ export const ManagerLayout: React.FC = () => {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-y-auto">
+      <main
+        className={`flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-y-auto ${
+          showMobileBottomNav ? 'pb-24 md:pb-8' : ''
+        }`}
+      >
+        {isBooting ? (
+          <ManagerBootSkeleton />
+        ) : (
+        <>
         {activeTab === 'OVERVIEW' && <DashboardOverview onNavigateTab={setActiveTab} />}
         {activeTab === 'POS' && <CashierPOSView />}
         {activeTab === 'BRANCHES' && <BranchManagementView />}
@@ -356,7 +412,49 @@ export const ManagerLayout: React.FC = () => {
         {activeTab === 'ANALYTICS' && <AnalyticsView />}
         {activeTab === 'BRANDING' && <BrandingSettingsView />}
         {activeTab === 'SUBSCRIPTION' && <SubscriptionView />}
+        </>
+        )}
       </main>
+
+      {/* Role-first mobile bottom navigation for operational staff (phones
+          only): a waiter or cashier reaches every primary destination in one
+          tap, without opening the full sections sheet. */}
+      {showMobileBottomNav && (
+        <nav
+          aria-label="تنقل المهام"
+          className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-luxury-950/95 backdrop-blur-md border-t border-luxury-800 flex items-stretch"
+          style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        >
+          {navItems.map((item) => {
+            const isSelected = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                aria-current={isSelected ? 'page' : undefined}
+                className={`relative flex-1 min-h-[56px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-bold transition-colors ${
+                  isSelected ? 'text-gold-400' : 'text-luxury-400 hover:text-luxury-200'
+                }`}
+              >
+                <span className="relative">
+                  {item.icon}
+                  {item.badge !== undefined && (
+                    <span
+                      className={`absolute -top-2 -left-2.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold flex items-center justify-center ${
+                        item.badgeColor || 'bg-luxury-700 text-luxury-100'
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </span>
+                <span className="leading-tight px-0.5 text-center">{item.label}</span>
+                {isSelected && <span className="absolute top-0 inset-x-4 h-0.5 rounded-full bg-gold-500" />}
+              </button>
+            );
+          })}
+        </nav>
+      )}
 
       {/* Mobile Navigation Sheet — creative button list (phones only) */}
       {isMobileNavOpen && (
@@ -400,57 +498,60 @@ export const ManagerLayout: React.FC = () => {
                 </button>
               </div>
 
-              {/* Creative button list of sections */}
-              <nav className="space-y-2">
-                {navItems.map((item) => {
-                  const isSelected = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setActiveTab(item.id);
-                        setIsMobileNavOpen(false);
-                      }}
-                      className={`w-full p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
-                        isSelected
-                          ? 'bg-gradient-to-l from-gold-500 to-gold-600 border-gold-400 text-luxury-950 shadow-gold-glow'
-                          : 'bg-luxury-850/70 border-luxury-800 text-luxury-100 hover:border-gold-500/40 hover:bg-luxury-850'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+              {/* Destinations grouped by responsibility — same grouping as
+                  the desktop sidebar, so phones scan by task, not a flat list. */}
+              <nav className="space-y-3">
+                {mobileSections.map((group) => (
+                  <div key={group.section} className="space-y-1.5">
+                    <span className="block px-1 text-[10px] font-bold text-luxury-500">
+                      {sectionLabels[group.section]}
+                    </span>
+                    {group.items.map((item) => {
+                      const isSelected = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsMobileNavOpen(false);
+                          }}
+                          className={`w-full p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all active:scale-[0.98] ${
                             isSelected
-                              ? 'bg-luxury-950/15 text-luxury-950'
-                              : 'bg-luxury-900 text-gold-400 border border-luxury-750'
+                              ? 'bg-gradient-to-l from-gold-500 to-gold-600 border-gold-400 text-luxury-950 shadow-gold-glow'
+                              : 'bg-luxury-850/70 border-luxury-800 text-luxury-100 hover:border-gold-500/40 hover:bg-luxury-850'
                           }`}
                         >
-                          {item.icon}
-                        </span>
-                        <div className="text-right min-w-0">
-                          <span className={`text-sm block truncate ${isSelected ? 'font-bold' : 'font-semibold'}`}>
-                            {item.label}
-                          </span>
-                          <span className={`text-[10px] block ${isSelected ? 'text-luxury-900/70' : 'text-luxury-500'}`}>
-                            {sectionLabels[item.section]}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {item.badge !== undefined && (
-                          <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                              item.badgeColor || 'bg-luxury-800 text-luxury-200'
-                            }`}
-                          >
-                            {item.badge}
-                          </span>
-                        )}
-                        <ChevronLeft className={`w-4 h-4 ${isSelected ? 'text-luxury-950' : 'text-luxury-500'}`} />
-                      </div>
-                    </button>
-                  );
-                })}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                isSelected
+                                  ? 'bg-luxury-950/15 text-luxury-950'
+                                  : 'bg-luxury-900 text-gold-400 border border-luxury-750'
+                              }`}
+                            >
+                              {item.icon}
+                            </span>
+                            <span className={`text-sm text-right truncate ${isSelected ? 'font-bold' : 'font-semibold'}`}>
+                              {item.label}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {item.badge !== undefined && (
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                  item.badgeColor || 'bg-luxury-800 text-luxury-200'
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            )}
+                            <ChevronLeft className={`w-4 h-4 ${isSelected ? 'text-luxury-950' : 'text-luxury-500'}`} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </nav>
 
               {/* Quick links — the same shortcuts the desktop sidebar footer has,

@@ -1234,6 +1234,7 @@
   box-shadow: 0 8px 20px -14px var(--brand-glow);
 }
 .menu-qty button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1243,6 +1244,17 @@
   color: var(--brand-ink);
   cursor: pointer;
   transition: background-color 0.18s ease, transform 0.15s ease;
+}
+/* Expand the compact stepper hit area to ~40px without enlarging the visual
+   chip (WCAG 2.2 SC 2.5.8 Target Size) — phones are the primary device. */
+.menu-qty button::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 40px);
+  height: max(100%, 40px);
+  transform: translate(-50%, -50%);
 }
 .menu-qty button:hover {
   background: rgb(0 0 0 / 0.14);
@@ -1261,6 +1273,23 @@
   font-weight: 900;
   color: var(--brand-ink);
   font-variant-numeric: tabular-nums;
+}
+
+/* Generic hit-area expander for compact icon controls. Keeps the visual
+   control small for dense operational UIs while the invisible target meets
+   the ~40px touch floor (WCAG 2.2 SC 2.5.8). */
+.touch-target {
+  position: relative;
+}
+.touch-target::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(100%, 40px);
+  height: max(100%, 40px);
+  transform: translate(-50%, -50%);
+  z-index: 1;
 }
 
 /* Section heading + empty state ---------------------------------------------- */

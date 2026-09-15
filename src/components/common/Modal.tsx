@@ -1,5 +1,6 @@
-import React, { useEffect, useId } from 'react';
+import React, { useId } from 'react';
 import { X } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 interface ModalProps {
   isOpen: boolean;
@@ -9,6 +10,8 @@ interface ModalProps {
   children: React.ReactNode;
   maxWidth?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | 'full';
   showCloseButton?: boolean;
+  /** Set false for wizards that must not be dismissed by a stray Escape. */
+  closeOnEscape?: boolean;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -19,22 +22,13 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   maxWidth = 'md',
   showCloseButton = true,
+  closeOnEscape = true,
 }) => {
   const titleId = useId();
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, onClose]);
+  // Shared overlay behaviour: Escape (optional), nested-safe scroll lock,
+  // focus entry/trap and focus restoration (see hooks/useDialog).
+  useDialog({ isOpen, onClose, closeOnEscape });
 
   if (!isOpen) return null;
 
@@ -56,6 +50,7 @@ export const Modal: React.FC<ModalProps> = ({
         className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
         onClick={onClose}
         aria-hidden="true"
+        tabIndex={-1}
       />
 
       {/* Dialog container.

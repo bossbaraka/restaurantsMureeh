@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice } from '../../utils/formatting';
 import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
 import { Printer, X, Phone, MapPin, QrCode } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 interface PrintMenuModalProps {
   isOpen: boolean;
@@ -25,6 +26,9 @@ export const PrintMenuModal: React.FC<PrintMenuModalProps> = ({ isOpen, onClose 
     };
   }, [isOpen, currentRestaurant]);
 
+  // Escape-to-close, scroll lock and focus management.
+  useDialog({ isOpen: isOpen && !!currentRestaurant, onClose });
+
   if (!isOpen || !currentRestaurant) return null;
 
   const handlePrint = () => {
@@ -45,7 +49,13 @@ export const PrintMenuModal: React.FC<PrintMenuModalProps> = ({ isOpen, onClose 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
       {/* Modal Container */}
-      <div className="relative w-full max-w-5xl bg-luxury-950 border border-luxury-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="print-menu-title"
+        className="relative w-full max-w-5xl bg-luxury-950 border border-luxury-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        dir="rtl"
+      >
         {/* Top Controls Bar (Hidden during printing) */}
         <div className="print:hidden flex items-center justify-between px-6 py-4 bg-luxury-900 border-b border-luxury-800">
           <div className="flex items-center gap-3">
@@ -56,7 +66,7 @@ export const PrintMenuModal: React.FC<PrintMenuModalProps> = ({ isOpen, onClose 
               <Printer className="w-5 h-5 text-black" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-luxury-50 font-serif">معاينة طباعة المنيو الورقي الفاخر</h3>
+              <h3 id="print-menu-title" className="text-sm font-bold text-luxury-50 font-serif">معاينة طباعة المنيو الورقي الفاخر</h3>
               <p className="text-xs text-luxury-400">تصميم فاخر مستوحى من هوية وتنسيق مطعم {currentRestaurant.name}</p>
             </div>
           </div>
@@ -73,6 +83,7 @@ export const PrintMenuModal: React.FC<PrintMenuModalProps> = ({ isOpen, onClose 
             <button
               onClick={onClose}
               className="p-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-300 transition-colors"
+              aria-label="إغلاق معاينة الطباعة"
             >
               <X className="w-5 h-5" />
             </button>

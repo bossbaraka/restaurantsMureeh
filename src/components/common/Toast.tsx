@@ -8,7 +8,14 @@ export const ToastContainer: React.FC = () => {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-20 sm:bottom-6 left-4 right-4 z-[9999] flex flex-col items-center pointer-events-none gap-2 sm:right-auto sm:left-6 sm:max-w-md sm:items-start">
+    <div
+      // Each toast carries its own live-role (status = polite, alert =
+      // assertive) so success messages never interrupt and errors are never
+      // missed; the region is labelled for assistive-tech navigation.
+      role="region"
+      aria-label="الإشعارات"
+      className="fixed bottom-20 sm:bottom-6 left-4 right-4 z-[9999] flex flex-col items-center pointer-events-none gap-2 sm:right-auto sm:left-6 sm:max-w-md sm:items-start"
+    >
       {toasts.map((toast) => {
         const icons = {
           success: <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />,
@@ -27,6 +34,7 @@ export const ToastContainer: React.FC = () => {
         return (
           <div
             key={toast.id}
+            role={toast.type === 'error' ? 'alert' : 'status'}
             className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl shadow-luxury border backdrop-blur-md text-luxury-50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-3 w-full ${borders[toast.type]}`}
           >
             {icons[toast.type]}
@@ -39,6 +47,7 @@ export const ToastContainer: React.FC = () => {
             <button
               onClick={() => removeToast(toast.id)}
               className="text-luxury-400 hover:text-luxury-200 p-1 -mr-1"
+              aria-label="إغلاق الإشعار"
             >
               <X className="w-4 h-4" />
             </button>

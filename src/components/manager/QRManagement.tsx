@@ -12,7 +12,6 @@ import {
   ExternalLink,
   Search,
   Check,
-  Building2,
   MonitorPlay,
   Link2,
 } from 'lucide-react';
@@ -327,6 +326,35 @@ export const QRManagement: React.FC = () => {
             </div>
           );
         })}
+
+        {filteredTables.length === 0 && (
+          <div className="col-span-full flex flex-col items-center justify-center text-center py-14 px-6 rounded-2xl border border-dashed border-luxury-750 bg-luxury-900/50">
+            <div className="w-12 h-12 rounded-2xl bg-luxury-850 border border-luxury-800 flex items-center justify-center mb-3 text-luxury-400">
+              <QrCode className="w-5 h-5" />
+            </div>
+            {tables.length === 0 ? (
+              <>
+                <p className="text-sm font-bold text-luxury-100">لا توجد طاولات لطباعة رموز QR</p>
+                <p className="text-xs text-luxury-400 mt-1 max-w-sm leading-relaxed">
+                  أنشئ الطاولات أولًا من شاشة إدارة الطاولات، ثم ستظهر هنا بطاقات الباركود الجاهزة للطباعة.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-bold text-luxury-100">لا توجد طاولات تطابق البحث أو الصالة</p>
+                <button
+                  onClick={() => {
+                    setSelectedZone('ALL');
+                    setSearchTable('');
+                  }}
+                  className="mt-4 px-4 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 border border-luxury-750 text-luxury-100 font-bold text-xs cursor-pointer"
+                >
+                  إعادة تعيين التصفية
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Print Tent Card Modal */}

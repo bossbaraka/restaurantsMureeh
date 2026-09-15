@@ -18,7 +18,9 @@ import {
   Search,
   Loader2,
   Edit3,
+  AlertTriangle,
 } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 interface StaffUser {
   id: string;
@@ -39,10 +41,18 @@ export const StaffManagement: React.FC = () => {
 
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Add/edit staff dialogs: Escape, scroll lock and focus management.
+  useDialog({
+    isOpen: isAddModalOpen,
+    onClose: () => setIsAddModalOpen(false),
+  });
+  useDialog({ isOpen: !!editingStaff, onClose: () => setEditingStaff(null) });
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
 
   // Form State for Add
@@ -63,12 +73,16 @@ export const StaffManagement: React.FC = () => {
   // Load the real staff directory of this tenant from the API.
   const loadStaff = async () => {
     if (!currentRestaurant) return;
+    setIsLoading(true);
+    setLoadError(null);
     const res = await api.getStaff(currentRestaurant.id);
     setIsLoading(false);
     if (!res.success || !res.data) {
+      setLoadError(res.error || 'حدث خطأ أثناء الاتصال بالخادم');
       showToast('error', 'تعذر تحميل طاقم العمل', res.error);
       return;
     }
+    setLoadError(null);
     const list: StaffUser[] = res.data.map((u) => ({
         id: u.id,
         restaurantId: u.restaurantId || currentRestaurant.id,
@@ -365,14 +379,48 @@ export const StaffManagement: React.FC = () => {
       {/* Staff Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading && (
-          <div className="col-span-full p-10 text-center text-luxury-400 text-sm flex items-center justify-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-gold-400" />
-            جارٍ تحميل حسابات طاقم العمل من قاعدة البيانات...
+          <>
+            {/* Skeletons preserve the grid's structure while the directory loads. */}
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="bg-luxury-900/80 border border-luxury-800 rounded-2xl p-5 animate-pulse" aria-hidden="true">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-11 h-11 rounded-full bg-luxury-800" />
+                  <div className="space-y-2 flex-1">
+                    <div className="h-3 w-2/3 rounded bg-luxury-800" />
+                    <div className="h-2.5 w-1/2 rounded bg-luxury-850" />
+                  </div>
+                </div>
+                <div className="h-7 rounded-lg bg-luxury-850" />
+              </div>
+            ))}
+            <span className="sr-only" role="status">جارٍ تحميل حسابات طاقم العمل…</span>
+          </>
+        )}
+        {!isLoading && loadError && (
+          <div className="col-span-full p-8 text-center rounded-2xl bg-red-500/5 border border-red-500/20">
+            <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+            <p className="text-sm font-bold text-red-300">تعذر تحميل طاقم العمل</p>
+            <p className="text-xs text-luxury-400 mt-1">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => void loadStaff()}
+              className="mt-4 px-4 py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 border border-luxury-750 text-luxury-100 text-xs font-bold transition-colors"
+            >
+              إعادة المحاولة
+            </button>
           </div>
         )}
-        {!isLoading && filteredStaff.length === 0 && (
-          <div className="col-span-full p-10 text-center text-luxury-400 text-sm">
-            لا توجد حسابات بعد لهذا المطعم. أضف أول موظف (نادل / شيف / كاشير) من زر «+ إضافة موظف جديد».
+        {!isLoading && !loadError && filteredStaff.length === 0 && (
+          <div className="col-span-full p-10 text-center rounded-2xl bg-luxury-900/50 border border-luxury-800">
+            <Users className="w-8 h-8 text-gold-400/60 mx-auto mb-2" />
+            <p className="text-sm font-bold text-luxury-200">
+              {searchQuery || roleFilter !== 'ALL' ? 'لا توجد نتائج مطابقة للبحث' : 'لا يوجد طاقم عمل بعد'}
+            </p>
+            <p className="text-xs text-luxury-400 mt-1">
+              {searchQuery || roleFilter !== 'ALL'
+                ? 'جرّب تعديل كلمات البحث أو الفلتر المحدد.'
+                : 'أضف أول موظف (نادل / شيف / كاشير) من زر «+ إضافة موظف جديد».'}
+            </p>
           </div>
         )}
         {filteredStaff.map((staff) => (
@@ -448,9 +496,15 @@ export const StaffManagement: React.FC = () => {
 
       {/* Add Staff Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md p-6 relative shadow-2xl" dir="rtl">
-            <h2 className="text-xl font-bold font-serif text-luxury-50 mb-1 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staff-add-title"
+            className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md p-6 relative shadow-2xl my-4"
+            dir="rtl"
+          >
+            <h2 id="staff-add-title" className="text-xl font-bold font-serif text-luxury-50 mb-1 flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-gold-400" />
               <span>إضافة موظف جديد للمطعم</span>
             </h2>
@@ -546,9 +600,15 @@ export const StaffManagement: React.FC = () => {
 
       {/* Edit Staff Modal */}
       {editingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md p-6 relative shadow-2xl" dir="rtl">
-            <h2 className="text-xl font-bold font-serif text-luxury-50 mb-1 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="staff-edit-title"
+            className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md p-6 relative shadow-2xl my-4"
+            dir="rtl"
+          >
+            <h2 id="staff-edit-title" className="text-xl font-bold font-serif text-luxury-50 mb-1 flex items-center gap-2">
               <Edit3 className="w-5 h-5 text-gold-400" />
               <span>تعديل بيانات الموظف ({editingStaff.name})</span>
             </h2>
