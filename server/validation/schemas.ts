@@ -492,6 +492,9 @@ export const orderStatusSchema = z
   .object({
     restaurantId: idSchema.optional(),
     status: z.enum(ORDER_STATUSES, 'حالة الطلب غير صالحة'),
+    // Optional when transitioning (ignored for flow transitions); for
+    // CANCELLED it is recorded on the order and in the audit event.
+    reason: optionalText(200),
   })
   .strict();
 
@@ -777,6 +780,16 @@ export const paymentCreateSchema = z
     cashReceived: moneySchema.optional(),
     tip: moneySchema.optional(),
     note: optionalText(500),
+  })
+  .strict();
+
+// Void (reverse) an existing ledger receipt — the covered orders return to
+// UNPAID and become cancellable/collectable again. The receipt row itself is
+// never deleted or rewritten (immutable ledger); the void is a marker.
+export const paymentVoidSchema = z
+  .object({
+    restaurantId: idSchema.optional(),
+    reason: optionalText(200),
   })
   .strict();
 

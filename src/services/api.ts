@@ -28,6 +28,18 @@ export interface ApiResponse<T> {
   statusCode: number;
 }
 
+/** Pagination/scope metadata returned by GET /api/manager/orders (H-03). */
+export interface ManagerOrdersMeta {
+  scope?: string;
+  liveCount?: number;
+  liveTotal?: number;
+  liveHasMore?: boolean;
+  historyCount?: number;
+  historyTotal?: number;
+  historyHasMore?: boolean;
+  closedWindowHours?: number;
+}
+
 const configuredApiUrl = import.meta.env.VITE_API_URL
   ?.replace(/\/+$/, '')
   .replace(/\/api$/, '');
@@ -324,6 +336,8 @@ export function mapOrderRow(raw: any): Order {
     paymentRejected: Boolean(raw.paymentRejected),
     paymentRejectedReason: raw.paymentRejectedReason || undefined,
     paymentRejectedAt: raw.paymentRejectedAt ? toISO(raw.paymentRejectedAt) : undefined,
+    cancelledAt: raw.cancelledAt ? toISO(raw.cancelledAt) : undefined,
+    cancelReason: raw.cancelReason || undefined,
     notes: raw.notes || undefined,
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
@@ -383,6 +397,8 @@ export function mapPaymentRow(raw: any): PaymentRecord {
     cashierId: raw.cashierId || undefined,
     cashierName: raw.cashierName || '',
     note: raw.note || undefined,
+    voidedAt: raw.voidedAt ? toISO(raw.voidedAt) : undefined,
+    voidReason: raw.voidReason || undefined,
     createdAt: toISO(raw.createdAt),
   };
 }
@@ -956,15 +972,29 @@ class RestaurantApiService {
    */
   public async getManagerOrders(
     restaurantId: string,
-    opts?: { operational?: boolean }
-  ): Promise<ApiResponse<Order[]>> {
+    opts?: { operational?: boolean; scope?: 'operations'; closedHours?: number }
+  ): Promise<ApiResponse<Order[]> & { meta?: ManagerOrdersMeta }> {
     const query = new URLSearchParams({ restaurantId });
     if (typeof opts?.operational === 'boolean') {
       query.set('operational', opts.operational ? 'true' : 'false');
     }
-    const res = await this.request<any>('GET', `/manager/orders?${query.toString()}`);
+    // H-03: `scope=operations` asks the server for the domain sets (live
+    // orders of ANY age + a bounded recent-history window) instead of the
+    // default "N newest" page that could hide an old still-active ticket.
+    if (opts?.scope === 'operations') {
+      query.set('scope', 'operations');
+      if (opts.closedHours !== undefined) query.set('closedHours', String(opts.closedHours));
+    }
+    const res = (await this.request<any>('GET', `/manager/orders?${query.toString()}`)) as ApiResponse<any> & {
+      meta?: ManagerOrdersMeta;
+    };
     if (res.success && Array.isArray(res.data)) {
-      return { success: true, data: res.data.map(mapOrderRow), statusCode: 200 };
+      return {
+        success: true,
+        data: res.data.map(mapOrderRow),
+        statusCode: 200,
+        meta: res.meta,
+      };
     }
     return res as ApiResponse<never>;
   }
@@ -992,10 +1022,11 @@ class RestaurantApiService {
     user: RestaurantUser,
     restaurantId: string,
     orderId: string,
-    nextStatus: OrderStatus
+    nextStatus: OrderStatus,
+    opts?: { reason?: string }
   ): Promise<ApiResponse<Order>> {
     const res = await this.request<any>('PUT', `/manager/orders/${encodeURIComponent(orderId)}/status`, {
-      body: { status: nextStatus, restaurantId },
+      body: { status: nextStatus, restaurantId, ...(opts?.reason ? { reason: opts.reason } : {}) },
     });
     if (res.success && res.data?.order) {
       return { success: true, data: mapOrderRow(res.data.order), statusCode: 200 };
@@ -1228,6 +1259,35 @@ class RestaurantApiService {
         data: { payment: mapPaymentRow({ ...res.data.payment, restaurantId }), message: res.data.message },
         statusCode: 201,
       };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  /**
+   * Void (reverse) a ledger receipt (audit H-02). The server marks the
+   * immutable receipt voided and reverts its covered orders to
+   * UNPAID — an idempotent replay returns `alreadyVoided: true`.
+   */
+  public async voidPayment(
+    user: RestaurantUser,
+    restaurantId: string,
+    paymentId: string,
+    reason?: string
+  ): Promise<
+    ApiResponse<{
+      paymentId: string;
+      alreadyVoided: boolean;
+      voidedAt: string;
+      revertedOrders?: number;
+    }>
+  > {
+    const res = await this.request<any>(
+      'POST',
+      `/manager/payments/${encodeURIComponent(paymentId)}/void`,
+      { body: { restaurantId, ...(reason ? { reason } : {}) } }
+    );
+    if (res.success && res.data?.paymentId) {
+      return { success: true, data: res.data, statusCode: 200 };
     }
     return res as ApiResponse<never>;
   }

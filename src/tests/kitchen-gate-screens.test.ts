@@ -40,8 +40,10 @@ const apiTs = source('../services/api.ts');
 describe('every kitchen-facing surface derives from the payment gate', () => {
   it('the orders/kitchen tab renders released tickets only', () => {
     expect(orderManagement).toContain(
-      "import { isOrderHeldForPayment, isOrderOperational } from '../../utils/orderLifecycle';"
+      "from '../../utils/orderLifecycle';"
     );
+    expect(orderManagement).toContain('isOrderHeldForPayment');
+    expect(orderManagement).toContain('isOrderOperational');
     expect(orderManagement).toContain(
       'orders.filter((order) => isOrderOperational(order) || order.status === \'CANCELLED\')'
     );
@@ -119,7 +121,7 @@ describe('server: the dashboard kitchen metrics are the released set', () => {
 
   it('the manager orders payload can explain WHY an order is held', () => {
     const ordersBlock = managerRoute.slice(
-      managerRoute.indexOf("router.get('/orders'"),
+      managerRoute.indexOf('function formatManagerOrderRow'),
       managerRoute.indexOf('POS order creation')
     );
     expect(ordersBlock).toContain('paymentRejected: Boolean(o.paymentRejectedAt)');

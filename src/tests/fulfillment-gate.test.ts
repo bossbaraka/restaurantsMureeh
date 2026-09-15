@@ -208,9 +208,9 @@ describe('schema + migration', () => {
     expect(migration).not.toMatch(/DELETE\s+FROM/i);
   });
 
-  it('is the newest migration in the deploy order', () => {
+  it('is superseded only by the H-02 staff-cancel/void migration in the deploy order', () => {
     const newest = [...migrationDirs].sort().pop();
-    expect(newest).toBe('20260914180000_add_order_fulfillment_gate');
+    expect(newest).toBe('20260915120000_staff_cancel_and_payment_void');
   });
 });
 

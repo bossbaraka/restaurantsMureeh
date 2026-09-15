@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useAuth } from '../../context/AuthContext';
 import { Order, OrderStatus } from '../../types/restaurant';
 import { escapeHtml, formatPrice, formatTime, formatRelativeMinutes, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
-import { isOrderHeldForPayment, isOrderOperational } from '../../utils/orderLifecycle';
+import { isOrderHeldForPayment, isOrderOperational, isOrderCancellableByStaff, canRoleCancelOrders } from '../../utils/orderLifecycle';
 import { TableAggregationModal } from './TableAggregationModal';
 import {
   ChefHat,
@@ -16,14 +17,19 @@ import {
   Calendar,
   Sparkles,
   Printer,
+  Ban,
 } from 'lucide-react';
 
 export const OrderManagement: React.FC = () => {
-  const { orders, updateOrderStatus, isMutationPending, tables } = useRestaurant();
+  const { orders, updateOrderStatus, cancelStaffOrder, isMutationPending, tables } = useRestaurant();
+  const { currentUser } = useAuth();
 
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedAggregateTableId, setSelectedAggregateTableId] = useState<string | null>(null);
+  // Two-step cancel confirm: no modal, the first tap arms the button, the
+  // second executes. Leaving the card disarms it via a blur-safe reset below.
+  const [armedCancelOrderId, setArmedCancelOrderId] = useState<string | null>(null);
 
   const handlePrintInvoice = (order: Order) => {
     const printWindow = window.open('', '_blank', 'noopener,noreferrer,width=720,height=800');
@@ -311,6 +317,30 @@ export const OrderManagement: React.FC = () => {
 
                   {/* State Machine Transition Actions */}
                   <div className="flex items-center gap-1.5">
+                    {/* Staff cancellation (audit H-02): cashier/manager only,
+                        requires the money guard (never PAID), two-tap confirm. */}
+                    {isOrderCancellableByStaff(order) && canRoleCancelOrders(currentUser?.role) && (
+                      <button
+                        onClick={() => {
+                          if (armedCancelOrderId === order.id) {
+                            setArmedCancelOrderId(null);
+                            void cancelStaffOrder(order.id);
+                          } else {
+                            setArmedCancelOrderId(order.id);
+                          }
+                        }}
+                        disabled={isUpdating}
+                        className={`p-2 rounded-xl border transition-colors ${
+                          armedCancelOrderId === order.id
+                            ? 'bg-red-500 hover:bg-red-400 text-white border-red-400 px-2.5 text-[11px] font-bold'
+                            : 'bg-luxury-800 hover:bg-red-500/15 hover:text-red-300 text-luxury-400 border-luxury-700'
+                        }`}
+                        title="إلغاء الطلب"
+                        aria-label={`إلغاء الطلب ${order.id}`}
+                      >
+                        {armedCancelOrderId === order.id ? 'تأكيد الإلغاء؟' : <Ban className="w-4 h-4" />}
+                      </button>
+                    )}
                     <button
                       onClick={() => handlePrintInvoice(order)}
                       className="p-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 text-luxury-200 border border-luxury-700 transition-colors"

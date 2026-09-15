@@ -169,6 +169,10 @@ interface RestaurantContextType {
 
   // Manager Actions
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<boolean>;
+  /** Staff cancellation (audit H-02): cashier/manager transition to CANCELLED with an optional reason. */
+  cancelStaffOrder: (orderId: string, reason?: string) => Promise<boolean>;
+  /** Payment void (audit H-02): reverse a ledger receipt; covered orders return to UNPAID. */
+  voidStaffPayment: (paymentId: string, reason?: string) => Promise<boolean>;
   updateTableStatus: (tableId: string, status: RestaurantTable['status']) => Promise<boolean>;
   isMutationPending: (key: string) => boolean;
   settleTableAndFree: (tableId: string) => void;
@@ -428,7 +432,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (currentUser) {
         const [menuRes, ordersRes, tablesRes, waitersRes, offersRes, paymentsRes, branchesRes, subRes] = await Promise.all([
           api.getManagerMenu(tenantId),
-          api.getManagerOrders(tenantId),
+          // H-03: the operational scope — every LIVE order (any age) plus a
+          // bounded recent-history window. The default "50 newest" page could
+          // silently drop an old still-active ticket from the KDS/floor/POS.
+          api.getManagerOrders(tenantId, { scope: 'operations' }),
           api.getManagerTables(tenantId),
           api.getManagerWaiterRequests(tenantId),
           api.getManagerOffers(tenantId),
@@ -1008,6 +1015,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           ORDER_CANCELLED: () => refreshTenantData(),
           TABLE_SETTLED: () => refreshTenantData(),
           PAYMENT_RECORDED: () => refreshTenantData(),
+          PAYMENT_VOIDED: () => refreshTenantData(),
           // A transfer notice needs a cashier decision: cashier/manager only
           // (waiters and kitchen have no verification screen or permission).
           PAYMENT_PROOF_SUBMITTED: (event: MessageEvent) => {
@@ -1411,7 +1419,15 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     async (orderId: string, nextStatus: OrderStatus): Promise<boolean> => {
       if (!currentRestaurant || !currentUser) return false;
       const order = orders.find((item) => item.id === orderId);
-      if (!order || (order.status === 'SERVED' && nextStatus !== 'SERVED')) return false;
+      if (!order) return false;
+      if (order.status === 'SERVED' && nextStatus !== 'SERVED') {
+        // A SERVED bill is not editable — EXCEPT cancellation of an unpaid
+        // one (audit H-02): a settled-then-voided or never-paid SERVED order
+        // must remain correctable. PAID orders stay non-cancellable client-
+        // side exactly as they do server-side.
+        const servedCancellation = nextStatus === 'CANCELLED' && order.paymentStatus !== 'PAID';
+        if (!servedCancellation) return false;
+      }
       const key = `order:${orderId}`;
       if (!beginMutation(key)) return false;
       try {
@@ -1430,6 +1446,66 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     },
     [currentRestaurant, currentUser, orders, refreshTenantData, showToast, beginMutation, endMutation]
+  );
+
+  // Staff cancellation (audit H-02): distinct wrapper so the caller passes an
+  // optional reason and the toast copy says "إلغاء" — the actual server call
+  // is the same guarded status transition the server authorizes.
+  const cancelStaffOrder = useCallback(
+    async (orderId: string, reason?: string): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const order = orders.find((item) => item.id === orderId);
+      if (!order || order.status === 'CANCELLED') return false;
+      const key = `order:${orderId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.updateOrderStatus(currentUser, currentRestaurant.id, orderId, 'CANCELLED', {
+          reason,
+        });
+        if (!res.success) {
+          showToast('error', 'تعذر إلغاء الطلب', res.error || 'لم يقبل الخادم الإلغاء.');
+          return false;
+        }
+        await refreshTenantData();
+        soundFX.playTap();
+        showToast('success', 'تم إلغاء الطلب', `تم إلغاء الطلب ${orderId} بنجاح — لا يُحتسب ضمن الإيراد.`);
+        return true;
+      } finally {
+        endMutation(key);
+      }
+    },
+    [currentRestaurant, currentUser, orders, refreshTenantData, showToast, beginMutation, endMutation]
+  );
+
+  // Payment void (audit H-02): reverse a ledger receipt; the covered orders
+  // return to UNPAID (collectable again, or cancellable afterwards).
+  const voidStaffPayment = useCallback(
+    async (paymentId: string, reason?: string): Promise<boolean> => {
+      if (!currentRestaurant || !currentUser) return false;
+      const key = `payment:${paymentId}`;
+      if (!beginMutation(key)) return false;
+      try {
+        const res = await api.voidPayment(currentUser, currentRestaurant.id, paymentId, reason);
+        if (!res.success) {
+          showToast('error', 'تعذر إلغاء الإيصال', res.error || 'لم يقبل الخادم الإلغاء.');
+          return false;
+        }
+        await refreshTenantData();
+        soundFX.playTap();
+        const reverted = res.data?.revertedOrders ?? 0;
+        showToast(
+          'success',
+          res.data?.alreadyVoided ? 'الإيصال ملغٍ مسبقاً' : 'تم إلغاء الإيصال',
+          res.data?.alreadyVoided
+            ? 'كان هذا الإيصال ملغى من قبل — لم يتغير شيء.'
+            : `عاد ${reverted} طلبًا إلى غير مدفوع — يمكن تحصيلها مجددًا أو إلغاؤها.`
+        );
+        return true;
+      } finally {
+        endMutation(key);
+      }
+    },
+    [currentRestaurant, currentUser, refreshTenantData, showToast, beginMutation, endMutation]
   );
 
   const cancelCustomerOrder = useCallback(
@@ -1847,6 +1923,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         callWaiter,
         activeTableOrders,
         updateOrderStatus,
+        cancelStaffOrder,
+        voidStaffPayment,
         updateTableStatus,
         isMutationPending,
         settleTableAndFree,

@@ -28,6 +28,7 @@ import {
   User,
   Store,
   Lock,
+  Ban,
 } from 'lucide-react';
 
 interface CartLine {
@@ -55,8 +56,13 @@ export const CashierPOSView: React.FC = () => {
     branches,
     showToast,
     refreshTenantData,
+    voidStaffPayment,
+    isMutationPending,
   } = useRestaurant();
   const { currentUser } = useAuth();
+
+  // Two-step void confirm (audit H-02): first tap arms, second executes.
+  const [armedVoidPaymentId, setArmedVoidPaymentId] = useState<string | null>(null);
 
   const tenantId = currentRestaurant?.id || '';
   const isWalkInId = '__WALKIN__';
@@ -580,7 +586,7 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
               <div key={p.id} className="bg-luxury-950 rounded-lg p-2 text-[11px] flex items-center justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-bold text-luxury-100">{p.receiptNumber}</span>
+                    <span className={`font-mono font-bold ${p.voidedAt ? 'text-luxury-500 line-through' : 'text-luxury-100'}`}>{p.receiptNumber}</span>
                     <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
                       p.method === 'CASH' ? 'bg-emerald-500/15 text-emerald-300'
                         : p.method === 'CARD' ? 'bg-sky-500/15 text-sky-300'
@@ -588,10 +594,43 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                     }`}>
                       {METHOD_LABELS[p.method] || p.method}
                     </span>
+                    {p.voidedAt && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-300 font-bold">ملغى</span>
+                    )}
                   </div>
                   <div className="text-luxury-500 truncate">{p.tableLabel} • {new Date(p.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</div>
+                  {p.voidedAt && p.voidReason && (
+                    <div className="text-red-300/70 truncate" title={p.voidReason}>{p.voidReason}</div>
+                  )}
                 </div>
-                <span className="font-bold text-gold-300 font-mono">{formatPrice(p.total)}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className={`font-bold font-mono ${p.voidedAt ? 'text-luxury-500 line-through' : 'text-gold-300'}`}>{formatPrice(p.total)}</span>
+                  {/* Payment void (audit H-02): reverse an erroneous receipt —
+                      the covered orders return to UNPAID; never a delete. */}
+                  {!p.voidedAt && (
+                    <button
+                      onClick={() => {
+                        if (armedVoidPaymentId === p.id) {
+                          setArmedVoidPaymentId(null);
+                          void voidStaffPayment(p.id);
+                        } else {
+                          setArmedVoidPaymentId(p.id);
+                        }
+                      }}
+                      disabled={isMutationPending(`payment:${p.id}`)}
+                      aria-busy={isMutationPending(`payment:${p.id}`)}
+                      className={`p-1.5 rounded-lg border transition-colors cursor-pointer disabled:opacity-50 ${
+                        armedVoidPaymentId === p.id
+                          ? 'bg-red-500 hover:bg-red-400 text-white border-red-400 px-2 text-[10px] font-bold'
+                          : 'bg-luxury-900 hover:bg-red-500/15 hover:text-red-300 text-luxury-500 border-luxury-800'
+                      }`}
+                      title="إلغاء الإيصال (Void)"
+                      aria-label={`إلغاء الإيصال ${p.receiptNumber}`}
+                    >
+                      {armedVoidPaymentId === p.id ? 'تأكيد؟' : <Ban className="w-3 h-3" />}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
