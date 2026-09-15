@@ -1,21 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { Order, OrderStatus } from '../../types/restaurant';
-import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
+import { OrderStatus } from '../../types/restaurant';
+import { formatPrice, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { soundFX } from '../../utils/audio';
 import { getDismissedCompletedOrderIds } from './OrderCompletedModal';
 import {
   ChefHat,
   Bell,
   Utensils,
-  CheckCircle2,
-  AlertCircle,
   X,
   ArrowLeft,
-  Clock,
   Sparkles,
-  Flame,
-  Volume2,
 } from 'lucide-react';
 
 interface NotificationState {
@@ -130,7 +125,13 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
 
   return (
     <div className="fixed top-28 sm:top-24 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in fade-in slide-in-from-top-3 duration-300 select-none">
-      <div className="bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.5)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.8)] space-y-3.5 text-right text-luxury-50 relative overflow-hidden">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-label="تحديث حالة الطلب"
+        className="bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.5)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.8)] space-y-3.5 text-right text-luxury-50 relative overflow-hidden"
+      >
         {/* Top glowing ambient line */}
         <div
           className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[var(--brand-primary-strong)] to-transparent"
@@ -140,8 +141,9 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
         <div className="flex items-center justify-between">
           <button
             onClick={() => setIsDismissed(true)}
-            className="p-1 rounded-lg text-luxury-400 hover:text-white hover:bg-luxury-800 transition-colors"
+            className="touch-target p-1.5 rounded-lg text-luxury-400 hover:text-white hover:bg-luxury-800 transition-colors"
             title="إغلاق التنبيه"
+            aria-label="إغلاق التنبيه"
           >
             <X className="w-4 h-4" />
           </button>

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { GUIDE_OPEN_EVENT } from './guideBus';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useDialog } from '../../hooks/useDialog';
 
 /**
  * Interactive customer onboarding tour.
@@ -213,20 +214,16 @@ export const CustomerGuideOverlay: React.FC = () => {
     }
   }, [open]);
 
-  // Lock body scroll while the guide is open.
-  useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [isOpen]);
+  const showTooltip = !!targetRect;
+
+  // Modal coach-mark semantics: Escape closes, scroll locks (ref-counted so it
+  // composes with the drawers the tour opens), and focus is trapped inside the
+  // tooltip controls. The surface mounts one render after the step measures.
+  useDialog({ isOpen: isOpen && showTooltip, onClose: close });
 
   if (!isOpen || !activeStep) return null;
 
   const StepIcon = activeStep.icon;
-  const showTooltip = !!targetRect;
 
   // Arrow direction depends on where the tooltip sits relative to the target.
   const tooltipCenterY = tooltipPos.top + 95;
@@ -234,7 +231,15 @@ export const CustomerGuideOverlay: React.FC = () => {
   const arrowPointsDown = tooltipCenterY < targetCenterY;
 
   return (
-    <div className="fixed inset-0 z-[120] select-none" dir="rtl">
+    <div
+      className="fixed inset-0 z-[120] select-none"
+      dir="rtl"
+      role="dialog"
+      aria-modal="true"
+      aria-label={showTooltip ? undefined : 'جولة تعريفية — دليل الاستخدام'}
+      aria-labelledby={showTooltip ? 'guide-step-title' : undefined}
+      aria-describedby={showTooltip ? 'guide-step-desc' : undefined}
+    >
       {/* Dim backdrop */}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-[2px]" />
 
@@ -272,8 +277,8 @@ export const CustomerGuideOverlay: React.FC = () => {
                 <StepIcon className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-luxury-50 font-serif">{activeStep.title}</h4>
-                <p className="text-[11px] text-luxury-400 mt-0.5 leading-relaxed">{activeStep.description}</p>
+                <h4 id="guide-step-title" className="text-sm font-bold text-luxury-50 font-serif">{activeStep.title}</h4>
+                <p id="guide-step-desc" className="text-[11px] text-luxury-400 mt-0.5 leading-relaxed">{activeStep.description}</p>
               </div>
             </div>
 
@@ -284,8 +289,9 @@ export const CustomerGuideOverlay: React.FC = () => {
                   <button
                     key={s.id}
                     onClick={() => setStepIndex(i)}
-                    aria-label={`الخطوة ${i + 1}`}
-                    className={`h-1.5 rounded-full transition-all ${i === stepIndex ? 'w-5 bg-[var(--brand-primary-strong)]' : 'w-1.5 bg-luxury-700 hover:bg-luxury-600'}`}
+                    aria-label={`الذهاب إلى الخطوة ${i + 1}: ${s.title}`}
+                    aria-current={i === stepIndex ? 'step' : undefined}
+                    className={`touch-target h-1.5 rounded-full transition-all ${i === stepIndex ? 'w-5 bg-[var(--brand-primary-strong)]' : 'w-1.5 bg-luxury-700 hover:bg-luxury-600'}`}
                   />
                 ))}
               </div>
@@ -293,7 +299,7 @@ export const CustomerGuideOverlay: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={close}
-                  className="px-2.5 py-1.5 rounded-lg text-luxury-400 hover:text-luxury-200 text-[11px] font-bold transition-colors cursor-pointer"
+                  className="touch-target px-2.5 py-1.5 rounded-lg text-luxury-400 hover:text-luxury-200 text-[11px] font-bold transition-colors cursor-pointer"
                 >
                   تخطي
                 </button>
@@ -308,7 +314,8 @@ export const CustomerGuideOverlay: React.FC = () => {
                 )}
                 <button
                   onClick={next}
-                  className="px-3 py-1.5 rounded-lg brand-cta font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                  data-autofocus
+                  className="touch-target px-3 py-1.5 rounded-lg brand-cta font-bold text-[11px] flex items-center gap-1 cursor-pointer"
                 >
                   {stepIndex >= GUIDE_STEPS.length - 1 ? (
                     <>
@@ -336,7 +343,7 @@ export const CustomerGuideOverlay: React.FC = () => {
         </span>
         <button
           onClick={close}
-          className="p-2 rounded-full bg-luxury-950/80 border border-luxury-750 text-luxury-300 hover:text-white transition-colors cursor-pointer"
+          className="touch-target p-2.5 rounded-full bg-luxury-950/80 border border-luxury-750 text-luxury-300 hover:text-white transition-colors cursor-pointer"
           aria-label="إغلاق الدليل"
         >
           <X className="w-4 h-4" />

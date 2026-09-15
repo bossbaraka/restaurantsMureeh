@@ -4,6 +4,7 @@ import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
 import { getTableZoneLabel, formatTableNumber } from '../../utils/formatting';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { X, Printer, Sparkles, QrCode } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 interface PrintQRTentCardsModalProps {
   tables: RestaurantTable[];
@@ -54,6 +55,9 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
     };
   }, [isOpen, selectedTable, slug]);
 
+  // Escape-to-close, scroll lock and focus management.
+  useDialog({ isOpen, onClose });
+
   if (!isOpen) return null;
 
   const handlePrint = () => {
@@ -63,10 +67,13 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
   return (
     <div className="fixed inset-0 z-60 overflow-y-auto flex items-center justify-center p-3 sm:p-4">
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity" onClick={onClose} aria-hidden="true" tabIndex={-1} />
 
       {/* Modal Container */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="print-qr-title"
         className="relative w-full max-w-4xl bg-luxury-900 border border-luxury-700/80 rounded-2xl shadow-luxury overflow-hidden z-10 my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col max-h-[92vh]"
         dir="rtl"
       >
@@ -77,7 +84,7 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
               <Printer className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="print-qr-title" className="text-base font-bold text-luxury-50 font-serif">
                 {selectedTable ? `معاينة باركود طاولة ${selectedTable.tableNumber != null ? selectedTable.tableNumber : formatTableNumber(selectedTable.id)}` : `معاينة طباعة بطاقات طاولات ${restName}`}
               </h3>
               <p className="text-xs text-luxury-400">
@@ -96,7 +103,8 @@ export const PrintQRTentCardsModal: React.FC<PrintQRTentCardsModalProps> = ({
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800 transition-colors"
+              className="p-2 rounded-lg text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800 transition-colors"
+              aria-label="إغلاق معاينة الطباعة"
             >
               <X className="w-5 h-5" />
             </button>

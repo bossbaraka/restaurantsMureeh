@@ -4,6 +4,7 @@ import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
 import { Search, Sparkles, Flame, ChefHat, Clock, ArrowLeft, UtensilsCrossed, Camera, Play, X, Eye } from 'lucide-react';
 import { OrderStatus } from '../../types/restaurant';
 import { optimizeImageUrl } from './ProductImage';
+import { useDialog } from '../../hooks/useDialog';
 
 /**
  * Turn a manager-supplied promo-video link into an embeddable YouTube player
@@ -33,6 +34,18 @@ export const CustomerHero: React.FC = () => {
 
   const [activeGalleryImg, setActiveGalleryImg] = useState<string | null>(null);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+
+  // Full-screen photo lightbox: Escape closes, focus is trapped and restored.
+  useDialog({ isOpen: !!activeGalleryImg, onClose: () => setActiveGalleryImg(null) });
+
+  // The promo video plays inline inside the hero: Escape still closes it, but
+  // it is non-modal — no scroll lock or focus trap for an in-page media swap.
+  useDialog({
+    isOpen: isPlayingVideo,
+    onClose: () => setIsPlayingVideo(false),
+    lockBodyScroll: false,
+    trapFocus: false,
+  });
 
   const activeOffers = offers.filter((o) => o.isActive);
 
@@ -79,7 +92,12 @@ export const CustomerHero: React.FC = () => {
       {/* Background Editorial Hero Image & Video Container */}
       <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl border border-luxury-800 shadow-2xl mx-auto group">
         {isPlayingVideo && promoVideo ? (
-          <div className="relative w-full h-full bg-black">
+          <div
+            role="dialog"
+            aria-modal="false"
+            aria-label="مشغّل فيديو صالة المطعم"
+            className="relative w-full h-full bg-black"
+          >
             {(() => {
               const embed = toEmbeddableVideo(promoVideo);
               if (!embed) return null;
@@ -95,8 +113,9 @@ export const CustomerHero: React.FC = () => {
             })()}
             <button
               onClick={() => setIsPlayingVideo(false)}
-              className="absolute top-3 left-3 z-20 p-2 rounded-full bg-luxury-950/80 text-white hover:bg-red-500 transition-colors"
+              className="touch-target absolute top-3 left-3 z-20 p-2.5 rounded-full bg-luxury-950/80 text-white hover:bg-red-500 transition-colors"
               title="إغلاق الفيديو"
+              aria-label="إغلاق الفيديو"
             >
               <X className="w-4 h-4" />
             </button>
@@ -345,11 +364,18 @@ export const CustomerHero: React.FC = () => {
           <button
             onClick={() => setActiveGalleryImg(null)}
             className="absolute top-4 left-4 p-2.5 rounded-full bg-luxury-900 text-luxury-200 hover:text-white border border-luxury-700 transition-colors z-10"
+            aria-label="إغلاق الصورة"
           >
             <X className="w-6 h-6" />
           </button>
 
-          <div className="relative max-w-4xl max-h-[85vh] w-full rounded-2xl overflow-hidden border border-luxury-700 shadow-2xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="صورة من صالة المطعم"
+            className="relative max-w-4xl max-h-[85vh] w-full rounded-2xl overflow-hidden border border-luxury-700 shadow-2xl"
+            dir="rtl"
+          >
             <img
               src={activeGalleryImg}
               alt="صالة المطعم"

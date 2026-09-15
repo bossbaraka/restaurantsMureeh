@@ -11,8 +11,6 @@ import {
   Receipt,
   ArrowLeft,
   Utensils,
-  CreditCard,
-  CheckCircle2,
 } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
 
@@ -25,7 +23,6 @@ export const CartDrawer: React.FC = () => {
     cartTotalCount,
     updateCartItemQuantity,
     removeFromCart,
-    clearCart,
     activeTableId,
     activeTableNumber,
     activeTable,
@@ -176,18 +173,20 @@ export const CartDrawer: React.FC = () => {
                     <div className="flex items-center gap-2 bg-luxury-900 border border-luxury-800 rounded-xl p-0.5">
                       <button
                         onClick={() => updateCartItemQuantity(item.id, item.quantity - 1)}
-                        className="w-6 h-6 rounded-lg bg-luxury-800 hover:bg-luxury-750 text-luxury-300 flex items-center justify-center transition-colors"
+                        aria-label={`إنقاص كمية ${item.product?.name || item.productName}`}
+                        className="touch-target w-7 h-7 rounded-lg bg-luxury-800 hover:bg-luxury-750 text-luxury-300 flex items-center justify-center transition-colors"
                       >
-                        <Minus className="w-3 h-3" />
+                        <Minus className="w-3.5 h-3.5" />
                       </button>
-                      <span className="w-6 text-center font-bold text-xs font-mono text-luxury-100">
+                      <span className="w-6 text-center font-bold text-xs font-mono text-luxury-100" aria-live="polite">
                         {item.quantity}
                       </span>
                       <button
                         onClick={() => updateCartItemQuantity(item.id, item.quantity + 1)}
-                        className="w-6 h-6 rounded-lg brand-cta font-bold flex items-center justify-center transition-colors"
+                        aria-label={`زيادة كمية ${item.product?.name || item.productName}`}
+                        className="touch-target w-7 h-7 rounded-lg brand-cta font-bold flex items-center justify-center transition-colors"
                       >
-                        <Plus className="w-3 h-3" />
+                        <Plus className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>

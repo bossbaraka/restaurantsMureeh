@@ -25,7 +25,17 @@ describe('UX refactor regression guards', () => {
     const context = source('../context/RestaurantContext.tsx');
 
     expect(modal).toContain('const result = await callWaiter');
-    expect(modal).toContain('if (!result.success) return');
+    // Explicit IDLE → SUBMITTING → SUCCESS | ERROR state machine.
+    expect(modal).toContain("'SUBMITTING'");
+    expect(modal).toContain("'SUCCESS'");
+    expect(modal).toContain("'ERROR'");
+    // Failure never paints success: it sets the error state, keeps the form,
+    // and offers an inline one-tap retry (role="alert" + إعادة المحاولة).
+    expect(modal).toContain("setSubmitState('ERROR')");
+    expect(modal).toContain('role="alert"');
+    expect(modal).toContain('إعادة المحاولة');
+    // Duplicate submissions stay blocked while in flight or while an active
+    // server-acknowledged request already exists.
     expect(modal).toContain('|| !!activeRequest');
     expect(context).toContain('Promise<{ success: boolean; error?: string }>');
     expect(context).toContain('setWaiterRequests((prev) =>');

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatTime, formatRelativeMinutes, formatTableNumber } from '../../utils/formatting';
-import { Bell, CheckCircle2, Clock, HelpCircle, Receipt, Droplets, Sparkles, Check } from 'lucide-react';
+import { Bell, CheckCircle2, Clock, HelpCircle, Receipt, Droplets, Sparkles, Check, UtensilsCrossed, Footprints } from 'lucide-react';
 
 export const WaiterRequestsList: React.FC = () => {
   const { waiterRequests, tables, resolveWaiterRequest, acknowledgeWaiterRequest, isMutationPending } = useRestaurant();
@@ -19,14 +19,22 @@ export const WaiterRequestsList: React.FC = () => {
   );
   const resolvedRequests = waiterRequests.filter((w) => w.status === 'RESOLVED');
 
+  // Icons cover BOTH the guest-facing reason codes (ASSISTANCE, WATER_REFILL,
+  // CLEANING, EXTRA_CUTLERY, BILL) and the legacy 'WATER' value kept for old
+  // records, so every call reads at a glance in the noisy dining room.
   const getReasonIcon = (reason: string) => {
     switch (reason) {
       case 'BILL':
         return <Receipt className="w-5 h-5 text-purple-400" />;
+      case 'WATER_REFILL':
       case 'WATER':
-        return <Droplets className="w-5 h-5 text-blue-400" />;
+        return <Droplets className="w-5 h-5 text-sky-400" />;
       case 'CLEANING':
         return <Sparkles className="w-5 h-5 text-emerald-400" />;
+      case 'EXTRA_CUTLERY':
+        return <UtensilsCrossed className="w-5 h-5 text-gold-400" />;
+      case 'ASSISTANCE':
+        return <Bell className="w-5 h-5 text-gold-400" />;
       default:
         return <HelpCircle className="w-5 h-5 text-gold-400" />;
     }
@@ -73,23 +81,45 @@ export const WaiterRequestsList: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {activeRequests.map((req) => {
               const isUpdating = isMutationPending(`waiter:${req.id}`);
+              const isPending = req.status === 'PENDING';
               return (
               <div
                 key={req.id}
-                className="p-4 rounded-2xl bg-luxury-900 border border-red-500/40 shadow-luxury flex items-start justify-between gap-3 animate-in fade-in"
+                className={`p-4 rounded-2xl bg-luxury-900 border shadow-luxury flex items-start justify-between gap-3 animate-in fade-in ${
+                  isPending ? 'border-red-500/40' : 'border-sky-500/40'
+                }`}
               >
                 <div className="flex items-start gap-3">
-                  <div className="p-2.5 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 shrink-0">
+                  <div
+                    className={`p-2.5 rounded-xl border shrink-0 ${
+                      isPending
+                        ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                        : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                    }`}
+                  >
                     {getReasonIcon(req.reason)}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-bold text-luxury-50">
                         {getTableLabel(req.tableId)}
                       </span>
                       <span className="text-[10px] text-luxury-400">
                         ({formatRelativeMinutes(req.createdAt)})
                       </span>
+                      {/* PENDING (red, urgent, pulsing) vs ACKNOWLEDGED (sky,
+                          "on the way") — two genuinely different workloads. */}
+                      {isPending ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-300 bg-red-500/10 border border-red-500/25 rounded-full px-2 py-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
+                          بانتظار الاستلام
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-sky-300 bg-sky-500/10 border border-sky-500/25 rounded-full px-2 py-0.5">
+                          <Footprints className="w-3 h-3" />
+                          تم الاستلام — في الطريق
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-luxury-300 mt-1">{req.reasonText}</p>
                     <span className="text-[11px] text-gold-400 font-mono block mt-1">
@@ -99,13 +129,13 @@ export const WaiterRequestsList: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => req.status === 'PENDING' ? acknowledgeWaiterRequest(req.id) : resolveWaiterRequest(req.id)}
+                  onClick={() => isPending ? acknowledgeWaiterRequest(req.id) : resolveWaiterRequest(req.id)}
                   disabled={isUpdating}
                   aria-busy={isUpdating}
-                  className={`px-3.5 py-2 rounded-xl text-luxury-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${req.status === 'PENDING' ? 'bg-amber-500 hover:bg-amber-400' : 'bg-emerald-500 hover:bg-emerald-400'}`}
+                  className={`px-3.5 py-2 rounded-xl text-luxury-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${isPending ? 'bg-amber-500 hover:bg-amber-400' : 'bg-emerald-500 hover:bg-emerald-400'}`}
                 >
-                  {req.status === 'PENDING' ? <Clock className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                  <span>{isUpdating ? 'جاري التأكيد...' : req.status === 'PENDING' ? 'استلام النداء' : 'تمت الخدمة'}</span>
+                  {isPending ? <Clock className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                  <span>{isUpdating ? 'جاري التأكيد...' : isPending ? 'استلام النداء' : 'تمت الخدمة'}</span>
                 </button>
               </div>
             );

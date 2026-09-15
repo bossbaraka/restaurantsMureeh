@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { WaiterCallReason } from '../../types/restaurant';
-import { Bell, Check, X, Clock } from 'lucide-react';
+import { Bell, Check, X, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
 import { formatTableNumber } from '../../utils/formatting';
 
@@ -19,9 +19,14 @@ export const WaiterCallModal: React.FC = () => {
 
   const [selectedReason, setSelectedReason] = useState<WaiterCallReason>('ASSISTANCE');
   const [note, setNote] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [justCalled, setJustCalled] = useState(false);
+  // Explicit request state machine — the UI may only show SUCCESS after the
+  // server accepted the call. IDLE → SUBMITTING → SUCCESS | ERROR.
+  const [submitState, setSubmitState] = useState<'IDLE' | 'SUBMITTING' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  const isSubmitting = submitState === 'SUBMITTING';
+  const justCalled = submitState === 'SUCCESS';
 
   // Check if there is already an active pending request for this table
   const activeRequest = waiterRequests.find(
@@ -41,6 +46,17 @@ export const WaiterCallModal: React.FC = () => {
     return () => clearInterval(timer);
   }, [cooldownSeconds]);
 
+  // A failed attempt must not linger as an error on the next time the modal
+  // is opened; the form starts fresh (the persistent active-request banner
+  // still reflects real server state).
+  useEffect(() => {
+    if (isWaiterModalOpen && submitState === 'ERROR') {
+      setSubmitState('IDLE');
+      setErrorMessage('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWaiterModalOpen]);
+
   // UX-001: Escape-to-close + body scroll lock (see hooks/useDialog).
   useDialog({ isOpen: isWaiterModalOpen, onClose: () => setIsWaiterModalOpen(false) });
 
@@ -54,16 +70,26 @@ export const WaiterCallModal: React.FC = () => {
     { id: 'BILL', label: 'طلب الحساب / الفاتورة', desc: 'إعداد الحساب للدفع عند الكاشير', icon: '🧾' },
   ];
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     if (!activeTableId || cooldownSeconds > 0 || activeRequest || isSubmitting) return;
 
-    setIsSubmitting(true);
+    // SUBMITTING: lock the form and show an inline indicator. No success
+    // messaging is rendered until `callWaiter` resolves successfully.
+    setSubmitState('SUBMITTING');
+    setErrorMessage('');
     const result = await callWaiter(selectedReason, note.trim() || undefined);
-    setIsSubmitting(false);
-    if (!result.success) return;
 
-    setJustCalled(true);
+    if (!result.success) {
+      // ERROR: explain what happened and keep every choice the guest made so
+      // a single tap retries the exact same request.
+      setSubmitState('ERROR');
+      setErrorMessage(result.error || 'تعذر الاتصال بالخادم');
+      return;
+    }
+
+    // SUCCESS only after the server confirmed acceptance.
+    setSubmitState('SUCCESS');
     setCooldownSeconds(60); // UI feedback complements the existing server limiter.
     setNote('');
   };
@@ -175,13 +201,48 @@ export const WaiterCallModal: React.FC = () => {
               </div>
             )}
 
+            {/* ERROR: human-readable explanation + one-tap retry. The guest's
+                selected reason and note are preserved above. */}
+            {submitState === 'ERROR' && (
+              <div
+                role="alert"
+                className="rounded-2xl bg-red-500/10 border border-red-500/30 p-3.5 flex items-start gap-3"
+              >
+                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-red-300">تعذر إرسال النداء</p>
+                  <p className="text-[11px] text-red-200/80 mt-0.5 leading-relaxed">
+                    {errorMessage} — لم يتم تسجيل أي طلب. تحقق من اتصالك بالشبكة وأعد المحاولة.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={isSubmitting || cooldownSeconds > 0 || !!activeRequest}
+              aria-busy={isSubmitting}
               className="w-full py-3.5 rounded-2xl bg-[var(--brand-primary-strong)] hover:bg-[var(--brand-primary-strong)] disabled:opacity-50 text-luxury-950 font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
             >
-              <Bell className="w-4 h-4" />
-              <span>{isSubmitting ? 'جاري إرسال الطلب...' : activeRequest ? 'يوجد طلب نشط لطاولتك' : cooldownSeconds > 0 ? `تم الإرسال — انتظر (${cooldownSeconds}s)` : 'إرسال النداء الآن'}</span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>جاري إرسال الطلب...</span>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-4 h-4" />
+                  <span>
+                    {submitState === 'ERROR'
+                      ? 'إعادة المحاولة'
+                      : activeRequest
+                      ? 'يوجد طلب نشط لطاولتك'
+                      : cooldownSeconds > 0
+                      ? `تم الإرسال — انتظر (${cooldownSeconds}s)`
+                      : 'إرسال النداء الآن'}
+                  </span>
+                </>
+              )}
             </button>
           </form>
         )}

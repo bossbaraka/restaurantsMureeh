@@ -51,6 +51,8 @@ export const OrderTrackingDrawer: React.FC = () => {
   const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
   // Order whose transfer receipt is being submitted (null = modal closed).
   const [transferOrder, setTransferOrder] = useState<Order | null>(null);
+  // Two-step destructive guard: first tap arms cancellation, second confirms.
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
 
   useDialog({ isOpen: isOrderTrackingOpen, onClose: () => setIsOrderTrackingOpen(false) });
 
@@ -209,7 +211,9 @@ export const OrderTrackingDrawer: React.FC = () => {
                           onClick={() =>
                             setExpandedOrderId(isExpanded ? null : order.id)
                           }
-                          className="p-1 text-luxury-400 hover:text-luxury-200 cursor-pointer"
+                          aria-expanded={isExpanded}
+                          aria-label={isExpanded ? `طي تفاصيل الطلب ${order.id}` : `عرض تفاصيل الطلب ${order.id}`}
+                          className="touch-target p-1.5 text-luxury-400 hover:text-luxury-200 cursor-pointer"
                         >
                           {isExpanded ? (
                             <ChevronUp className="w-4 h-4" />
@@ -365,11 +369,16 @@ export const OrderTrackingDrawer: React.FC = () => {
                       <div className="pt-2 border-t border-luxury-800">
                         {editingNotesOrderId === order.id ? (
                           <div className="space-y-2">
+                            <label htmlFor="tracking-notes-edit" className="sr-only">
+                              تعديل ملاحظات الطلب
+                            </label>
                             <textarea
+                              id="tracking-notes-edit"
                               value={editingNotesText}
                               onChange={(e) => setEditingNotesText(e.target.value)}
                               className="w-full bg-luxury-950 border border-luxury-750 text-luxury-100 p-2 rounded-lg text-xs"
                               rows={2}
+                              placeholder="ملاحظاتك للشيف…"
                             />
                             <div className="flex gap-2">
                               <button
@@ -484,15 +493,41 @@ export const OrderTrackingDrawer: React.FC = () => {
                                 cancel action: the cashier is holding a
                                 transfer for this order and the money question
                                 must not be silently deleted. */}
-                            {order.paymentStatus !== 'PENDING_VERIFICATION' && (
-                              <button
-                                onClick={() => cancelCustomerOrder(order.id)}
-                                className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>إلغاء هذا الطلب</span>
-                              </button>
-                            )}
+                            {order.paymentStatus !== 'PENDING_VERIFICATION' ? (
+                              confirmCancelId === order.id ? (
+                                // Armed: an explicit second tap is required so
+                                // a stray touch can never cancel an order.
+                                <span className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmCancelId(null)}
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-luxury-800 text-luxury-200 hover:bg-luxury-750 transition-colors cursor-pointer"
+                                  >
+                                    تراجع
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setConfirmCancelId(null);
+                                      void cancelCustomerOrder(order.id);
+                                    }}
+                                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-red-500/15 border border-red-500/40 text-red-300 hover:bg-red-500/25 transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>تأكيد إلغاء الطلب</span>
+                                  </button>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmCancelId(order.id)}
+                                  className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>إلغاء هذا الطلب</span>
+                                </button>
+                              )
+                            ) : null}
                           </>
                         ) : (
                           <div className="w-full flex items-center gap-2 p-2 rounded-xl bg-luxury-950/70 border border-luxury-800 text-luxury-400 text-[11px]">

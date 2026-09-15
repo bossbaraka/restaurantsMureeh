@@ -16,6 +16,7 @@ import {
   Store,
   Users,
 } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 const BRANCH_COLORS = ['#D4AF37', '#4ADE80', '#60A5FA', '#F87171', '#C084FC', '#FB923C', '#2DD4BF', '#E879F9'];
 
@@ -36,6 +37,11 @@ export const BranchManagementView: React.FC = () => {
   const [pendingSave, setPendingSave] = useState(false);
   // Branch ceiling of the tenant's plan (server-enforced; shown as a hint here).
   const [maxBranches, setMaxBranches] = useState<number | null>(null);
+
+  // Create/edit dialog and the table-assignment dialog share the overlay
+  // behaviour (Escape, scroll lock, focus management).
+  useDialog({ isOpen: creating || !!editing, onClose: () => { setCreating(false); setEditing(null); } });
+  useDialog({ isOpen: assignmentModalOpen, onClose: () => setAssignmentModalOpen(false) });
 
   const tenantId = currentRestaurant?.id || '';
 
@@ -247,6 +253,25 @@ export const BranchManagementView: React.FC = () => {
           );
         })}
 
+        {branches.length === 0 && (
+          <div className="flex flex-col items-center justify-center text-center py-12 px-6 rounded-2xl border border-dashed border-luxury-750 bg-luxury-900/50">
+            <div className="w-12 h-12 rounded-2xl bg-luxury-850 border border-luxury-800 flex items-center justify-center mb-3 text-gold-400">
+              <Store className="w-5 h-5" />
+            </div>
+            <p className="text-sm font-bold text-luxury-100">لا توجد فروع بعد</p>
+            <p className="text-xs text-luxury-400 mt-1 max-w-sm leading-relaxed">
+              أنشئ فرعك الأول ووزّع الطاولات عليه. الطاولات غير الموزّعة تبين في المجموعة الجانبية.
+            </p>
+            <button
+              onClick={startCreate}
+              className="mt-4 px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              إضافة أول فرع
+            </button>
+          </div>
+        )}
+
         {/* Unassigned group */}
         <div className="rounded-2xl bg-luxury-900/60 border border-dashed border-luxury-700 p-4 space-y-3">
           <div className="flex items-center gap-3">
@@ -274,10 +299,16 @@ export const BranchManagementView: React.FC = () => {
       {/* Create / Edit modal */}
       {(creating || editing) && (
         <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md shadow-2xl p-5">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="branch-form-title"
+            className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md shadow-2xl p-5"
+            dir="rtl"
+          >
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-luxury-50 text-sm">{editing ? 'تعديل الفرع' : 'فرع جديد'}</h3>
-              <button onClick={() => { setCreating(false); setEditing(null); }} className="text-luxury-400 hover:text-luxury-100 cursor-pointer">
+              <h3 id="branch-form-title" className="font-bold text-luxury-50 text-sm">{editing ? 'تعديل الفرع' : 'فرع جديد'}</h3>
+              <button onClick={() => { setCreating(false); setEditing(null); }} className="p-1.5 -ml-1.5 text-luxury-400 hover:text-luxury-100 cursor-pointer rounded-lg hover:bg-luxury-800" aria-label="إغلاق">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -317,7 +348,10 @@ export const BranchManagementView: React.FC = () => {
                   {BRANCH_COLORS.map((c) => (
                     <button
                       key={c}
+                      type="button"
                       onClick={() => setColor(c)}
+                      aria-label={`اختيار اللون ${c}`}
+                      aria-pressed={color === c}
                       className={`w-7 h-7 rounded-full transition-transform cursor-pointer ${color === c ? 'scale-125 ring-2 ring-white/60' : ''}`}
                       style={{ background: c }}
                     />
@@ -339,13 +373,19 @@ export const BranchManagementView: React.FC = () => {
       {/* Table assignment modal */}
       {assignmentModalOpen && (
         <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-2xl shadow-2xl p-5 max-h-[85vh] flex flex-col">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="branch-assignment-title"
+            className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-2xl shadow-2xl p-5 max-h-[85vh] flex flex-col"
+            dir="rtl"
+          >
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-luxury-50 text-sm flex items-center gap-2">
+              <h3 id="branch-assignment-title" className="font-bold text-luxury-50 text-sm flex items-center gap-2">
                 <Users className="w-4 h-4 text-gold-400" />
                 توزيع الطاولات — {assignmentBranchId ? branches.find((b) => b.id === assignmentBranchId)?.name : 'غير مصنفة'}
               </h3>
-              <button onClick={() => setAssignmentModalOpen(false)} className="text-luxury-400 hover:text-luxury-100 cursor-pointer">
+              <button onClick={() => setAssignmentModalOpen(false)} className="p-1.5 -ml-1.5 text-luxury-400 hover:text-luxury-100 cursor-pointer rounded-lg hover:bg-luxury-800" aria-label="إغلاق">
                 <X className="w-4 h-4" />
               </button>
             </div>

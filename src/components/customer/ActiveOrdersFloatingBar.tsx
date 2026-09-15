@@ -13,7 +13,10 @@ export const ActiveOrdersFloatingBar: React.FC = () => {
   const statusCfg = getOrderStatusConfig(latestOrder.status);
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-30 max-w-lg mx-auto select-none animate-in slide-in-from-bottom duration-300">
+    <div
+      className="fixed left-4 right-4 z-30 max-w-lg mx-auto select-none animate-in slide-in-from-bottom duration-300"
+      style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+    >
       <button
         onClick={() => setIsOrderTrackingOpen(true)}
         className="w-full bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] backdrop-blur-md rounded-2xl p-3.5 shadow-luxury flex items-center justify-between text-right group hover:border-[rgb(var(--brand-primary-strong-rgb)/0.7)] transition-all active:scale-[0.99]"

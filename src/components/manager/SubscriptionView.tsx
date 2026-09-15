@@ -20,6 +20,7 @@ import {
   Hourglass,
   AlertTriangle,
 } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 const PLAN_DETAIL_LINES: Record<string, string[]> = {
   'plan-starter': [
@@ -64,6 +65,11 @@ export const SubscriptionView: React.FC = () => {
   const [allPlans, setAllPlans] = useState<Plan[]>([]);
   /** Lower-cost plan the owner picked but hasn't confirmed yet. */
   const [pendingDowngradePlan, setPendingDowngradePlan] = useState<Plan | null>(null);
+
+  // Upgrade picker and downgrade confirmation share the standard overlay
+  // behaviour (Escape = cancel, scroll lock, focus management).
+  useDialog({ isOpen: isUpgradeModalOpen, onClose: () => setIsUpgradeModalOpen(false) });
+  useDialog({ isOpen: !!pendingDowngradePlan, onClose: () => setPendingDowngradePlan(null) });
 
   const loadSubscription = () => {
     if (!currentRestaurant) return;
@@ -342,15 +348,21 @@ export const SubscriptionView: React.FC = () => {
       {/* Upgrade Modal */}
       {isUpgradeModalOpen && (
         <div className="fixed inset-0 z-60 overflow-y-auto flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={() => setIsUpgradeModalOpen(false)} />
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={() => setIsUpgradeModalOpen(false)} aria-hidden="true" tabIndex={-1} />
 
-          <div className="relative w-full max-w-3xl bg-luxury-900 border border-gold-500/40 rounded-2xl p-6 z-10 space-y-5" dir="rtl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="subscription-upgrade-title"
+            className="relative w-full max-w-3xl bg-luxury-900 border border-gold-500/40 rounded-2xl p-6 z-10 space-y-5 my-4"
+            dir="rtl"
+          >
             <div className="flex items-center justify-between border-b border-luxury-800 pb-3">
               <div>
-                <h3 className="text-base font-bold text-luxury-50 font-serif">اختر باقة الترقية المناسبة لمطعمك</h3>
+                <h3 id="subscription-upgrade-title" className="text-base font-bold text-luxury-50 font-serif">اختر باقة الترقية المناسبة لمطعمك</h3>
                 <p className="text-xs text-luxury-400">تفعيل فوري لكافة الميزات دون توقف الخدمة</p>
               </div>
-              <button onClick={() => setIsUpgradeModalOpen(false)} className="text-luxury-400 hover:text-white">
+              <button onClick={() => setIsUpgradeModalOpen(false)} className="p-2 -ml-2 text-luxury-400 hover:text-white rounded-lg hover:bg-luxury-800" aria-label="إغلاق">
                 ✕
               </button>
             </div>
@@ -507,15 +519,21 @@ export const SubscriptionView: React.FC = () => {
       {/* Downgrade warning — confirm before losing higher-tier features */}
       {pendingDowngradePlan && (
         <div className="fixed inset-0 z-[90] overflow-y-auto flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={() => setPendingDowngradePlan(null)} />
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-md" onClick={() => setPendingDowngradePlan(null)} aria-hidden="true" tabIndex={-1} />
 
-          <div className="relative w-full max-w-md bg-luxury-900 border border-amber-500/50 rounded-2xl p-6 z-10 space-y-4" dir="rtl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="subscription-downgrade-title"
+            className="relative w-full max-w-md bg-luxury-900 border border-amber-500/50 rounded-2xl p-6 z-10 space-y-4 my-4"
+            dir="rtl"
+          >
             <div className="flex items-start gap-3">
               <div className="w-11 h-11 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-6 h-6 text-amber-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-luxury-50 font-serif">تأكيد التخفيض إلى باقة أقل</h3>
+                <h3 id="subscription-downgrade-title" className="text-base font-bold text-luxury-50 font-serif">تأكيد التخفيض إلى باقة أقل</h3>
                 <p className="text-xs text-luxury-400 mt-1 leading-relaxed">
                   أنت على وشك التخفيض من{' '}
                   <span className="font-bold text-luxury-200">{currentPlan?.name}</span> إلى{' '}

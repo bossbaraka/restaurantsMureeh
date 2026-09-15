@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice } from '../../utils/formatting';
-import { Tag, Plus, Trash2, CheckCircle2, X, Sparkles, Image as ImageIcon } from 'lucide-react';
+import { Tag, Plus, Trash2, CheckCircle2, X, Sparkles } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 export const OffersManagement: React.FC = () => {
-  const { offers, addOffer, deleteOffer, isMutationPending, currentRestaurant } = useRestaurant();
+  const { offers, addOffer, deleteOffer, isMutationPending } = useRestaurant();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [title, setTitle] = useState('');
@@ -13,6 +14,9 @@ export const OffersManagement: React.FC = () => {
   const [originalPrice, setOriginalPrice] = useState<number | ''>('');
   const [badge, setBadge] = useState('عرض نهاية الأسبوع');
   const [image, setImage] = useState('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80');
+
+  // Offer editor dialog: Escape, scroll lock and focus management.
+  useDialog({ isOpen: isAddModalOpen, onClose: () => setIsAddModalOpen(false) });
 
   const handleCreateOffer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,20 +122,45 @@ export const OffersManagement: React.FC = () => {
           </div>
           );
         })}
+
+        {offers.length === 0 && (
+          <div className="md:col-span-2 flex flex-col items-center justify-center text-center py-14 px-6 rounded-2xl border border-dashed border-luxury-750 bg-luxury-900/50">
+            <div className="w-12 h-12 rounded-2xl bg-luxury-850 border border-luxury-800 flex items-center justify-center mb-3 text-gold-400">
+              <Tag className="w-5 h-5" />
+            </div>
+            <p className="text-sm font-bold text-luxury-100">لا توجد عروض ترويجية بعد</p>
+            <p className="text-xs text-luxury-400 mt-1 max-w-sm leading-relaxed">
+              أنشئ عرضًا خاصًا لتحفيز الطلبات — يظهر فورًا في شاشة العروض لدى ضيوفك.
+            </p>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="mt-4 px-4 py-2 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              إضافة أول عرض
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Add Offer Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddModalOpen(false)} />
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setIsAddModalOpen(false)} aria-hidden="true" tabIndex={-1} />
 
-          <div className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700/80 rounded-2xl p-6 z-10 shadow-2xl space-y-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="offer-form-title"
+            className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700/80 rounded-2xl p-6 z-10 shadow-2xl space-y-4"
+            dir="rtl"
+          >
             <div className="flex items-center justify-between border-b border-luxury-800 pb-3">
-              <h3 className="text-base font-bold text-luxury-100 font-serif flex items-center gap-2">
+              <h3 id="offer-form-title" className="text-base font-bold text-luxury-100 font-serif flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-gold-400" />
                 <span>إنشاء عرض ترويجي جديد</span>
               </h3>
-              <button onClick={() => setIsAddModalOpen(false)} className="text-luxury-400 hover:text-luxury-200">
+              <button onClick={() => setIsAddModalOpen(false)} className="p-1.5 -ml-1.5 text-luxury-400 hover:text-luxury-200 rounded-lg hover:bg-luxury-800" aria-label="إغلاق">
                 <X className="w-5 h-5" />
               </button>
             </div>

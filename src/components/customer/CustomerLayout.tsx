@@ -494,9 +494,6 @@ export const CustomerLayout: React.FC = () => {
       <CustomerOrderLiveNotifier />
       <ActiveOrdersFloatingBar />
 
-      {/* Interactive customer onboarding tour (coach-marks with arrows) */}
-      <CustomerGuideOverlay />
-
       {/* Modals & Drawers */}
       <ProductDetailModal product={selectedProduct} isOpen={!!selectedProduct} onClose={handleCloseDetail} />
 
@@ -519,6 +516,10 @@ export const CustomerLayout: React.FC = () => {
       <WaiterCallModal />
       <DirectTableEntryModal />
       <OrderCompletedModal />
+
+      {/* Interactive customer onboarding tour. Rendered last so its dialog
+          surface wins focus/Escape management over the drawers it opens. */}
+      <CustomerGuideOverlay />
     </div>
   );
 };

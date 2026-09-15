@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { formatPrice, formatTime, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
 import { isOrderHeldForPayment, isOrderOperational } from '../../utils/orderLifecycle';
 import { X, CheckCircle, Layers } from 'lucide-react';
+import { useDialog } from '../../hooks/useDialog';
 
 interface TableAggregationModalProps {
   tableId: string | null;
@@ -20,6 +21,9 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
   const { orders, tables, currentRestaurant, refreshTenantData, showToast, updateOrderStatus } = useRestaurant();
   const { currentUser } = useAuth();
   const [settling, setSettling] = useState(false);
+
+  // Escape-to-close, scroll lock and focus management.
+  useDialog({ isOpen: isOpen && !!tableId, onClose });
 
   if (!isOpen || !tableId) return null;
 
@@ -67,10 +71,15 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
       <div
         className="fixed inset-0 bg-black/85 backdrop-blur-md transition-opacity"
         onClick={onClose}
+        aria-hidden="true"
+        tabIndex={-1}
       />
 
       {/* Modal Card */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="table-aggregation-title"
         className="relative w-full max-w-2xl bg-luxury-900 border border-luxury-700/80 rounded-2xl shadow-luxury overflow-hidden z-10 my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col max-h-[90vh]"
         dir="rtl"
       >
@@ -81,7 +90,7 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="table-aggregation-title" className="text-base font-bold text-luxury-50 font-serif">
                 تجميع طلبات {tableLabel}
               </h3>
               <p className="text-xs text-luxury-400">
@@ -92,7 +101,8 @@ export const TableAggregationModal: React.FC<TableAggregationModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800 transition-colors"
+            className="p-2 rounded-lg text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800 transition-colors"
+            aria-label="إغلاق"
           >
             <X className="w-5 h-5" />
           </button>
