@@ -20,12 +20,6 @@ import { useBrandTheme } from '../../theme/brandTheme';
  * only thing it hands back to `CustomerLayout` is "the guest is done here"
  * (`onEnter`), which is the same one boolean the previous welcome screen used.
  *
- * IDENTITY
- * --------
- * White-label: nothing on this layer names, marks or links to the platform.
- * The cover, the crest, the name, the description and the palette are all the
- * tenant's, so the venue keeps its own identity end to end.
- *
  * DATA
  * ----
  * Everything comes from the existing `useRestaurant()` tenant object —
@@ -630,9 +624,9 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
           <span className="entry-progress__label">02</span>
         </div>
 
-        {/* No platform credit on this layer. The guest scanned the
-            restaurant's QR code, so from the cover photograph to the last
-            pixel of the exit, the only identity on screen is the venue's. */}
+        {/* Persistent platform credit — the smallest element of the layer:
+            it supports the restaurant brand rather than competing with it. */}
+        <p className="entry-credit">{isEnglish ? 'Powered by Mureeh' : 'مدعوم بـ MUREEH'}</p>
       </div>
     </div>
   );

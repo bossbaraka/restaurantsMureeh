@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useBrandTheme } from '../../theme/brandTheme';
-import { useMenuPageFlip } from '../../hooks/useMenuPageFlip';
 import { formatPrice } from '../../utils/formatting';
 import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
 import {
@@ -130,17 +129,6 @@ export const DisplayMenu: React.FC = () => {
   const sectionId = section?.category.id;
   const currency = currentRestaurant?.currency || '₪';
 
-  // Page turn: the board is a booklet that flips from section to section,
-  // whether the autoplay timer, the arrow keys or the controls drive it. The
-  // hook only observes — `goTo` below stays the single source of truth.
-  const sectionIds = useMemo(() => sections.map((entry) => entry.category.id), [sections]);
-  const { attachPageNode: attachBoardPage, direction: boardFlipDirection } = useMenuPageFlip({
-    pages: sectionIds,
-    activePageId: sectionId || '',
-    turnMs: 640,
-    scrollPageIntoView: false,
-  });
-
   const update = useCallback((patch: Partial<DisplaySettings>) => {
     setSettings((prev) => ({ ...prev, ...patch }));
   }, []);
@@ -219,7 +207,7 @@ export const DisplayMenu: React.FC = () => {
 
   const displayUrl = useMemo(() => {
     if (typeof window === 'undefined') return '';
-    const slug = currentRestaurant?.slug || 'menu';
+    const slug = currentRestaurant?.slug || 'mureeh';
     return `${window.location.origin}/r/${slug}?view=display`;
   }, [currentRestaurant?.slug]);
 
@@ -341,7 +329,7 @@ export const DisplayMenu: React.FC = () => {
   useEffect(() => {
     if (!showQr || !displayUrl) return;
     let cancelled = false;
-    void generateQrDataUrl('display', currentRestaurant?.slug || 'menu', displayUrl).then(
+    void generateQrDataUrl('display', currentRestaurant?.slug || 'mureeh', displayUrl).then(
       (dataUrl) => {
         if (!cancelled) setQrDataUrl(dataUrl);
       }
@@ -386,62 +374,55 @@ export const DisplayMenu: React.FC = () => {
         {/* ---------- Board ---------- */}
         {section ? (
           <div className="display-menu__board" ref={scrollerRef}>
-            <div
-              className="display-menu__page"
-              ref={attachBoardPage}
-              data-flip={boardFlipDirection || 'none'}
-              data-section={safeIndex + 1}
-            >
-              <div className="display-menu__section-head">
-                <div>
-                  <h2 className="display-menu__section-title">{section.category.name}</h2>
-                  {section.category.nameEn && (
-                    <p className="display-menu__section-sub">{section.category.nameEn}</p>
-                  )}
-                </div>
-                <span className="display-menu__counter">
-                  {safeIndex + 1} / {sections.length}
-                </span>
+            <div className="display-menu__section-head">
+              <div>
+                <h2 className="display-menu__section-title">{section.category.name}</h2>
+                {section.category.nameEn && (
+                  <p className="display-menu__section-sub">{section.category.nameEn}</p>
+                )}
               </div>
-
-              <ul className="display-menu__list" data-images={settings.showImages ? 'on' : 'off'}>
-                {section.items.map((item, index) => (
-                  <li className="display-menu__item" key={item.id}>
-                    {settings.showImages && (
-                      <div className="display-menu__thumb" data-tone={tileTone(item.id, 3)}>
-                        {item.image ? (
-                          <img src={item.image} alt="" loading="lazy" decoding="async" />
-                        ) : (
-                          <Sparkles className="display-menu__thumb-icon" aria-hidden="true" />
-                        )}
-                      </div>
-                    )}
-                    <div className="display-menu__body">
-                      <div className="display-menu__name-row">
-                        <h3 className="display-menu__dish">{item.name}</h3>
-                        {item.badge && <span className="display-menu__badge">{item.badge}</span>}
-                        {item.isFeatured && (
-                          <span className="display-menu__badge display-menu__badge--gold">مميز</span>
-                        )}
-                      </div>
-                      {item.nameEn && <p className="display-menu__dish-en">{item.nameEn}</p>}
-                      {item.description && <p className="display-menu__desc">{item.description}</p>}
-                      <div className="display-menu__facts">
-                        {item.preparationTimeMinutes ? <span>{item.preparationTimeMinutes} دقيقة</span> : null}
-                        {item.calories ? <span>{item.calories} سعرة</span> : null}
-                        {index === 0 && section.items.length > 1 ? <span>الأكثر طلباً</span> : null}
-                      </div>
-                    </div>
-                    <div className="display-menu__leader" aria-hidden="true" />
-                    <div className="display-menu__price">{formatPrice(item.price, currency)}</div>
-                  </li>
-                ))}
-              </ul>
-
-              <p className="display-menu__note">
-                الأسعار تشمل ضريبة القيمة المضافة · للطلب يرجى التوجه إلى الكاشير
-              </p>
+              <span className="display-menu__counter">
+                {safeIndex + 1} / {sections.length}
+              </span>
             </div>
+
+            <ul className="display-menu__list" data-images={settings.showImages ? 'on' : 'off'}>
+              {section.items.map((item, index) => (
+                <li className="display-menu__item" key={item.id}>
+                  {settings.showImages && (
+                    <div className="display-menu__thumb" data-tone={tileTone(item.id, 3)}>
+                      {item.image ? (
+                        <img src={item.image} alt="" loading="lazy" decoding="async" />
+                      ) : (
+                        <Sparkles className="display-menu__thumb-icon" aria-hidden="true" />
+                      )}
+                    </div>
+                  )}
+                  <div className="display-menu__body">
+                    <div className="display-menu__name-row">
+                      <h3 className="display-menu__dish">{item.name}</h3>
+                      {item.badge && <span className="display-menu__badge">{item.badge}</span>}
+                      {item.isFeatured && (
+                        <span className="display-menu__badge display-menu__badge--gold">مميز</span>
+                      )}
+                    </div>
+                    {item.nameEn && <p className="display-menu__dish-en">{item.nameEn}</p>}
+                    {item.description && <p className="display-menu__desc">{item.description}</p>}
+                    <div className="display-menu__facts">
+                      {item.preparationTimeMinutes ? <span>{item.preparationTimeMinutes} دقيقة</span> : null}
+                      {item.calories ? <span>{item.calories} سعرة</span> : null}
+                      {index === 0 && section.items.length > 1 ? <span>الأكثر طلباً</span> : null}
+                    </div>
+                  </div>
+                  <div className="display-menu__leader" aria-hidden="true" />
+                  <div className="display-menu__price">{formatPrice(item.price, currency)}</div>
+                </li>
+              ))}
+            </ul>
+
+            <p className="display-menu__note">
+              الأسعار تشمل ضريبة القيمة المضافة · للطلب يرجى التوجه إلى الكاشير
+            </p>
           </div>
         ) : (
           <div className="display-menu__empty">
@@ -450,22 +431,14 @@ export const DisplayMenu: React.FC = () => {
           </div>
         )}
 
-        {/* ---------- Footer watermark ----------
-            White-label: a board filmed inside the dining room carries the
-            restaurant's name and nothing else — no platform wordmark, no
-            platform link. The shareable link lives in the QR dialog. */}
+        {/* ---------- Footer watermark ---------- */}
         <footer className="display-menu__foot">
-          <span>
-            <strong>{restaurantName}</strong>
-          </span>
-          {restaurantNameEn && (
-            <>
-              <span className="display-menu__dot" aria-hidden="true">·</span>
-              <span>{restaurantNameEn}</span>
-            </>
-          )}
+          <span>{restaurantName}</span>
           <span className="display-menu__dot" aria-hidden="true">·</span>
-          <span>القائمة الرقمية</span>
+          <span>
+            مُدار بواسطة <strong>منصة مريح MUREEH</strong>
+          </span>
+          {displayUrl && <span className="display-menu__url">{displayUrl.replace(/^https?:\/\//, '')}</span>}
         </footer>
 
         {/* ---------- Controls (never shown inside a recording when hidden) ---------- */}

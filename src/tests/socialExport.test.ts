@@ -155,11 +155,8 @@ describe('drawMenuPoster', () => {
     // Prices are formatted with the tenant currency.
     expect(texts.some((t) => t?.includes('74'))).toBe(true);
     expect(texts.some((t) => t?.includes('₪'))).toBe(true);
-    // White-label: the asset is published on the venue's own channels, so it
-    // credits the restaurant and never the platform (name, wordmark or link).
-    expect(texts.some((t) => t?.includes('مريح'))).toBe(false);
-    expect(texts.some((t) => /mureeh/i.test(t || ''))).toBe(false);
-    expect(texts.some((t) => t?.includes('Diwan Restaurant'))).toBe(true);
+    // The platform is credited on the asset itself.
+    expect(texts.some((t) => t?.includes('منصة مريح'))).toBe(true);
 
     // Background is painted edge to edge before anything is drawn on it.
     const firstRect = (ctx.fillRect as unknown as { mock: { calls: number[][] } }).mock.calls[0];
@@ -232,21 +229,16 @@ describe('wrapText', () => {
 describe('posterFilename', () => {
   it('produces a filesystem-safe name carrying the ratio', () => {
     const name = posterFilename(input([]), getFormat('story'));
-    expect(name).toBe('diwan-restaurant-menu-1080x1920.png');
+    expect(name).toBe('mureeh-diwan-restaurant-1080x1920.png');
     expect(name).not.toMatch(/[\\/:*?"<>|\s]/);
-  });
-
-  it('is white-label: the venue leads the file name, no platform prefix', () => {
-    const name = posterFilename(input([]), getFormat('story'));
-    expect(name).not.toMatch(/mureeh/i);
-    expect(name.startsWith('diwan-restaurant-')).toBe(true);
   });
 
   it('falls back to "menu" when the tenant has no latin name', () => {
     const name = posterFilename(input([], { restaurantNameEn: '', restaurantName: 'مطعم' }), getFormat('post'));
-    expect(name.endsWith('-menu-1080x1350.png')).toBe(true);
+    expect(name).toContain('mureeh-');
+    expect(name.endsWith('-1080x1350.png')).toBe(true);
     // Arabic letters are word characters for the slug, so nothing collapses.
-    expect(name.startsWith('مطعم')).toBe(true);
+    expect(name.startsWith('mureeh-مطعم')).toBe(true);
   });
 });
 

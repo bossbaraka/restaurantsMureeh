@@ -115,28 +115,8 @@ describe('DisplayMenu (read-only board)', () => {
     expect(html).toContain('المقبلات');
     expect(html).toContain('حمص بالصنوبر');
     expect(html).toContain('24');
-  });
-
-  it('is white-label: the board carries the restaurant, never the platform', () => {
-    const html = render(<DisplayMenu />);
-
-    // A clip filmed off a wall screen (or a screenshot of the board) is
-    // published by the venue, so no platform wordmark, name or link may appear.
-    expect(html).not.toContain('مريح');
-    expect(html).not.toMatch(/mureeh/i);
-    expect(html).not.toContain('مُدار بواسطة');
-    // The watermark that remains is the tenant's own name.
-    expect(html).toContain('display-menu__foot');
-    expect(html).toContain('<strong>مطعم الديوان</strong>');
-  });
-
-  it('turns the board like a booklet when the section changes', () => {
-    const html = render(<DisplayMenu />);
-
-    // The page wrapper carries the flip contract the CSS animates from.
-    expect(html).toContain('display-menu__page');
-    expect(html).toContain('data-flip="none"');
-    expect(html).toContain('data-section="1"');
+    // The board is branded with the platform so a filmed clip credits it.
+    expect(html).toContain('منصة مريح MUREEH');
   });
 
   it('offers no way to order: no cart, no add button, no quantity stepper', () => {

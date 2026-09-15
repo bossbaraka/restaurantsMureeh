@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, formatTableNumber } from '../../utils/formatting';
-import { ShoppingBag, Bell, Store, Menu, X, ChefHat, Phone, User, MapPin, HelpCircle } from 'lucide-react';
+import { ShoppingBag, Bell, Store, Menu, X, ChefHat, MessageCircle, User, MapPin, HelpCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { RestaurantMapModal } from '../common/RestaurantMapModal';
 import { openCustomerGuide } from './guideBus';
@@ -40,8 +40,7 @@ export const CustomerHeader: React.FC = () => {
   const restNameEn = currentRestaurant?.nameEn || '';
   const initialLetter = restNameEn.charAt(0) || 'M';
 
-  // White-label: every contact channel here belongs to the restaurant.
-  const restaurantPhone = (currentRestaurant?.phone || '').trim();
+  const whatsappUrl = `https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، أتواصل معكم عبر قائمة الطعام في ${restName}`)}`;
 
   return (
     <>
@@ -337,21 +336,20 @@ export const CustomerHeader: React.FC = () => {
                 )}
               </button>
 
-              {/* Contact the restaurant — the venue's own line, never a
-                  platform support channel. Omitted when it has no number. */}
-              {restaurantPhone && (
-                <a
-                  href={`tel:${restaurantPhone}`}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="w-full p-3 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] text-[var(--brand-primary-strong)] text-xs font-bold flex items-center justify-between transition-all"
-                >
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-4 h-4" />
-                    <span>الاتصال بالمطعم</span>
-                  </div>
-                  <span className="font-mono text-[11px] direction-ltr">{restaurantPhone}</span>
-                </a>
-              )}
+              {/* Telegram Bot Direct Support */}
+              <a
+                href="https://t.me/Mureeh_tech_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="w-full p-3 rounded-xl bg-sky-950/80 border border-sky-500/40 text-sky-300 text-xs font-bold flex items-center justify-between transition-all"
+              >
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4 text-sky-400" />
+                  <span>تواصل عبر بوت تليجرام المنصة</span>
+                </div>
+                <span className="font-mono text-[11px] text-sky-300 direction-ltr">@Mureeh_tech_bot</span>
+              </a>
 
               {/* Admin Login */}
               <button

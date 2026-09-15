@@ -5,7 +5,7 @@
  * can be imported anywhere without breaking React Fast Refresh on the overlay
  * component file.
  */
-export const GUIDE_OPEN_EVENT = 'guest-menu:guide:open';
+export const GUIDE_OPEN_EVENT = 'mureeh:guide:open';
 
 /** Open the guide from anywhere (header button, etc.). */
 export function openCustomerGuide(): void {

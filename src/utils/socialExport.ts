@@ -65,13 +65,6 @@ export interface PosterInput {
   sectionIndex: number;
   sectionCount: number;
   note?: string;
-  /**
-   * Optional one-line credit printed in the poster footer. Defaults to the
-   * restaurant's own name — the asset is published on the venue's channels, so
-   * no platform wordmark, name or link is ever printed on it.
-   */
-  credit?: string;
-  /** Kept for the in-app QR/copy-link flows; deliberately never printed. */
   url?: string;
   /** 0..1 — drives the slide-in used by the clip recorder. */
   progress?: number;
@@ -390,14 +383,8 @@ export function drawMenuPoster(ctx: PosterCtx, input: PosterInput, format: Socia
   ctx.textAlign = 'right';
   ctx.fillStyle = tokens.muted;
   ctx.font = font(600, W * 0.025);
-  // White-label footer: the restaurant's own name (or an explicit credit the
-  // caller supplies). Nothing here identifies the platform.
-  const credit =
-    input.credit?.trim() ||
-    [input.restaurantName, input.restaurantNameEn].filter(Boolean).join(' · ').trim();
-  if (credit) {
-    ctx.fillText(wrapText(ctx, credit, W - pad * 2, 1)[0] || credit, W - pad, footLine + Math.round(H * 0.035));
-  }
+  const credit = `مُدار بواسطة منصة مريح MUREEH${input.url ? ` · ${input.url.replace(/^https?:\/\//, '')}` : ''}`;
+  ctx.fillText(wrapText(ctx, credit, W - pad * 2, 1)[0] || credit, W - pad, footLine + Math.round(H * 0.035));
 
   if (input.note) {
     ctx.textAlign = 'left';
@@ -414,8 +401,7 @@ export function posterFilename(input: PosterInput, format: SocialFormat, ext = '
     .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
-  // The restaurant's own name leads the file; no platform prefix.
-  return `${slug || 'menu'}-menu-${format.width}x${format.height}.${ext}`;
+  return `mureeh-${slug || 'menu'}-${format.width}x${format.height}.${ext}`;
 }
 
 const MIME_CANDIDATES = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
@@ -593,8 +579,7 @@ export async function recordMenuClip(inputs: PosterInput[], options: ClipOptions
   return {
     blob,
     mime,
-    // Same rule as the poster: the venue's own name leads the file.
-    filename: `${slug || 'menu'}-menu-${format.width}x${format.height}.${ext}`,
+    filename: `mureeh-${slug || 'menu'}-${format.width}x${format.height}.${ext}`,
     durationSeconds: Math.round(totalMs / 100) / 10,
   };
 }
