@@ -69,9 +69,14 @@ export function computeSalesKpis(orders: Order[], payments: PaymentRecord[]): Sa
     .reduce((s, o) => s + (o.total || 0), 0);
   const grossOrderValue = nonCancelled.reduce((s, o) => s + (o.total || 0), 0);
 
-  const collectedRevenue = payments.reduce((s, p) => s + (p.total || 0), 0);
+  // Void receipts are reversals (audit H-02): they never count as collected
+  // revenue and their orders do not count as paid. The receipt rows stay in
+  // the ledger list for audit; the KPIs must reflect money, not history.
+  const livePayments = payments.filter((p) => !p.voidedAt);
+
+  const collectedRevenue = livePayments.reduce((s, p) => s + (p.total || 0), 0);
   const paidIds = new Set<string>();
-  payments.forEach((p) => (p.orderIds || []).forEach((id) => paidIds.add(id)));
+  livePayments.forEach((p) => (p.orderIds || []).forEach((id) => paidIds.add(id)));
 
   const paidOrders = nonCancelled.filter((o) => paidIds.has(o.id) || o.paymentStatus === 'PAID');
   // "Open bills" = unpaid orders still flowing through the floor (queue/prep/ready).
@@ -86,7 +91,7 @@ export function computeSalesKpis(orders: Order[], payments: PaymentRecord[]): Sa
   const openBillsValue = openOrders.reduce((s, o) => s + (o.total || 0), 0);
 
   const methodTotals = new Map<string, { count: number; total: number }>();
-  payments.forEach((p) => {
+  livePayments.forEach((p) => {
     const key = p.method || 'PAY AT CASHIER';
     const cur = methodTotals.get(key) || { count: 0, total: 0 };
     cur.count += 1;
@@ -104,7 +109,7 @@ export function computeSalesKpis(orders: Order[], payments: PaymentRecord[]): Sa
     const dayGross = nonCancelled
       .filter((o) => isSameISODate(o.createdAt, date))
       .reduce((s, o) => s + (o.total || 0), 0);
-    const dayCollected = payments
+    const dayCollected = livePayments
       .filter((p) => isSameISODate(p.createdAt, date))
       .reduce((s, p) => s + (p.total || 0), 0);
     return { date: toISODate(date), label: dateLabel(date), gross: dayGross, collected: dayCollected };

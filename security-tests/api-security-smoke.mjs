@@ -174,6 +174,35 @@ for (const [name, path] of [
   await tenantReadIsolated(name, path);
 }
 
+// H-01 (2026-09-15 adversarial audit): the staff tables payload must not hand
+// QR capability tokens to ordinary staff roles. Managers/platform keep the
+// token (QR management surface); every other role's payload must contain ZERO
+// qrToken keys. The role is decoded locally from the operator-supplied token
+// purely to pick the correct expectation — the API does the verification.
+{
+  probes += 1;
+  const QR_TOKEN_ROLES = new Set(['RESTAURANT_MANAGER', 'SUPER_ADMIN', 'PLATFORM_ADMIN']);
+  let role;
+  try {
+    role = JSON.parse(Buffer.from(tokenA.split('.')[1], 'base64url').toString('utf8'))?.role;
+  } catch {
+    role = undefined;
+  }
+  try {
+    const response = await request(`/api/manager/tables?restaurantId=${encodeURIComponent(tenantA)}`, { headers: authHeaders });
+    const tokenKeys = (response.text.match(/"qrToken"/g) || []).length;
+    if (response.status !== 200) {
+      printResult('H-01: staff table payload QR capability gating', false, `HTTP ${response.status}; expected 200 with a valid staff token (role=${role})`);
+    } else if (QR_TOKEN_ROLES.has(role)) {
+      printResult('H-01: manager table payload may carry QR token (management surface)', true, `role=${role}, qrToken keys=${tokenKeys} (positive-control when tables exist)`);
+    } else {
+      printResult('H-01: ordinary staff table payload hides QR token', tokenKeys === 0, `role=${role}, qrToken keys=${tokenKeys} — must be 0`);
+    }
+  } catch (error) {
+    printResult('H-01: staff table payload QR capability gating', false, `request error: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 // Unknown public slugs must not fall back to a different tenant's menu.
 await statusIs('Public isolation: unknown restaurant slug is not remapped', '/api/public/restaurants/security-audit-no-such-slug', new Set([404]));
 

@@ -290,6 +290,9 @@ export interface Order {
   paymentRejected?: boolean;
   paymentRejectedReason?: string;
   paymentRejectedAt?: string;
+  /** Staff cancellation markers (audit H-02): when/why a cashier or manager cancelled the order. */
+  cancelledAt?: string;
+  cancelReason?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -380,6 +383,9 @@ export interface PaymentRecord {
   cashierId?: string;
   cashierName: string;
   note?: string;
+  /** Void marker (audit H-02): a voided receipt stays in the ledger — it is flagged, never deleted. */
+  voidedAt?: string;
+  voidReason?: string;
   createdAt: string;
 }
 

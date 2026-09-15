@@ -412,6 +412,15 @@ model Order {
   // When the gate opened. Written in the SAME transaction as the payment claim
   // that released the order, so "paid" and "released" can never disagree.
   releasedAt            DateTime?
+  // --------------------------------------------------------------- 
+  // Staff cancellation marker (audit H-02). `status = CANCELLED` remains the
+  // single operational truth; these nullable columns answer when/why/by whom
+  // a staff member cancelled the order. Money guard: the API refuses to
+  // cancel a PAID order (the receipt must be voided first, Payment.voidedAt).
+  // -----------------------------------------------------------------
+  cancelledAt           DateTime?
+  cancelReason          String?
+  cancelledByUserId     String?
   // ---------------------------------------------------------------
   // Daily archive / retention (financial history is NEVER removed).
   // ---------------------------------------------------------------
@@ -577,10 +586,17 @@ model Payment {
   cashierId     String?
   cashierName   String
   note          String?
+  // Payment void marker (audit H-02): the receipt row is an immutable ledger
+  // entry — voiding MARKS it (never deletes/rewrites amounts) and the covered
+  // orders are reverted to UNPAID/AWAITING_PAYMENT in the same transaction.
+  voidedAt      DateTime?
+  voidReason    String?
+  voidedByUserId String?
   createdAt     DateTime   @default(now())
 
   @@unique([restaurantId, receiptNumber])
   @@index([restaurantId])
   @@index([createdAt])
   @@index([method])
+  @@index([restaurantId, voidedAt])
 }

@@ -46,6 +46,21 @@ import {
   normalizeFulfillmentState,
   releaseFields,
 } from '../services/orderLifecycle';
+import {
+  evaluateStaffCancellation,
+  evaluatePaymentVoid,
+  canPerformStaffCancellation,
+  CANCELLATION_AUTO_REJECT_REASON,
+} from '../services/orderCancellation';
+import {
+  OPERATIONS_LIVE_TAKE,
+  OPERATIONS_HISTORY_TAKE,
+  parseClosedWindowHours,
+  buildManagerOrderLiveWhere,
+  buildManagerOrderHistoryWhere,
+  assembleOperationsOrders,
+} from '../services/orderVisibility';
+import { canReadQrToken, serializeStaffTable } from '../services/tableSerialization';
 import { generateQrToken, csvField, roundMoney, parsePagination, reconcileCashPayment } from '../utils/security';
 
 /**
@@ -91,9 +106,11 @@ import {
   paymentCreateSchema,
   paymentConfirmSchema,
   paymentRejectSchema,
+  paymentVoidSchema,
 } from '../validation/schemas';
 import bcrypt from 'bcryptjs';
 import { OrderStatus, TableZone, TableStatus, TenantRole } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 const router = Router();
 
@@ -372,6 +389,66 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
 });
 
 // GET /api/manager/orders — paginated (M-01 DoS hardening, capped at 100)
+type ManagerOrderRow = Prisma.OrderGetPayload<{ include: { items: true; table: true } }>;
+
+function formatManagerOrderRow(o: ManagerOrderRow) {
+  return {
+    id: o.id,
+    numericId: o.numericId,
+    restaurantId: o.restaurantId,
+    tableId: o.tableId,
+    tableNumber: o.table?.number,
+    tableName: o.table?.name || undefined,
+    sessionId: o.sessionId || undefined,
+    subtotal: o.subtotal,
+    total: o.total,
+    status: o.status,
+    paymentMethod: o.paymentMethod,
+    // Settlement state of the order (UNPAID | PENDING_VERIFICATION | PAID).
+    // Without it the cashier screen could not tell a bill awaiting transfer
+    // verification from a plain unpaid bill — and could not exclude it from
+    // a cash collection. The guest phone is intentionally NOT exposed here:
+    // it is only returned by the cashier verification queue.
+    paymentStatus: o.paymentStatus,
+    hasPaymentProof: Boolean(o.paymentProofPath),
+    paymentRejectedAt: o.paymentRejectedAt?.toISOString(),
+    // A held order must be explainable where it is absent: the operational
+    // screens show "rejected — the guest must act" instead of silently
+    // dropping the ticket. Derived from the stored marker, never from the
+    // gate value the client sends (there is no such thing).
+    paymentRejected: Boolean(o.paymentRejectedAt),
+    paymentRejectedReason: o.paymentRejectionReason || undefined,
+    settledAt: o.settledAt?.toISOString(),
+    // Payment authorization boundary, computed HERE (never from the client):
+    // `fulfillmentState` is the stored gate and `operational` is the single
+    // predicate the KDS/floor screens may act on.
+    fulfillmentState: normalizeFulfillmentState(o.fulfillmentState),
+    operational: isOperational(o.fulfillmentState),
+    releasedAt: o.releasedAt?.toISOString(),
+    // Staff cancellation markers (audit H-02) — when/why. The cancelling
+    // user id stays server-side; the AuditLog carries the actor.
+    cancelledAt: o.cancelledAt?.toISOString(),
+    cancelReason: o.cancelReason || undefined,
+    notes: o.notes || undefined,
+    estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
+    createdAt: o.createdAt.toISOString(),
+    updatedAt: o.updatedAt.toISOString(),
+    items: o.items.map((i) => ({
+      id: i.id,
+      productId: i.productId,
+      productName: i.productNameSnapshot,
+      productNameEn: i.productNameEnSnapshot || undefined,
+      unitPrice: i.priceSnapshot,
+      quantity: i.quantity,
+      totalPrice: i.totalPrice,
+      selectedSize: i.selectedSize || undefined,
+      selectedAddOns: i.selectedAddOns,
+      removedIngredients: i.removedIngredients,
+      specialInstructions: i.specialInstructions || undefined,
+    })),
+  };
+}
+
 router.get('/orders', async (req: Request, res: Response) => {
   try {
     const restaurantId = getTenantId(req);
@@ -393,6 +470,66 @@ router.get('/orders', async (req: Request, res: Response) => {
           ? { operationalOnly: false }
           : null;
 
+    // ---------------------------------------------------------------------
+    // OPERATIONAL VISIBILITY SCOPE (audit H-03).
+    //
+    // The historical default — "the N newest orders" — silently dropped any
+    // live order older than the pagination window: in a busy shift a PENDING
+    // ticket placed early vanished from the kitchen once 50 newer orders
+    // existed. Instead of raising the limit, `scope=operations` queries the
+    // domain sets the screens actually need (see services/orderVisibility):
+    //
+    //   1. LIVE: not-cancelled AND not-(served AND paid), ANY age, oldest
+    //      first — the oldest unattended ticket is always reachable;
+    //   2. RECENTLY-CLOSED: cancelled/settled rows updated within a bounded
+    //      sliding window (default 24h, max 72h), newest first — for the
+    //      history/cancelled tabs and the cashier's recent receipts.
+    //
+    // Truncation can only ever touch the history set, and it is REPORTED via
+    // `meta.*HasMore` instead of being silent.
+    // ---------------------------------------------------------------------
+    if (req.query.scope === 'operations') {
+      const closedHours = parseClosedWindowHours(req.query.closedHours);
+      const now = new Date();
+      const liveWhere = buildManagerOrderLiveWhere(restaurantId);
+      const historyWhere = buildManagerOrderHistoryWhere(restaurantId, now, closedHours);
+      const include = { items: true, table: true } as const;
+
+      const [liveTotal, live, historyTotal, history] = await Promise.all([
+        prisma.order.count({ where: liveWhere }),
+        prisma.order.findMany({
+          where: liveWhere,
+          include,
+          orderBy: { createdAt: 'asc' },
+          take: OPERATIONS_LIVE_TAKE,
+        }),
+        prisma.order.count({ where: historyWhere }),
+        prisma.order.findMany({
+          where: historyWhere,
+          include,
+          orderBy: { updatedAt: 'desc' },
+          take: OPERATIONS_HISTORY_TAKE,
+        }),
+      ]);
+
+      const merged = assembleOperationsOrders(live, history);
+      return res.json({
+        success: true,
+        data: merged.map(formatManagerOrderRow),
+        meta: {
+          scope: 'operations',
+          liveCount: live.length,
+          liveTotal,
+          liveHasMore: liveTotal > live.length,
+          historyCount: history.length,
+          historyTotal,
+          historyHasMore: historyTotal > history.length,
+          closedWindowHours: closedHours,
+        },
+        statusCode: 200,
+      });
+    }
+
     const orders = await prisma.order.findMany({
       where: {
         restaurantId,
@@ -413,57 +550,7 @@ router.get('/orders', async (req: Request, res: Response) => {
       skip,
     });
 
-    const formatted = orders.map((o) => ({
-      id: o.id,
-      numericId: o.numericId,
-      restaurantId: o.restaurantId,
-      tableId: o.tableId,
-      tableNumber: o.table?.number,
-      tableName: o.table?.name || undefined,
-      sessionId: o.sessionId || undefined,
-      subtotal: o.subtotal,
-      total: o.total,
-      status: o.status,
-      paymentMethod: o.paymentMethod,
-      // Settlement state of the order (UNPAID | PENDING_VERIFICATION | PAID).
-      // Without it the cashier screen could not tell a bill awaiting transfer
-      // verification from a plain unpaid bill — and could not exclude it from
-      // a cash collection. The guest phone is intentionally NOT exposed here:
-      // it is only returned by the cashier verification queue.
-      paymentStatus: o.paymentStatus,
-      hasPaymentProof: Boolean(o.paymentProofPath),
-      paymentRejectedAt: o.paymentRejectedAt?.toISOString(),
-      // A held order must be explainable where it is absent: the operational
-      // screens show "rejected — the guest must act" instead of silently
-      // dropping the ticket. Derived from the stored marker, never from the
-      // gate value the client sends (there is no such thing).
-      paymentRejected: Boolean(o.paymentRejectedAt),
-      paymentRejectedReason: o.paymentRejectionReason || undefined,
-      settledAt: o.settledAt?.toISOString(),
-      // Payment authorization boundary, computed HERE (never from the client):
-      // `fulfillmentState` is the stored gate and `operational` is the single
-      // predicate the KDS/floor screens may act on.
-      fulfillmentState: normalizeFulfillmentState(o.fulfillmentState),
-      operational: isOperational(o.fulfillmentState),
-      releasedAt: o.releasedAt?.toISOString(),
-      notes: o.notes || undefined,
-      estimatedPrepMinutes: o.estimatedPrepMinutes ?? undefined,
-      createdAt: o.createdAt.toISOString(),
-      updatedAt: o.updatedAt.toISOString(),
-      items: o.items.map((i) => ({
-        id: i.id,
-        productId: i.productId,
-        productName: i.productNameSnapshot,
-        productNameEn: i.productNameEnSnapshot || undefined,
-        unitPrice: i.priceSnapshot,
-        quantity: i.quantity,
-        totalPrice: i.totalPrice,
-        selectedSize: i.selectedSize || undefined,
-        selectedAddOns: i.selectedAddOns,
-        removedIngredients: i.removedIngredients,
-        specialInstructions: i.specialInstructions || undefined,
-      })),
-    }));
+    const formatted = orders.map(formatManagerOrderRow);
 
     return res.json({ success: true, data: formatted, statusCode: 200 });
   } catch (err) {
@@ -721,9 +808,10 @@ router.put(
   async (req: Request, res: Response) => {
     try {
       const { orderId } = req.params;
-      const { status, restaurantId } = req.body as {
+      const { status, restaurantId, reason } = req.body as {
         status: OrderStatus;
         restaurantId?: string;
+        reason?: string;
       };
       const targetRestId = restaurantId || req.user?.restaurantId;
 
@@ -747,6 +835,108 @@ router.put(
             'هذا الطلب بانتظار التحقق من الدفع من قبل الكاشير — لا يمكن بدء تحضيره قبل تأكيد الدفع.',
           statusCode: 409,
         });
+      }
+
+      // --------------------------------------------------------------------
+      // CANCELLATION (audit H-02, 2026-09-15). Reuses the existing CANCELLED
+      // enum value — no state invented. Invariants enforced here:
+      //   * ROLE: only cashier/manager/platform (financial-impacting action);
+      //     waiters/kitchen/service-staff get 403.
+      //   * MONEY GUARD: a PAID order can never be cancelled — the receipt is
+      //     an immutable ledger entry and must be voided first, which reverts
+      //     the order to UNPAID (see POST /payments/:paymentId/void).
+      //   * TRANSFER PROOF: cancelling an order awaiting cashier verification
+      //     auto-rejects the receipt in the same compare-and-set (storage
+      //     object discarded first, same policy as the reject endpoint), so no
+      //     screen can show "cancelled but still awaiting a decision".
+      //   * ISOLATION: tenant check above already ran; the CAS below still
+      //     pins restaurantId + the status snapshot so a concurrent transition
+      //     (kitchen starting cooking mid-cancel) fails loudly, not silently.
+      //   * REPLAY: repeating CANCEL on an already-cancelled order returns the
+      //     order idempotently (same convention as the flow transitions).
+      //   * AUDIT: ORDER_CANCELLED is written with actor, previous status and
+      //     reason; the order row is NEVER deleted (financial history is
+      //     preserved — the retention/archive sweeps treat it exactly like
+      //     before, by status).
+      // --------------------------------------------------------------------
+      if (status === 'CANCELLED') {
+        if (!canPerformStaffCancellation(req.user!.role)) {
+          return res.status(403).json({
+            success: false,
+            error: 'إلغاء الطلب متاح للكاشير أو مدير المطعم فقط',
+            statusCode: 403,
+          });
+        }
+        if (order.status === 'CANCELLED') {
+          return res.json({ success: true, data: { order }, statusCode: 200 });
+        }
+        const decision = evaluateStaffCancellation(order);
+        if (!decision.ok) {
+          return res
+            .status(decision.statusCode)
+            .json({ success: false, error: decision.error, statusCode: decision.statusCode });
+        }
+
+        const proofDeleted =
+          decision.clearsPendingVerification && order.paymentProofPath
+            ? await discardPaymentProof(order.paymentProofPath)
+            : true;
+
+        const cancelledAt = new Date();
+        const cancelClaim = await prisma.order.updateMany({
+          where: { id: orderId, restaurantId: targetRestId, status: order.status },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt,
+            cancelReason: reason || undefined,
+            cancelledByUserId: req.user!.id,
+            ...(decision.clearsPendingVerification
+              ? {
+                  paymentStatus: PAYMENT_STATUS.UNPAID,
+                  fulfillmentState: FULFILLMENT_STATE.PAYMENT_REJECTED,
+                  paymentRejectedAt: cancelledAt,
+                  paymentRejectionReason: reason || CANCELLATION_AUTO_REJECT_REASON,
+                  ...(proofDeleted ? { paymentProofPath: null } : {}),
+                }
+              : {}),
+          },
+        });
+        if (cancelClaim.count !== 1) {
+          return res.status(409).json({
+            success: false,
+            error: 'تغيرت حالة الطلب بواسطة مستخدم آخر. حدّث القائمة وحاول مجدداً.',
+            statusCode: 409,
+          });
+        }
+        const cancelledOrder = await prisma.order.findUnique({ where: { id: orderId } });
+
+        await logAuditEvent({
+          restaurantId: targetRestId,
+          userId: req.user!.id,
+          actor: req.user!.name,
+          actorRole: req.user!.role,
+          action: 'ORDER_CANCELLED',
+          entity: 'Order',
+          entityId: orderId,
+          details: `تم إلغاء الطلب ${orderId} (كان ${order.status})${reason ? ` — ${reason}` : ''}`,
+          metadata: {
+            previousStatus: order.status,
+            paymentStatus: order.paymentStatus,
+            clearedPendingVerification: decision.clearsPendingVerification,
+            proofDiscarded: decision.clearsPendingVerification ? proofDeleted : undefined,
+            reason: reason || undefined,
+          },
+          ipAddress: req.ip,
+        });
+
+        realtimeService.broadcastToTable(targetRestId, order.tableId, 'ORDER_CANCELLED', {
+          orderId,
+          tableId: order.tableId,
+          previousStatus: order.status,
+          cancelledAt: cancelledAt.toISOString(),
+        });
+
+        return res.json({ success: true, data: { order: cancelledOrder }, statusCode: 200 });
       }
 
       // Enforce the operational state machine at the authority boundary, not
@@ -827,18 +1017,28 @@ router.get('/tables', async (req: Request, res: Response) => {
       orderBy: { number: 'asc' },
     });
 
-    const formatted = tables.map((t) => ({
-      id: t.id,
-      restaurantId: t.restaurantId,
-      tableNumber: t.number,
-      capacity: t.capacity,
-      zone: t.zone,
-      status: t.status,
-      qrToken: t.qrToken,
-      hasWaiterCall: t.hasWaiterCall,
-      activeOrderIds: t.orders.map((o) => o.id),
-      lastActivityAt: t.lastActivityAt?.toISOString(),
-    }));
+    // H-01 (2026-09-15 audit): the qrToken is the anonymous capability printed
+    // on the table's QR card. Only roles that operate the QR-management
+    // surface may receive it; for waiter/kitchen/staff the key is OMITTED
+    // from the payload entirely (see services/tableSerialization).
+    const includeQrToken = canReadQrToken(req.user?.role);
+    const formatted = tables.map((t) =>
+      serializeStaffTable(
+        {
+          id: t.id,
+          restaurantId: t.restaurantId,
+          number: t.number,
+          capacity: t.capacity,
+          zone: t.zone,
+          status: t.status,
+          qrToken: t.qrToken,
+          hasWaiterCall: t.hasWaiterCall,
+          activeOrderIds: t.orders.map((o) => o.id),
+          lastActivityAt: t.lastActivityAt?.toISOString(),
+        },
+        includeQrToken
+      )
+    );
 
     return res.json({ success: true, data: formatted, statusCode: 200 });
   } catch (err) {
@@ -3071,6 +3271,10 @@ router.get('/payments', requireCashierOrManager(), async (req: Request, res: Res
       cashierId: p.cashierId || undefined,
       cashierName: p.cashierName,
       note: p.note || undefined,
+      // Void marker (audit H-02): a voided receipt stays visible in the ledger
+      // list — voiding never deletes or rewrites it.
+      voidedAt: p.voidedAt?.toISOString(),
+      voidReason: p.voidReason || undefined,
       createdAt: p.createdAt.toISOString(),
     }));
     return res.json({ success: true, data: formatted, statusCode: 200 });
@@ -3078,6 +3282,156 @@ router.get('/payments', requireCashierOrManager(), async (req: Request, res: Res
     return res.status(500).json({ success: false, error: 'تعذر استرجاع سجل الدفعات', statusCode: 500 });
   }
 });
+
+// POST /api/manager/payments/:paymentId/void — reverse a ledger receipt.
+//
+// (Audit H-02, 2026-09-15.) An erroneous collection must be correctable
+// WITHOUT being left as fabricated revenue and WITHOUT deleting anything:
+//   * The receipt row is an IMMUTABLE ledger entry — voiding marks
+//     voidedAt/voidReason/voidedByUserId; amounts are never rewritten and the
+//     row is never deleted (auditors keep the full trail).
+//   * Every covered order that is still PAID reverts atomically in the same
+//     transaction to UNPAID / AWAITING_PAYMENT (settledAt/cashierId/releasedAt
+//     cleared): the bill re-enters the cashier's collectable list and the
+//     staff-cancellation money guard, and it no longer counts as settled.
+//   * REPLAY: voiding an already-voided receipt answers idempotently with the
+//     current state — never a second mutation (double-click / retry safe).
+//   * RACE: a compare-and-set on `voidedAt: null` means exactly one of two
+//     concurrent void requests mutates; the loser gets 409.
+//   * AUDIT: PAYMENT_VOIDED with actor, receipt number, amount, covered order
+//     ids and IP — the inverse of PROCESS_PAYMENT.
+router.post(
+  '/payments/:paymentId/void',
+  requireCashierOrManager(),
+  paymentLimiter,
+  validateBody(paymentVoidSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+      const paymentId = String(req.params.paymentId);
+      const { reason } = req.body as { reason?: string };
+
+      const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+      if (!payment || payment.restaurantId !== restaurantId) {
+        return res
+          .status(404)
+          .json({ success: false, error: 'الإيصال غير موجود في هذا المطعم', statusCode: 404 });
+      }
+
+      if (payment.voidedAt) {
+        return res.json({
+          success: true,
+          data: {
+            paymentId: payment.id,
+            alreadyVoided: true,
+            voidedAt: payment.voidedAt.toISOString(),
+          },
+          statusCode: 200,
+        });
+      }
+
+      const decision = evaluatePaymentVoid(Boolean(payment.voidedAt));
+      if (!decision.ok) {
+        return res
+          .status(decision.statusCode)
+          .json({ success: false, error: decision.error, statusCode: decision.statusCode });
+      }
+
+      const now = new Date();
+      let reverted = 0;
+      try {
+        reverted = await prisma.$transaction(async (tx) => {
+          const claimed = await tx.payment.updateMany({
+            where: { id: payment.id, restaurantId, voidedAt: null },
+            data: {
+              voidedAt: now,
+              voidReason: reason || undefined,
+              voidedByUserId: req.user!.id,
+            },
+          });
+          if (claimed.count !== 1) {
+            throw Object.assign(new Error('VOID_RACE'), { code: 'VOID_RACE' });
+          }
+          const affected = await tx.order.updateMany({
+            where: {
+              id: { in: payment.orderIds },
+              restaurantId,
+              paymentStatus: PAYMENT_STATUS.PAID,
+            },
+            data: {
+              paymentStatus: PAYMENT_STATUS.UNPAID,
+              settledAt: null,
+              cashierId: null,
+              fulfillmentState: FULFILLMENT_STATE.AWAITING_PAYMENT,
+              releasedAt: null,
+            },
+          });
+          return affected.count;
+        });
+      } catch (txErr: unknown) {
+        if ((txErr as { code?: string })?.code === 'VOID_RACE') {
+          return res.status(409).json({
+            success: false,
+            error: 'تم إلغاء هذا الإيصال للتو من جهاز آخر. حدّث الصفحة.',
+            statusCode: 409,
+          });
+        }
+        throw txErr;
+      }
+
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role as TenantRole,
+        action: 'PAYMENT_VOIDED',
+        entity: 'Payment',
+        entityId: payment.id,
+        details: `تم إلغاء الإيصال ${payment.receiptNumber} (${payment.total}) — عاد ${reverted} طلبًا إلى غير مدفوع${reason ? ` — ${reason}` : ''}`,
+        metadata: {
+          paymentId: payment.id,
+          receiptNumber: payment.receiptNumber,
+          total: payment.total,
+          method: payment.method,
+          orderIds: payment.orderIds,
+          revertedOrders: reverted,
+          reason: reason || undefined,
+          voidedAt: now.toISOString(),
+        },
+        ipAddress: req.ip,
+      }).catch(() => undefined);
+
+      realtimeService.broadcastToTable(restaurantId, payment.tableId, 'PAYMENT_VOIDED', {
+        paymentId: payment.id,
+        receiptNumber: payment.receiptNumber,
+        tableId: payment.tableId,
+        total: payment.total,
+        revertedOrders: reverted,
+        voidedAt: now.toISOString(),
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          paymentId: payment.id,
+          alreadyVoided: false,
+          voidedAt: now.toISOString(),
+          revertedOrders: reverted,
+        },
+        statusCode: 200,
+      });
+    } catch (err: unknown) {
+      console.error('[Payment Void Error]', {
+        endpoint: 'POST /api/manager/payments/:paymentId/void',
+        paymentId: req.params?.paymentId,
+        tenantId: getTenantId(req),
+        message: (err as any)?.message || String(err),
+      });
+      return res.status(500).json({ success: false, error: 'تعذر إلغاء الإيصال', statusCode: 500 });
+    }
+  }
+);
 
 router.post(
   '/payments',

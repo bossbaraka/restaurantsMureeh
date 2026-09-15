@@ -82,3 +82,38 @@ export const FULFILLMENT_STATES: readonly FulfillmentState[] = [
   ...HELD_STATES,
   'RELEASED',
 ];
+
+// ---------------------------------------------------------------------------
+// Staff cancellation (audit H-02) — UI-side mirror of the server predicate in
+// server/services/orderCancellation.ts. The SERVER remains the authority;
+// this only decides whether a cancel affordance is offered at all.
+//
+// The single invariant: an order is staff-cancellable while its money has not
+// been claimed (paymentStatus !== 'PAID'). A PAID order must be voided first;
+// the void reverts it to UNPAID, after which it is cancellable.
+// ---------------------------------------------------------------------------
+export function isOrderCancellableByStaff(
+  order: { status?: string; paymentStatus?: string } | null | undefined
+): boolean {
+  if (!order) return false;
+  if (order.status === 'CANCELLED') return false;
+  if (order.paymentStatus === 'PAID') return false;
+  return (
+    order.status === 'PENDING' ||
+    order.status === 'PREPARING' ||
+    order.status === 'READY' ||
+    order.status === 'SERVED'
+  );
+}
+
+/** Roles that may see/click the staff-cancel affordance (server re-checks). */
+export const STAFF_CANCELLATION_ROLES: readonly string[] = [
+  'RESTAURANT_MANAGER',
+  'CASHIER',
+  'SUPER_ADMIN',
+  'PLATFORM_ADMIN',
+];
+
+export function canRoleCancelOrders(role: string | undefined | null): boolean {
+  return !!role && STAFF_CANCELLATION_ROLES.includes(role);
+}
