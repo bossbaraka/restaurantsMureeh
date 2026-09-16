@@ -39,8 +39,12 @@ export interface SupabaseStorageAdapter {
   listNames(folder: string, search: string): Promise<string[]>;
   /** Authenticated (service-role) download — used for the PRIVATE namespace. */
   download(key: string): Promise<{ body: Buffer; contentType: string } | null>;
-  /** Idempotent bucket creation (private buckets are never public-read). */
-  ensureBucket(bucket: string): Promise<void>;
+  /**
+   * Idempotent bucket creation. `isPublic` defaults to false so the private
+   * receipt bucket can never accidentally become public-read; the public
+   * asset bucket passes `true` explicitly.
+   */
+  ensureBucket(bucket: string, isPublic?: boolean): Promise<void>;
 }
 
 export function createSupabaseAdapter(
@@ -81,11 +85,12 @@ export function createSupabaseAdapter(
         contentType: data.type || 'application/octet-stream',
       };
     },
-    async ensureBucket(name) {
+    async ensureBucket(name, isPublic = false) {
       // createBucket is idempotent in practice: an existing bucket answers with
-      // an error we deliberately ignore. Private receipts must never live in a
-      // public-read bucket, so `public: false` is explicit and non-negotiable.
-      const { error } = await client.storage.createBucket(name, { public: false });
+      // an error we deliberately ignore (it is never recreated or replaced).
+      // Private receipts must never live in a public-read bucket, so the
+      // default is `public: false`; only the asset bucket opts into public.
+      const { error } = await client.storage.createBucket(name, { public: isPublic });
       if (error && !/exist/i.test(error.message || '')) {
         throw new Error(error.message || 'bucket creation failed');
       }
@@ -204,9 +209,18 @@ export class SupabaseStorageDriver implements StorageService, PrivateStorageServ
     await this.privateAdapter.remove([key]);
   }
 
+  /**
+   * Ensure the PUBLIC asset bucket exists (idempotent). Called from the
+   * boot readiness probe so a fresh Supabase project serves guest images
+   * without a manual dashboard step. An existing bucket is left untouched.
+   */
+  async ensurePublicBucket(): Promise<void> {
+    await this.adapter.ensureBucket(this.bucket, true);
+  }
+
   async ensureReady(): Promise<{ ok: boolean; error?: string }> {
     try {
-      await this.privateAdapter.ensureBucket(this.privateBucket);
+      await this.privateAdapter.ensureBucket(this.privateBucket, false);
       await this.privateAdapter.listNames('__healthcheck__', 'readiness-probe');
       return { ok: true };
     } catch (err) {

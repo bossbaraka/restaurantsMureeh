@@ -293,12 +293,14 @@ export async function seedGhosnCafe() {
     });
     console.log('✅ Created Restaurant:', restaurant.name);
   } else {
+    // Never overwrite custom production assets: only fill in the seed
+    // placeholders when the existing row has no asset of its own.
     await prisma.restaurant.update({
       where: { id: restaurant.id },
       data: {
         name: ghosnData.name,
-        logoUrl: ghosnData.logoUrl,
-        coverImageUrl: ghosnData.coverImageUrl,
+        logoUrl: restaurant.logoUrl ? undefined : ghosnData.logoUrl,
+        coverImageUrl: restaurant.coverImageUrl ? undefined : ghosnData.coverImageUrl,
       },
     });
   }

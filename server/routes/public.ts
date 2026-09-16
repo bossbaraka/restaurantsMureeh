@@ -502,6 +502,14 @@ router.get('/tables/qr/:qrToken', qrSessionLimiter, async (req: Request, res: Re
           // full catalog fetch resolves, so the kind must ride along here too —
           // otherwise a café or bakery shows restaurant copy in that window.
           businessType: table.restaurant.businessType,
+          // Complete visual identity: this object may become
+          // `currentRestaurant` before the catalog arrives, and a partial
+          // payload here used to reset the venue's theme to the defaults.
+          coverImage: resolveAssetUrl(table.restaurant.coverImageUrl),
+          logoFit: table.restaurant.logoFit,
+          logoPosition: table.restaurant.logoPosition,
+          primaryColor: table.restaurant.primaryColor,
+          accentColor: table.restaurant.accentColor,
         },
       },
       statusCode: 200,
@@ -593,6 +601,12 @@ router.post(
             // flashes an empty brand between session creation and catalog.
             logo: resolveAssetUrl(restaurant.logoUrl),
             businessType: restaurant.businessType,
+            nameEn: restaurant.nameEn,
+            coverImage: resolveAssetUrl(restaurant.coverImageUrl),
+            logoFit: restaurant.logoFit,
+            logoPosition: restaurant.logoPosition,
+            primaryColor: restaurant.primaryColor,
+            accentColor: restaurant.accentColor,
           },
         },
         statusCode: 200,

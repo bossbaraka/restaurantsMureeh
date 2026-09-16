@@ -760,7 +760,17 @@ class RestaurantApiService {
       body: { slug, restaurantId },
     });
     if (res.success && res.data) {
-      const restaurant = mapRestaurantRow({ ...res.data.restaurant, logoUrl: res.data.restaurant.logo, nameEn: res.data.restaurant.nameEn });
+      // The session payload carries the complete visual identity (theme
+      // colors, cover, logo framing). Map it through the same row mapper as
+      // every other restaurant payload so customer entry never downgrades
+      // an already-known theme to the platform defaults.
+      const raw = res.data.restaurant;
+      const restaurant = mapRestaurantRow({
+        ...raw,
+        logoUrl: raw.logoUrl || raw.logo,
+        coverImageUrl: raw.coverImageUrl || raw.coverImage,
+        nameEn: raw.nameEn,
+      });
       const table = mapTableRow({ id: res.data.tableId, restaurantId: restaurant.id, number: res.data.tableNumber });
       const session = mapSessionRow({ ...res.data, status: 'ACTIVE' }, restaurant.id, res.data.tableId);
       return { success: true, data: { session, table, restaurant }, statusCode: 200 };
