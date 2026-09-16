@@ -554,18 +554,25 @@ router.post(
         return res.status(403).json({ success: false, error: 'المطعم غير متاح للطلب حالياً', statusCode: 403 });
       }
 
-      // Check for existing active session
-      let session = await prisma.tableSession.findFirst({
-        where: {
-          restaurantId: restaurant.id,
-          tableId: table.id,
-          status: 'ACTIVE',
-          expiresAt: { gt: new Date() },
-        },
-      });
+      // Serialize session creation per table inside the database. The
+      // pre-existing find-then-create sequence was raceable: two simultaneous
+      // scans could create two active capabilities for one table. PostgreSQL's
+      // transaction-scoped advisory lock makes the invariant atomic without
+      // changing the public session contract or requiring frontend behavior.
+      const session = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`${restaurant.id}:${table.id}`}, 0))`;
 
-      if (!session) {
-        session = await prisma.tableSession.create({
+        const existing = await tx.tableSession.findFirst({
+          where: {
+            restaurantId: restaurant.id,
+            tableId: table.id,
+            status: 'ACTIVE',
+            expiresAt: { gt: new Date() },
+          },
+        });
+        if (existing) return existing;
+
+        return tx.tableSession.create({
           data: {
             restaurantId: restaurant.id,
             tableId: table.id,
@@ -574,7 +581,7 @@ router.post(
             expiresAt: new Date(Date.now() + 6 * 3600 * 1000), // 6 hours
           },
         });
-      }
+      });
 
       return res.json({
         success: true,

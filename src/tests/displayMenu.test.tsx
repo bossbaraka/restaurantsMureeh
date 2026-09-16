@@ -115,8 +115,9 @@ describe('DisplayMenu (read-only board)', () => {
     expect(html).toContain('المقبلات');
     expect(html).toContain('حمص بالصنوبر');
     expect(html).toContain('24');
-    // The board is branded with the platform so a filmed clip credits it.
-    expect(html).toContain('منصة مريح MUREEH');
+    // The customer-facing display is white-label and tenant-owned.
+    expect(html).not.toContain('منصة مريح MUREEH');
+    expect(html).not.toContain('MUREEH');
   });
 
   it('offers no way to order: no cart, no add button, no quantity stepper', () => {

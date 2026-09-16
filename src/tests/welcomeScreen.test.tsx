@@ -454,7 +454,8 @@ describe('§13 — QR morphs into the wordmark', () => {
     );
 
     expect(html).toContain('welcome-wordmark');
-    expect(html).toContain('MUREEH');
+    expect(html).toContain('مطعم الأوركيد');
+    expect(html).not.toContain('MUREEH');
     expect(html).toContain('رمز واحد يفتح تجربة كاملة');
     expect(html).not.toContain('اسحب إصبعك على الرمز');
   });

@@ -435,9 +435,6 @@ export const DisplayMenu: React.FC = () => {
         <footer className="display-menu__foot">
           <span>{restaurantName}</span>
           <span className="display-menu__dot" aria-hidden="true">·</span>
-          <span>
-            مُدار بواسطة <strong>منصة مريح MUREEH</strong>
-          </span>
           {displayUrl && <span className="display-menu__url">{displayUrl.replace(/^https?:\/\//, '')}</span>}
         </footer>
 

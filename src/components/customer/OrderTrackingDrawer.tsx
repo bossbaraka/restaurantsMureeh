@@ -547,20 +547,8 @@ export const OrderTrackingDrawer: React.FC = () => {
         )}
       </div>
 
-        {/* Sticky Footer: Order More, Call Waiter & Telegram Bot Support */}
+        {/* Sticky Footer: Order More & Call Waiter */}
         <div className="p-4 bg-luxury-950 border-t border-luxury-800 space-y-2 shrink-0">
-          <div className="flex items-center gap-2 text-xs justify-between">
-            <a
-              href="https://t.me/Mureeh_tech_bot"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 py-2 px-3 rounded-xl bg-sky-950/80 hover:bg-sky-900 border border-sky-500/40 text-sky-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <span>تليجرام الخدمة الدعم الفني:</span>
-              <span className="font-mono direction-ltr">@Mureeh_tech_bot</span>
-            </a>
-          </div>
-
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsWaiterModalOpen(true)}

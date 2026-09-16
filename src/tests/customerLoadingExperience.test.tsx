@@ -30,7 +30,9 @@ describe('loading states (INITIALIZING → RETRYING)', () => {
     const html = render(
       <CustomerLoadingExperience phase="LOADING_CATALOG" restaurant={restaurant} />
     );
-    expect(html).toContain('نجهّز لك التجربة...');
+    expect(html).toContain('Just a moment');
+    expect(html).toContain('لحظات ونكون جاهزين');
+    expect(html).toContain('mload__orbit');
     expect(html).toContain('mload__skeleton');
     expect(html).toContain('مطعم الاختبار');
     for (const term of TECHNICAL_TERMS) expect(html).not.toContain(term);
@@ -52,9 +54,23 @@ describe('loading states (INITIALIZING → RETRYING)', () => {
 
   it('the RETRYING phase keeps the same calm loader (no attempt counters)', () => {
     const html = render(<CustomerLoadingExperience phase="RETRYING" restaurant={restaurant} />);
-    expect(html).toContain('نجهّز لك التجربة...');
+    expect(html).toContain('Just a moment');
     expect(html).not.toContain('Attempt');
     expect(html).not.toContain('محاولة 2');
+  });
+});
+
+describe('continuous restaurant → coffee → time sequence', () => {
+  it.each([
+    ['INITIALIZING', 'Preparing your experience', 'بنحضّرلك تجربتك'],
+    ['LOADING_RESTAURANT', 'Brewing the experience', 'بنحضّرلك كل التفاصيل'],
+    ['LOADING_CATALOG', 'Just a moment', 'لحظات ونكون جاهزين'],
+  ] as const)('maps the real entry phase %s to %s without a timer', (phase, english, arabic) => {
+    const html = render(<CustomerLoadingExperience phase={phase} restaurant={restaurant} />);
+    expect(html).toContain(english);
+    expect(html).toContain(arabic);
+    expect(html).toContain('mload__orbit');
+    expect(html).not.toContain('setTimeout');
   });
 });
 

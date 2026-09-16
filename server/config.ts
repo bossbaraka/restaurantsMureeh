@@ -27,6 +27,9 @@ const envSchema = z.object({
   // Number of trusted reverse proxies in front of Express (Render/Nginx = 1).
   // Keep 0 for direct exposure so client IPs cannot be spoofed via headers.
   TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
+  // Deployment topology is explicit so a Render deployment cannot silently
+  // run with direct-exposure proxy semantics (or vice versa).
+  DEPLOYMENT_TOPOLOGY: z.enum(['render', 'direct']).default('direct'),
   // CSP frame-ancestors value for the API/SPA responses.
   FRAME_ANCESTORS: z.string().min(1).default("'self'"),
   // Public origin of this API service (https://api.example.com). Used to
@@ -115,6 +118,18 @@ if (isProd && allowedOrigins.length === 0) {
   );
 }
 
+if (isProd && env.DEPLOYMENT_TOPOLOGY === 'render' && env.TRUST_PROXY !== 1) {
+  throw new Error(
+    'TRUST_PROXY must equal 1 for the configured Render topology. Refusing to start.'
+  );
+}
+
+if (isProd && env.DEPLOYMENT_TOPOLOGY === 'direct' && env.TRUST_PROXY !== 0) {
+  throw new Error(
+    'TRUST_PROXY must equal 0 for the configured direct topology. Refusing to start.'
+  );
+}
+
 // Fail closed: a production API without a database is not "degraded", it is
 // broken — and booting anyway invites a fallback connection string being
 // added later "to make it work". Development/test may run without a DB so
@@ -177,6 +192,7 @@ export const config = {
   jwtSecret: env.JWT_SECRET,
   jwtExpiresIn: env.JWT_EXPIRES_IN,
   trustProxy: env.TRUST_PROXY,
+  deploymentTopology: env.DEPLOYMENT_TOPOLOGY,
   frameAncestors: env.FRAME_ANCESTORS,
   storageDriver: resolvedStorageDriver,
   uploadDir: env.UPLOAD_DIR,

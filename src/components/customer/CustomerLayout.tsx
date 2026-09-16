@@ -97,6 +97,20 @@ export const CustomerLayout: React.FC = () => {
   // Tenant palette -> CSS custom properties consumed by the whole menu.
   useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
 
+  // Public menu metadata is tenant-owned too: browser title, description and
+  // favicon must never expose the platform brand while a guest is browsing.
+  useEffect(() => {
+    if (typeof document === 'undefined' || !currentRestaurant) return;
+    const restaurantName = currentRestaurant.name || currentRestaurant.nameEn || 'القائمة الرقمية';
+    document.title = restaurantName;
+    const description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    description?.setAttribute('content', currentRestaurant.description || `القائمة الرقمية لـ ${restaurantName}`);
+    const favicon = document.querySelector<HTMLLinkElement>('link[data-restaurant-favicon]');
+    if (favicon && currentRestaurant.logo) {
+      favicon.href = currentRestaurant.logo;
+    }
+  }, [currentRestaurant]);
+
   const [preferences, updatePreferences] = useMenuPreferences(currentRestaurant?.slug || 'default');
   const { sort, layout, availableOnly } = preferences;
 
@@ -459,34 +473,7 @@ export const CustomerLayout: React.FC = () => {
             جميع الأسعار تشمل ضريبة القيمة المضافة · المحاسبة عند الكاشير
           </p>
 
-          {/* Platform Branding & WhatsApp Support */}
-          <div className="pt-3 border-t border-luxury-850/80 space-y-2">
-            <p className="text-xs font-semibold text-luxury-300">
-              الخدمة تعمل بوساطة <strong className="text-[#38BDF8]">منصة مريح MUREEH</strong>
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
-              <button
-                onClick={() => setViewMode('SAAS_LANDING')}
-                className="text-[11px] text-[#38BDF8]/90 hover:text-[#38BDF8] hover:underline font-semibold transition-colors cursor-pointer"
-                title="التعرف على خدمات المنصة واشتراكات المطاعم"
-              >
-                هل تملك مطعماً؟ احصل على نظام مريح الذكي ⚡
-              </button>
-              <a
-                href="https://t.me/Mureeh_tech_bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0072BC]/20 border border-[#0072BC]/40 text-[#38BDF8] text-[11px] font-bold hover:bg-[#0072BC]/30 transition-colors"
-              >
-                <span>تليجرام الدعم الفني:</span>
-                <span className="font-mono text-[#38BDF8] font-bold direction-ltr">@Mureeh_tech_bot</span>
-              </a>
-            </div>
-          </div>
 
-          <p className="text-[10px] text-luxury-600">
-            MUREEH Digital Dining & Smart Hospitality Platform © 2026
-          </p>
         </div>
       </footer>
 

@@ -624,9 +624,7 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
           <span className="entry-progress__label">02</span>
         </div>
 
-        {/* Persistent platform credit — the smallest element of the layer:
-            it supports the restaurant brand rather than competing with it. */}
-        <p className="entry-credit">{isEnglish ? 'Powered by Mureeh' : 'مدعوم بـ MUREEH'}</p>
+
       </div>
     </div>
   );

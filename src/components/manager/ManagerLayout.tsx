@@ -198,7 +198,7 @@ export const ManagerLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col md:flex-row" dir="rtl">
       {/* Sidebar Navigation */}
-      <aside className="w-full md:w-64 bg-luxury-950 border-b md:border-b-0 md:border-l border-luxury-800 p-4 shrink-0 flex flex-col justify-between">
+      <aside className="w-full md:w-64 bg-luxury-950 border-b md:border-b-0 md:border-l border-luxury-800 p-4 shrink-0 flex flex-col justify-between md:sticky md:top-0 md:h-screen md:overflow-y-auto">
         <div className="space-y-5">
           {/* Tenant Selector Dropdown (platform manager only) */}
           <div className="relative">
@@ -391,10 +391,33 @@ export const ManagerLayout: React.FC = () => {
 
       {/* Main Content Area */}
       <main
-        className={`flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-y-auto ${
+        className={`flex-1 p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full overflow-y-auto ${
           showMobileBottomNav ? 'pb-24 md:pb-8' : ''
         }`}
       >
+        <header className="manager-context-bar mb-5" aria-label="سياق لوحة التحكم">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-[11px] text-luxury-400 mb-1">
+              <span>لوحة التحكم</span>
+              <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="text-gold-400 truncate">{activeNavItem?.label || 'نظرة عامة'}</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-serif font-bold text-luxury-50 truncate">
+              {activeNavItem?.label || 'لوحة العمليات'}
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="manager-live-pill" role="status">
+              <span className="manager-live-dot" aria-hidden="true" />
+              مباشر
+            </span>
+            {totalAlerts > 0 && (
+              <span className="manager-alert-count" aria-label={`${totalAlerts} تنبيهات معلقة`}>
+                {totalAlerts} مهام معلقة
+              </span>
+            )}
+          </div>
+        </header>
         {isBooting ? (
           <ManagerBootSkeleton />
         ) : (

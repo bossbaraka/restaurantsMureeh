@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChefHat, Flame, Sparkles, UtensilsCrossed } from 'lucide-react';
+import { ChefHat, Coffee, Flame, Sparkles, UtensilsCrossed, Clock3 } from 'lucide-react';
 import type { EntryInvalidReason, EntryPhase } from '../../services/customerEntry';
 
 // ============================================================
@@ -169,6 +169,31 @@ const LoadingScene: React.FC = () => (
   </div>
 );
 
+type LoadingStage = 'RESTAURANT' | 'COFFEE' | 'TIME';
+
+const LoadingOrbit: React.FC<{ stage: LoadingStage; logo: string; name: string; onLogoError: () => void }> = ({
+  stage,
+  logo,
+  name,
+  onLogoError,
+}) => (
+  <div className="mload__orbit" aria-hidden="true">
+    <div className={`mload__orbit-item mload__orbit-item--restaurant ${stage === 'RESTAURANT' ? 'is-active' : ''}`}>
+      {logo ? <img src={logo} alt="" onError={onLogoError} /> : <UtensilsCrossed size={30} />}
+      <span>{name || 'Restaurant'}</span>
+    </div>
+    <div className={`mload__orbit-item mload__orbit-item--coffee ${stage === 'COFFEE' ? 'is-active' : ''}`}>
+      <Coffee size={30} />
+      <span>Brewing</span>
+    </div>
+    <div className={`mload__orbit-item mload__orbit-item--time ${stage === 'TIME' ? 'is-active' : ''}`}>
+      <Clock3 size={30} />
+      <span>Ready</span>
+    </div>
+    <span className="mload__orbit-core" />
+  </div>
+);
+
 /** Three short, warm lines that cross-fade under the status — CSS only. */
 const PacingLines: React.FC = () => (
   <div className="mload__poems" aria-hidden="true">
@@ -188,6 +213,17 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
   const isLoading = LOADING_PHASES.has(phase);
   const logo = !logoBroken && restaurant?.logo ? restaurant.logo : '';
   const name = restaurant?.name || restaurant?.nameEn || '';
+  const loadingStage: LoadingStage =
+    phase === 'LOADING_CATALOG' || phase === 'RETRYING'
+      ? 'TIME'
+      : phase === 'LOADING_RESTAURANT'
+        ? 'COFFEE'
+        : 'RESTAURANT';
+  const stageCopy = {
+    RESTAURANT: ['Preparing your experience', 'بنحضّرلك تجربتك'],
+    COFFEE: ['Brewing the experience', 'بنحضّرلك كل التفاصيل'],
+    TIME: ['Just a moment', 'لحظات ونكون جاهزين'],
+  }[loadingStage];
 
   return (
     <div className="mload" dir="rtl" aria-live="polite" aria-busy={isLoading}>
@@ -202,8 +238,9 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
       <div className="mload__inner">
         {isLoading && (
           <>
-            <div className="mload__stage">
+            <div className="mload__stage" data-loading-stage={loadingStage}>
               <LoadingScene />
+              <LoadingOrbit stage={loadingStage} logo={logo} name={name} onLogoError={() => setLogoBroken(true)} />
               <div className="mload__core">
                 {logo ? (
                   <img
@@ -220,7 +257,10 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
 
             <div className="mload__headline">
               {name && <div className="mload__name">{name}</div>}
-              <div className="mload__status">نجهّز لك التجربة...</div>
+              <div className="mload__status">
+                <span>{stageCopy[0]}</span>
+                <span className="mload__status-ar">{stageCopy[1]}</span>
+              </div>
             </div>
 
             <div className="mload__rail" aria-hidden="true">

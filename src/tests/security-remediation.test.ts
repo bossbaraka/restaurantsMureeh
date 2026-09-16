@@ -392,3 +392,26 @@ describe('PayloadTooLarge: base64 images are rejected, /uploads paths accepted',
     expect(src).toContain('حجم البيانات المرسلة كبير جداً');
   });
 });
+
+// SEC-001 — password login must never switch identity via another user's PIN.
+describe('SEC-001: password login is account-bound to PIN', () => {
+  it('does not search for or replace the authenticated user with a tenant PIN owner', () => {
+    const src = read('server/routes/auth.ts');
+    expect(src).toContain('A PIN supplied alongside a password is an additional credential');
+    expect(src).toContain("bcrypt.compare(pin, user.pinHash)");
+    const loginSection = src.split("// GET /api/auth/me")[0];
+    expect(loginSection).not.toContain('const candidates = await prisma.restaurantUser.findMany');
+    expect(loginSection).not.toContain('user = staffWorker');
+  });
+});
+
+// SEC-003 — active QR-session creation is serialized in PostgreSQL.
+describe('SEC-003: QR session creation is database-atomic', () => {
+  it('uses a transaction-scoped advisory lock before find/create', () => {
+    const src = read('server/routes/public.ts');
+    expect(src).toContain('prisma.$transaction');
+    expect(src).toContain('pg_advisory_xact_lock');
+    expect(src).toContain('tx.tableSession.findFirst');
+    expect(src).toContain('tx.tableSession.create');
+  });
+});

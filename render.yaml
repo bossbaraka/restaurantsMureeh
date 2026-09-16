@@ -18,6 +18,8 @@ services:
       # X-Forwarded-For chain.
       - key: TRUST_PROXY
         value: "1"
+      - key: DEPLOYMENT_TOPOLOGY
+        value: render
       - key: FRAME_ANCESTORS
         value: "'self'"
       - key: KEEP_ALIVE

@@ -112,40 +112,22 @@ router.post(
         });
       }
 
-      // If worker PIN is provided along with account email & password, switch identity to specific staff worker
-      if (pin && user.restaurantId) {
-        let isSelfPin = false;
-        if (user.pinHash) {
-          isSelfPin = await bcrypt.compare(pin, user.pinHash);
-        }
-
-        if (!isSelfPin) {
-          const candidates = await prisma.restaurantUser.findMany({
-            where: {
-              restaurantId: user.restaurantId,
-              status: 'ACTIVE',
-              pinHash: { not: null },
-            },
-            include: { restaurant: true },
+      // A PIN supplied alongside a password is an additional credential for
+      // THE SAME account. Never search the tenant for another user's PIN and
+      // replace the authenticated principal: doing so would let User A obtain
+      // User B's role by combining A's password with B's PIN. Staff who use a
+      // PIN as their primary credential must use POST /api/auth/pin, which is
+      // already tenant-scoped and issues that staff member's own identity.
+      if (pin) {
+        const selfPinMatches = user.pinHash
+          ? await bcrypt.compare(pin, user.pinHash)
+          : false;
+        if (!selfPinMatches) {
+          return res.status(401).json({
+            success: false,
+            error: 'رمز PIN غير صحيح لهذا الحساب',
+            statusCode: 401,
           });
-          const matchResults = await Promise.all(
-            candidates.map(async (candidate) => {
-              const matched = candidate.pinHash
-                ? await bcrypt.compare(pin, candidate.pinHash)
-                : false;
-              return matched ? candidate : null;
-            })
-          );
-          const staffWorker = matchResults.find(Boolean);
-          if (staffWorker) {
-            user = staffWorker;
-          } else {
-            return res.status(401).json({
-              success: false,
-              error: 'رمز الـ PIN الخاص بالعامل غير صحيح لهذا المطعم',
-              statusCode: 401,
-            });
-          }
         }
       }
 

@@ -346,6 +346,7 @@ interface QrMorphProps {
   token: string;
   palette: SplashPalette;
   reducedMotion: boolean;
+  brandLabel: string;
   /** Fired once the wordmark has assembled and the menu should take over. */
   onMaterialize: () => void;
 }
@@ -361,6 +362,7 @@ const QrMorphCanvas: React.FC<QrMorphProps> = ({
   token,
   palette,
   reducedMotion,
+  brandLabel,
   onMaterialize,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -407,7 +409,7 @@ const QrMorphCanvas: React.FC<QrMorphProps> = ({
     const oy = (h - cell * size) / 2;
     dimsRef.current = { w, h, cell, ox, oy };
 
-    const targets = sampleTextPoints('MUREEH MENU', w * 0.92, h * 0.5, 420);
+    const targets = sampleTextPoints(brandLabel || 'MENU', w * 0.92, h * 0.5, 420);
     let t = 0;
     particlesRef.current = [];
     grid.forEach((row, gy) => {
@@ -437,7 +439,7 @@ const QrMorphCanvas: React.FC<QrMorphProps> = ({
       ctx.font = `800 ${Math.round(h * 0.14)}px Georgia, serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('MUREEH MENU', w / 2, h / 2);
+      ctx.fillText(brandLabel || 'MENU', w / 2, h / 2);
       if (!materializedRef.current) {
         materializedRef.current = true;
         onMaterialize();
@@ -850,7 +852,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
     return null;
   }, [activeTableId, activeTableNumber, activeTable]);
 
-  const restName = currentRestaurant?.name || 'مطعم مريح';
+  const restName = currentRestaurant?.name || 'المطعم';
   const restNameEn = currentRestaurant?.nameEn || '';
   const logoImg = currentRestaurant?.logo ? optimizeImageUrl(currentRestaurant.logo, 240, 85) : '';
   const logoStyle: React.CSSProperties = {
@@ -1321,10 +1323,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
             )}
           </div>
 
-          {/* Platform watermark */}
-          <div className="relative z-10 text-center text-[10px] tracking-[0.2em] text-luxury-500">
-            MUREEH · منصة الضيافة الرقمية
-          </div>
+
         </div>
       )}
 
@@ -1476,11 +1475,8 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
               <div className="welcome-qr-stage relative mx-auto aspect-square w-full max-w-[260px]">
                 {qrMaterialized ? (
                   <div className="animate-in fade-in zoom-in-95 flex h-full w-full flex-col items-center justify-center gap-2 duration-700">
-                    <span className="welcome-wordmark font-serif text-2xl font-black tracking-[0.18em]">
-                      MUREEH
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.42em] text-[var(--brand-primary-strong)]">
-                      MENU
+                    <span className="welcome-wordmark font-serif text-2xl font-black tracking-[0.08em]">
+                      {currentRestaurant?.name || 'MENU'}
                     </span>
                     <span className="pt-1 text-[10px] text-luxury-400">
                       رمز واحد يفتح تجربة كاملة
@@ -1491,6 +1487,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                     token={tableNumStr || currentRestaurant?.slug || 'mureeh'}
                     palette={palette}
                     reducedMotion={reducedMotion}
+                    brandLabel={currentRestaurant?.name || 'MENU'}
                     onMaterialize={() => setQrMaterialized(true)}
                   />
                 )}
@@ -1584,22 +1581,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
               <ArrowLeft className="relative z-10 h-5 w-5 transition-transform group-hover:-translate-x-1" />
             </button>
 
-            <div className="flex items-center justify-between px-1 text-[11px] text-luxury-500">
-              <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                <span>مدعوم بـ</span>
-                <span className="font-bold tracking-wide text-luxury-200">MUREEH</span>
-              </div>
-              <a
-                href="https://t.me/Mureeh_tech_bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-luxury-300 transition-colors hover:text-luxury-50 focus-visible:outline-2 focus-visible:outline-offset-2"
-              >
-                <MessageCircle className="h-3.5 w-3.5 text-[var(--brand-primary-strong)]" />
-                <span>الدعم الفني</span>
-              </a>
-            </div>
+
           </footer>
 
         </div>
