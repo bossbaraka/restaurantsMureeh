@@ -295,18 +295,27 @@ export const CustomerLayout: React.FC = () => {
     return <DisplayMenu />;
   }
 
+  // Visual loading completion gate: ensures minimum visual duration and smooth 100% progress hand-off
+  const [visualLoadingComplete, setVisualLoadingComplete] = useState<boolean>(() => {
+    return (entryPhase ?? 'READY') === 'READY';
+  });
+
+  useEffect(() => {
+    if ((entryPhase ?? 'READY') !== 'READY') {
+      setVisualLoadingComplete(false);
+    }
+  }, [entryPhase]);
+
   // Guest entry in flight: the premium loader / recovery / invalid state owns
-  // the whole screen until the entry machine reaches READY. This replaces the
-  // old blank-then-error flash, and guarantees the menu (or the welcome
-  // layer) is never painted before session + catalog genuinely succeeded.
-  // `entryPhase` is READY by default for non-guest starts (staff preview etc).
-  if ((entryPhase ?? 'READY') !== 'READY') {
+  // the whole screen until the entry machine reaches READY and visual hand-off finishes.
+  if ((entryPhase ?? 'READY') !== 'READY' || !visualLoadingComplete) {
     return (
       <CustomerLoadingExperience
         phase={entryPhase}
         restaurant={currentRestaurant}
         invalidReason={entryInvalidReason}
         onRetry={retryEntry}
+        onComplete={() => setVisualLoadingComplete(true)}
       />
     );
   }

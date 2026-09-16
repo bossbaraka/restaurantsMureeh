@@ -6,6 +6,7 @@ interface AuthContextType {
   currentUser: RestaurantUser | null;
   setCurrentUser: (user: RestaurantUser | null) => void;
   currentManagerRestaurant: Restaurant | null;
+  setCurrentManagerRestaurant: React.Dispatch<React.SetStateAction<Restaurant | null>>;
   isAuthenticated: boolean;
   isSuperAdmin: boolean;
   isRestaurantManager: boolean;
@@ -300,6 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         setCurrentUser,
         currentManagerRestaurant,
+        setCurrentManagerRestaurant,
         isAuthenticated,
         isSuperAdmin,
         isRestaurantManager,

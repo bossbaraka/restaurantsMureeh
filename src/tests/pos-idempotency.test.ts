@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const read = (relative: string) =>
-  readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
+  readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
 
 describe('POS durable request idempotency regressions', () => {
   const schema = read('../../prisma/schema.prisma');

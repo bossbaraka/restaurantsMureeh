@@ -39,7 +39,7 @@ import {
  */
 
 const read = (relative: string) =>
-  readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
+  readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8').replace(/\r\n/g, '\n');
 
 const schema = read('../../prisma/schema.prisma');
 const migration = read('../../prisma/migrations/20260914180000_add_order_fulfillment_gate/migration.sql');

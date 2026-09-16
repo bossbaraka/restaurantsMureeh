@@ -55,6 +55,7 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
     settledAt?: Date | null;
     total?: number;
     customerName?: string;
+    customerPhone?: string;
   } = {}) {
     const id = `ord-${runTag}-${orders.length + 1}`;
     orders.push(id);
@@ -72,6 +73,7 @@ describe.skipIf(!hasDb)('Transfer payment proof end to end (real PostgreSQL)', (
         tax: 0,
         total: opts.total ?? 68,
         customerName: opts.customerName ?? null,
+        customerPhone: opts.customerPhone ?? null,
         createdAt: opts.createdAt ?? new Date(),
       },
     });

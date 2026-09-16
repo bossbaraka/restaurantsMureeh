@@ -14,7 +14,7 @@ import { computeSalesKpis } from '../services/analytics';
 import type { Order, PaymentRecord } from '../types/restaurant';
 
 const repoRoot = resolve(__dirname, '../..');
-const read = (p: string) => readFileSync(resolve(repoRoot, p), 'utf8');
+const read = (p: string) => readFileSync(resolve(repoRoot, p), 'utf8').replace(/\r\n/g, '\n');
 
 /**
  * H-02 (adversarial audit 2026-09-15) — staff order cancellation.

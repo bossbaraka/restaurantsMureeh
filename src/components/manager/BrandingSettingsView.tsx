@@ -122,9 +122,24 @@ export const BrandingSettingsView: React.FC = () => {
   const coverInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const mapInputRef = useRef<HTMLInputElement>(null);
+  const lastRestaurantIdRef = useRef<string>('');
+  const lastCommittedRestaurantRef = useRef<string>('');
+  const isDirtyRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (currentRestaurant) {
+      const isDifferentTenant = lastRestaurantIdRef.current !== currentRestaurant.id;
+      // If user has unsaved edits on the current restaurant, never overwrite them on background sync
+      if (!isDifferentTenant && isDirtyRef.current) {
+        return;
+      }
+
+      const restaurantKey = `${currentRestaurant.id}-${currentRestaurant.updatedAt || ''}-${currentRestaurant.logo}-${currentRestaurant.coverImage}-${currentRestaurant.name}`;
+      if (lastCommittedRestaurantRef.current === restaurantKey) return;
+      lastCommittedRestaurantRef.current = restaurantKey;
+      lastRestaurantIdRef.current = currentRestaurant.id;
+      isDirtyRef.current = false;
+
       setName(currentRestaurant.name);
       setNameEn(currentRestaurant.nameEn);
       setDescription(currentRestaurant.description);
@@ -155,8 +170,7 @@ export const BrandingSettingsView: React.FC = () => {
       setPromoVideoUrl(currentRestaurant.promoVideoUrl || '');
       setGalleryImages(currentRestaurant.galleryImages || []);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRestaurant?.id]);
+  }, [currentRestaurant]);
 
   if (!currentRestaurant) return null;
 
@@ -295,6 +309,9 @@ export const BrandingSettingsView: React.FC = () => {
       showToast('error', 'تعذر حفظ الهوية البصرية', res.error || 'يرجى المحاولة لاحقاً');
       return;
     }
+    isDirtyRef.current = false;
+    lastRestaurantIdRef.current = res.data.restaurant.id;
+    lastCommittedRestaurantRef.current = `${res.data.restaurant.id}-${res.data.restaurant.updatedAt || ''}-${res.data.restaurant.logo}-${res.data.restaurant.coverImage}-${res.data.restaurant.name}`;
     setCurrentRestaurant(res.data.restaurant);
     applyBrandTheme(res.data.restaurant.primaryColor, res.data.restaurant.accentColor, null, {
       presetId: activePreset || undefined,
@@ -353,7 +370,11 @@ export const BrandingSettingsView: React.FC = () => {
         {/* ============ Right column: editors ============ */}
         <div className="lg:col-span-3 space-y-6">
           {/* Basic info */}
-          <form onSubmit={handleSave} className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs">
+          <form
+            onSubmit={handleSave}
+            onInput={() => { isDirtyRef.current = true; }}
+            className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs"
+          >
             <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
               <UtensilsCrossed className="w-4 h-4 text-gold-400" />
               بيانات المطعم الأساسية

@@ -25,7 +25,12 @@ import { config as loadDotenv } from 'dotenv';
 // from the router modules, exactly the way the real server mounts them.
 // ============================================================================
 
-loadDotenv();
+const testEnvPath = path.resolve(__dirname, '../../.env.test');
+if (fs.existsSync(testEnvPath)) {
+  loadDotenv({ path: testEnvPath });
+} else {
+  loadDotenv();
+}
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 const RUN: 'on' | 'off' = hasDb ? 'on' : 'off';
@@ -37,7 +42,10 @@ process.env.STORAGE_DRIVER = 'local';
 process.env.UPLOAD_DIR = TMP_UPLOADS;
 process.env.NODE_ENV = 'test';
 delete process.env.APP_URL; // same-origin mode: relative /uploads/… URLs
-process.env.JWT_SECRET = process.env.JWT_SECRET || 'theme-persist-test-secret';
+process.env.JWT_SECRET =
+  process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32
+    ? process.env.JWT_SECRET
+    : 'theme-persist-test-secret-min-32-chars-long';
 process.env.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '2h';
 
 type App = ReturnType<typeof import('express')>;

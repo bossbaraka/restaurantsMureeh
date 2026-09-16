@@ -279,9 +279,19 @@ export function resolveBestInitialCategory(cats: Category[], prods: Product[]): 
 
 export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const auth = useAuth();
-  const { currentUser, currentManagerRestaurant, setCurrentUser: authSetCurrentUser, logout: authLogout } = auth;
+  const { currentUser, currentManagerRestaurant, setCurrentManagerRestaurant, setCurrentUser: authSetCurrentUser, logout: authLogout } = auth;
 
   const [currentRestaurant, setCurrentRestaurant] = useState<Restaurant | null>(null);
+
+  const updateCurrentRestaurant = useCallback((action: React.SetStateAction<Restaurant | null>) => {
+    setCurrentRestaurant((prev) => {
+      const next = typeof action === 'function' ? (action as (p: Restaurant | null) => Restaurant | null)(prev) : action;
+      if (next && (currentUser?.restaurantId === next.id || currentManagerRestaurant?.id === next.id)) {
+        setCurrentManagerRestaurant?.(next);
+      }
+      return next;
+    });
+  }, [currentUser?.restaurantId, currentManagerRestaurant?.id, setCurrentManagerRestaurant]);
   // Read-only menu board (TV / social media). Fixed for the session: it comes
   // from the URL and never flips while the board is open.
   const [displayMode] = useState<boolean>(isDisplayModeUrl);
@@ -575,12 +585,17 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!currentUser) return;
     if (viewMode === 'CUSTOMER' && currentTableSession) return; // keep QR session
     if (currentManagerRestaurant) {
-      setCurrentRestaurant((prev) =>
-        prev?.id === currentManagerRestaurant.id ? prev : currentManagerRestaurant
-      );
+      setCurrentRestaurant((prev) => {
+        if (!prev || prev.id !== currentManagerRestaurant.id) {
+          return currentManagerRestaurant;
+        }
+        return {
+          ...prev,
+          ...currentManagerRestaurant,
+        };
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentManagerRestaurant?.id]);
+  }, [currentUser?.id, currentManagerRestaurant, viewMode, currentTableSession]);
 
   // Keep brand theme synchronized and persistently cached when current restaurant changes
   useEffect(() => {
@@ -1860,7 +1875,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <RestaurantContext.Provider
       value={{
         currentRestaurant,
-        setCurrentRestaurant,
+        setCurrentRestaurant: updateCurrentRestaurant,
         availableRestaurants,
         tenantsList: availableRestaurants,
         currentUser,

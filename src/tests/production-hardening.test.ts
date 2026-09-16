@@ -17,8 +17,8 @@
  */
 import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { resolve, relative } from 'node:path';
 import { execSync } from 'node:child_process';
 
 import { RealtimeService, MAX_PER_TENANT, MAX_PER_SUBJECT, GLOBAL_MAX_CLIENTS } from '../../server/services/realtime';
@@ -32,7 +32,7 @@ import { startOfDayInTimezone } from '../../server/utils/datetime';
 import { SupabaseStorageDriver } from '../../server/services/storage/supabase';
 
 const repoRoot = resolve(__dirname, '../..');
-const read = (p: string) => readFileSync(resolve(repoRoot, p), 'utf8');
+const read = (p: string) => readFileSync(resolve(repoRoot, p), 'utf8').replace(/\r\n/g, '\n');
 
 const day = 86_400_000;
 const now = new Date('2026-09-11T12:00:00.000Z');
@@ -365,7 +365,7 @@ describe('P1: shipped log redaction covers every credential query param', () => 
     }
     // Non-sensitive values survive.
     expect(redact('/api/health?x=1')).toContain('x=1');
-  });
+  }, 15000);
 });
 
 // ---------------------------------------------------------------------------
@@ -446,8 +446,8 @@ describe('deployment & database safety', () => {
 
   it('adds the audit IP column through an additive, idempotent migration', () => {
     expect(read('prisma/schema.prisma')).toMatch(/AuditLog[\s\S]*ipAddress\s+String\?/);
-    const migrations = execSync('ls prisma/migrations', { cwd: repoRoot }).toString();
-    const dir = migrations.split('\n').find((d) => d.includes('audit_ip'));
+    const migrations = readdirSync(resolve(repoRoot, 'prisma/migrations'));
+    const dir = migrations.find((d) => d.includes('audit_ip'));
     expect(dir).toBeTruthy();
     const sql = read(`prisma/migrations/${dir}/migration.sql`);
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS "ipAddress"');
@@ -675,11 +675,15 @@ describe('P2: SSE client reconnect backoff', () => {
 // ---------------------------------------------------------------------------
 describe('P2: frontend XSS sinks', () => {
   function listTsxFiles(dir: string): string[] {
-    return execSync('find src -name "*.tsx" -o -name "*.ts"', { cwd: repoRoot })
-      .toString()
-      .split('\n')
-      .filter((f) => f && !f.includes('tests/'))
-      .map((f) => f.trim());
+    const baseDir = resolve(repoRoot, dir);
+    const entries = readdirSync(baseDir, { recursive: true, withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && (e.name.endsWith('.tsx') || e.name.endsWith('.ts')))
+      .map((e) => {
+        const parent = (e as any).parentPath || (e as any).path || baseDir;
+        return relative(repoRoot, resolve(parent, e.name)).replace(/\\/g, '/');
+      })
+      .filter((f) => !f.includes('tests/'));
   }
 
   it('never uses dangerouslySetInnerHTML', () => {

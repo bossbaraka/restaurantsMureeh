@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
-import { Search, Sparkles, Flame, ChefHat, Clock, ArrowLeft, UtensilsCrossed, Camera, Play, X, Eye } from 'lucide-react';
+import { Search, Sparkles, Flame, ChefHat, Clock, ArrowLeft, UtensilsCrossed, Camera, Play, X, Eye, ChevronRight, ChevronLeft } from 'lucide-react';
 import { OrderStatus } from '../../types/restaurant';
 import { optimizeImageUrl } from './ProductImage';
 import { useDialog } from '../../hooks/useDialog';
@@ -28,15 +28,68 @@ function toEmbeddableVideo(url: string): { kind: 'youtube'; src: string } | null
   return null;
 }
 
+const DEFAULT_GALLERY = [
+  'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=85',
+  'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=85',
+  'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=85',
+  'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1200&q=85',
+];
+
 export const CustomerHero: React.FC = () => {
   const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
 
-  const [activeGalleryImg, setActiveGalleryImg] = useState<string | null>(null);
+  const galleryList = (currentRestaurant?.galleryImages && currentRestaurant.galleryImages.length > 0)
+    ? currentRestaurant.galleryImages
+    : DEFAULT_GALLERY;
+
+  const [activeGalleryIndex, setActiveGalleryIndex] = useState<number | null>(null);
   const [isPlayingVideo, setIsPlayingVideo] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+
+  const handleNext = () => {
+    setActiveGalleryIndex((prev) => (prev !== null ? (prev + 1) % galleryList.length : 0));
+  };
+
+  const handlePrev = () => {
+    setActiveGalleryIndex((prev) => (prev !== null ? (prev - 1 + galleryList.length) % galleryList.length : 0));
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(deltaX) > 40) {
+      if (deltaX > 0) {
+        // In RTL, swipe right goes to previous image
+        handlePrev();
+      } else {
+        // Swipe left goes to next image
+        handleNext();
+      }
+    }
+    touchStartX.current = null;
+  };
 
   // Full-screen photo lightbox: Escape closes, focus is trapped and restored.
-  useDialog({ isOpen: !!activeGalleryImg, onClose: () => setActiveGalleryImg(null) });
+  useDialog({ isOpen: activeGalleryIndex !== null, onClose: () => setActiveGalleryIndex(null) });
+
+  // Keyboard arrow navigation for lightbox
+  useEffect(() => {
+    if (activeGalleryIndex === null || typeof window === 'undefined') return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') {
+        handlePrev();
+      } else if (e.key === 'ArrowLeft') {
+        handleNext();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeGalleryIndex, galleryList.length]);
 
   // The promo video plays inline inside the hero: Escape still closes it, but
   // it is non-modal — no scroll lock or focus trap for an in-page media swap.
@@ -54,18 +107,6 @@ export const CustomerHero: React.FC = () => {
   const restDesc = currentRestaurant?.description || 'مأكولات استثنائية محضرة بأيدي نخبة الطهاة بأرقى المكونات المعتقة.';
   const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
   const promoVideo = currentRestaurant?.promoVideoUrl || '';
-
-  // Default interior dining hall gallery shots if none uploaded yet
-  const defaultGallery = [
-    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=85',
-    'https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?auto=format&fit=crop&w=1200&q=85',
-    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=85',
-    'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1200&q=85',
-  ];
-
-  const galleryList = (currentRestaurant?.galleryImages && currentRestaurant.galleryImages.length > 0)
-    ? currentRestaurant.galleryImages
-    : defaultGallery;
 
   const latestOrder = activeTableOrders.length > 0 ? activeTableOrders[0] : null;
   const statusCfg = latestOrder ? getOrderStatusConfig(latestOrder.status) : null;
@@ -169,41 +210,144 @@ export const CustomerHero: React.FC = () => {
         )}
       </div>
 
-      {/* RESTAURANT DINING HALL & INTERIOR CREATIVE GALLERY BAR */}
-      <div className="mt-4 p-3.5 rounded-2xl bg-luxury-900/90 border border-luxury-800 space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <span className="text-xs font-bold text-luxury-200 flex items-center gap-1.5">
-            <Camera className="w-4 h-4 text-[var(--brand-primary-strong)]" />
-            <span>لقطات حية من داخل صالة المطعم والأجواء</span>
-          </span>
-          <span className="text-[11px] text-luxury-400 font-mono">
-            {galleryList.length} صور مصورة
-          </span>
-        </div>
+      {/* RESTAURANT DINING HALL & EDITORIAL ATMOSPHERE GALLERY */}
+      {galleryList.length > 0 && (
+        <div className="mt-5 p-4 sm:p-5 rounded-3xl bg-luxury-900/90 border border-luxury-800 space-y-3.5 shadow-2xl">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs sm:text-sm font-bold text-luxury-100 flex items-center gap-2">
+              <Camera className="w-4 h-4 text-[var(--brand-primary-strong)]" />
+              <span>أجواء وصالة المطعم الحية</span>
+            </span>
+            <span className="text-[11px] text-luxury-400 font-mono">
+              {galleryList.length} لقطات حصرية
+            </span>
+          </div>
 
-        {/* Scrollable Gallery Thumbnails Strip */}
-        <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1">
-          {galleryList.map((imgUrl, index) => (
+          {/* Desktop & Tablet: Large main image + clean secondary asymmetric grid */}
+          <div className="hidden md:grid grid-cols-12 gap-3.5 items-stretch">
+            {/* Main Atmosphere Hero Image */}
             <button
-              key={index}
-              onClick={() => setActiveGalleryImg(imgUrl)}
-              aria-label={`عرض صورة المعرض رقم ${index + 1}`}
-              className="relative w-28 h-20 sm:w-36 sm:h-24 rounded-xl overflow-hidden shrink-0 border border-luxury-750 group cursor-pointer hover:border-[rgb(var(--brand-primary-strong-rgb)/0.8)] transition-all shadow-md"
+              type="button"
+              onClick={() => setActiveGalleryIndex(0)}
+              aria-label="عرض صورة الصالة الرئيسية بالحجم الكامل"
+              className={`${
+                galleryList.length === 1 ? 'col-span-12 h-[420px]' : 'col-span-7 h-[420px]'
+              } relative rounded-2xl overflow-hidden group cursor-pointer border border-luxury-800 shadow-xl transition-all hover:border-[var(--brand-primary-strong)] text-right`}
             >
               <img
-                src={optimizeImageUrl(imgUrl, 420, 70)}
-                alt={`صالة المطعم ${index + 1}`}
+                src={optimizeImageUrl(galleryList[0], 1200, 80)}
+                alt="الصورة الرئيسية لصالة المطعم"
                 loading="lazy"
                 decoding="async"
-                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
               />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                <Eye className="w-5 h-5 text-[var(--brand-primary-strong)]" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+              <div className="absolute bottom-3.5 right-3.5 z-10 flex items-center gap-2 text-white">
+                <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/20 text-xs font-bold flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
+                  <span>اللقطة الرئيسية</span>
+                </div>
               </div>
             </button>
-          ))}
+
+            {/* Supporting Asymmetric Secondary Grid */}
+            {galleryList.length > 1 && (
+              <div
+                className={`col-span-5 grid gap-3 ${
+                  galleryList.length === 2
+                    ? 'grid-cols-1 h-[420px]'
+                    : galleryList.length === 3
+                    ? 'grid-cols-1 grid-rows-2 h-[420px]'
+                    : 'grid-cols-2 grid-rows-2 h-[420px]'
+                }`}
+              >
+                {galleryList.slice(1, 5).map((imgUrl, idx) => {
+                  const actualIndex = idx + 1;
+                  const isLastSlot = idx === 3 && galleryList.length > 5;
+                  return (
+                    <button
+                      key={actualIndex}
+                      type="button"
+                      onClick={() => setActiveGalleryIndex(actualIndex)}
+                      aria-label={`عرض صورة المعرض رقم ${actualIndex + 1}`}
+                      className="relative w-full h-full rounded-xl overflow-hidden group cursor-pointer border border-luxury-800 transition-all hover:border-[var(--brand-primary-strong)] shadow-md"
+                    >
+                      <img
+                        src={optimizeImageUrl(imgUrl, 600, 75)}
+                        alt={`لقطة ${actualIndex + 1}`}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                        <Eye className="w-5 h-5 text-[var(--brand-primary-strong)]" />
+                      </div>
+                      {isLastSlot && (
+                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-white font-bold font-mono text-sm">
+                          +{galleryList.length - 4} صور
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Mobile: Large main atmosphere card + swipeable scroll-snap strip */}
+          <div className="block md:hidden space-y-2.5">
+            {/* Mobile Main Atmosphere Image */}
+            <button
+              type="button"
+              onClick={() => setActiveGalleryIndex(0)}
+              aria-label="عرض صورة الصالة الرئيسية"
+              className="w-full aspect-[4/3] relative rounded-2xl overflow-hidden border border-luxury-800 shadow-lg text-right group cursor-pointer"
+            >
+              <img
+                src={optimizeImageUrl(galleryList[0], 800, 80)}
+                alt="الصورة الرئيسية لصالة المطعم"
+                loading="lazy"
+                decoding="async"
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none" />
+              <div className="absolute bottom-2.5 right-2.5 z-10 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/20 text-[11px] font-bold text-white flex items-center gap-1.5">
+                <Eye className="w-3 h-3 text-[var(--brand-primary-strong)]" />
+                <span>اللقطة الرئيسية</span>
+              </div>
+            </button>
+
+            {/* Mobile Secondary Swipeable Snap Strip */}
+            {galleryList.length > 1 && (
+              <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar py-1 snap-x">
+                {galleryList.slice(1).map((imgUrl, idx) => {
+                  const actualIndex = idx + 1;
+                  return (
+                    <button
+                      key={actualIndex}
+                      type="button"
+                      onClick={() => setActiveGalleryIndex(actualIndex)}
+                      aria-label={`عرض صورة المعرض رقم ${actualIndex + 1}`}
+                      className="relative w-36 aspect-[4/3] rounded-xl overflow-hidden shrink-0 border border-luxury-800 snap-start group cursor-pointer shadow-md"
+                    >
+                      <img
+                        src={optimizeImageUrl(imgUrl, 420, 70)}
+                        alt={`لقطة ${actualIndex + 1}`}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      />
+                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                        <Eye className="w-4 h-4 text-[var(--brand-primary-strong)]" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* PROMINENT LIVE ORDER STATUS BANNER ON MENU PAGE */}
       {latestOrder && statusCfg && (
@@ -359,30 +503,78 @@ export const CustomerHero: React.FC = () => {
       )}
 
       {/* FULLSCREEN LIGHTBOX FOR INTERIOR HALL GALLERY PHOTOS */}
-      {activeGalleryImg && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+      {activeGalleryIndex !== null && galleryList[activeGalleryIndex] && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-xl animate-in fade-in duration-300 select-none"
+          onClick={() => setActiveGalleryIndex(null)}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Close button */}
           <button
-            onClick={() => setActiveGalleryImg(null)}
-            className="absolute top-4 left-4 p-2.5 rounded-full bg-luxury-900 text-luxury-200 hover:text-white border border-luxury-700 transition-colors z-10"
+            type="button"
+            onClick={() => setActiveGalleryIndex(null)}
+            className="absolute top-4 left-4 p-2.5 rounded-full bg-luxury-900/80 text-luxury-200 hover:text-white border border-luxury-700/60 transition-colors z-20 backdrop-blur-sm"
             aria-label="إغلاق الصورة"
           >
             <X className="w-6 h-6" />
           </button>
 
+          {/* Counter Badge */}
+          <div className="absolute top-4 right-4 z-20 px-3.5 py-1.5 rounded-full bg-luxury-900/80 border border-luxury-700/60 text-xs font-mono font-bold text-luxury-200 backdrop-blur-sm">
+            <span>{activeGalleryIndex + 1}</span>
+            <span className="text-luxury-500 mx-1">/</span>
+            <span>{galleryList.length}</span>
+          </div>
+
+          {/* Previous Button (Right arrow in RTL / Prev) */}
+          {galleryList.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePrev();
+              }}
+              className="absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/60 text-white hover:bg-black/90 border border-white/20 transition-all hover:scale-110 shadow-lg"
+              aria-label="الصورة السابقة"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Next Button (Left arrow in RTL / Next) */}
+          {galleryList.length > 1 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNext();
+              }}
+              className="absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-20 p-3 rounded-full bg-black/60 text-white hover:bg-black/90 border border-white/20 transition-all hover:scale-110 shadow-lg"
+              aria-label="الصورة التالية"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+
+          {/* Modal Container */}
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="صورة من صالة المطعم"
-            className="relative max-w-4xl max-h-[85vh] w-full rounded-2xl overflow-hidden border border-luxury-700 shadow-2xl"
+            aria-label={`صورة من صالة المطعم (${activeGalleryIndex + 1} من ${galleryList.length})`}
+            className="relative max-w-5xl max-h-[85vh] w-full rounded-2xl overflow-hidden border border-luxury-800 shadow-2xl bg-black/50 flex flex-col items-center justify-center"
             dir="rtl"
+            onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={activeGalleryImg}
-              alt="صالة المطعم"
-              className="w-full h-full object-contain max-h-[85vh] mx-auto"
+              src={galleryList[activeGalleryIndex]}
+              alt={`صورة من صالة وأجواء المطعم ${activeGalleryIndex + 1}`}
+              className="w-full h-full object-contain max-h-[80vh] mx-auto select-none"
             />
-            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 to-transparent text-right text-xs text-luxury-200">
-              <span className="font-bold font-serif text-sm text-[var(--brand-primary-strong)]">لقطة من داخل صالة وأجواء {restName}</span>
+            <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent text-right text-xs text-luxury-200">
+              <span className="font-bold font-serif text-sm text-[var(--brand-primary-strong)]">
+                لقطة من داخل صالة وأجواء {restName}
+              </span>
             </div>
           </div>
         </div>

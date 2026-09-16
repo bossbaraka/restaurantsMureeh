@@ -105,3 +105,58 @@ describe('structure & accessibility', () => {
     expect(settled).toContain('aria-busy="false"');
   });
 });
+
+describe('cinematic 3-stage customer loading & atmosphere UX', () => {
+  it('renders all 3 visual stages (01-المطعم, 02-الأجواء, 03-التجربة) and progress bar', () => {
+    const restaurantWithAtmosphere = {
+      ...restaurant,
+      coverImage: 'https://cdn.example.test/cover.webp',
+      galleryImages: ['https://cdn.example.test/gallery1.webp', 'https://cdn.example.test/gallery2.webp'],
+    };
+    const html = render(<CustomerLoadingExperience phase="LOADING_CATALOG" restaurant={restaurantWithAtmosphere} />);
+
+    // Check step numbers and labels
+    expect(html).toContain('01');
+    expect(html).toContain('المطعم');
+    expect(html).toContain('02');
+    expect(html).toContain('الأجواء');
+    expect(html).toContain('03');
+    expect(html).toContain('التجربة');
+
+    // Check progress bar structure
+    expect(html).toContain('mload-progress-track');
+    expect(html).toContain('mload-progress-fill');
+    expect(html).toContain('mload-progress-shine');
+
+    // Check showcase slide image
+    expect(html).toContain('mload-showcase');
+    expect(html).toContain('https://cdn.example.test/cover.webp');
+  });
+
+  it('renders rich 3D CSS fallback scene when restaurant has zero images', () => {
+    const restaurantNoImages = {
+      name: 'مطعم بلا صور',
+      nameEn: 'No Image Restaurant',
+      logo: '',
+      coverImage: '',
+      galleryImages: [],
+    };
+    const html = render(<CustomerLoadingExperience phase="LOADING_CATALOG" restaurant={restaurantNoImages} />);
+
+    // Verifies 3D CSS architectural fallback is rendered
+    expect(html).toContain('mload__scene');
+    expect(html).toContain('mload__halo-glow');
+    expect(html).toContain('mload__floor');
+    expect(html).toContain('mload__ring');
+    expect(html).toContain('mload__cube');
+  });
+
+  it('renders initials in monogram when logo is missing', () => {
+    const html = render(
+      <CustomerLoadingExperience phase="LOADING_CATALOG" restaurant={{ name: 'شوارما البركة' }} />
+    );
+    expect(html).toContain('mload__monogram');
+    // Arabic letter "ش"
+    expect(html).toContain('ش');
+  });
+});

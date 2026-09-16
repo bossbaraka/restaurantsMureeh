@@ -1673,6 +1673,8 @@ class RestaurantApiService {
         timezone: patch.timezone,
         primaryColor: patch.primaryColor,
         accentColor: patch.accentColor,
+        logoFit: patch.logoFit,
+        logoPosition: patch.logoPosition,
         businessType: patch.businessType,
         promoVideoUrl: patch.promoVideoUrl,
         galleryImages: patch.galleryImages,
