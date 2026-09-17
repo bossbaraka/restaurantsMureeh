@@ -1,10 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, getOrderStatusConfig } from '../../utils/formatting';
 import { Search, Sparkles, Flame, ChefHat, Clock, ArrowLeft, UtensilsCrossed, Camera, Play, X, Eye, ChevronRight, ChevronLeft } from 'lucide-react';
 import { OrderStatus } from '../../types/restaurant';
 import { optimizeImageUrl } from './ProductImage';
 import { useDialog } from '../../hooks/useDialog';
+import {
+  isAwaitingGuestPayment,
+  isPaymentVerificationPending,
+  isPaymentRejected,
+  isOrderOperational,
+} from '../../utils/orderLifecycle';
 
 /**
  * Turn a manager-supplied promo-video link into an embeddable YouTube player
@@ -127,6 +133,34 @@ export const CustomerHero: React.FC = () => {
   };
 
   const currentStep = latestOrder ? getStepIndex(latestOrder.status) : 0;
+  const isAwaitingPayment = latestOrder ? isAwaitingGuestPayment(latestOrder) : false;
+  const isVerificationPending = latestOrder ? isPaymentVerificationPending(latestOrder) : false;
+
+  const heroOrderStatusText = useMemo(() => {
+    if (!latestOrder) return '';
+    if (isAwaitingGuestPayment(latestOrder)) {
+      return 'طلبك بانتظار تأكيد الدفع لبدء التحضير';
+    }
+    if (isPaymentVerificationPending(latestOrder)) {
+      return 'جاري التحقق من إشعار التحويل بواسطة الكاشير';
+    }
+    if (isPaymentRejected(latestOrder)) {
+      return 'لم يتم تأكيد إشعار التحويل — يرجى مراجعة الكاشير';
+    }
+    if (latestOrder.status === 'PREPARING') {
+      return 'المطبخ الحي يعمل على تجهيز طلبك الآن بكل عناية';
+    }
+    if (latestOrder.status === 'READY') {
+      return 'طلبك جاهز ولذيذ وبانتظار التقديم';
+    }
+    if (latestOrder.status === 'SERVED') {
+      return 'تم تقديم وجبتك، نتمنى لك تجربة ممتعة';
+    }
+    if (isOrderOperational(latestOrder)) {
+      return 'تم تأكيد الدفع، والمطبخ يستعد لتحضير طلبك';
+    }
+    return 'طلبك بانتظار تأكيد الدفع لبدء التحضير';
+  }, [latestOrder]);
 
   return (
     <div className="relative overflow-hidden mb-6">
@@ -355,7 +389,11 @@ export const CustomerHero: React.FC = () => {
           <div className="flex items-center justify-between border-b border-luxury-800 pb-2.5">
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
-                <ChefHat className="w-5 h-5 animate-pulse" />
+                {isAwaitingPayment || isVerificationPending ? (
+                  <Clock className="w-5 h-5 text-amber-400" />
+                ) : (
+                  <ChefHat className="w-5 h-5 animate-pulse" />
+                )}
               </div>
               <div>
                 <div className="flex items-center gap-2">
@@ -365,7 +403,7 @@ export const CustomerHero: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-[11px] text-luxury-400 mt-0.5">
-                  المطبخ الحي يعمل على تجهيز طلبك الآن بكل عناية
+                  {heroOrderStatusText}
                 </p>
               </div>
             </div>

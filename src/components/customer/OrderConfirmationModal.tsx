@@ -66,7 +66,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             </div>
             <div>
               <h3 id="order-confirmation-title" className="text-base font-bold text-luxury-50 font-serif">
-                تأكيد إرسال الطلب إلى المطبخ
+                تأكيد الطلب
               </h3>
               <p className="text-xs text-luxury-400">
                 {currentRestaurant?.name} · طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? (activeTableId ? formatTableNumber(activeTableId) || '—' : '—')}
@@ -130,7 +130,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
           <div className="flex items-center gap-2 pt-2 border-t border-luxury-850 text-[11px] text-amber-300/90">
             <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-            <span>المحاسبة تتم نقداً أو بالبطاقة عند الكاشير بعد الانتهاء من وجبتك.</span>
+            <span>يتم تأكيد الطلب وبدء التحضير فور الدفع نقداً أو بالبطاقة لدى الكاشير، أو عبر التحويل.</span>
           </div>
         </div>
 
@@ -150,7 +150,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
-            <span>{isSubmitting ? 'جاري الإرسال...' : 'تأكيد وإرسال الطلب للمطبخ'}</span>
+            <span>{isSubmitting ? 'جاري التأكيد...' : 'تأكيد الطلب'}</span>
           </button>
         </div>
       </div>

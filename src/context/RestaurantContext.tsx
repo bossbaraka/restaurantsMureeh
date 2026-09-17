@@ -1416,15 +1416,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         soundFX.playChime();
         setIsCartOpen(false);
         setIsOrderTrackingOpen(true);
-        // THE AUTHORIZATION BOUNDARY, guest side: the order was accepted but is
-        // NOT part of the restaurant's workflow yet. The guest goes straight to
-        // the payment confirmation screen (phone + receipt); the order only
-        // reaches the kitchen after the cashier verifies that payment.
-        setPaymentStepOrder(res.data.order);
+        // F-03 (UX-Audit): Open OrderTrackingDrawer only. Do NOT auto-open TransferPaymentModal.
+        // The transfer form is opened on demand from inside the tracking drawer.
+        // setPaymentStepOrder(res.data.order);
         showToast(
           'info',
           'تم إرسال طلبك، يرجى تأكيد عملية الدفع لإتمام الطلب.',
-          'هل ستدفع بتحويل بنكي أو محفظة؟ أرسل إشعار التحويل الآن — بعد تأكيد الكاشير ينتقل طلبك للمطبخ فوراً، أو ادفع عند الكاشير.'
+          'طلبك بانتظار تأكيد الدفع لبدء التحضير. هل ستدفع بتحويل بنكي أو محفظة؟ يمكنك إرسال إشعار التحويل من شاشة التتبع، أو الدفع نقداً لدى الكاشير.'
         );
         return { success: true, order: res.data.order };
       }
