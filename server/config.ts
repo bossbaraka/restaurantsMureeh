@@ -100,6 +100,33 @@ const env = parsed.data;
 export const isProd = env.NODE_ENV === 'production';
 export const isTest = env.NODE_ENV === 'test';
 
+// ------------------------------------------------------------
+// Production infrastructure detection — NOT derived from NODE_ENV.
+//
+// The storage guard at the bottom of this file is what keeps tenant images
+// alive across a restart, and it used to be keyed on `NODE_ENV === 'production'`
+// alone. That is only sound when the operator remembered to set NODE_ENV: a
+// Render service with NODE_ENV unset (this file's default is `development`) or
+// overridden in the dashboard booted happily on the ephemeral filesystem and
+// lost every uploaded logo/cover/gallery image on the next redeploy.
+//
+// Render injects its own variables into every service at build AND run time,
+// whatever NODE_ENV says (platform "Default Environment Variables": RENDER is
+// always "true", plus RENDER_SERVICE_ID / RENDER_EXTERNAL_HOSTNAME). Those are
+// the only names used here — read from the environment, never defaulted, so a
+// host that does not set them keeps its current behaviour.
+// ------------------------------------------------------------
+const platformVar = (value: string | undefined): string => (value ?? '').trim().toLowerCase();
+
+/** True when the process is known to run on Render (ephemeral filesystem). */
+export const isRenderInfra =
+  platformVar(process.env.RENDER) === 'true' ||
+  platformVar(process.env.RENDER_SERVICE_ID) !== '' ||
+  platformVar(process.env.RENDER_EXTERNAL_HOSTNAME) !== '';
+
+/** True when uploaded assets MUST live on durable storage. */
+export const isProductionInfra = isProd || isRenderInfra;
+
 // `object` is a generic alias; the concrete implemented driver is `supabase`.
 // Resolution order:
 //   1. explicit STORAGE_DRIVER                          -> honoured as-is
@@ -149,10 +176,18 @@ if (isProd && !env.DATABASE_URL) {
 //   STORAGE_DRIVER=local in production without an explicit persistent-volume
 //   opt-in (STORAGE_ALLOW_LOCAL_IN_PROD=true)                       -> throw
 //
+// The guard fires on `isProductionInfra` — NODE_ENV=production OR a
+// platform-injected production indicator (Render) — so a mis-set or absent
+// NODE_ENV can no longer downgrade a live deployment to ephemeral uploads.
+//
 // Development and test keep defaulting to local storage with no warnings.
 let resolvedStorageDriver: 'local' | 'supabase' = storageDriver;
 
-if (isProd) {
+if (isProductionInfra) {
+  const where = isRenderInfra
+    ? 'production (detected as a Render service via RENDER/RENDER_SERVICE_ID, regardless of NODE_ENV)'
+    : 'production';
+
   if (resolvedStorageDriver === 'supabase') {
     const missing: string[] = [];
     if (!env.SUPABASE_URL) missing.push('SUPABASE_URL');
@@ -160,7 +195,7 @@ if (isProd) {
     if (missing.length > 0) {
       throw new Error(
         `[STORAGE] STORAGE_DRIVER=supabase is selected but ${missing.join(' and ')} ` +
-          'is missing. Refusing to start in production: falling back to local/ephemeral storage ' +
+          `is missing. Refusing to start in ${where}: falling back to local/ephemeral storage ` +
           'would silently lose uploaded images on restart or redeploy. Configure the Supabase ' +
           'credentials (and public bucket "restaurant-assets"), or set STORAGE_DRIVER=local with ' +
           'STORAGE_ALLOW_LOCAL_IN_PROD=true ONLY for a self-hosted deployment with a mounted ' +
@@ -169,14 +204,23 @@ if (isProd) {
     }
   }
 
-  if (resolvedStorageDriver === 'local' && env.STORAGE_ALLOW_LOCAL_IN_PROD !== 'true') {
-    throw new Error(
-      '[STORAGE] STORAGE_DRIVER=local is selected in production. Local filesystem storage is ' +
-        'ephemeral on most hosts (images are lost on restart/redeploy/scale-out). Refusing to ' +
-        'start. Set STORAGE_DRIVER=supabase with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, or ' +
-        'explicitly set STORAGE_ALLOW_LOCAL_IN_PROD=true for a self-hosted deployment that mounts ' +
-        'a persistent volume at UPLOAD_DIR.'
-    );
+  if (resolvedStorageDriver === 'local') {
+    // The persistent-volume opt-in is honoured for SELF-HOSTED production only:
+    // Render gives a web service no persistent disk, so `local` there always
+    // loses uploads on the next redeploy — no flag can make it safe.
+    const selfHostedPersistentVolume =
+      env.STORAGE_ALLOW_LOCAL_IN_PROD === 'true' && !isRenderInfra;
+    if (!selfHostedPersistentVolume) {
+      throw new Error(
+        `[STORAGE] STORAGE_DRIVER=local is selected in ${where}. Local filesystem storage is ` +
+          'ephemeral on most hosts (images are lost on restart/redeploy/scale-out). Refusing to ' +
+          'start. Set STORAGE_DRIVER=supabase with SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY' +
+          (isRenderInfra
+            ? ' (Render has no persistent disk, so STORAGE_ALLOW_LOCAL_IN_PROD is ignored there).'
+            : ', or explicitly set STORAGE_ALLOW_LOCAL_IN_PROD=true for a self-hosted ' +
+              'deployment that mounts a persistent volume at UPLOAD_DIR.')
+      );
+    }
   }
 }
 

@@ -17,6 +17,7 @@ import {
   assetUrlResolverFor,
   resolveRestaurantAssets,
   resolveAssetReference,
+  isStorageKey,
 } from '../services/storage';
 import {
   discardPaymentProof,
@@ -107,6 +108,23 @@ const resolveRow = (row: {
 const resolveAssetUrl = (value: string | null | undefined): string | null => {
   const { normalizer, toUrl } = assetContractFor();
   return resolveAssetReference(value, normalizer, toUrl).url;
+};
+
+/**
+ * Catalog images (dish photos, offer photos) follow the same persistence
+ * contract as the theme assets: the database keeps the stable storage key and
+ * this resolves it to a renderable URL on every read, so a fresh instance
+ * re-derives the same URL after a restart or redeploy.
+ *
+ * Deliberately narrow: ONLY a canonical storage key is resolved. Any other
+ * stored value — an external CDN/Unsplash URL, or a legacy `/uploads/…`
+ * reference whose object was never migrated into the bucket — is returned
+ * exactly as stored, so an image that renders today keeps rendering instead of
+ * being retargeted at a missing object.
+ */
+const resolveCatalogImage = (value: string | null | undefined): string | null => {
+  if (!value) return value ?? null;
+  return isStorageKey(value) ? resolveAssetUrl(value) ?? value : value;
 };
 
 async function getQrSession(
@@ -355,7 +373,7 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
       nameEn: p.nameEn,
       description: p.description,
       price: p.price,
-      image: p.imageUrl,
+      image: resolveCatalogImage(p.imageUrl) ?? '',
       isAvailable: p.available,
       isFeatured: p.isFeatured,
       badge: p.badge || undefined,
@@ -435,7 +453,7 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           titleEn: o.titleEn || undefined,
           subtitle: o.subtitle || undefined,
           description: o.description || undefined,
-          image: o.image || undefined,
+          image: resolveCatalogImage(o.image) || undefined,
           discountedPrice: o.discountedPrice || undefined,
           originalPrice: o.originalPrice || undefined,
           badge: o.badge || undefined,

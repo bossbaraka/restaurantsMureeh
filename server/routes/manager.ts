@@ -1522,6 +1522,88 @@ router.post('/tables/:id/regenerate-qr', requireManager(), async (req: Request, 
 });
 
 // GET /api/manager/menu/categories
+// ============================================================
+// CATALOG IMAGE PERSISTENCE (dish photos, offer photos)
+//
+// The SAME reference contract `PUT /branding` uses for logo/cover/map/gallery,
+// so a dish photo and a logo are persisted identically: the DATABASE holds the
+// stable tenant-scoped object key, and every response re-derives the renderable
+// URL from that key. That is what makes an image survive a redeploy, a fresh
+// instance, or a moved storage host — a stored absolute URL does not.
+//
+//   canonical key          -> persisted verbatim (idempotent, no storage I/O)
+//   managed public URL     -> folded back into its object key (host-free)
+//   legacy `/uploads/…`    -> folded into the key ONLY when the object is
+//                            actually present in the active storage; a row that
+//                            was never migrated keeps its current value, so a
+//                            legacy reference is never silently retargeted at
+//                            a missing object (it stays detectable for
+//                            `npm run storage:migrate`)
+//   external http(s) URL   -> persisted verbatim (external assets are stable
+//                            by design: Unsplash/CDN seeds keep working)
+//   '' / whitespace        -> explicit "no image"
+//   data: / blob: / file:  -> refused with 400, never persisted
+// ============================================================
+
+type CatalogImageResult = { ok: true; ref: string } | { ok: false; error: string };
+
+const CATALOG_IMAGE_TRANSIENT_ERROR =
+  'رابط الصورة غير صالح — ارفع الصورة عبر زر الرفع من جهازك ثم احفظ مجدداً';
+const CATALOG_IMAGE_FOREIGN_TENANT_ERROR = 'رابط الصورة لا ينتمي لمطعمك';
+
+/**
+ * Normalize an incoming catalog image value into the reference to persist.
+ * `restaurantId` is the tenant that owns the row — a key from another
+ * restaurant's namespace is refused, exactly as the branding route does.
+ */
+async function persistCatalogImage(
+  raw: string,
+  restaurantId: string
+): Promise<CatalogImageResult> {
+  const storage = getStorage();
+  const normalized = normalizeAssetReference(raw, assetNormalizerFor(storage));
+  if (normalized.kind === 'reject') {
+    return { ok: false, error: CATALOG_IMAGE_TRANSIENT_ERROR };
+  }
+  if (normalized.kind === 'clear') return { ok: true, ref: '' };
+  if (normalized.kind === 'external') return { ok: true, ref: normalized.reference };
+
+  const key = normalized.reference;
+  if (!keyBelongsToRestaurant(key, restaurantId)) {
+    return { ok: false, error: CATALOG_IMAGE_FOREIGN_TENANT_ERROR };
+  }
+  // Already the canonical form — nothing to fold, nothing to verify.
+  if (isStorageKey(raw)) return { ok: true, ref: key };
+  // Folded from a URL: keep the fold only when the object is really there.
+  const present = await storage.exists(key).catch(() => false);
+  return { ok: true, ref: present ? key : String(raw).trim() };
+}
+
+/**
+ * Response side of the contract: a canonical key becomes a renderable URL,
+ * every other stored form (external URL, legacy `/uploads/…`) is handed back
+ * untouched — a value that renders today must keep rendering.
+ */
+function resolveCatalogImage(value: string | null | undefined): string {
+  if (!value) return '';
+  if (!isStorageKey(value)) return String(value);
+  return assetUrlResolverFor(getStorage(), config.appUrl)(String(value));
+}
+
+/** Fold any stored form to its object key, for replacement comparisons only —
+ *  a client that round-trips the same asset as a URL must not trigger a
+ *  delete of the object the row still points at. */
+function foldCatalogImageKey(value: string | null | undefined): string | null {
+  const value$ = String(value ?? '').trim();
+  if (!value$) return null;
+  if (isStorageKey(value$)) return value$;
+  try {
+    return getStorage().keyFromUrl(value$);
+  } catch {
+    return null;
+  }
+}
+
 router.get('/menu/categories', async (req: Request, res: Response) => {
   const restaurantId = getTenantId(req);
   if (!restaurantId) return res.status(400).json({ success: false, error: 'restaurantId required', statusCode: 400 });
@@ -1667,7 +1749,7 @@ router.get('/menu/products', async (req: Request, res: Response) => {
     nameEn: p.nameEn,
     description: p.description,
     price: p.price,
-    image: p.imageUrl,
+    image: resolveCatalogImage(p.imageUrl),
     isAvailable: p.available,
     isFeatured: p.isFeatured,
     badge: p.badge || undefined,
@@ -1757,6 +1839,18 @@ router.post(
         });
       }
 
+      // Dish photo: persist the STABLE reference (key), never a renderable URL
+      // (see the catalog image contract above). A rejected payload (base64 /
+      // blob / another tenant's key) fails the whole save with 400.
+      const dishImage = await persistCatalogImage(String(image ?? ''), targetRestId);
+      if (!dishImage.ok) {
+        return res.status(400).json({
+          success: false,
+          error: dishImage.error,
+          statusCode: 400,
+        });
+      }
+
       const newProd = await prisma.product.create({
         data: {
           restaurantId: targetRestId,
@@ -1765,7 +1859,7 @@ router.post(
           nameEn: nameEn || name,
           description: description || '',
           price,
-          imageUrl: image || '',
+          imageUrl: dishImage.ref,
           badge: badge || undefined,
           preparationTimeMinutes: preparationTimeMinutes ?? 15,
           calories: calories ?? 450,
@@ -1805,7 +1899,18 @@ router.post(
         details: `تم إنشاء طبق جديد: ${name} (₪${price})`,
       });
 
-      return res.status(201).json({ success: true, data: newProd, statusCode: 201 });
+      // The client keeps receiving a renderable URL in `imageUrl`; the key
+      // itself stays in the database (the response also carries it as
+      // `imageStoragePath` so a caller can round-trip the stable reference).
+      return res.status(201).json({
+        success: true,
+        data: {
+          ...newProd,
+          imageUrl: resolveCatalogImage(newProd.imageUrl),
+          imageStoragePath: newProd.imageUrl,
+        },
+        statusCode: 201,
+      });
     } catch (err) {
       console.error('Create product error:', err);
       return res.status(500).json({ success: false, error: 'تعذر إنشاء الطبق', statusCode: 500 });
@@ -1878,6 +1983,24 @@ router.put(
 
       // Only explicitly provided fields are updated — omitted fields are
       // left untouched instead of being reset to defaults.
+      // The dish photo goes through the catalog image contract first, so the
+      // column keeps the stable key (omitted = unchanged, '' = explicit clear).
+      const incomingImage =
+        data.image !== undefined || data.imageUrl !== undefined
+          ? (data.image ?? data.imageUrl)
+          : undefined;
+      const dishImage =
+        incomingImage !== undefined
+          ? await persistCatalogImage(String(incomingImage), existingProduct.restaurantId)
+          : undefined;
+      if (dishImage && !dishImage.ok) {
+        return res.status(400).json({
+          success: false,
+          error: dishImage.error,
+          statusCode: 400,
+        });
+      }
+
       const updated = await prisma.product.update({
         where: { id },
         data: {
@@ -1885,7 +2008,7 @@ router.put(
           nameEn: data.nameEn !== undefined ? data.nameEn : undefined,
           description: data.description !== undefined ? data.description : undefined,
           price: data.price !== undefined ? data.price : undefined,
-          imageUrl: data.image !== undefined || data.imageUrl !== undefined ? (data.image ?? data.imageUrl) : undefined,
+          imageUrl: dishImage ? dishImage.ref : undefined,
           categoryId: data.categoryId !== undefined ? data.categoryId : undefined,
           available: data.isAvailable !== undefined ? data.isAvailable : undefined,
           isFeatured: data.isFeatured !== undefined ? data.isFeatured : undefined,
@@ -1896,18 +2019,31 @@ router.put(
       });
 
       // Best-effort cleanup of a replaced dish image — AFTER the DB commit.
-      const newImage = data.image ?? data.imageUrl;
+      // Comparison happens on FOLDED keys, so a client that round-trips the
+      // same asset as a URL (instead of the key) never deletes the object the
+      // row still points at.
       if (
-        newImage !== undefined &&
+        incomingImage !== undefined &&
         existingProduct.imageUrl &&
-        newImage !== existingProduct.imageUrl
+        foldCatalogImageKey(existingProduct.imageUrl) !== foldCatalogImageKey(incomingImage)
       ) {
         void deleteManagedAssets(getStorage(), existingProduct.restaurantId, [
           existingProduct.imageUrl,
         ]);
       }
 
-      return res.json({ success: true, data: updated, statusCode: 200 });
+      // Response contract: `imageUrl` stays a renderable URL for every client
+      // (manager list, POS tile, print preview) and the stable reference itself
+      // is exposed additively as `imageStoragePath`.
+      return res.json({
+        success: true,
+        data: {
+          ...updated,
+          imageUrl: resolveCatalogImage(updated.imageUrl),
+          imageStoragePath: updated.imageUrl,
+        },
+        statusCode: 200,
+      });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر تعديل الطبق', statusCode: 500 });
     }
@@ -2461,7 +2597,17 @@ router.get('/offers', async (req: Request, res: Response) => {
       where: { restaurantId },
       orderBy: { createdAt: 'desc' },
     });
-    return res.json({ success: true, data: offers, statusCode: 200 });
+    // Catalog image contract on read: a stored key becomes a renderable URL,
+    // every other stored form is returned exactly as stored.
+    return res.json({
+      success: true,
+      data: offers.map((offer: { image: string | null }) => ({
+        ...offer,
+        image: resolveCatalogImage(offer.image) || null,
+        imageStoragePath: offer.image || null,
+      })),
+      statusCode: 200,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'تعذر استرجاع العروض', statusCode: 500 });
   }
@@ -2489,6 +2635,20 @@ router.post(
         isActive?: boolean;
         code?: string;
       };
+      // Offer photo: same persistence contract as dish photos and branding —
+      // the database keeps the stable key, the response carries the URL.
+      const offerImage =
+        b.image !== undefined && b.image !== null
+          ? await persistCatalogImage(String(b.image), restaurantId)
+          : undefined;
+      if (offerImage && !offerImage.ok) {
+        return res.status(400).json({
+          success: false,
+          error: offerImage.error,
+          statusCode: 400,
+        });
+      }
+
       const offer = await prisma.offer.create({
         data: {
           id: `offer-${randomUUID()}`,
@@ -2497,7 +2657,7 @@ router.post(
           titleEn: b.titleEn || undefined,
           subtitle: b.subtitle || undefined,
           description: b.description || undefined,
-          image: b.image || undefined,
+          image: offerImage?.ref || undefined,
           originalPrice: b.originalPrice,
           discountedPrice: b.discountedPrice,
           discountPercentage: b.discountPercentage,
@@ -2517,7 +2677,17 @@ router.post(
         entityId: offer.id,
         details: `تم إنشاء عرض ${b.title}`,
       });
-      return res.status(201).json({ success: true, data: { offer }, statusCode: 201 });
+      return res.status(201).json({
+        success: true,
+        data: {
+          offer: {
+            ...offer,
+            image: resolveCatalogImage(offer.image) || null,
+            imageStoragePath: offer.image || null,
+          },
+        },
+        statusCode: 201,
+      });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر إنشاء العرض', statusCode: 500 });
     }
@@ -2548,6 +2718,20 @@ router.put(
         isActive?: boolean;
         code?: string;
       };
+      // Offer photo goes through the same catalog image contract as dish photos
+      // (omitted = unchanged, '' = explicit clear, managed URL = folded to key).
+      const offerImage =
+        b.image !== undefined && b.image !== null
+          ? await persistCatalogImage(String(b.image), existing.restaurantId)
+          : undefined;
+      if (offerImage && !offerImage.ok) {
+        return res.status(400).json({
+          success: false,
+          error: offerImage.error,
+          statusCode: 400,
+        });
+      }
+
       const updated = await prisma.offer.update({
         where: { id },
         data: {
@@ -2555,7 +2739,7 @@ router.put(
           titleEn: b.titleEn !== undefined ? b.titleEn : undefined,
           subtitle: b.subtitle !== undefined ? b.subtitle : undefined,
           description: b.description !== undefined ? b.description : undefined,
-          image: b.image !== undefined ? b.image : undefined,
+          image: offerImage ? offerImage.ref : undefined,
           originalPrice: b.originalPrice !== undefined ? b.originalPrice : undefined,
           discountedPrice: b.discountedPrice !== undefined ? b.discountedPrice : undefined,
           discountPercentage: b.discountPercentage !== undefined ? b.discountPercentage : undefined,
@@ -2566,14 +2750,26 @@ router.put(
         },
       });
       // Best-effort cleanup of a replaced offer image, AFTER the DB commit.
+      // Folded keys are compared so round-tripping the same asset as a URL
+      // never deletes the object the row still references.
       if (
         b.image !== undefined &&
         existing.image &&
-        b.image !== existing.image
+        foldCatalogImageKey(existing.image) !== foldCatalogImageKey(b.image)
       ) {
         void deleteManagedAssets(getStorage(), existing.restaurantId, [existing.image]);
       }
-      return res.json({ success: true, data: { offer: updated }, statusCode: 200 });
+      return res.json({
+        success: true,
+        data: {
+          offer: {
+            ...updated,
+            image: resolveCatalogImage(updated.image) || null,
+            imageStoragePath: updated.image || null,
+          },
+        },
+        statusCode: 200,
+      });
     } catch (err) {
       return res.status(500).json({ success: false, error: 'تعذر تعديل العرض', statusCode: 500 });
     }

@@ -3180,6 +3180,16 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-family: 'Tajawal', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   overscroll-behavior: contain;
   -webkit-tap-highlight-color: transparent;
+  /* Which edge the type writes itself on from. Arabic begins at the right and
+     travels left; a Latin tenant mirrors it. One pair of custom properties
+     drives every mask in this layer, so no two reveals can disagree. */
+  --entry-wipe-r: 0%;
+  --entry-wipe-l: 100%;
+}
+
+.entry-root[dir='ltr'] {
+  --entry-wipe-r: 100%;
+  --entry-wipe-l: 0%;
 }
 
 /* The moving layer. `--entry-shift` is written once per pointer frame;
@@ -3218,11 +3228,29 @@ input[type='range'].saas-range::-moz-range-thumb {
   inset: 0;
   overflow: hidden;
   background: #0a0b0d;
+  /* The reveal's resting state, spelled out so the one-shot animation ends on
+     an identical value — no pop when the keyframes are released. */
+  transform: scale(1);
   /* One-shot cinematic reveal on first paint: the photograph settles in
      from a whisper of scale, exactly once. The 30s Ken-Burns drift on the
      <img> keeps running afterwards — reveal and drift never fight because
      they animate different elements. */
   animation: entry-cover-reveal 1250ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  /* Hand-off: as the sheet steps aside the cover recedes half a size, so the
+     room reads as moving away from the guest rather than being deleted. */
+  transition: transform 460ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Depth layer: the only thing that moves here is a transform, read straight
+   off the drag progress, so the cover, the glints and the content column each
+   travel at their own rate — that difference is the parallax. The slight
+   overscan keeps the edge from ever showing through. */
+.entry-cover__depth {
+  position: absolute;
+  inset: -3% -4%;
+  transform:
+    translate3d(calc(var(--entry-progress, 0) * var(--entry-dir, 1) * -16px), 0, 0)
+    scale(calc(1 - var(--entry-progress, 0) * 0.025));
 }
 
 .entry-cover__img {
@@ -3234,13 +3262,32 @@ input[type='range'].saas-range::-moz-range-thumb {
   object-fit: cover;
   object-position: center;
   opacity: 0;
-  transition: opacity 1100ms ease-out;
-  filter: saturate(1.04) contrast(1.02) brightness(0.94);
+  /* The rack-focus: the photograph arrives defocused and pulls sharp as it
+     fades up. It is one-shot and lives on the image (a GPU shader) rather
+     than on a wrapper, and it is the only blur in this layer with a full
+     viewport to cover — everything else stays on opacity and transform. */
+  filter: blur(12px) saturate(1.04) contrast(1.02) brightness(0.9);
+  transition:
+    opacity 1100ms ease-out,
+    filter 900ms cubic-bezier(0.22, 1, 0.36, 1);
   user-select: none;
 }
 .entry-cover__img--ready {
   opacity: 1;
+  filter: blur(0px) saturate(1.04) contrast(1.02) brightness(0.94);
   animation: entry-cover-drift 30s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
+}
+
+/* Mobile budget — a guest arriving through a QR code is on a phone, and very
+   often a mid-range one. The defocus pull is the only full-viewport effect in
+   this layer, so it is the one whose radius is trimmed: a smaller blur reads
+   the same at arm's length and costs the shader far less. Scoped to the
+   un-focused state, so it can never win over `--ready` and leave a guest
+   looking at a permanently soft photograph. */
+@media (max-width: 640px) {
+  .entry-cover .entry-cover__img:not(.entry-cover__img--ready) {
+    filter: blur(7px) saturate(1.04) contrast(1.02) brightness(0.9);
+  }
 }
 
 /* Brand-built ambience when the tenant has no cover image (or it fails):
@@ -3279,6 +3326,14 @@ input[type='range'].saas-range::-moz-range-thumb {
       rgb(10 11 13 / 0.22) 24%,
       transparent 48%
     );
+  /* The room dims a half-step when the identity arrives — the photograph
+     drops into the background like a light being lowered, once, slowly. */
+  opacity: 0.84;
+  transition: opacity 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.entry-root[data-stage='IDENTITY'] .entry-cover__scrim {
+  opacity: 1;
 }
 .entry-cover__vignette {
   position: absolute;
@@ -3286,21 +3341,45 @@ input[type='range'].saas-range::-moz-range-thumb {
   background: radial-gradient(118% 88% at 50% 44%, transparent 36%, rgb(0 0 0 / 0.52) 100%);
 }
 
-/* A single slow light pass — atmosphere, not a spotlight effect. */
+/* A single slow light pass — atmosphere, not a spotlight effect. The second
+   stop is tinted with the tenant's accent, so the sheen is the venue's own
+   light (warm for a grill, cool for a café), not stock gloss. */
 .entry-cover__sweep {
   position: absolute;
   inset: -20% -45%;
   pointer-events: none;
   background: linear-gradient(
     104deg,
-    transparent 40%,
-    rgb(255 255 255 / 0.06) 50%,
-    transparent 60%
+    transparent 36%,
+    rgb(255 255 255 / 0.055) 46%,
+    rgb(var(--brand-accent-rgb) / 0.07) 52%,
+    rgb(255 255 255 / 0.03) 57%,
+    transparent 66%
   );
-  animation: entry-sweep 11s linear infinite;
+  animation: entry-sweep 9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Ambient motes: a dozen elements, never a particle system. */
+/* First paint only: one soft specular bloom as the photograph resolves, so
+   the moment the cover appears reads as an opening curtain. Inert (opacity 0)
+   for the rest of the stay, and never mounted under reduced motion. */
+.entry-cover__flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    82% 54% at 50% 42%,
+    rgb(255 255 255 / 0.14) 0%,
+    rgb(var(--brand-primary-rgb) / 0.08) 34%,
+    transparent 68%
+  );
+  animation: entry-flash 1250ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Ambient motes: a dozen elements, never a particle system. Each mote is two
+   nodes — the outer one carries parallax (a plain transform, driven by the
+   drag), the inner one carries drift and twinkle. Split that way, the two
+   motions can never overwrite each other's transform. */
 .entry-motes {
   position: absolute;
   inset: 0;
@@ -3308,6 +3387,16 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 .entry-mote {
   position: absolute;
+  display: block;
+  transform: translate3d(
+    calc(var(--entry-progress, 0) * var(--entry-dir, 1) * var(--entry-mote-depth, 0.5) * -34px),
+    calc(var(--entry-progress, 0) * var(--entry-mote-depth, 0.5) * -10px),
+    0
+  );
+}
+.entry-mote__dot {
+  position: absolute;
+  inset: 0;
   border-radius: 999px;
   background: rgb(255 255 255 / 0.6);
   box-shadow: 0 0 10px 2px rgb(var(--brand-primary-rgb) / 0.35);
@@ -3315,6 +3404,24 @@ input[type='range'].saas-range::-moz-range-thumb {
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
   animation-direction: alternate;
+}
+/* The drawn glints: light catching glass. One path, one currentColor, a small
+   drop-shadow for bloom — no filter on the container, no canvas. */
+.entry-mote__glyph {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: rgb(255 255 255 / 0.82);
+  animation-name: entry-glint;
+  animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+  animation-iteration-count: infinite;
+}
+.entry-mote__spark-path {
+  fill: currentColor;
+  filter: drop-shadow(0 0 5px rgb(var(--brand-primary-rgb) / 0.6));
 }
 
 /* --------------------------------------------------------------------------
@@ -3390,8 +3497,11 @@ input[type='range'].saas-range::-moz-range-thumb {
      opts back into pointer events. */
   pointer-events: none;
   /* First paint: the bar settles down from above, a quiet half-beat after
-     the cover reveal — the chrome "lands" on the photograph. */
+     the cover reveal — the chrome "lands" on the photograph. On the way out
+     it simply releases: without this transition the top bar would vanish in
+     a single frame while the rest of the layer is still moving. */
   animation: entry-drop 700ms cubic-bezier(0.16, 1, 0.3, 1) 140ms backwards;
+  transition: opacity 240ms ease-out;
 }
 
 .entry-topbar__brand {
@@ -3532,6 +3642,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   pointer-events: none;
   /* The rail floats up into place just after the cover has settled. */
   animation: entry-fade-up 700ms cubic-bezier(0.16, 1, 0.3, 1) 420ms backwards;
+  transition: opacity 240ms ease-out;
 }
 
 /* The platform credit lives at the very bottom, under the rail: the
@@ -3550,6 +3661,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   pointer-events: none;
   /* Fades in last of all — by the time it is visible, the cover is calm. */
   animation: entry-fade 900ms ease 640ms backwards;
+  transition: opacity 240ms ease-out;
 }
 .entry-progress__label {
   font-size: 10px;
@@ -3641,7 +3753,12 @@ input[type='range'].saas-range::-moz-range-thumb {
   background: transparent;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  animation: entry-breathe 4.8s ease-in-out infinite;
+  /* Spring first, float after. The breath is deliberately delayed past the
+     entrance so the two transforms never overlap — the seal either rises or
+     settles, it cannot do both at once and jitter. */
+  animation:
+    entry-logo-spring 880ms cubic-bezier(0.34, 1.42, 0.5, 1) backwards,
+    entry-breathe 4.8s ease-in-out 900ms infinite;
 }
 .entry-logo-button:focus-visible {
   outline: 2px solid var(--brand-primary-strong, #c9a227);
@@ -3661,9 +3778,11 @@ input[type='range'].saas-range::-moz-range-thumb {
     transparent 70%
   );
   filter: blur(20px);
-  /* The halo breathes in the same 4.8s cycle as the logo disc it wraps,
-     so the light and the object pulse as one living seal. */
-  animation: entry-halo-pulse 4.8s ease-in-out infinite;
+  /* The light blooms open with the seal, then breathes in the same 4.8s cycle
+     as the disc it wraps, so glow and object pulse as one living thing. */
+  animation:
+    entry-halo-bloom 980ms cubic-bezier(0.22, 1, 0.36, 1) backwards,
+    entry-halo-pulse 4.8s ease-in-out 1000ms infinite;
 }
 .entry-logo__ring {
   position: absolute;
@@ -3689,9 +3808,27 @@ input[type='range'].saas-range::-moz-range-thumb {
   box-shadow:
     0 20px 48px rgb(0 0 0 / 0.55),
     0 0 0 1px rgb(var(--brand-primary-rgb) / 0.22),
+    0 0 38px -6px var(--brand-glow),
     inset 0 1px 0 rgb(255 255 255 / 0.16);
   /* Tactile press: the disc compresses under the finger, like a physical seal. */
   transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* One specular pass crosses the seal as it springs in — the read of polished
+   metal catching the room light. It runs once and is clipped by the disc. */
+.entry-logo__disc::after {
+  content: '';
+  position: absolute;
+  inset: -60%;
+  pointer-events: none;
+  background: linear-gradient(
+    112deg,
+    transparent 42%,
+    rgb(255 255 255 / 0.3) 50%,
+    transparent 58%
+  );
+  transform: translate3d(-120%, 0, 0);
+  animation: entry-disc-sheen 1250ms cubic-bezier(0.32, 0, 0.24, 1) 240ms backwards;
 }
 .entry-logo-button:active .entry-logo__disc {
   transform: scale(0.94);
@@ -3745,6 +3882,14 @@ input[type='range'].saas-range::-moz-range-thumb {
   animation: entry-glow-breathe 7s ease-in-out infinite;
 }
 
+/* The content column rides a hair against the photograph while the guest
+   drags — that disagreement between the two layers is what reads as a room
+   with depth rather than as a panel sliding on a plane. */
+.entry-invite,
+.entry-identity {
+  transform: translate3d(calc(var(--entry-progress, 0) * var(--entry-dir, 1) * 12px), 0, 0);
+}
+
 .entry-identity {
   position: relative;
   z-index: 2;
@@ -3766,6 +3911,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   border: 1px solid rgb(255 255 255 / 0.18);
   box-shadow:
     0 14px 34px rgb(0 0 0 / 0.5),
+    0 0 26px -8px var(--brand-glow),
     inset 0 1px 0 rgb(255 255 255 / 0.18);
 }
 .entry-identity__logo {
@@ -3811,62 +3957,96 @@ input[type='range'].saas-range::-moz-range-thumb {
    opacity (a plain `opacity` property) keeps working once the entrance has
    finished.
    -------------------------------------------------------------------------- */
+/* A line of type does not simply appear: it rises, and it comes into focus.
+   The horizontal half of the travel is signed by --entry-dir, so Arabic
+   enters from the right and Latin from the left, off the same keyframes. */
 @keyframes entry-rise {
   from {
     opacity: 0;
-    transform: translate3d(0, 14px, 0);
+    transform: translate3d(calc(var(--entry-dir, 1) * 14px), 16px, 0);
+    filter: blur(6px);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
+    filter: blur(0px);
   }
 }
 
-/* Beat 1 (plays once on first load, while the cover is the active stage). */
+/* Beat 1 (plays once on first load, while the cover is the active stage). The
+   stagger is wide on purpose: a guest who has just held a phone up to a table
+   card should read each line as it lands, not after all of them have. */
 .entry-stage--cover[data-active='true'] .entry-invite__lead > * {
-  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: entry-rise 780ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .entry-stage--cover[data-active='true'] .entry-invite__lead > *:nth-child(2) {
-  animation-delay: 120ms;
+  animation-delay: 160ms;
 }
 .entry-stage--cover[data-active='true'] .entry-invite__hint {
-  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 260ms backwards;
+  animation: entry-rise 780ms cubic-bezier(0.16, 1, 0.3, 1) 320ms backwards;
 }
 
 /* Beat 2 (plays when the identity stage activates after the logo tap). */
 .entry-stage--identity[data-active='true'] .entry-identity > * {
-  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: entry-rise 780ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(2) {
-  animation-delay: 70ms;
+  animation-delay: 110ms;
 }
 .entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(3) {
-  animation-delay: 140ms;
+  animation-delay: 200ms;
 }
 .entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(4) {
-  animation-delay: 210ms;
+  animation-delay: 300ms;
 }
 .entry-stage--identity[data-active='true'] .entry-arrow-wrap {
-  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 280ms backwards;
+  animation: entry-rise 780ms cubic-bezier(0.16, 1, 0.3, 1) 400ms backwards;
 }
 .entry-stage--identity[data-active='true'] .entry-action {
-  animation: entry-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) 350ms backwards;
+  animation: entry-rise 780ms cubic-bezier(0.16, 1, 0.3, 1) 480ms backwards;
 }
 
 /* The crest gets a dedicated scale-in: the logo is the object of the beat,
    so it materialises like a seal being set down, not just lifted. */
 @keyframes entry-crest-rise {
-  from {
+  0% {
     opacity: 0;
-    transform: scale(0.94);
+    transform: scale(0.86);
+    filter: blur(4px);
   }
-  to {
+  60% {
+    opacity: 1;
+    transform: scale(1.04);
+    filter: blur(0px);
+  }
+  100% {
     opacity: 1;
     transform: scale(1);
+    filter: blur(0px);
   }
 }
 .entry-stage--identity[data-active='true'] .entry-identity > *:nth-child(1) {
-  animation: entry-crest-rise 640ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: entry-crest-rise 760ms cubic-bezier(0.34, 1.35, 0.5, 1) 60ms backwards;
+}
+
+/* The venue name writes itself on from its own reading edge, inside a mask
+   with slack around the glyphs so no Arabic tail or vowel mark is ever cut.
+   A child element owns the clip so the name's own blur-and-rise (the generic
+   per-line choreography) keeps running underneath, untouched. */
+@keyframes entry-type-wipe {
+  from {
+    clip-path: inset(-14% var(--entry-wipe-r, 0%) -14% var(--entry-wipe-l, 100%));
+  }
+  to {
+    clip-path: inset(-14% -14% -14% -14%);
+  }
+}
+
+.entry-identity__name .entry-name__type {
+  display: block;
+  padding: 0.14em 0.3em;
+  margin: -0.14em -0.3em;
+  animation: entry-type-wipe 820ms cubic-bezier(0.16, 1, 0.3, 1) 180ms backwards;
 }
 
 /* Hollow, dimensional arrow — a floating object, not a button. */
@@ -4160,6 +4340,86 @@ input[type='range'].saas-range::-moz-range-thumb {
   }
 }
 
+/* The photograph resolves out of a soft white: the reveal's opening beat. */
+@keyframes entry-flash {
+  0% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+  55% {
+    opacity: 0.3;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* A glint: small, slow, and never fully bright — the field should be noticed
+   peripherally or not at all. */
+@keyframes entry-glint {
+  0%,
+  100% {
+    opacity: 0.08;
+    transform: scale(0.72) rotate(0deg);
+  }
+  46% {
+    opacity: 0.62;
+    transform: scale(1) rotate(12deg);
+  }
+  70% {
+    opacity: 0.2;
+    transform: scale(0.86) rotate(18deg);
+  }
+}
+
+/* Spring in: overshoot once, then come to rest on the breathing cycle. */
+@keyframes entry-logo-spring {
+  0% {
+    opacity: 0;
+    transform: scale(0.58) translate3d(0, 12px, 0);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.06) translate3d(0, -3px, 0);
+  }
+  76% {
+    opacity: 1;
+    transform: scale(0.976) translate3d(0, 1px, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+}
+
+/* The halo blooms open behind the springing seal, ending exactly where the
+   slow pulse picks it up — one continuous light, not two effects. */
+@keyframes entry-halo-bloom {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+
+@keyframes entry-disc-sheen {
+  0% {
+    opacity: 0;
+    transform: translate3d(-120%, 0, 0);
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(120%, 0, 0);
+  }
+}
+
 /* The seal's halo pulses in the same 4.8s breath as the disc it wraps. */
 @keyframes entry-halo-pulse {
   0%,
@@ -4184,6 +4444,75 @@ input[type='range'].saas-range::-moz-range-thumb {
     opacity: 1;
     transform: scale(1.12);
   }
+}
+
+
+
+/* --------------------------------------------------------------------------
+   The hand-off — welcome to menu.
+   The layer never "disappears": the content lifts, the cover recedes half a
+   size, the sheet slides out in the swipe direction and a brand-tinted veil
+   crosses the seam and dissolves. Four gestures inside one 460ms budget (the
+   exact length of the JS exit timer), all on opacity and transform only.
+   -------------------------------------------------------------------------- */
+.entry-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  /* Deliberately quiet: at its peak the curtain is a soft dark shoulder on
+     the edge the guest just left, plus a breath of brand light. It never
+     blacks the menu out — the seam is hidden, not the destination. */
+  background:
+    radial-gradient(88% 62% at 50% 50%, rgb(var(--brand-primary-rgb) / 0.12) 0%, transparent 62%),
+    linear-gradient(
+      calc(var(--entry-dir, 1) * 90deg),
+      rgb(10 11 13 / 0.66) 0%,
+      rgb(10 11 13 / 0.08) 54%,
+      rgb(var(--brand-accent-rgb) / 0.1) 100%
+    );
+}
+
+/* The veil is a sibling of the sheet, so it cannot inherit --entry-dir from
+   it: the curtain crosses the other way for a Latin tenant. */
+.entry-root[dir='ltr'] .entry-veil {
+  --entry-dir: -1;
+}
+
+.entry-root[data-exiting='true'] .entry-veil {
+  animation: entry-veil 460ms cubic-bezier(0.4, 0, 0.2, 1) backwards;
+}
+
+@keyframes entry-veil {
+  0% {
+    opacity: 0;
+    transform: translate3d(calc(var(--entry-dir, 1) * -22%), 0, 0);
+  }
+  44% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--entry-dir, 1) * 6%), 0, 0);
+  }
+}
+
+/* The type leaves first and fastest: the guest's eye is already on the menu
+   before the photograph starts to move. */
+.entry-root[data-exiting='true'] .entry-stage {
+  opacity: 0;
+  transform: translate3d(calc(var(--entry-dir, 1) * 20px), -12px, 0) scale(0.985);
+}
+
+.entry-root[data-exiting='true'] .entry-cover {
+  transform: scale(1.055);
+}
+
+.entry-root[data-exiting='true'] .entry-topbar,
+.entry-root[data-exiting='true'] .entry-progress,
+.entry-root[data-exiting='true'] .entry-credit {
+  opacity: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -4226,6 +4555,13 @@ input[type='range'].saas-range::-moz-range-thumb {
   .entry-action__button {
     padding: 0.6rem 1.3rem;
   }
+  /* The ambient field yields first on a landscape phone: glints and the
+     opening bloom are the least informative things on the layer, and vertical
+     room is the scarce resource here. */
+  .entry-mote--spark,
+  .entry-cover__flash {
+    display: none;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -4235,18 +4571,23 @@ input[type='range'].saas-range::-moz-range-thumb {
    -------------------------------------------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .entry-cover,
-  .entry-cover__img--ready,
   .entry-cover__sweep,
+  .entry-cover__flash,
+  .entry-cover__img--ready,
   .entry-mote,
-  .entry-topbar,
-  .entry-progress,
-  .entry-credit,
+  .entry-mote__dot,
+  .entry-mote__glyph,
   .entry-logo-button,
   .entry-logo__ring,
   .entry-logo__halo,
+  .entry-logo__disc::after,
   .entry-composition__glow,
+  .entry-identity__name .entry-name__type,
   .entry-arrow__float,
   .entry-arrow__gesture,
+  .entry-topbar,
+  .entry-progress,
+  .entry-credit,
   .entry-stage--cover[data-active='true'] .entry-invite__lead > *,
   .entry-stage--cover[data-active='true'] .entry-invite__hint,
   .entry-stage--identity[data-active='true'] .entry-identity > *,
@@ -4259,6 +4600,32 @@ input[type='range'].saas-range::-moz-range-thumb {
   /* The CTA keeps its fill and glow; only the sheen pass is dropped. */
   .entry-action__button::after {
     display: none;
+  }
+
+  /* The rack-focus pull is a transition, not an animation, so it has to be
+     released by hand: a reduced-motion guest gets the fade, never a blur. */
+  .entry-cover .entry-cover__img:not(.entry-cover__img--ready),
+  .entry-cover .entry-cover__img--ready {
+    filter: none;
+    transition: opacity 240ms linear;
+  }
+
+  /* No parallax, no curtain, no dolly on the cover. The hand-off stays a
+     plain crossfade — still animated, because the guest must see that they
+     have arrived at the menu. */
+  .entry-veil,
+  .entry-root[data-exiting='true'] .entry-veil {
+    display: none;
+    animation: none;
+  }
+  .entry-cover__depth,
+  .entry-invite,
+  .entry-identity {
+    transform: none;
+  }
+  .entry-root[data-exiting='true'] .entry-stage,
+  .entry-root[data-exiting='true'] .entry-cover {
+    transform: none;
   }
 
   .entry-cover__img--ready {

@@ -33,6 +33,29 @@ import { useBrandTheme } from '../../theme/brandTheme';
  * surface sits to the LEFT and the guest drags RIGHT (dragging content right
  * reveals what is on its left). English mirrors it. Arrow, drag, layer movement
  * and exit all read from the same `dirSign`, so none of them can disagree.
+ *
+ * MOTION
+ * ------
+ * The layer is choreographed like a hotel check-in rather than a loader:
+ *
+ *   COVER     the photograph settles in — opacity, a defocus pull (blur ->
+ *             zero) and a whisper of scale-down, then a single specular light
+ *             sweep and a slow Ken-Burns drift. Depth is real: the cover, the
+ *             glints and the content column each travel at their own rate as
+ *             the guest drags, all read from `--entry-progress`.
+ *   IDENTITY  the seal springs into place (overshoot, then a slow floating
+ *             breath), the brand light blooms behind it, and the Arabic type
+ *             writes itself on from the reading edge — a right-to-left mask
+ *             for Arabic, mirrored for Latin — with a per-line stagger.
+ *   HAND-OFF  the sheet steps aside, the cover recedes a half-step and a
+ *             brand-tinted veil dissolves over the seam, so the menu arrives
+ *             through a curtain instead of appearing by deletion.
+ *
+ * Everything is CSS (opacity / transform / filter only) — no motion library, no
+ * canvas, no requestAnimationFrame. Glints are a fixed, deterministic table and
+ * are dropped on short viewports and under `prefers-reduced-motion`, because a
+ * guest on a 5-year-old Android phone arriving through a QR code must never
+ * wait on decoration.
  */
 
 interface RestaurantEntryExperienceProps {
@@ -52,9 +75,20 @@ const FLICK_VELOCITY = 0.45;
 const EXIT_MS = 460;
 
 /**
+ * The glint glyph: a four-point sparkle drawn as one path (no filter, no
+ * gradient, no canvas) so a dozen of them cost less than a single shadow.
+ */
+const GLINT_PATH =
+  'M12 1.6 C12.95 7.35 16.65 11.05 22.4 12 C16.65 12.95 12.95 16.65 12 22.4 C11.05 16.65 7.35 12.95 1.6 12 C7.35 11.05 11.05 7.35 12 1.6 Z';
+
+/**
  * Deterministic ambient motes. A fixed table (no Math.random) keeps server
  * rendering, snapshot tests and the guest's first paint byte-identical, and it
  * keeps the field small enough to read as atmosphere rather than as an effect.
+ *
+ * `depth` is the parallax factor: 0 sits on the photograph, 1 sits with the
+ * content. `spark` swaps a dot for a drawn glint, so the field reads as
+ * light catching glass rather than as dust.
  */
 const MOTES: ReadonlyArray<{
   left: number;
@@ -63,19 +97,21 @@ const MOTES: ReadonlyArray<{
   delay: number;
   duration: number;
   driftX: number;
+  depth: number;
+  spark?: boolean;
 }> = [
-  { left: 12, top: 18, size: 3, delay: 0, duration: 17, driftX: 14 },
-  { left: 26, top: 62, size: 2, delay: 2.4, duration: 21, driftX: -10 },
-  { left: 44, top: 12, size: 4, delay: 1.2, duration: 19, driftX: 9 },
-  { left: 58, top: 74, size: 2, delay: 3.1, duration: 24, driftX: -16 },
-  { left: 71, top: 28, size: 3, delay: 0.6, duration: 16, driftX: 12 },
-  { left: 84, top: 58, size: 2, delay: 4.2, duration: 22, driftX: -8 },
-  { left: 33, top: 42, size: 2, delay: 5.5, duration: 26, driftX: 11 },
-  { left: 66, top: 86, size: 3, delay: 2.9, duration: 18, driftX: -13 },
-  { left: 8, top: 82, size: 2, delay: 6.1, duration: 23, driftX: 7 },
-  { left: 92, top: 36, size: 2, delay: 1.8, duration: 20, driftX: -6 },
-  { left: 51, top: 92, size: 3, delay: 7.4, duration: 25, driftX: 10 },
-  { left: 20, top: 34, size: 2, delay: 8.2, duration: 28, driftX: -9 },
+  { left: 12, top: 18, size: 3, delay: 0, duration: 17, driftX: 14, depth: 0.35 },
+  { left: 26, top: 62, size: 8, delay: 2.4, duration: 21, driftX: -10, depth: 0.7, spark: true },
+  { left: 44, top: 12, size: 4, delay: 1.2, duration: 19, driftX: 9, depth: 0.2 },
+  { left: 58, top: 74, size: 2, delay: 3.1, duration: 24, driftX: -16, depth: 0.9 },
+  { left: 71, top: 28, size: 11, delay: 0.6, duration: 16, driftX: 12, depth: 0.45, spark: true },
+  { left: 84, top: 58, size: 2, delay: 4.2, duration: 22, driftX: -8, depth: 0.8 },
+  { left: 33, top: 42, size: 9, delay: 5.5, duration: 26, driftX: 11, depth: 1, spark: true },
+  { left: 66, top: 86, size: 3, delay: 2.9, duration: 18, driftX: -13, depth: 0.3 },
+  { left: 8, top: 82, size: 2, delay: 6.1, duration: 23, driftX: 7, depth: 0.6 },
+  { left: 92, top: 36, size: 2, delay: 1.8, duration: 20, driftX: -6, depth: 0.95 },
+  { left: 51, top: 92, size: 12, delay: 7.4, duration: 25, driftX: 10, depth: 0.25, spark: true },
+  { left: 20, top: 34, size: 2, delay: 8.2, duration: 28, driftX: -9, depth: 0.5 },
 ];
 
 function prefersReducedMotion(): boolean {
@@ -352,45 +388,76 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
         {/* Cinematic cover: the restaurant's own photography is the hero.  */}
         {/* --------------------------------------------------------------- */}
         <div className="entry-cover" aria-hidden={!showCover}>
-          {showCover ? (
-            <img
-              className={`entry-cover__img${coverReady ? ' entry-cover__img--ready' : ''}`}
-              src={coverSrc}
-              alt=""
-              loading="eager"
-              fetchPriority="high"
-              decoding="async"
-              draggable={false}
-              onLoad={() => setCoverReady(true)}
-              onError={() => setCoverFailed(true)}
-            />
-          ) : (
-            // No cover (or it failed): a brand-built ambience rather than a
-            // generic placeholder, so the venue still feels like itself.
-            <div className="entry-cover__fallback" />
-          )}
+          {/* Depth layer. The photograph never animates layout: it settles in
+              on the reveal, then recedes a half-step as the guest drags, so
+              the cover reads as a place with distance instead of a banner. */}
+          <div className="entry-cover__depth">
+            {showCover ? (
+              <img
+                className={`entry-cover__img${coverReady ? ' entry-cover__img--ready' : ''}`}
+                src={coverSrc}
+                alt=""
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                draggable={false}
+                onLoad={() => setCoverReady(true)}
+                onError={() => setCoverFailed(true)}
+              />
+            ) : (
+              // No cover (or it failed): a brand-built ambience rather than a
+              // generic placeholder, so the venue still feels like itself.
+              <div className="entry-cover__fallback" />
+            )}
+          </div>
 
           <div className="entry-cover__scrim" aria-hidden="true" />
           <div className="entry-cover__vignette" aria-hidden="true" />
+          {/* A single specular bloom on first paint — the room "opens" once
+              and is calm from then on. Never a second animation layer. */}
+          {!reducedMotion && <div className="entry-cover__flash" aria-hidden="true" />}
           {!reducedMotion && <div className="entry-cover__sweep" aria-hidden="true" />}
 
-          {/* Atmosphere: a handful of slow motes, never a particle system. */}
+          {/* Atmosphere: a handful of slow motes, never a particle system. The
+              outer span owns parallax, the glyph owns drift + twinkle, so the
+              two motions can never overwrite each other's transform. */}
           {!reducedMotion && (
             <div className="entry-motes" aria-hidden="true">
               {MOTES.map((mote, index) => (
                 <span
                   key={index}
-                  className="entry-mote"
+                  className={`entry-mote${mote.spark ? ' entry-mote--spark' : ''}`}
                   style={{
                     left: `${mote.left}%`,
                     top: `${mote.top}%`,
                     width: `${mote.size}px`,
                     height: `${mote.size}px`,
-                    animationDelay: `${mote.delay}s`,
-                    animationDuration: `${mote.duration}s`,
-                    ['--entry-mote-drift' as string]: `${mote.driftX}px`,
+                    ['--entry-mote-depth' as string]: String(mote.depth),
                   }}
-                />
+                >
+                  {mote.spark ? (
+                    <svg
+                      className="entry-mote__glyph"
+                      viewBox="0 0 24 24"
+                      focusable="false"
+                      style={{
+                        animationDelay: `${mote.delay}s`,
+                        animationDuration: `${mote.duration / 2}s`,
+                      }}
+                    >
+                      <path className="entry-mote__spark-path" d={GLINT_PATH} />
+                    </svg>
+                  ) : (
+                    <span
+                      className="entry-mote__dot"
+                      style={{
+                        animationDelay: `${mote.delay}s`,
+                        animationDuration: `${mote.duration}s`,
+                        ['--entry-mote-drift' as string]: `${mote.driftX}px`,
+                      }}
+                    />
+                  )}
+                </span>
               ))}
             </div>
           )}
@@ -539,7 +606,12 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
               {isEnglish ? 'WELCOME TO' : 'أهلاً بكم في'}
             </p>
 
-            <h1 className="entry-identity__name">{displayName}</h1>
+            {/* The name is wrapped so it can be revealed by a directional
+                mask on the child while the h1 itself keeps the generic
+                per-line rise — two owners, two properties, no fight. */}
+            <h1 className="entry-identity__name">
+              <span className="entry-name__type">{displayName}</span>
+            </h1>
 
             {/* Omitted entirely when the tenant has no description. */}
             {description && <p className="entry-identity__desc">{description}</p>}
@@ -628,6 +700,11 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
             it supports the restaurant brand rather than competing with it. */}
         <p className="entry-credit">{isEnglish ? 'Powered by Mureeh' : 'مدعوم بـ MUREEH'}</p>
       </div>
+
+      {/* The hand-off curtain. It is inert for the whole stay of the layer and
+          only breathes during the exit (`.entry-root[data-exiting='true']`),
+          so the menu arrives through a dissolve rather than by deletion. */}
+      <div className="entry-veil" aria-hidden="true" />
     </div>
   );
 };

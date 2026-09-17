@@ -30,6 +30,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState<number | ''>('');
   const [image, setImage] = useState('');
+  // The stable storage reference to persist (`pathUrl` from the upload). The
+  // preview and the URL field keep showing `image`, which is always a
+  // renderable URL — exactly the previous UX.
+  const [imageKey, setImageKey] = useState('');
   const [badge, setBadge] = useState('');
   const [preparationTimeMinutes, setPreparationTimeMinutes] = useState<number | ''>('');
   const [calories, setCalories] = useState<number | ''>('');
@@ -55,6 +59,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
         return;
       }
       setImage(res.data.url);
+      // Persist the STABLE storage key (same reference the branding flow
+      // stores); `url` stays the preview source only.
+      setImageKey(res.data.pathUrl ?? res.data.url);
       setHasUnsavedChanges(true);
       showToast('success', 'تم رفع صورة الطبق بنجاح');
     } catch {
@@ -87,6 +94,9 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setDescription(product.description);
       setPrice(product.price);
       setImage(product.image);
+      // The stored value from the API is already a renderable URL; the route
+      // re-derives the stable reference from it on save.
+      setImageKey('');
       setBadge(product.badge || '');
       setPreparationTimeMinutes(product.preparationTimeMinutes || '');
       setCalories(product.calories || '');
@@ -102,6 +112,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setDescription('');
       setPrice('');
       setImage('https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80');
+      setImageKey('');
       setBadge('');
       setPreparationTimeMinutes(15);
       setCalories(450);
@@ -189,7 +200,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       nameEn: nameEn.trim() || name.trim(),
       description: description.trim(),
       price: Number(price),
-      image: image.trim() || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
+      // Uploaded file -> the stable storage key (what the DB should hold).
+      // Typed/pasted URL -> that URL, folded server-side when it is one of ours.
+      image:
+        (imageKey.trim() || image.trim()) ||
+        'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80',
       badge: badge.trim() || undefined,
       preparationTimeMinutes: Number(preparationTimeMinutes) || undefined,
       calories: Number(calories) || undefined,
@@ -386,7 +401,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                 type="url"
                 required
                 value={image}
-                onChange={(e) => setImage(e.target.value)}
+                onChange={(e) => {
+                  setImage(e.target.value);
+                  // A manually typed URL replaces any uploaded reference.
+                  setImageKey('');
+                }}
                 placeholder="https://..."
                 className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:outline-none focus:border-gold-500/60 font-mono text-[11px]"
               />

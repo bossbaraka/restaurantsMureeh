@@ -429,7 +429,12 @@ export const productCreateSchema = z
     nameEn: optionalText(120),
     description: z.string().trim().max(2000, 'الوصف طويل جداً').optional(),
     price: moneySchema,
-    image: httpsUrl('رابط الصورة'),
+    // Dish photo: the value the client persists is the STABLE storage key
+    // returned by POST /api/uploads/image (`pathUrl`), so the field must accept
+    // the asset-reference form (key | managed URL | legacy /uploads/… |
+    // external URL) — never a base64/blob payload. The route re-normalizes it
+    // through normalizeAssetReference before anything is written.
+    image: assetReference('صورة الطبق'),
     badge: optionalText(60),
     preparationTimeMinutes: z.number().int().min(0).max(600).optional(),
     calories: z.number().int().min(0).max(20000).optional(),
@@ -454,8 +459,9 @@ export const productUpdateSchema = z
     nameEn: optionalText(120),
     description: z.string().trim().max(2000, 'الوصف طويل جداً').optional(),
     price: moneySchema.optional(),
-    image: httpsUrl('رابط الصورة'),
-    imageUrl: httpsUrl('رابط الصورة'),
+    // Both aliases accept the persisted reference form (see productCreateSchema).
+    image: assetReference('صورة الطبق'),
+    imageUrl: assetReference('صورة الطبق'),
     badge: z.string().trim().max(60).nullable().optional(),
     preparationTimeMinutes: z.number().int().min(0).max(600).optional(),
     calories: z.number().int().min(0).max(20000).optional(),
@@ -625,7 +631,9 @@ export const offerCreateSchema = z
     titleEn: optionalText(120),
     subtitle: optionalText(200),
     description: optionalText(2000),
-    image: httpsUrl('رابط الصورة'),
+    // Offer photo: same reference contract as dish photos (the route folds a
+    // managed URL into its storage key and refuses transient payloads).
+    image: assetReference('صورة العرض'),
     originalPrice: moneySchema.optional(),
     discountedPrice: moneySchema.optional(),
     discountPercentage: finiteNumber(0, 100, 'نسبة الخصم غير صالحة').optional(),
