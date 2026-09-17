@@ -9,6 +9,7 @@ import {
   ChefHat,
   Check,
   Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 import { GUIDE_OPEN_EVENT } from './guideBus';
 import { useRestaurant } from '../../context/RestaurantContext';
@@ -21,12 +22,14 @@ import { useDialog } from '../../hooks/useDialog';
  * screens of the ordering flow — menu → cart → order tracking — instead of
  * merely pointing at controls on the first screen. Each step opens the right
  * drawer (or returns to the menu), then highlights its target so the guest
- * learns by seeing the real screen. It is opened automatically once per tab
- * and can be re-opened at any time through `openCustomerGuide()` (bound to the
- * "دليل الاستخدام" button in the header, on both desktop and mobile).
+ * learns by seeing the real screen.
+ *
+ * It NEVER opens by itself: the guest asks for it (the "دليل الاستخدام" button
+ * in the header, on desktop and mobile — `openCustomerGuide()`), a confirmation
+ * card explains what is about to happen, and only an explicit confirmation
+ * starts the tour. The component stays reusable: drop it in the menu and fire
+ * the same event from anywhere.
  */
-
-const GUIDE_SEEN_KEY = 'merar_customer_guide_seen';
 
 interface GuideStep {
   id: string;
@@ -95,6 +98,9 @@ export const CustomerGuideOverlay: React.FC = () => {
   const { setIsCartOpen, setIsOrderTrackingOpen } = useRestaurant();
 
   const [isOpen, setIsOpen] = useState(false);
+  // The guest's request (Help button) only opens this confirmation card —
+  // the tour itself starts after an explicit confirmation.
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
@@ -161,7 +167,19 @@ export const CustomerGuideOverlay: React.FC = () => {
     };
   }, [isOpen, stepIndex, activeStep, measure, setIsCartOpen, setIsOrderTrackingOpen]);
 
-  const open = useCallback(() => {
+  /** Guest asked for help: show the confirmation, do not start the tour. */
+  const askToOpen = useCallback(() => {
+    setIsConfirmOpen(true);
+  }, []);
+
+  /** Confirmation card dismissed without consent. */
+  const dismissConfirm = useCallback(() => {
+    setIsConfirmOpen(false);
+  }, []);
+
+  /** Explicit confirmation: now the tour may start. */
+  const confirmOpen = useCallback(() => {
+    setIsConfirmOpen(false);
     setStepIndex(0);
     setIsOpen(true);
   }, []);
@@ -171,13 +189,6 @@ export const CustomerGuideOverlay: React.FC = () => {
     // Return the guest to the menu screen rather than leaving a drawer open.
     setIsCartOpen(false);
     setIsOrderTrackingOpen(false);
-    if (typeof window !== 'undefined') {
-      try {
-        sessionStorage.setItem(GUIDE_SEEN_KEY, 'true');
-      } catch {
-        /* noop */
-      }
-    }
   }, [setIsCartOpen, setIsOrderTrackingOpen]);
 
   const next = useCallback(() => {
@@ -195,24 +206,12 @@ export const CustomerGuideOverlay: React.FC = () => {
   }, []);
 
   // Listen for external open requests (header "دليل الاستخدام" button).
+  // A request only surfaces the confirmation — there is no auto-open path.
   useEffect(() => {
-    const handler = () => open();
+    const handler = () => askToOpen();
     window.addEventListener(GUIDE_OPEN_EVENT, handler);
     return () => window.removeEventListener(GUIDE_OPEN_EVENT, handler);
-  }, [open]);
-
-  // First-run auto-open (once per tab).
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      if (!sessionStorage.getItem(GUIDE_SEEN_KEY)) {
-        const t = window.setTimeout(() => open(), 1600);
-        return () => window.clearTimeout(t);
-      }
-    } catch {
-      /* noop */
-    }
-  }, [open]);
+  }, [askToOpen]);
 
   const showTooltip = !!targetRect;
 
@@ -220,6 +219,60 @@ export const CustomerGuideOverlay: React.FC = () => {
   // composes with the drawers the tour opens), and focus is trapped inside the
   // tooltip controls. The surface mounts one render after the step measures.
   useDialog({ isOpen: isOpen && showTooltip, onClose: close });
+  useDialog({ isOpen: isConfirmOpen, onClose: dismissConfirm });
+
+  // Confirmation card: the guest's Help request lands here, never directly in
+  // the tour. Only `confirmOpen` moves on to the walkthrough.
+  if (isConfirmOpen) {
+    return (
+      <div
+        className="fixed inset-0 z-[130] flex items-center justify-center p-4 select-none"
+        dir="rtl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guide-confirm-title"
+        aria-describedby="guide-confirm-desc"
+      >
+        <div
+          className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
+          onClick={dismissConfirm}
+        />
+        <div className="relative w-full max-w-sm rounded-2xl bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.45)] backdrop-blur-xl p-5 shadow-[0_18px_50px_rgba(0,0,0,0.7)] text-right space-y-3">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)] shrink-0">
+              <HelpCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 id="guide-confirm-title" className="text-sm font-bold text-luxury-50 font-serif">
+                الدليل الإرشادي
+              </h3>
+              <p id="guide-confirm-desc" className="text-[11px] text-luxury-400 mt-1 leading-relaxed">
+                جولة قصيرة تشرح خطوات الطلب داخل القائمة. هل ترغب أن نبدأها الآن؟
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              data-autofocus
+              onClick={confirmOpen}
+              className="flex-1 touch-target px-4 py-2.5 rounded-xl brand-cta font-bold text-xs cursor-pointer"
+            >
+              نعم، ابدأ الدليل
+            </button>
+            <button
+              type="button"
+              onClick={dismissConfirm}
+              className="touch-target px-4 py-2.5 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-200 text-xs font-bold cursor-pointer"
+            >
+              ليس الآن
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!isOpen || !activeStep) return null;
 

@@ -7,12 +7,14 @@ import './customerLoadingExperience.css';
 // CustomerLoadingExperience — Premium guest loading & atmosphere experience.
 //
 // 1. RTL-first, restaurant-centric, and cinematic.
-// 2. Three progressive visual stages:
-//    01 — Restaurant: coverImage ("لحظات ونكون جاهزين" / "نجهّز تجربة المطعم لك")
-//    02 — Atmosphere: galleryImages[0] ("نرتّب القائمة" / "نحمّل الأصناف والتفاصيل")
-//    03 — Experience: galleryImages[1] / fallback ("خذ وقتك" / "كل شيء جاهز لتجربتك")
+// 2. Four beats that mirror the REAL entry milestones — the animation tells
+//    the guest what the system is doing, it never fakes progress:
+//    01 — الاتصال: connecting to the restaurant (INITIALIZING/VALIDATING_QR/RETRYING)
+//    02 — الهوية: the venue's identity is known (identity payload / LOADING_RESTAURANT)
+//    03 — المنيو: preparing the menu (LOADING_CATALOG)
+//    04 — جاهز: everything is ready (READY), held for the hand-off window.
 // 3. Preloads critical assets (logo, cover, gallery[0], gallery[1]) with a 3s timeout.
-// 4. Smooth capped progress (starts >0, caps <100 until phase === 'READY').
+// 4. Progress is derived from those beats: monotonic, and 100% only when READY.
 // 5. Never shows broken-image UI; falls back gracefully to CSS 3D scene when no images exist.
 // 6. Presentation only — owns no data fetching.
 // ============================================================================
@@ -47,8 +49,42 @@ const LOADING_PHASES: ReadonlySet<EntryPhase> = new Set([
 ]);
 
 const MIN_VISUAL_DURATION_MS = 1400;
-const STAGE_INTERVAL_MS = 1800;
 const PRELOAD_TIMEOUT_MS = 3000;
+
+/**
+ * The four beats of the hand-off. Each beat is a REAL milestone of the entry
+ * state machine — never a decorative timer — so the animation says exactly
+ * what is happening: connecting → the venue's identity → the menu → ready.
+ * The progress rail is derived from the same beats, so it can never run ahead
+ * of the work and never reaches 100% before the data is genuinely READY.
+ */
+interface LoadingBeat {
+  id: string;
+  label: string;
+  title: string;
+  secondary: string;
+  /** Progress percentage this beat honestly represents. */
+  progress: number;
+}
+
+const LOADING_BEATS: readonly LoadingBeat[] = [
+  { id: '01', label: 'الاتصال', title: 'نتواصل مع المطعم', secondary: 'نفتح اتصالاً آمناً بطاولتك', progress: 28 },
+  { id: '02', label: 'الهوية', title: 'نتعرف على المكان', secondary: 'نرتّب لك الشعار والأجواء', progress: 52 },
+  { id: '03', label: 'المنيو', title: 'نحضّر لك المنيو', secondary: 'نرتّب الأصناف والتفاصيل', progress: 78 },
+  { id: '04', label: 'جاهز', title: 'كل شيء جاهز', secondary: 'القائمة بين يديك الآن', progress: 100 },
+];
+
+/**
+ * Which beat a phase belongs to. `hasIdentity` lets the QR path surface the
+ * venue beat as soon as the session returns the tenant identity (that path
+ * never passes through LOADING_RESTAURANT).
+ */
+function beatForPhase(phase: EntryPhase, hasIdentity: boolean): number {
+  if (phase === 'READY') return 3;
+  if (phase === 'LOADING_CATALOG') return 2;
+  if (phase === 'LOADING_RESTAURANT') return 1;
+  return hasIdentity ? 1 : 0;
+}
 
 /** Menu-shaped skeleton for loading states */
 const MenuSkeleton: React.FC = () => (
@@ -152,8 +188,6 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
 
   const [logoBroken, setLogoBroken] = useState(false);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
-  const [stageIndex, setStageIndex] = useState(0);
-  const [progress, setProgress] = useState(24);
   const [assetsReady, setAssetsReady] = useState(false);
 
   const mountTimeRef = useRef<number>(Date.now());
@@ -163,6 +197,13 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
   const nameEn = restaurant?.nameEn || '';
   const initialChar = (nameEn.charAt(0) || name.charAt(0) || 'م').toUpperCase();
   const rawLogo = !logoBroken && restaurant?.logo ? restaurant.logo.trim() : '';
+
+  // Latched forward-only beat, derived from the real phase: a transient
+  // RETRYING must never drag the animation (or the progress rail) backwards,
+  // and the very first paint already shows the correct beat.
+  const targetBeat = beatForPhase(phase, Boolean(name));
+  const [beat, setBeat] = useState(targetBeat);
+  if (targetBeat > beat) setBeat(targetBeat);
 
   // Extract restaurant photography
   const rawCover = (restaurant?.coverImage || '').trim();
@@ -238,71 +279,19 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
 
   const hasAnyImages = Boolean(validCover || validGallery.length > 0);
 
-  // Define the 3 distinct visual stages
-  const stages = useMemo(() => {
-    // Stage 1: Restaurant (coverImage)
-    const s1Img = validCover || validGallery[0] || '';
-    // Stage 2: Atmosphere (galleryImages[0])
-    const s2Img = validGallery[0] || validCover || '';
-    // Stage 3: Experience (galleryImages[1] or fallback)
-    const s3Img = validGallery[1] || validGallery[0] || validCover || '';
-
-    return [
-      {
-        id: '01' as const,
-        label: 'المطعم',
-        title: 'لحظات ونكون جاهزين',
-        secondary: 'نجهّز تجربة المطعم لك',
-        image: s1Img,
-      },
-      {
-        id: '02' as const,
-        label: 'الأجواء',
-        title: 'نرتّب القائمة',
-        secondary: 'نحمّل الأصناف والتفاصيل',
-        image: s2Img,
-      },
-      {
-        id: '03' as const,
-        label: 'التجربة',
-        title: 'خذ وقتك',
-        secondary: 'كل شيء جاهز لتجربتك',
-        image: s3Img,
-      },
-    ];
+  // One image per beat, best-first: the venue's own photography is the hero,
+  // and the final beat reuses the strongest shot so the hand-off is seamless.
+  const beatImages = useMemo(() => {
+    const s1 = validCover || validGallery[0] || '';
+    const s2 = validGallery[0] || validCover || '';
+    const s3 = validGallery[1] || validGallery[0] || validCover || '';
+    return [s1, s2, s3, s1];
   }, [validCover, validGallery]);
 
-  // Cycle through the 3 stages during active loading
-  useEffect(() => {
-    if (!isLoading) return;
-    const interval = window.setInterval(() => {
-      setStageIndex((prev) => (prev + 1) % 3);
-    }, STAGE_INTERVAL_MS);
-
-    return () => window.clearInterval(interval);
-  }, [isLoading]);
-
-  // Progress animation:
-  // - Starts at 24%
-  // - Moves smoothly towards ~88% while loading
-  // - Reaches 100% ONLY when phase is genuinely READY
-  useEffect(() => {
-    if (isReady) {
-      setProgress(100);
-      return;
-    }
-
-    if (!isLoading) return;
-
-    const interval = window.setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 88) return 88;
-        return prev + Math.floor(Math.random() * 8 + 4);
-      });
-    }, 450);
-
-    return () => window.clearInterval(interval);
-  }, [isReady, isLoading]);
+  const activeBeat = LOADING_BEATS[beat];
+  // Smooth, monotonic progress: it moves to the beat's honest value and only
+  // reaches 100% when the phase is genuinely READY.
+  const progress = isReady ? 100 : Math.min(88, activeBeat.progress);
 
   // Completion hand-off to CustomerLayout once:
   // dataReady (isReady) + (assetsReady || timeout) + minimumVisualDuration
@@ -322,8 +311,6 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
     return () => window.clearTimeout(timer);
   }, [isReady, onComplete]);
 
-  const activeStage = stages[stageIndex];
-
   return (
     <div
       className="mload-root mload"
@@ -340,7 +327,10 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
       </div>
 
       <div className="mload-container">
-        {isLoading && (
+        {/* The final beat (READY) stays on screen during the hand-off window
+            — assets + minimum visual duration — so the journey ends on
+            "جاهز" instead of cutting to a blank canvas. */}
+        {(isLoading || isReady) && (
           <>
             {/* Restaurant Brand Header */}
             <div className="mload-brand">
@@ -362,19 +352,31 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
               </div>
             </div>
 
+            {/* Connection signal — a calm cue that we are reaching the
+                restaurant; it settles when everything is ready. */}
+            <div
+              className="mload-signal"
+              data-state={isReady ? 'ready' : 'connecting'}
+              aria-hidden="true"
+            >
+              <span className="mload-signal__dot" />
+              <span className="mload-signal__dot" />
+              <span className="mload-signal__dot" />
+            </div>
+
             {/* Atmosphere Photography Showcase or Fallback 3D Scene */}
             {hasAnyImages ? (
               <div className="mload-showcase">
                 <div className="mload-slides">
-                  {stages.map((st, idx) => (
+                  {LOADING_BEATS.map((beatDef, idx) => (
                     <div
-                      key={st.id}
-                      className={`mload-slide ${idx === stageIndex ? 'mload-slide--active' : ''}`}
+                      key={beatDef.id}
+                      className={`mload-slide ${idx === beat ? 'mload-slide--active' : ''}`}
                     >
-                      {st.image ? (
+                      {beatImages[idx] ? (
                         <img
-                          src={st.image}
-                          alt={st.label}
+                          src={beatImages[idx]}
+                          alt={beatDef.label}
                           className="mload-slide__img"
                           loading="eager"
                         />
@@ -388,36 +390,45 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
                   ))}
                 </div>
 
-                {/* Bottom Overlay with Stage Typography */}
-                <div className="mload-overlay-info">
+                {/* Bottom Overlay with Beat Typography — remounts per beat so
+                    the copy fades in softly instead of snapping. */}
+                <div className="mload-overlay-info" key={activeBeat.id}>
                   <div className="mload-stage-badge">
-                    <span className="font-mono">{activeStage.id}</span>
+                    <span className="font-mono">{activeBeat.id}</span>
                     <span>·</span>
-                    <span>{activeStage.label}</span>
+                    <span>{activeBeat.label}</span>
                   </div>
-                  <h2 className="mload-overlay-title">{activeStage.title}</h2>
-                  <p className="mload-overlay-sub">{activeStage.secondary}</p>
+                  <h2 className="mload-overlay-title">{activeBeat.title}</h2>
+                  <p className="mload-overlay-sub">{activeBeat.secondary}</p>
                 </div>
               </div>
             ) : (
               <div className="mload-showcase flex items-center justify-center p-6">
                 <FallbackLoadingScene />
-                <div className="mload-overlay-info">
-                  <h2 className="mload-overlay-title">{activeStage.title}</h2>
+                <div className="mload-overlay-info" key={activeBeat.id}>
+                  <div className="mload-stage-badge">
+                    <span className="font-mono">{activeBeat.id}</span>
+                    <span>·</span>
+                    <span>{activeBeat.label}</span>
+                  </div>
+                  <h2 className="mload-overlay-title">{activeBeat.title}</h2>
                   <p className="mload-overlay-sub">نجهّز لك التجربة...</p>
                 </div>
               </div>
             )}
 
-            {/* 3-Stage Pills Bar */}
+            {/* Hand-off rail — the guest's place in the four real beats */}
             <div className="mload-stages-bar">
-              {stages.map((st, idx) => (
+              {LOADING_BEATS.map((beatDef, idx) => (
                 <div
-                  key={st.id}
-                  className={`mload-step-pill ${idx === stageIndex ? 'mload-step-pill--active' : ''}`}
+                  key={beatDef.id}
+                  className={`mload-step-pill ${idx === beat ? 'mload-step-pill--active' : ''} ${
+                    idx < beat ? 'mload-step-pill--done' : ''
+                  }`}
+                  data-state={idx < beat ? 'done' : idx === beat ? 'active' : 'idle'}
                 >
-                  <span className="mload-step-pill__num">{st.id}</span>
-                  <span>{st.label}</span>
+                  <span className="mload-step-pill__num">{beatDef.id}</span>
+                  <span>{beatDef.label}</span>
                 </div>
               ))}
             </div>
@@ -432,24 +443,29 @@ export const CustomerLoadingExperience: React.FC<CustomerLoadingExperienceProps>
               </div>
             </div>
 
-            {/* Thumbnail previews for secondary images (if multi-image) */}
+            {/* Decorative thumbnails of the venue's own photography — they
+                follow the beats, they are not controls. */}
             {validGallery.length > 1 && (
               <div className="mload-previews" aria-hidden="true">
-                {stages.map((st, idx) => (
+                {beatImages.slice(0, 3).map((src, idx) => (
                   <div
-                    key={st.id}
-                    onClick={() => setStageIndex(idx)}
-                    className={`mload-preview-thumb ${idx === stageIndex ? 'mload-preview-thumb--active' : ''}`}
+                    key={idx}
+                    className={`mload-preview-thumb ${
+                      idx === Math.min(beat, 2) ? 'mload-preview-thumb--active' : ''
+                    }`}
                   >
-                    {st.image && <img src={st.image} alt="" />}
+                    {src && <img src={src} alt="" />}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* Hidden accessibility/fallback elements */}
+            {/* Hidden accessibility/fallback elements + the polite status line */}
             <MenuSkeleton />
             <div className="sr-only">نجهّز لك التجربة...</div>
+            <div className="sr-only">
+              {activeBeat.title} — {activeBeat.secondary}
+            </div>
           </>
         )}
 

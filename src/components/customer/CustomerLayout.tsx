@@ -26,6 +26,40 @@ import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 /** Cards rendered above the fold get eager loading + network priority. */
 const PRIORITY_CARDS = 4;
 
+/**
+ * F-04 — "the guest already saw the entry layer in this tab" flag.
+ *
+ * The flag MUST NOT be keyed by the tenant slug: on the first render after a
+ * reload the entry state machine is still running and `currentRestaurant` is
+ * `null` (the tenant is only known once the session/catalog request resolves),
+ * so a slug-scoped key would be read under the fallback key while the
+ * dismissal wrote the real slug — the two could never match and the entry
+ * layer replayed on every reload.
+ *
+ * One stable key gives exactly what the entry layer promises: once per
+ * browser tab. Read and write both go through these helpers so the two keys
+ * can never drift apart again.
+ */
+export const WELCOME_SEEN_KEY = 'merar_welcome_seen';
+
+export function hasSeenWelcome(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return sessionStorage.getItem(WELCOME_SEEN_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function markWelcomeSeen(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(WELCOME_SEEN_KEY, 'true');
+  } catch {
+    /* storage unavailable — the entry layer simply shows again next reload */
+  }
+}
+
 interface CartIndexEntry {
   quantity: number;
   lastItem: CartItem;
@@ -104,12 +138,9 @@ export const CustomerLayout: React.FC = () => {
   const deferredSearch = useDeferredValue(searchQuery);
 
   const [showWelcome, setShowWelcome] = useState<boolean>(() => {
-    // Show welcome screen initially once per session
-    if (typeof window !== 'undefined') {
-      const seen = sessionStorage.getItem(`merar_welcome_seen_${currentRestaurant?.slug || 'restaurant'}`);
-      return !seen;
-    }
-    return true;
+    // Show the entry layer initially once per browser tab — the flag is
+    // slug-independent on purpose (see hasSeenWelcome).
+    return !hasSeenWelcome();
   });
 
   // One-shot flag: when the entry experience hands the guest over, the menu
@@ -120,9 +151,7 @@ export const CustomerLayout: React.FC = () => {
   const handleDismissWelcome = () => {
     setShowWelcome(false);
     setMenuReveal(true);
-    if (typeof window !== 'undefined' && currentRestaurant) {
-      sessionStorage.setItem(`merar_welcome_seen_${currentRestaurant.slug}`, 'true');
-    }
+    markWelcomeSeen();
   };
 
   // Ensure we always have an effective category that contains actual dishes
@@ -526,9 +555,12 @@ export const CustomerLayout: React.FC = () => {
       <DirectTableEntryModal />
       <OrderCompletedModal />
 
-      {/* Interactive customer onboarding tour. Rendered last so its dialog
-          surface wins focus/Escape management over the drawers it opens. */}
-      <CustomerGuideOverlay />
+      {/* Interactive customer onboarding tour. It belongs to the MENU only:
+          it is not mounted while the entry layer is on screen, never opens by
+          itself, and starts solely from the guest's confirmed request (header
+          "دليل الاستخدام" → confirmation → start). Rendered last so its
+          dialog surface wins focus/Escape management over the drawers it opens. */}
+      {!showWelcome && <CustomerGuideOverlay />}
     </div>
   );
 };
