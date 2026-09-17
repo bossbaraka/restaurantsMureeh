@@ -108,6 +108,21 @@ router.get('/overview', async (req: Request, res: Response) => {
             coverImage: assets.coverImageUrl,
             logoStoragePath: assets.logoStoragePath,
             coverStoragePath: assets.coverStoragePath,
+            // Full tenant identity: switching tenants in the admin console
+            // replaces `currentRestaurant` with this entry, so a partial row
+            // here used to drop the theme/branding of the selected venue.
+            primaryColor: r.primaryColor,
+            accentColor: r.accentColor,
+            logoFit: r.logoFit,
+            logoPosition: r.logoPosition,
+            businessType: r.businessType,
+            description: r.description,
+            phone: r.phone,
+            address: r.address,
+            galleryImages: assets.galleryImages,
+            galleryStoragePaths: assets.galleryStoragePaths,
+            mapImageUrl: assets.mapImageUrl,
+            mapStoragePath: assets.mapStoragePath,
             status: r.status,
             currency: r.currency,
             planId: r.planId,

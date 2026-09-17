@@ -24,6 +24,8 @@ import {
 } from '../types/restaurant';
 import { api, apiConnectionUrl, newClientRequestId } from '../services/api';
 import {
+  mergeRestaurantIdentity,
+  parseCustomerEntryUrl,
   runCustomerEntry,
   type EntryApiResponse,
   type EntryCatalogData,
@@ -640,18 +642,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   //   - guests never see technical errors — only the premium loader, the
   //     safe recovery card or the minimal invalid state.
   // -------------------------------------------------------------------------
-  const parseEntryUrl = useCallback((): { slug: string; qrToken: string } => {
-    if (typeof window === 'undefined') return { slug: 'mureeh', qrToken: '' };
-    const params = new URLSearchParams(window.location.search);
-    const pathMatch = window.location.pathname.match(/\/r\/([a-zA-Z0-9_-]+)/);
-    let rawSlug = (pathMatch?.[1] || params.get('r') || params.get('restaurant') || params.get('slug') || '').toLowerCase();
-    if (rawSlug === 'marer' || rawSlug === 'merar') {
-      rawSlug = 'mureeh';
-    }
-    const slug = rawSlug || 'mureeh';
-    const qrToken = params.get('qr') || params.get('table') || params.get('t') || params.get('tableId') || '';
-    return { slug, qrToken };
-  }, []);
+  const parseEntryUrl = useCallback(
+    (): { slug: string; qrToken: string } =>
+      parseCustomerEntryUrl(
+        typeof window === 'undefined' ? null : window.location
+      ),
+    []
+  );
 
   const startCustomerEntry = useCallback(
     async (runId: number, slug: string, qrTokenRaw: string) => {
@@ -678,7 +675,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         onPhase: setPhaseSafe,
         onIdentity: (restaurant) => {
-          if (!isStale()) setCurrentRestaurant(restaurant as unknown as Restaurant);
+          if (isStale()) return;
+          // Merge, never replace: the identity payload may be partial, and a
+          // missing field must not erase branding that is already known
+          // (theme colors, cover, logo framing, gallery, map).
+          setCurrentRestaurant((prev) =>
+            mergeRestaurantIdentity(prev, restaurant as unknown as Partial<Restaurant>)
+          );
         },
       });
 
@@ -828,7 +831,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       return;
     }
 
-    if (slug) {
+    // A customer entry run starts ONLY for a real venue link (`/r/{slug}`,
+    // `?r=`) or a QR token. A bare `/` visit is the platform landing page and
+    // must never fire a fake QR/customer initialization request.
+    if (slug || qrToken) {
       urlHandledRef.done = true;
       const runId = ++entryRunRef.current;
       void startCustomerEntry(runId, slug, qrToken);

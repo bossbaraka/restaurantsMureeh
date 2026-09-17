@@ -1,7 +1,8 @@
 import { config } from '../../config';
 import { LocalStorageDriver } from './local';
 import { SupabaseStorageDriver } from './supabase';
-import { absolutizePublicUrl } from './resolve';
+import { absolutizePublicUrl, isStorageKey } from './resolve';
+import { localKeyFromUrl, supabaseKeyFromUrl } from './helpers';
 import type { StorageKind } from './helpers';
 
 // ============================================================
@@ -134,14 +135,78 @@ export function assetNormalizerFor(
   storage: Pick<StorageService, 'keyFromUrl'>
 ): import('./resolve').AssetNormalizer {
   return {
-    keyFromUrl: (value: string) => {
-      try {
-        return storage.keyFromUrl(value);
-      } catch {
-        return null;
-      }
-    },
+    keyFromUrl: (value: string) => universalKeyFromUrl(value, storage),
   };
+}
+
+/**
+ * Recover the canonical object key (`restaurants/{tenant}/{folder}/{name}`)
+ * from ANY reference shape this platform has ever persisted, regardless of
+ * which driver is active right now:
+ *
+ *   A. a URL the ACTIVE driver manages            -> storage.keyFromUrl
+ *   B. a Supabase public URL (`/object/public/{bucket}/restaurants/...`)
+ *   C. a legacy local URL (`/uploads/restaurants/...`, bare or host-prefixed)
+ *   D. an already-canonical key/path (`restaurants/...`, optional leading `/`)
+ *
+ * This is what keeps rows written under the local driver renderable after
+ * the deployment moved to Supabase (and vice-versa): the key is host- and
+ * driver-independent, so the resolver can always re-derive the current URL.
+ *
+ * Safety: only keys under the managed `restaurants/` prefix are accepted, so
+ * an arbitrary external URL (CDN/Unsplash/…) is never mistaken for a tenant
+ * asset — it stays external/unresolved for the caller. Never throws.
+ */
+export function universalKeyFromUrl(
+  value: string,
+  storage?: Pick<StorageService, 'keyFromUrl'>
+): string | null {
+  if (typeof value !== 'string') return null;
+  const v = value.trim();
+  if (!v) return null;
+
+  // A. active driver
+  if (storage) {
+    try {
+      const key = storage.keyFromUrl(v);
+      if (isStorageKey(key)) return key;
+    } catch {
+      /* fall through to the driver-independent shapes */
+    }
+  }
+
+  // B. Supabase public URL (current bucket name first, then any bucket:
+  // legacy rows may predate a bucket rename).
+  const supabaseKey =
+    supabaseKeyFromUrl(v, config.supabaseBucket) ?? supabaseKeyFromAnyBucket(v);
+  if (isStorageKey(supabaseKey)) return supabaseKey;
+
+  // C. local legacy URL (relative or absolute on any host)
+  const localKey = stripQuery(localKeyFromUrl(v));
+  if (isStorageKey(localKey)) return localKey;
+
+  // D. canonical key (tolerating a single leading slash)
+  const bare = v.startsWith('/') ? v.slice(1) : v;
+  if (isStorageKey(bare)) return bare;
+
+  return null;
+}
+
+function stripQuery(key: string | null): string | null {
+  if (!key) return null;
+  const idx = key.search(/[?#]/);
+  return idx === -1 ? key : key.slice(0, idx);
+}
+
+const SUPABASE_PUBLIC_ANY_BUCKET_RE = /\/object\/public\/[^/?#]+\/(restaurants\/[^?#]+)/;
+function supabaseKeyFromAnyBucket(url: string): string | null {
+  const m = SUPABASE_PUBLIC_ANY_BUCKET_RE.exec(url);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -202,6 +267,11 @@ export function resetStorageForTests(): void {
 export async function verifyStorageReady(): Promise<{ ok: boolean; error?: string }> {
   try {
     const storage = getStorage();
+    // Object storage: make sure the PUBLIC asset bucket exists before probing
+    // it. Idempotent — an existing bucket is left exactly as it is.
+    if (storage instanceof SupabaseStorageDriver) {
+      await storage.ensurePublicBucket();
+    }
     await storage.exists('__healthcheck__/readiness-probe');
     return { ok: true };
   } catch (err) {

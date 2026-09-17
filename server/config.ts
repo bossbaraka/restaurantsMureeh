@@ -40,9 +40,9 @@ const envSchema = z.object({
   //              in production unless explicitly opted-in, see below).
   // - `supabase` → persistent Supabase Storage bucket (S3-compatible API).
   // - `object` → alias for `supabase`, to match generic deployment naming.
-  STORAGE_DRIVER: z
-    .enum(['local', 'supabase', 'object'])
-    .default('local'),
+  // Optional: when unset, `supabase` is inferred if SUPABASE_URL and
+  // SUPABASE_SERVICE_ROLE_KEY are both present; otherwise `local`.
+  STORAGE_DRIVER: z.enum(['local', 'supabase', 'object']).optional(),
   UPLOAD_DIR: z.string().min(1).default('./uploads'),
   // PRIVATE namespace for transfer-receipt images (never statically served).
   PRIVATE_UPLOAD_DIR: z.string().min(1).default('./private-uploads'),
@@ -101,8 +101,18 @@ export const isProd = env.NODE_ENV === 'production';
 export const isTest = env.NODE_ENV === 'test';
 
 // `object` is a generic alias; the concrete implemented driver is `supabase`.
-const storageDriver =
+// Resolution order:
+//   1. explicit STORAGE_DRIVER                          -> honoured as-is
+//   2. SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY present -> supabase
+//   3. otherwise                                        -> local (existing default)
+// (2) closes the Render gap where credentials were configured but the
+// driver variable was not, which silently wrote uploads to the ephemeral
+// filesystem and lost them on the next restart/redeploy.
+const explicitStorageDriver =
   env.STORAGE_DRIVER === 'object' ? ('supabase' as const) : env.STORAGE_DRIVER;
+const storageDriver: 'local' | 'supabase' =
+  explicitStorageDriver ??
+  (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY ? 'supabase' : 'local');
 
 export const allowedOrigins = env.CORS_ORIGIN.split(',')
   .map((origin) => origin.trim())

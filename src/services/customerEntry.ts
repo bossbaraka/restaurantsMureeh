@@ -148,6 +148,63 @@ async function runStage<T>(
   return { exhausted: true };
 }
 
+/**
+ * Parse the customer entry intent out of the current URL.
+ *
+ *   /r/{slug}[?qr=…]         -> { slug, qrToken }
+ *   /?r={slug} | ?restaurant= | ?slug=
+ *   /?qr=… | ?table= | ?t= | ?tableId=   -> { slug: '', qrToken }
+ *   /                        -> { slug: '', qrToken: '' }  (no customer entry)
+ *
+ * A bare `/` visit is the platform landing page: it must NOT be coerced into
+ * a default venue slug, otherwise every root visit fires a fake customer
+ * QR/entry request. Legacy brand aliases still map to the canonical slug.
+ */
+export function parseCustomerEntryUrl(
+  location: { pathname: string; search: string } | null | undefined
+): { slug: string; qrToken: string } {
+  if (!location) return { slug: '', qrToken: '' };
+  const params = new URLSearchParams(location.search || '');
+  const pathMatch = (location.pathname || '').match(/\/r\/([a-zA-Z0-9_-]+)/);
+  let slug = (
+    pathMatch?.[1] ||
+    params.get('r') ||
+    params.get('restaurant') ||
+    params.get('slug') ||
+    ''
+  ).toLowerCase();
+  if (slug === 'marer' || slug === 'merar') slug = 'mureeh';
+  const qrToken = params.get('qr') || params.get('table') || params.get('t') || params.get('tableId') || '';
+  return { slug, qrToken };
+}
+
+/**
+ * Merge a (possibly partial) restaurant identity payload into the restaurant
+ * already in state. A field the incoming payload does not carry — or carries
+ * as `undefined` / `null` / `''` / `[]` — must never erase a value that is
+ * already known (theme colors, cover, logo framing, gallery, map…). When the
+ * incoming identity is a DIFFERENT venue, nothing of the old one is kept.
+ */
+export function mergeRestaurantIdentity<T extends { id: string }>(
+  prev: T | null,
+  incoming: Partial<T> & { id?: string }
+): T {
+  if (!prev || (incoming.id && incoming.id !== prev.id)) {
+    return incoming as T;
+  }
+  const merged: Record<string, unknown> = { ...(prev as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(incoming as Record<string, unknown>)) {
+    const empty =
+      value === undefined ||
+      value === null ||
+      value === '' ||
+      (Array.isArray(value) && value.length === 0);
+    if (empty && key in merged) continue;
+    merged[key] = value;
+  }
+  return merged as T;
+}
+
 export interface EntryInput {
   slug: string;
   /** Opaque table capability token; empty/undefined = direct venue link (browse-only). */
@@ -180,7 +237,7 @@ export async function runCustomerEntry(
     if (hasQr) {
       const sessionStage = await runStage(
         'VALIDATING_QR',
-        () => api.createTableSession(qrToken, slug),
+        () => api.createTableSession(qrToken, slug || undefined),
         classifySessionResponse,
         hooks
       );
@@ -190,10 +247,15 @@ export async function runCustomerEntry(
       if (session && hooks.onIdentity) hooks.onIdentity(session.restaurant);
     }
 
+    // A QR-only link carries no slug in the URL; the venue is whatever the
+    // validated table session resolved to (never a hard-coded default).
+    const catalogSlug = slug || (typeof session?.restaurant?.slug === 'string' ? session.restaurant.slug : '');
+    if (!catalogSlug) return { outcome: 'INVALID', reason: 'restaurant' };
+
     hooks.onPhase?.(hasQr ? 'LOADING_CATALOG' : 'LOADING_RESTAURANT');
     const catalogStage = await runStage(
       hasQr ? 'LOADING_CATALOG' : 'LOADING_RESTAURANT',
-      () => api.getCatalog(slug, hasQr ? qrToken : undefined),
+      () => api.getCatalog(catalogSlug, hasQr ? qrToken : undefined),
       (res) => classifyCatalogResponse(res, hasQr),
       hooks
     );
