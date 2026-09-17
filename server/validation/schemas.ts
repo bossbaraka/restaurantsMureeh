@@ -609,6 +609,10 @@ export const qrSessionSchema = z
   .object({
     slug: z.string().trim().max(120).optional(),
     restaurantId: idSchema.optional(),
+    // A device may present its already-issued session capability after a
+    // reload. The server can then restore read-only order tracking without
+    // reopening a CLOSED table session or exposing it to a fresh QR scan.
+    resumeSessionToken: z.string().trim().min(8).max(200).optional(),
   })
   .strict();
 

@@ -223,6 +223,11 @@ interface TableBinding {
   tableId: string;
   tableNumber: number;
   qrToken: string;
+  // The opaque capability is persisted only for this browser tab. It lets a
+  // reload restore this guest's own order tracker after the business session
+  // closes; the QR token alone can never recover an earlier guest's orders.
+  sessionId?: string;
+  sessionToken?: string;
 }
 
 function readTableBinding(): TableBinding | null {
@@ -242,6 +247,14 @@ function readTableBinding(): TableBinding | null {
         tableId: parsed.tableId,
         tableNumber: Number(parsed.tableNumber) || 0,
         qrToken: parsed.qrToken,
+        sessionId:
+          typeof parsed.sessionId === 'string' && parsed.sessionId
+            ? parsed.sessionId
+            : undefined,
+        sessionToken:
+          typeof parsed.sessionToken === 'string' && parsed.sessionToken
+            ? parsed.sessionToken
+            : undefined,
       };
     }
     return null;
@@ -657,11 +670,29 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (!isStale()) setEntryPhase(phase);
       };
 
+      const storedBinding = readTableBinding();
+
       // The entry orchestrator works on minimal structural shapes; the real
-      // API client returns rich domain types — bridge them once here.
+      // API client returns rich domain types — bridge them once here. A reload
+      // presents the tab's saved session capability so the server can restore
+      // the same tracker without reopening a CLOSED business session. If that
+      // capability has naturally expired, explicitly retry as a fresh QR scan;
+      // the rejected capability itself never grants access.
       const entryApi = {
-        createTableSession: (token: string, s?: string) =>
-          api.createTableSession(token, s) as unknown as Promise<EntryApiResponse<EntrySessionData>>,
+        createTableSession: async (token: string, s?: string) => {
+          const isBoundQr = storedBinding?.qrToken === token;
+          const resumeSessionToken = isBoundQr ? storedBinding.sessionToken : undefined;
+          let response = await api.createTableSession(
+            token,
+            s,
+            isBoundQr ? storedBinding?.restaurantId : undefined,
+            resumeSessionToken
+          );
+          if (!response.success && response.statusCode === 403 && resumeSessionToken) {
+            response = await api.createTableSession(token, s, storedBinding?.restaurantId);
+          }
+          return response as unknown as EntryApiResponse<EntrySessionData>;
+        },
         getCatalog: (s: string, q?: string) =>
           api.getPublicRestaurantBySlug(s, q) as unknown as Promise<EntryApiResponse<EntryCatalogData>>,
       };
@@ -687,7 +718,6 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       if (!isStale()) setEntryInvalidReason(null);
 
-      const storedBinding = readTableBinding();
       const urlToken = qrTokenRaw && qrTokenRaw !== 'default' ? qrTokenRaw : '';
       // A fresh scan takes precedence over stale table context: the new token
       // is validated SERVER-SIDE before anything is adopted. Only when the
@@ -723,6 +753,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               tableId: session.table.id,
               tableNumber: session.table.tableNumber,
               qrToken: adoptedToken,
+              sessionId: session.session.id,
+              sessionToken: session.session.sessionToken,
             });
           }
         }
@@ -865,7 +897,12 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // SSE real-time listener for customers with an active table session.
   useEffect(() => {
     if (!currentRestaurant || typeof window === 'undefined') return;
-    if (viewMode !== 'CUSTOMER' || !activeTableId || !currentTableSession?.sessionToken) return;
+    if (
+      viewMode !== 'CUSTOMER' ||
+      !activeTableId ||
+      !currentTableSession?.sessionToken ||
+      currentTableSession.status !== 'ACTIVE'
+    ) return;
 
     let conn: { close: () => void } | null = null;
     try {
@@ -959,7 +996,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       conn?.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, viewMode]);
+  }, [currentRestaurant?.id, activeTableId, currentTableSession?.sessionToken, currentTableSession?.status, viewMode]);
 
   // SSE real-time listener for staff (Manager / Kitchen KDS / Cashier / Waiter)
   useEffect(() => {
@@ -1279,6 +1316,14 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setCurrentTableSession(res.data.session);
       setActiveTableId(res.data.table.id);
       setActiveTableNumber(res.data.table.tableNumber);
+      writeTableBinding({
+        restaurantId: res.data.restaurant.id,
+        tableId: res.data.table.id,
+        tableNumber: res.data.table.tableNumber,
+        qrToken: binding.qrToken,
+        sessionId: res.data.session.id,
+        sessionToken: res.data.session.sessionToken,
+      });
       return res.data.session;
     }
     return null;

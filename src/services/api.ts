@@ -753,11 +753,12 @@ class RestaurantApiService {
   public async createTableSession(
     qrToken: string,
     slug?: string,
-    restaurantId?: string
+    restaurantId?: string,
+    resumeSessionToken?: string
   ): Promise<ApiResponse<{ session: TableSession; table: RestaurantTable; restaurant: Restaurant }>> {
     const res = await this.request<any>('POST', `/public/tables/qr/${encodeURIComponent(qrToken)}/session`, {
       auth: false,
-      body: { slug, restaurantId },
+      body: { slug, restaurantId, resumeSessionToken },
     });
     if (res.success && res.data) {
       // The session payload carries the complete visual identity (theme
@@ -772,7 +773,16 @@ class RestaurantApiService {
         nameEn: raw.nameEn,
       });
       const table = mapTableRow({ id: res.data.tableId, restaurantId: restaurant.id, number: res.data.tableNumber });
-      const session = mapSessionRow({ ...res.data, status: 'ACTIVE' }, restaurant.id, res.data.tableId);
+      const session = mapSessionRow(
+        {
+          ...res.data,
+          status: res.data.sessionStatus || 'ACTIVE',
+          createdAt: res.data.sessionCreatedAt,
+          expiresAt: res.data.sessionExpiresAt,
+        },
+        restaurant.id,
+        res.data.tableId
+      );
       return { success: true, data: { session, table, restaurant }, statusCode: 200 };
     }
     return res as ApiResponse<never>;

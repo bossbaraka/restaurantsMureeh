@@ -34,6 +34,11 @@ import {
 import { generateSessionToken, roundMoney } from '../utils/security';
 import { normalizeCustomerPhone } from '../utils/phone';
 import {
+  GUEST_SESSION_PURPOSE,
+  guestSessionCapabilityWhere,
+  type GuestSessionPurpose,
+} from '../services/guestSessionAuthorization';
+import {
   publicOrderLimiter,
   waiterCallLimiter,
   qrSessionLimiter,
@@ -104,17 +109,20 @@ const resolveAssetUrl = (value: string | null | undefined): string | null => {
   return resolveAssetReference(value, normalizer, toUrl).url;
 };
 
-async function getQrSession(sessionToken: unknown, restaurantId: string, tableId: string) {
-  if (typeof sessionToken !== 'string' || !sessionToken) return null;
-  return prisma.tableSession.findFirst({
-    where: {
-      sessionToken,
-      restaurantId,
-      tableId,
-      status: 'ACTIVE',
-      expiresAt: { gt: new Date() },
-    },
+async function getQrSession(
+  sessionToken: unknown,
+  restaurantId: string,
+  tableId: string,
+  purpose: GuestSessionPurpose = GUEST_SESSION_PURPOSE.INTERACTION
+) {
+  const where = guestSessionCapabilityWhere({
+    sessionToken,
+    restaurantId,
+    tableId,
+    purpose,
   });
+  if (!where) return null;
+  return prisma.tableSession.findFirst({ where });
 }
 
 // GET /api/public/events (SSE Stream for Real-time Updates)
@@ -530,9 +538,10 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { qrToken } = req.params;
-      const { slug, restaurantId } = req.body as {
+      const { slug, restaurantId, resumeSessionToken } = req.body as {
         slug?: string;
         restaurantId?: string;
+        resumeSessionToken?: string;
       };
 
       const table = await prisma.table.findUnique({
@@ -562,15 +571,38 @@ router.post(
         return res.status(403).json({ success: false, error: 'المطعم غير متاح للطلب حالياً', statusCode: 403 });
       }
 
-      // Check for existing active session
-      let session = await prisma.tableSession.findFirst({
-        where: {
-          restaurantId: restaurant.id,
-          tableId: table.id,
-          status: 'ACTIVE',
-          expiresAt: { gt: new Date() },
-        },
-      });
+      // A reload may present the exact capability issued to this device. It
+      // can resume a CLOSED session for read-only tracking, but is never
+      // reactivated. Without that proof, a fresh scan can only receive the
+      // current ACTIVE session (or create a new one), so a later guest cannot
+      // see an earlier guest's orders at the same physical table.
+      let session = resumeSessionToken
+        ? await getQrSession(
+            resumeSessionToken,
+            restaurant.id,
+            table.id,
+            GUEST_SESSION_PURPOSE.ORDER_TRACKING
+          )
+        : null;
+
+      if (resumeSessionToken && !session) {
+        return res.status(403).json({
+          success: false,
+          error: 'جلسة QR غير صالحة أو منتهية الصلاحية',
+          statusCode: 403,
+        });
+      }
+
+      if (!session) {
+        session = await prisma.tableSession.findFirst({
+          where: {
+            restaurantId: restaurant.id,
+            tableId: table.id,
+            status: 'ACTIVE',
+            expiresAt: { gt: new Date() },
+          },
+        });
+      }
 
       if (!session) {
         session = await prisma.tableSession.create({
@@ -589,6 +621,9 @@ router.post(
         data: {
           sessionToken: session.sessionToken,
           sessionId: session.id,
+          sessionStatus: session.status,
+          sessionCreatedAt: session.createdAt,
+          sessionExpiresAt: session.expiresAt,
           tableId: table.id,
           tableNumber: table.number,
           restaurant: {
@@ -644,16 +679,16 @@ function legacyAddOnName(entry: unknown): string | null {
   return null;
 }
 
-// GET /api/public/tables/:tableId/orders — the active orders of the caller's
-// own QR session. This is how a guest sees live order status: previously the
-// public catalog never returned orders, so the guest's tracker stayed empty
-// even while the kitchen was updating statuses over SSE.
+// GET /api/public/tables/:tableId/orders — orders owned by the caller's exact
+// QR-session capability. This is intentionally a read-only authorization
+// boundary: CLOSED sessions remain valid here until normal capability expiry,
+// while all order/table mutations continue to require an ACTIVE session.
 router.get(
   '/tables/:tableId/orders',
   customerOrdersLimiter,
   async (req: Request, res: Response) => {
     try {
-      const { tableId } = req.params;
+      const tableId = String(req.params.tableId);
       const restaurantId = req.query.restaurantId as string;
       const sessionToken = req.query.sessionToken as string;
 
@@ -661,7 +696,12 @@ router.get(
         return res.status(400).json({ success: false, error: 'restaurantId و tableId مطلوبان', statusCode: 400 });
       }
 
-      const session = await getQrSession(sessionToken, restaurantId, tableId);
+      const session = await getQrSession(
+        sessionToken,
+        restaurantId,
+        tableId,
+        GUEST_SESSION_PURPOSE.ORDER_TRACKING
+      );
       if (!session) {
         return res.status(403).json({ success: false, error: 'جلسة QR غير صالحة أو منتهية الصلاحية', statusCode: 403 });
       }
