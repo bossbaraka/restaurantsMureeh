@@ -127,6 +127,52 @@
   letter-spacing: 0.04em;
 }
 
+/* Connection signal — three slow dots that say "we are reaching the venue".
+   It settles into a single calm line the moment everything is ready. */
+.mload-signal {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -0.5rem 0 1.25rem;
+  height: 0.5rem;
+}
+
+.mload-signal__dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--brand-primary-strong, #D4AF37);
+  opacity: 0.35;
+  animation: mloadSignalPulse 2.4s ease-in-out infinite;
+}
+
+.mload-signal__dot:nth-child(2) {
+  animation-delay: 0.4s;
+}
+
+.mload-signal__dot:nth-child(3) {
+  animation-delay: 0.8s;
+}
+
+.mload-signal[data-state='ready'] .mload-signal__dot {
+  animation: none;
+  opacity: 0.9;
+  width: 10px;
+  transition: width 0.5s ease, opacity 0.5s ease;
+}
+
+@keyframes mloadSignalPulse {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.85;
+    transform: translateY(-1.5px);
+  }
+}
+
 /* Atmosphere Photography Showcase */
 .mload-showcase {
   position: relative;
@@ -186,6 +232,17 @@
   height: 100%;
   object-fit: cover;
   object-position: center;
+  /* Slow, barely-there drift: the photography breathes instead of moving. */
+  animation: mloadKenBurns 22s ease-in-out infinite alternate;
+}
+
+@keyframes mloadKenBurns {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.08);
+  }
 }
 
 .mload-slide__scrim {
@@ -210,6 +267,19 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  /* Remounted per beat (key) — the copy fades up instead of snapping. */
+  animation: mloadBeatIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes mloadBeatIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 640px) {
@@ -274,8 +344,15 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 0.75rem;
   color: #9CA3AF;
-  transition: all 0.4s ease;
+  transition: background 0.6s ease, border-color 0.6s ease, color 0.6s ease, box-shadow 0.6s ease;
   cursor: default;
+}
+
+/* Beats already completed: quiet, but visibly done. */
+.mload-step-pill[data-state='done'] {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(var(--brand-primary-strong-rgb, 212, 175, 55), 0.35);
+  color: #D1D5DB;
 }
 
 .mload-step-pill--active {
@@ -315,7 +392,9 @@
     var(--brand-accent-strong, #F59E0B)
   );
   border-radius: 9999px;
-  transition: width 0.3s cubic-bezier(0.2, 0, 0, 1);
+  /* Beat-to-beat glide: the bar eases into the next milestone instead of
+     jumping to it. */
+  transition: width 1.1s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .mload-progress-shine {
@@ -326,10 +405,10 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.6),
+    rgba(255, 255, 255, 0.35),
     transparent
   );
-  animation: mloadProgressShine 1.8s infinite;
+  animation: mloadProgressShine 3.2s ease-in-out infinite;
 }
 
 /* Secondary images preview bar below showcase (desktop/tablet) */
@@ -449,6 +528,18 @@
   .mload-slide {
     transition: opacity 0.3s linear !important;
     transform: none !important;
+  }
+  .mload-slide__img {
+    animation: none !important;
+  }
+  .mload-signal__dot {
+    animation: none !important;
+  }
+  .mload-overlay-info {
+    animation: none !important;
+  }
+  .mload-progress-fill {
+    transition: none !important;
   }
   .mload-progress-shine {
     display: none !important;

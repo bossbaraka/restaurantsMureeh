@@ -9,7 +9,11 @@
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CustomerLoadingExperience } from '../components/customer/CustomerLoadingExperience';
+import {
+  CustomerLoadingExperience,
+  type CustomerLoadingExperienceProps,
+  type IdentityLike,
+} from '../components/customer/CustomerLoadingExperience';
 
 const TECHNICAL_TERMS = [
   '500', '502', '503', '404', 'HTTP', 'API', 'fetch', 'Fetch', 'Network', 'network',
@@ -106,22 +110,25 @@ describe('structure & accessibility', () => {
   });
 });
 
-describe('cinematic 3-stage customer loading & atmosphere UX', () => {
-  it('renders all 3 visual stages (01-المطعم, 02-الأجواء, 03-التجربة) and progress bar', () => {
-    const restaurantWithAtmosphere = {
-      ...restaurant,
-      coverImage: 'https://cdn.example.test/cover.webp',
-      galleryImages: ['https://cdn.example.test/gallery1.webp', 'https://cdn.example.test/gallery2.webp'],
-    };
-    const html = render(<CustomerLoadingExperience phase="LOADING_CATALOG" restaurant={restaurantWithAtmosphere} />);
+describe('cinematic customer loading & atmosphere UX', () => {
+  const atmosphere = {
+    ...restaurant,
+    coverImage: 'https://cdn.example.test/cover.webp',
+    galleryImages: ['https://cdn.example.test/gallery1.webp', 'https://cdn.example.test/gallery2.webp'],
+  };
 
-    // Check step numbers and labels
+  it('renders the four real beats (الاتصال / الهوية / المنيو / جاهز) and progress bar', () => {
+    const html = render(<CustomerLoadingExperience phase="LOADING_CATALOG" restaurant={atmosphere} />);
+
+    // Check beat numbers and labels
     expect(html).toContain('01');
-    expect(html).toContain('المطعم');
+    expect(html).toContain('الاتصال');
     expect(html).toContain('02');
-    expect(html).toContain('الأجواء');
+    expect(html).toContain('الهوية');
     expect(html).toContain('03');
-    expect(html).toContain('التجربة');
+    expect(html).toContain('المنيو');
+    expect(html).toContain('04');
+    expect(html).toContain('جاهز');
 
     // Check progress bar structure
     expect(html).toContain('mload-progress-track');
@@ -131,6 +138,39 @@ describe('cinematic 3-stage customer loading & atmosphere UX', () => {
     // Check showcase slide image
     expect(html).toContain('mload-showcase');
     expect(html).toContain('https://cdn.example.test/cover.webp');
+  });
+
+  it('drives the beat from the real entry phase, never from a decorative timer', () => {
+    const activeOf = (
+      phase: CustomerLoadingExperienceProps['phase'],
+      tenant: IdentityLike | null
+    ) =>
+      render(<CustomerLoadingExperience phase={phase} restaurant={tenant} />).match(
+        /data-state="active"[\s\S]*?<span class="mload-step-pill__num">(\d\d)</
+      )?.[1];
+
+    // Tenant not known yet → the guest is on the "connecting" beat.
+    expect(activeOf('INITIALIZING', null)).toBe('01');
+    expect(activeOf('VALIDATING_QR', null)).toBe('01');
+    // The moment the venue identity arrives (QR session payload) the identity
+    // beat is surfaced — even while the same request is still in flight.
+    expect(activeOf('VALIDATING_QR', atmosphere)).toBe('02');
+    expect(activeOf('RETRYING', atmosphere)).toBe('02');
+    expect(activeOf('LOADING_RESTAURANT', null)).toBe('02');
+    // Catalog in flight → the menu beat.
+    expect(activeOf('LOADING_CATALOG', atmosphere)).toBe('03');
+    // Only a genuinely READY entry shows the final beat.
+    expect(activeOf('READY', atmosphere)).toBe('04');
+  });
+
+  it('never shows 100% progress before the catalog is genuinely READY', () => {
+    const loading = render(<CustomerLoadingExperience phase="LOADING_CATALOG" restaurant={atmosphere} />);
+    expect(loading).toContain('width:78%');
+    expect(loading).not.toContain('width:100%');
+
+    const ready = render(<CustomerLoadingExperience phase="READY" restaurant={atmosphere} />);
+    expect(ready).toContain('width:100%');
+    expect(ready).toContain('كل شيء جاهز');
   });
 
   it('renders rich 3D CSS fallback scene when restaurant has zero images', () => {
