@@ -231,7 +231,7 @@ export const CartDrawer: React.FC = () => {
               {/* Payment Method Notice */}
               <div className="bg-luxury-900/90 border border-luxury-800 p-2.5 rounded-xl flex items-center gap-2.5 text-[11px] text-luxury-300">
                 <Receipt className="w-4 h-4 text-[var(--brand-primary-strong)] shrink-0" />
-                <span>طريقة المحاسبة: الدفع نقداً أو بالبطاقة عند الكاشير بعد الانتهاء</span>
+                <span>طريقة المحاسبة: الدفع نقداً أو بالبطاقة لدى الكاشير، أو عبر التحويل</span>
               </div>
 
               {/* Confirm CTA */}
