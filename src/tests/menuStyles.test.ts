@@ -66,6 +66,13 @@ describe('menu grid layout cannot overlap itself', () => {
     }
   });
 
+  it('clips horizontal overflow without creating a sticky-breaking scroll container', () => {
+    const overflowX = declarations('.customer-shell').get('overflow-x') || [];
+    expect(overflowX).toContain('clip');
+    expect(overflowX).not.toContain('hidden');
+    expect(value('.menu-rail', 'position')).toContain('sticky');
+  });
+
   it('builds the rail surface from opaque brand tokens', () => {
     const rootVars = declarations(':root');
     const surface = (rootVars.get('--menu-surface') || []).join(' ');
