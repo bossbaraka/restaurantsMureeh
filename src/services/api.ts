@@ -245,7 +245,12 @@ export function mapProductRow(raw: any): Product {
     nameEn: raw.nameEn || raw.name,
     description: raw.description || '',
     price: Number(raw.price) || 0,
-    image: raw.imageUrl || raw.image || '',
+    // `imageUrl` from the API is an asset REFERENCE: a renderable absolute URL,
+    // a relative/legacy `/uploads/…` path (must resolve against the API origin
+    // in split frontend/API deployments), or — if only the stable storage key
+    // reached us — '' rather than an unrenderable bare key. The stable key
+    // itself is exposed by the API as `imageStoragePath` for diagnostics.
+    image: absoluteAssetUrl(raw.imageUrl || raw.image || ''),
     isAvailable: raw.isAvailable ?? raw.available ?? true,
     isFeatured: raw.isFeatured || false,
     badge: raw.badge || undefined,
@@ -366,7 +371,10 @@ export function mapOfferRow(raw: any): Offer {
     titleEn: raw.titleEn || undefined,
     subtitle: raw.subtitle || undefined,
     description: raw.description || undefined,
-    image: raw.image || undefined,
+    // Same asset-reference handling as dishes: absolute URLs pass through,
+    // relative/legacy paths resolve against the API origin, a bare storage key
+    // never reaches an <img>.
+    image: absoluteAssetUrl(raw.image) || undefined,
     originalPrice: raw.originalPrice !== null && raw.originalPrice !== undefined ? Number(raw.originalPrice) : undefined,
     discountedPrice: raw.discountedPrice !== null && raw.discountedPrice !== undefined ? Number(raw.discountedPrice) : undefined,
     discountPercentage: raw.discountPercentage !== null && raw.discountPercentage !== undefined ? Number(raw.discountPercentage) : undefined,
