@@ -27,6 +27,9 @@ import {
   Eye,
   Coffee,
   Croissant,
+  Landmark,
+  Wallet,
+  CreditCard,
 } from 'lucide-react';
 import type { BusinessType } from '../../types/restaurant';
 
@@ -112,6 +115,16 @@ export const BrandingSettingsView: React.FC = () => {
   const [promoVideoUrl, setPromoVideoUrl] = useState('');
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [newGalleryUrl, setNewGalleryUrl] = useState('');
+  // Customer transfer payment details — the venue's receiving account, shown to
+  // the guest in the transfer modal. '' means "not filled in"; saving '' clears
+  // the stored value (server writes NULL).
+  const [transferBankName, setTransferBankName] = useState('');
+  const [transferBankAccount, setTransferBankAccount] = useState('');
+  const [transferBankAccountHolder, setTransferBankAccountHolder] = useState('');
+  const [transferWalletName, setTransferWalletName] = useState('');
+  const [transferWalletNumber, setTransferWalletNumber] = useState('');
+  const [transferWalletAccountHolder, setTransferWalletAccountHolder] = useState('');
+  const [transferInstructions, setTransferInstructions] = useState('');
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
@@ -169,6 +182,14 @@ export const BrandingSettingsView: React.FC = () => {
       setBusinessType(currentRestaurant.businessType || 'RESTAURANT');
       setPromoVideoUrl(currentRestaurant.promoVideoUrl || '');
       setGalleryImages(currentRestaurant.galleryImages || []);
+      // Transfer receiving account (absent on tenants that configured nothing).
+      setTransferBankName(currentRestaurant.transfer?.bankName || '');
+      setTransferBankAccount(currentRestaurant.transfer?.bankAccount || '');
+      setTransferBankAccountHolder(currentRestaurant.transfer?.bankAccountHolder || '');
+      setTransferWalletName(currentRestaurant.transfer?.walletName || '');
+      setTransferWalletNumber(currentRestaurant.transfer?.walletNumber || '');
+      setTransferWalletAccountHolder(currentRestaurant.transfer?.walletAccountHolder || '');
+      setTransferInstructions(currentRestaurant.transfer?.instructions || '');
     }
   }, [currentRestaurant]);
 
@@ -303,6 +324,17 @@ export const BrandingSettingsView: React.FC = () => {
       businessType,
       promoVideoUrl: promoVideoUrl.trim(),
       galleryImages,
+      // Transfer receiving account. Trimmed, and '' is an explicit clear — the
+      // server validates bounds/characters and writes NULL for ''.
+      transfer: {
+        bankName: transferBankName.trim(),
+        bankAccount: transferBankAccount.trim(),
+        bankAccountHolder: transferBankAccountHolder.trim(),
+        walletName: transferWalletName.trim(),
+        walletNumber: transferWalletNumber.trim(),
+        walletAccountHolder: transferWalletAccountHolder.trim(),
+        instructions: transferInstructions.trim(),
+      },
     });
     setIsSaving(false);
     if (!res.success || !res.data) {
@@ -518,6 +550,163 @@ export const BrandingSettingsView: React.FC = () => {
                     إزالة صورة الخريطة
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* ============ Customer transfer payment details ============ */}
+            {/* The venue's RECEIVING account: what the guest sees inside the
+                transfer modal when he pays by bank transfer or e-wallet. Saved
+                by the same button as the rest of this screen (PUT /branding).
+                Display-only settings — they never take part in payment
+                verification: the cashier still confirms the money against the
+                guest's receipt. Leave a field empty and the guest sees a safe
+                message instead of an empty card. */}
+            <div className="pt-4 border-t border-luxury-850 space-y-4">
+              <div>
+                <h4 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-gold-400" />
+                  إعدادات الدفع — تحويل العميل
+                </h4>
+                <p className="text-[10px] text-luxury-400 mt-1 leading-relaxed">
+                  تظهر هذه البيانات للعميل داخل نافذة «الدفع عبر حوالة بنكية أو محفظة» ليعرف إلى أين
+                  يحوّل المبلغ. املأ القناة التي تستقبل بها فعلاً — الحقل الفارغ لا يظهر للعميل، وتظهر
+                  بدلاً منه رسالة آمنة. لا تُستخدم هذه البيانات في التحقق من الدفع؛ الكاشير يؤكد
+                  الحوالة من صورة الإشعار التي يرسلها العميل.
+                </p>
+              </div>
+
+              {/* BANK channel */}
+              <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+                <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
+                  <Landmark className="w-3.5 h-3.5 text-gold-400" />
+                  حوالة بنكية
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-name">
+                      اسم البنك
+                    </label>
+                    <input
+                      id="brandingsettingsview-transfer-bank-name"
+                      type="text"
+                      value={transferBankName}
+                      onChange={(e) => setTransferBankName(e.target.value)}
+                      maxLength={80}
+                      autoComplete="off"
+                      placeholder="مثال: بنك فلسطين"
+                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-holder">
+                      اسم صاحب الحساب
+                    </label>
+                    <input
+                      id="brandingsettingsview-transfer-bank-holder"
+                      type="text"
+                      value={transferBankAccountHolder}
+                      onChange={(e) => setTransferBankAccountHolder(e.target.value)}
+                      maxLength={80}
+                      autoComplete="off"
+                      placeholder="الاسم كما يظهر لدى البنك"
+                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-account">
+                    رقم الحساب / IBAN
+                  </label>
+                  <input
+                    id="brandingsettingsview-transfer-bank-account"
+                    type="text"
+                    value={transferBankAccount}
+                    onChange={(e) => setTransferBankAccount(e.target.value)}
+                    maxLength={40}
+                    autoComplete="off"
+                    spellCheck={false}
+                    dir="ltr"
+                    inputMode="text"
+                    placeholder="PS52 PALS 0453 1234 5678 9012 3456 7"
+                    className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono"
+                  />
+                  <span className="block text-[10px] text-luxury-500 mt-1">أرقام وحروف إنجليزية فقط — يُعرض للعميل كما تكتبه هنا.</span>
+                </div>
+              </div>
+
+              {/* WALLET channel */}
+              <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+                <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
+                  <Wallet className="w-3.5 h-3.5 text-gold-400" />
+                  محفظة إلكترونية
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-name">
+                      اسم المحفظة
+                    </label>
+                    <input
+                      id="brandingsettingsview-transfer-wallet-name"
+                      type="text"
+                      value={transferWalletName}
+                      onChange={(e) => setTransferWalletName(e.target.value)}
+                      maxLength={80}
+                      autoComplete="off"
+                      placeholder="مثال: محفظة جوال"
+                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-holder">
+                      اسم صاحب المحفظة
+                    </label>
+                    <input
+                      id="brandingsettingsview-transfer-wallet-holder"
+                      type="text"
+                      value={transferWalletAccountHolder}
+                      onChange={(e) => setTransferWalletAccountHolder(e.target.value)}
+                      maxLength={80}
+                      autoComplete="off"
+                      placeholder="الاسم المسجَّل على المحفظة"
+                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-number">
+                    رقم المحفظة (هاتف أو رقم حساب)
+                  </label>
+                  <input
+                    id="brandingsettingsview-transfer-wallet-number"
+                    type="text"
+                    value={transferWalletNumber}
+                    onChange={(e) => setTransferWalletNumber(e.target.value)}
+                    maxLength={40}
+                    autoComplete="off"
+                    spellCheck={false}
+                    dir="ltr"
+                    inputMode="tel"
+                    placeholder="0599123456"
+                    className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono"
+                  />
+                  <span className="block text-[10px] text-luxury-500 mt-1">أرقام فقط (يمكن البدء بـ +) — ليس بالضرورة رقم هاتف.</span>
+                </div>
+              </div>
+
+              {/* Shared, optional */}
+              <div>
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-instructions">
+                  تعليمات التحويل <span className="font-normal text-luxury-500">(اختياري — تظهر للقناتين)</span>
+                </label>
+                <textarea
+                  id="brandingsettingsview-transfer-instructions"
+                  value={transferInstructions}
+                  onChange={(e) => setTransferInstructions(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="مثال: اكتب رقم الطاولة في ملاحظة التحويل، وأرسل صورة الإشعار بعد التحويل مباشرة."
+                  className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 resize-y"
+                />
               </div>
             </div>
           </form>

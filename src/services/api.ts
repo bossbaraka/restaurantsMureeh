@@ -1,5 +1,6 @@
 import {
   Restaurant,
+  RestaurantTransferDetails,
   Plan,
   Subscription,
   RestaurantUser,
@@ -129,6 +130,41 @@ function toISO(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString();
 }
 
+/**
+ * Customer transfer payment details — the venue's receiving account (bank /
+ * wallet) shown to the guest in the transfer modal.
+ *
+ * Accepts BOTH server shapes through this single choke point:
+ *   - nested `transfer: { bankName, … }`  → GET /api/public/restaurants/:slug
+ *   - flat   `transferBankName`, …        → /auth/login, /auth/me, PUT /branding
+ *                                           (those return the whole row)
+ *
+ * Normalizes to "absent when empty": a trimmed-empty or non-string value becomes
+ * `undefined`, and when nothing is configured the whole object is `undefined` —
+ * so the UI can never render a blank card, "undefined" or an invented number.
+ * Display-only data: it is never sent back on a payment-proof submission.
+ */
+function mapTransferDetails(raw: any): RestaurantTransferDetails | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const nested = raw.transfer && typeof raw.transfer === 'object' ? raw.transfer : null;
+  const text = (nestedValue: unknown, flatValue: unknown): string | undefined => {
+    const value = nestedValue ?? flatValue;
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  };
+  const details: RestaurantTransferDetails = {
+    bankName: text(nested?.bankName, raw.transferBankName),
+    bankAccount: text(nested?.bankAccount, raw.transferBankAccount),
+    bankAccountHolder: text(nested?.bankAccountHolder, raw.transferBankAccountHolder),
+    walletName: text(nested?.walletName, raw.transferWalletName),
+    walletNumber: text(nested?.walletNumber, raw.transferWalletNumber),
+    walletAccountHolder: text(nested?.walletAccountHolder, raw.transferWalletAccountHolder),
+    instructions: text(nested?.instructions, raw.transferInstructions),
+  };
+  return Object.values(details).some((value) => value !== undefined) ? details : undefined;
+}
+
 export function mapRestaurantRow(raw: any): Restaurant {
   return {
     id: raw.id,
@@ -175,6 +211,10 @@ export function mapRestaurantRow(raw: any): Restaurant {
       : undefined,
     planId: raw.planId || '',
     customDomain: raw.customDomain || undefined,
+    // Customer transfer payment details (bank / wallet receiving account).
+    // Additive: `undefined` when the venue configured nothing or on a legacy
+    // payload, so the guest modal renders its safe fallback.
+    transfer: mapTransferDetails(raw),
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
   };
@@ -1710,6 +1750,17 @@ class RestaurantApiService {
         longitude: patch.longitude,
         mapUrl: patch.mapUrl,
         mapImage: patch.mapImageUrl,
+        // Customer transfer payment details, flattened to the server's column
+        // names. Same contract as every field above: `undefined` is dropped by
+        // JSON.stringify (column untouched), `''` is an explicit clear. A caller
+        // that omits `patch.transfer` entirely therefore changes nothing.
+        transferBankName: patch.transfer?.bankName,
+        transferBankAccount: patch.transfer?.bankAccount,
+        transferBankAccountHolder: patch.transfer?.bankAccountHolder,
+        transferWalletName: patch.transfer?.walletName,
+        transferWalletNumber: patch.transfer?.walletNumber,
+        transferWalletAccountHolder: patch.transfer?.walletAccountHolder,
+        transferInstructions: patch.transfer?.instructions,
       },
     });
     if (res.success && res.data?.restaurant) {

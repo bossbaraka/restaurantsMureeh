@@ -3002,6 +3002,16 @@ router.put(
         longitude?: number;
         mapUrl?: string | '';
         mapImage?: string;
+        // Customer transfer payment details. Same contract as every other field
+        // here: `undefined` (omitted) leaves the column untouched, `''` is an
+        // explicit clear. Never gated by an entitlement (see below).
+        transferBankName?: string;
+        transferBankAccount?: string;
+        transferBankAccountHolder?: string;
+        transferWalletName?: string;
+        transferWalletNumber?: string;
+        transferWalletAccountHolder?: string;
+        transferInstructions?: string;
       };
 
       const hasCustomBrandingFields =
@@ -3136,6 +3146,21 @@ router.put(
         }
       };
 
+      // Customer transfer payment details: the venue's receiving account shown
+      // to the guest in the transfer modal. Plain nullable TEXT columns — no
+      // storage driver, no asset normalization and NO entitlement gate (a venue
+      // must be able to publish its own account on any plan). Same write
+      // semantics as every field above: omitted -> `undefined` (column
+      // untouched), '' -> `null` (explicit clear), otherwise the trimmed value
+      // `validateBody(brandingSchema)` already bounded and character-checked.
+      // Values are never written to the audit log below (no IBAN / wallet
+      // number in AuditLog.details or metadata).
+      const transferColumn = (value: string | undefined): string | null | undefined => {
+        if (value === undefined) return undefined;
+        if (value.trim() === '') return null;
+        return value;
+      };
+
       const updated = await prisma.restaurant.update({
         where: { id: restaurantId },
         data: {
@@ -3185,6 +3210,13 @@ router.put(
               ? null
               : persistableRef(normMap)
             : undefined,
+          transferBankName: transferColumn(b.transferBankName),
+          transferBankAccount: transferColumn(b.transferBankAccount),
+          transferBankAccountHolder: transferColumn(b.transferBankAccountHolder),
+          transferWalletName: transferColumn(b.transferWalletName),
+          transferWalletNumber: transferColumn(b.transferWalletNumber),
+          transferWalletAccountHolder: transferColumn(b.transferWalletAccountHolder),
+          transferInstructions: transferColumn(b.transferInstructions),
         },
       });
       await logAuditEvent({
@@ -3197,6 +3229,39 @@ router.put(
         entityId: restaurantId,
         details: `تم تحديث هوية المطعم البصرية`,
       });
+
+      // Separate, VALUE-FREE audit trail for the transfer receiving account:
+      // which fields changed is operationally useful, the values are not — an
+      // IBAN or a wallet number must never land in AuditLog.details/metadata
+      // (it is a settings table, not a secret store, and audit rows are read by
+      // platform staff and exported). Logged only when the request actually
+      // carried transfer fields.
+      const touchedTransferFields = (
+        [
+          ['transferBankName', 'اسم البنك'],
+          ['transferBankAccount', 'رقم الحساب البنكي'],
+          ['transferBankAccountHolder', 'صاحب الحساب البنكي'],
+          ['transferWalletName', 'اسم المحفظة'],
+          ['transferWalletNumber', 'رقم المحفظة'],
+          ['transferWalletAccountHolder', 'صاحب المحفظة'],
+          ['transferInstructions', 'تعليمات التحويل'],
+        ] as const
+      )
+        .filter(([key]) => b[key] !== undefined)
+        .map(([, label]) => label);
+      if (touchedTransferFields.length > 0) {
+        await logAuditEvent({
+          restaurantId,
+          userId: req.user!.id,
+          actor: req.user!.name,
+          actorRole: req.user!.role,
+          action: 'TRANSFER_DETAILS_UPDATED',
+          entity: 'Restaurant',
+          entityId: restaurantId,
+          // Field NAMES only — never the account number, IBAN or wallet number.
+          details: `تم تحديث بيانات التحويل المعروضة للعميل: ${touchedTransferFields.join('، ')}`,
+        });
+      }
 
       // Best-effort cleanup of replaced/deleted managed assets — AFTER the
       // DB commit. Only keys owned by this tenant are touched; failures are

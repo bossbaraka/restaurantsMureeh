@@ -121,6 +121,40 @@ model Restaurant {
   // Static map/location image the venue can upload to show guests where it
   // is without embedding an external (Google Maps) frame.
   mapImageUrl     String?
+  // ------------------------------------------------------------------
+  // CUSTOMER TRANSFER PAYMENT DETAILS (tenant-scoped receiving account)
+  // ------------------------------------------------------------------
+  // Where the guest sends the money when he pays by transfer. This is the
+  // MIRROR IMAGE of the order's transfer proof: the proof says "I paid"
+  // (Order.customerName/customerPhone/transferChannel + receipt image),
+  // these columns say "pay HERE". They are venue settings, not financial
+  // data: nothing here is ever read by the settlement path, the fulfillment
+  // gate, the ledger (Payment) or the cashier's verification decision — the
+  // cashier still verifies the money against the receipt, never against
+  // these strings.
+  //
+  // Per-channel by design (the guest modal already offers BANK | WALLET):
+  //   BANK   → transferBankName + transferBankAccount + transferBankAccountHolder
+  //   WALLET → transferWalletName + transferWalletNumber + transferWalletAccountHolder
+  //   both   → transferInstructions (optional free text, e.g. "write the
+  //            table number in the transfer note")
+  // `transferWalletNumber` is the wallet's phone number OR its account id —
+  // deliberately NOT normalized as a customer phone (wallet identifiers are
+  // not always phone numbers), only bounded and character-restricted.
+  //
+  // All seven are nullable: NULL means "this venue did not fill this in", and
+  // the guest modal then shows a safe fallback instead of an empty card or a
+  // fake value. Scope is the RESTAURANT (tenant), never a Branch — a guest
+  // pays the venue, not a location. Public by nature (the equivalent of
+  // printing the account on the table tent card), so they are exposed through
+  // the existing guest catalog projection only.
+  transferBankName           String?
+  transferBankAccount        String?
+  transferBankAccountHolder  String?
+  transferWalletName         String?
+  transferWalletNumber       String?
+  transferWalletAccountHolder String?
+  transferInstructions       String?
   customDomain    String?
   planId          String?
   createdAt       DateTime          @default(now())

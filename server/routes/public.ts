@@ -402,6 +402,35 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
     // renderable URL in the existing fields + the stable storage path in
     // the additive `*StoragePath` fields (the persistence pair).
     const catalogRestaurant = resolveRow(restaurant);
+
+    // Customer transfer payment details — the venue's RECEIVING account, shown
+    // to the guest in the transfer modal (bank: name + IBAN/account + holder,
+    // wallet: name + number + holder, plus optional shared instructions).
+    //
+    // Tenant scoping: the query above resolved exactly ONE restaurant row by its
+    // unique slug, and every value here comes off that row — there is no id,
+    // table or session parameter a caller could swap to reach another venue's
+    // account. These fields are public by nature (the equivalent of printing the
+    // account on the table tent card) and are display-only: the settlement path,
+    // the fulfillment gate and the cashier's verification read none of them.
+    //
+    // Empty/NULL values are omitted, and when the venue filled nothing in the
+    // whole `transfer` key is absent — so the guest never sees a blank card, a
+    // "undefined" or an invented account number (the modal renders its safe
+    // fallback instead).
+    const transferDetails = {
+      bankName: restaurant.transferBankName?.trim() || undefined,
+      bankAccount: restaurant.transferBankAccount?.trim() || undefined,
+      bankAccountHolder: restaurant.transferBankAccountHolder?.trim() || undefined,
+      walletName: restaurant.transferWalletName?.trim() || undefined,
+      walletNumber: restaurant.transferWalletNumber?.trim() || undefined,
+      walletAccountHolder: restaurant.transferWalletAccountHolder?.trim() || undefined,
+      instructions: restaurant.transferInstructions?.trim() || undefined,
+    };
+    const hasTransferDetails = Object.values(transferDetails).some(
+      (value) => value !== undefined
+    );
+
     return res.json({
       success: true,
       data: {
@@ -437,6 +466,9 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           promoVideoUrl: restaurant.promoVideoUrl,
           galleryImages: catalogRestaurant.galleryImages,
           galleryStoragePaths: catalogRestaurant.galleryStoragePaths,
+          // Additive: absent on tenants that configured nothing (and on legacy
+          // payloads), so every existing consumer keeps working unchanged.
+          transfer: hasTransferDetails ? transferDetails : undefined,
         },
         categories: restaurant.categories.map((c) => ({
           id: c.id,

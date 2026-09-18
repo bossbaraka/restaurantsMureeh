@@ -208,9 +208,23 @@ describe('schema + migration', () => {
     expect(migration).not.toMatch(/DELETE\s+FROM/i);
   });
 
-  it('is superseded only by the H-02 staff-cancel/void migration in the deploy order', () => {
-    const newest = [...migrationDirs].sort().pop();
-    expect(newest).toBe('20260915120000_staff_cancel_and_payment_void');
+  it('is superseded only by the later additive migrations in the deploy order', () => {
+    // Deploy order IS the directory-name order, so the guard that matters is
+    // that nothing was inserted BEFORE the gate migration (it would then run
+    // first) and that every migration after it is a known, additive one.
+    const sorted = [...migrationDirs].sort();
+    const gateIndex = sorted.indexOf('20260914180000_add_order_fulfillment_gate');
+    expect(gateIndex).toBeGreaterThan(-1);
+    expect(sorted.slice(gateIndex + 1)).toEqual([
+      // H-02 staff cancel + payment void markers.
+      '20260915120000_staff_cancel_and_payment_void',
+      // Customer transfer payment details (Restaurant settings — the venue's
+      // receiving account). Additive nullable TEXT columns, no Order change.
+      '20260917120000_add_restaurant_transfer_details',
+    ]);
+    expect(sorted[sorted.length - 1]).toBe(
+      '20260917120000_add_restaurant_transfer_details'
+    );
   });
 });
 
