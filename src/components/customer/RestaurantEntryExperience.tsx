@@ -1,4 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ChefHat,
+  Coffee,
+  Croissant,
+  Hand,
+  LayoutGrid,
+  UtensilsCrossed,
+  type LucideIcon,
+} from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { soundFX } from '../../utils/audio';
 import { optimizeImageUrl } from './ProductImage';
@@ -33,6 +42,36 @@ import { useBrandTheme } from '../../theme/brandTheme';
  * surface sits to the LEFT and the guest drags RIGHT (dragging content right
  * reveals what is on its left). English mirrors it. Arrow, drag, layer movement
  * and exit all read from the same `dirSign`, so none of them can disagree.
+ *
+ * COMPOSITION
+ * -----------
+ * One symmetrical editorial column, read top to bottom: atmosphere (the
+ * venue's own photograph, held inside a hairline frame), then the mark, the
+ * greeting, the display name with its tracked Latin lockup, a single
+ * ornamental divider, the venue's own copy, the fact strip, and finally the
+ * gesture. Depth is layered rather than drawn — photograph, scrim, atmosphere,
+ * frame, content — which is what makes a phone screen read as a composed
+ * poster instead of as a stack of cards.
+ *
+ * TYPE
+ * ----
+ * `--font-serif` and `--font-sans` are the theme's typography knobs and this
+ * layer reads them verbatim: no family is named here, so a theme that changes
+ * its display face re-types the whole page, and no restaurant's identity is
+ * baked in. Hierarchy comes from size, tracking and tone — never from weight
+ * alone — and every tracking rule is gated to Latin (either by direction or by
+ * a name that carries no Arabic glyphs), because letter-spacing breaks
+ * connected Arabic script.
+ *
+ * LIGHT / DARK
+ * ------------
+ * The canvas stays dark on purpose. The tenant palette is DERIVED for a dark
+ * surface (`--brand-soft`, `--brand-line`, `--brand-muted`, `--brand-ink` in
+ * theme/brandTheme), the menu behind this layer is `#0A0B0D`, and the hand-off
+ * must not flash from one canvas to another. What adapts per restaurant is
+ * ATMOSPHERE — hue, glow, metal, depth — which is exactly what the tokens
+ * already carry: a bright brand gets a bright room on a dark canvas, it does
+ * not get a different colour scheme.
  *
  * MOTION
  * ------
@@ -119,13 +158,50 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
+/**
+ * Venue framing for the fact strip.
+ *
+ * `businessType` is tenant data, and these are the platform's own names for a
+ * capability the venue genuinely has — the one piece of copy this layer adds.
+ * Nothing here is a per-restaurant slogan, and nothing is invented when the
+ * tenant has filled in nothing.
+ */
+const VENUE_FACTS: Record<string, { ar: string; en: string; Icon: LucideIcon }> = {
+  RESTAURANT: { ar: 'خدمة الطاولة', en: 'Table service', Icon: UtensilsCrossed },
+  CAFE: { ar: 'طلب سريع', en: 'Quick order', Icon: Coffee },
+  BAKERY: { ar: 'استلام سريع', en: 'Quick pickup', Icon: Croissant },
+};
+
+/**
+ * Script test guarding the Latin lockup under the name.
+ *
+ * Letter-spacing is a Latin-script device — it visibly breaks the connected
+ * strokes of Arabic — so the tracked line is only ever rendered for a name
+ * that carries no Arabic glyphs (the `nameEn` of an Arabic venue). A Latin or
+ * mixed name falls back to the untracked identity, never to broken Arabic.
+ */
+const ARABIC_GLYPHS = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+const hasArabicGlyphs = (text: string): boolean => ARABIC_GLYPHS.test(text);
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+/**
+ * Arabic counts inflect, so a bare number in front of a plural only reads as
+ * Arabic from the count of 3 upwards — "1 أقسام" does not. Latin counts
+ * distinguish one from many. Only the agreement is repaired here; the wording
+ * stays the platform's own count copy.
+ */
+const arabicCount = (count: number, one: string, two: string, plural: string): string => {
+  if (count === 1) return one;
+  if (count === 2) return two;
+  return `${count} ${plural}`;
+};
 
 export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps> = ({
   onEnter,
 }) => {
-  const { currentRestaurant, activeTableNumber } = useRestaurant();
+  const { currentRestaurant, activeTableNumber, products, categories } = useRestaurant();
 
   // Tenant palette -> the same `--brand-*` custom properties the menu consumes,
   // so the hand-off into the menu has no colour jump.
@@ -180,6 +256,44 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
     .trim()
     .charAt(0)
     .toUpperCase();
+
+  // The Latin form of the name, shown as a tracked lockup under the display
+  // name — but only when it is a genuinely different, Latin-script string.
+  const latinName = (currentRestaurant?.nameEn || '').trim();
+  const showLatinName = Boolean(latinName) && latinName !== displayName.trim() && !hasArabicGlyphs(latinName);
+
+  /**
+   * The fact strip: real tenant data only. A venue whose catalogue has not
+   * loaded (or is empty) shows the single capability it definitely has instead
+   * of placeholder cells, so the composition degrades instead of lying.
+   */
+  const facts = useMemo(() => {
+    const venue = VENUE_FACTS[currentRestaurant?.businessType ?? 'RESTAURANT'] ?? VENUE_FACTS.RESTAURANT;
+    const list: Array<{ id: string; Icon: LucideIcon; label: string }> = [
+      { id: 'venue', Icon: venue.Icon, label: isEnglish ? venue.en : venue.ar },
+    ];
+    const dishCount = products?.length ?? 0;
+    const categoryCount = categories?.length ?? 0;
+    if (dishCount > 0) {
+      list.push({
+        id: 'dishes',
+        Icon: ChefHat,
+        label: isEnglish
+          ? `${dishCount} ${dishCount === 1 ? 'dish' : 'dishes'}`
+          : arabicCount(dishCount, 'صنف واحد في القائمة', 'صنفان في القائمة', 'صنف في القائمة'),
+      });
+    }
+    if (categoryCount > 0) {
+      list.push({
+        id: 'sections',
+        Icon: LayoutGrid,
+        label: isEnglish
+          ? `${categoryCount} ${categoryCount === 1 ? 'section' : 'sections'}`
+          : arabicCount(categoryCount, 'قسم واحد', 'قسمان', 'أقسام'),
+      });
+    }
+    return list;
+  }, [currentRestaurant?.businessType, isEnglish, products, categories]);
 
   // -------------------------------------------------------------------------
   // Entering the menu
@@ -464,6 +578,17 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
         </div>
 
         {/* --------------------------------------------------------------- */}
+        {/* Ornamental frame — the composed "window" of the reference,      */}
+        {/* translated into structure: a double hairline inset with         */}
+        {/* bracketed corners, drawn only from the tenant's own line       */}
+        {/* tokens. It carries NO motif, shape or colour of its own, so a   */}
+        {/* grill, a café and a bakery are all framed in their own light,   */}
+        {/* and whatever photograph the venue uploaded reads as a view      */}
+        {/* through the frame instead of as a flat background.              */}
+        {/* --------------------------------------------------------------- */}
+        <div className="entry-frame" aria-hidden="true" />
+
+        {/* --------------------------------------------------------------- */}
         {/* Persistent context bar — WHO the guest just entered, WHICH      */}
         {/* table the QR belongs to, and a one-tap skip. It lives OUTSIDE   */}
         {/* the stages so it stays put while the two beats cross-fade,      */}
@@ -577,6 +702,7 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
               identity text and read as clutter, not as atmosphere. */}
           <div className="entry-composition" aria-hidden="true">
             <span className="entry-composition__glow" />
+            <span className="entry-composition__warmth" />
           </div>
 
           <div className="entry-identity">
@@ -613,9 +739,33 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
               <span className="entry-name__type">{displayName}</span>
             </h1>
 
+            {/* Latin lockup — the tracked second line of the reference's
+                wordmark, kept strictly Latin: `showLatinName` already
+                refuses anything with Arabic glyphs, so the tracking can
+                never land on connected script. */}
+            {showLatinName && <p className="entry-name__latin">{latinName}</p>}
+
+            {/* Ornament as structure: one hairline rule through a diamond
+                node. Both are tenant tokens, so the divider is the venue's
+                own metal, never a fixed metallic. */}
+            <span className="entry-rule" aria-hidden="true">
+              <span className="entry-rule__node" />
+            </span>
+
             {/* Omitted entirely when the tenant has no description. */}
             {description && <p className="entry-identity__desc">{description}</p>}
           </div>
+
+          {/* Fact strip — the reference's column row of quiet claims, filled
+              with the venue's own numbers instead of with slogans. */}
+          <ul className="entry-facts" role="list">
+            {facts.map((fact) => (
+              <li key={fact.id} className="entry-fact">
+                <fact.Icon className="entry-fact__icon" strokeWidth={1.35} aria-hidden="true" />
+                <span className="entry-fact__label">{fact.label}</span>
+              </li>
+            ))}
+          </ul>
 
           {/* Hollow, dimensional arrow — a floating object, not a button. */}
           <div className="entry-arrow-wrap" aria-hidden="true">
@@ -658,6 +808,12 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
                 </svg>
               </div>
             </div>
+            {/* The reference teaches the gesture twice — an arrow that
+                travels and a finger that drags. Both read from the same
+                `--entry-dir`, so neither can ever point the wrong way. */}
+            {!reducedMotion && (
+              <Hand className="entry-arrow__hand" strokeWidth={1.4} aria-hidden="true" />
+            )}
           </div>
 
           {/* Swipe is the primary gesture; it is never the only one. The hint is
