@@ -38,6 +38,33 @@ export type EntitlementKey =
   | 'CAN_PRIORITY_SUPPORT'
   | 'CAN_USE_CUSTOM_DOMAIN';
 
+/**
+ * Customer transfer payment details — the venue's RECEIVING account, configured
+ * in Restaurant Settings and shown to the guest inside the transfer modal.
+ *
+ * This is the mirror image of the guest's transfer proof (`PaymentProof*`):
+ * the proof says "I paid", these details say "pay HERE". Per channel, matching
+ * `TransferChannel`:
+ *   BANK   → bankName + bankAccount (IBAN / account number) + bankAccountHolder
+ *   WALLET → walletName + walletNumber (wallet phone OR account id) + walletAccountHolder
+ *   both   → instructions (optional)
+ *
+ * Every field is optional and every value is DISPLAY-ONLY: none of them is sent
+ * back to the server, none of them is read by the settlement path, the
+ * fulfillment gate, the Payment ledger or the cashier's verify/reject decision.
+ * A missing field means "this venue did not fill it in" — the UI must show a
+ * safe fallback, never an empty card, "undefined" or an invented number.
+ */
+export interface RestaurantTransferDetails {
+  bankName?: string;
+  bankAccount?: string;
+  bankAccountHolder?: string;
+  walletName?: string;
+  walletNumber?: string;
+  walletAccountHolder?: string;
+  instructions?: string;
+}
+
 // Restaurant / Tenant Entity
 export interface Restaurant {
   id: string;
@@ -85,6 +112,12 @@ export interface Restaurant {
   galleryImages?: string[];
   /** Stable storage paths persisted for each gallery image (additive). */
   galleryStoragePaths?: string[];
+  /**
+   * Customer transfer payment details (bank / wallet receiving account shown in
+   * the guest transfer modal). Additive and optional: absent on tenants that
+   * configured nothing and on legacy/cached payloads.
+   */
+  transfer?: RestaurantTransferDetails;
   planId: string;
   customDomain?: string;
   createdAt: string;

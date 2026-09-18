@@ -669,6 +669,146 @@ export const assignTablesSchema = z
   })
   .strict();
 
+// ---------------------------------------------------------------------------
+// Customer transfer payment details (Restaurant settings).
+//
+// The venue's RECEIVING side of a transfer payment: where the guest sends the
+// money when he chooses «حوالة بنكية» or «محفظة إلكترونية» in the guest modal.
+// These are display settings, never financial data — the settlement path, the
+// fulfillment gate, the Payment ledger and the cashier's verify/reject decision
+// read none of them (the cashier verifies the money against the guest's
+// receipt, not against these strings).
+//
+// Contract, identical to every other branding field:
+//   field omitted → UNCHANGED (Prisma `undefined`)
+//   ''            → EXPLICIT clear (the route writes NULL)
+//   value         → bounded, trimmed, character-restricted
+//
+// Every value ends up rendered as text inside the GUEST transfer modal, so the
+// same character policy as `customerNameSchema` applies: control characters and
+// angle brackets are refused by code point (no markup/layout smuggling), while
+// React's own escaping stays the second line of defence.
+// ---------------------------------------------------------------------------
+
+/** Bounds for the free-text transfer fields (bank/wallet/holder names). */
+export const MIN_TRANSFER_NAME_LENGTH = 2;
+export const MAX_TRANSFER_NAME_LENGTH = 80;
+/** IBAN / bank account number: letters, digits and the grouping spaces. */
+export const MIN_TRANSFER_ACCOUNT_LENGTH = 6;
+export const MAX_TRANSFER_ACCOUNT_LENGTH = 40;
+/** Wallet phone number OR wallet account identifier (not always a phone). */
+export const MIN_TRANSFER_WALLET_DIGITS = 6;
+export const MAX_TRANSFER_WALLET_DIGITS = 32;
+export const MAX_TRANSFER_INSTRUCTIONS_LENGTH = 500;
+
+/** True when every code point is printable text (no control chars, no `<`/`>`). */
+const isPrintableText = (value: string, allowNewline = false) =>
+  [...value].every((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    if (char === '<' || char === '>' || code === 0x7f) return false;
+    if (allowNewline && char === '\n') return true;
+    return code >= 0x20;
+  });
+
+/**
+ * A transfer name/label field (bank name, wallet name, account holder name).
+ * `''` is the explicit clear signal, so it bypasses the minimum length.
+ */
+const transferNameField = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(MAX_TRANSFER_NAME_LENGTH, `${label} طويل جداً — بحد أقصى ${MAX_TRANSFER_NAME_LENGTH} حرفاً`)
+    .refine((value) => value === '' || [...value].length >= MIN_TRANSFER_NAME_LENGTH, {
+      message: `${label} قصير جداً — حرفان على الأقل`,
+    })
+    .refine((value) => isPrintableText(value), {
+      message: `${label} يحتوي محارف غير صالحة`,
+    })
+    .optional();
+
+/**
+ * IBAN / bank account number. Letters, digits and grouping spaces only: an
+ * account number is copied by a guest into his banking app, so punctuation
+ * that no bank accepts (and markup that could be rendered) is refused here
+ * instead of being stored. Stored exactly as entered (spaces preserved).
+ */
+const transferAccountField = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(MAX_TRANSFER_ACCOUNT_LENGTH, `${label} طويل جداً — بحد أقصى ${MAX_TRANSFER_ACCOUNT_LENGTH} خانة`)
+    .refine((value) => value === '' || /^[A-Za-z0-9][A-Za-z0-9 ]*[A-Za-z0-9]$/.test(value), {
+      message: `${label} يجب أن يتكون من أرقام وحروف إنجليزية فقط`,
+    })
+    .refine(
+      (value) =>
+        value === '' ||
+        value.replace(/ /g, '').length >= MIN_TRANSFER_ACCOUNT_LENGTH,
+      { message: `${label} قصير جداً — ${MIN_TRANSFER_ACCOUNT_LENGTH} خانات على الأقل` }
+    )
+    .optional();
+
+/**
+ * Wallet number: the wallet's PHONE number or its account identifier.
+ * Deliberately NOT normalized through `normalizeCustomerPhone` — wallet
+ * identifiers are not always phone numbers — but still bounded to digits with
+ * the separators people actually type (`+`, space, dash).
+ */
+const transferWalletNumberField = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(MAX_TRANSFER_ACCOUNT_LENGTH, `${label} طويل جداً — بحد أقصى ${MAX_TRANSFER_ACCOUNT_LENGTH} خانة`)
+    .refine((value) => value === '' || /^\+?[0-9][-0-9 ]*[0-9]$/.test(value), {
+      message: `${label} يجب أن يتكون من أرقام فقط (يمكن البدء بـ +)`,
+    })
+    .refine((value) => {
+      if (value === '') return true;
+      const digits = value.replace(/\D/g, '');
+      return (
+        digits.length >= MIN_TRANSFER_WALLET_DIGITS &&
+        digits.length <= MAX_TRANSFER_WALLET_DIGITS
+      );
+    }, {
+      message: `${label} غير صالح — بين ${MIN_TRANSFER_WALLET_DIGITS} و${MAX_TRANSFER_WALLET_DIGITS} خانة`,
+    })
+    .optional();
+
+/**
+ * Optional guest-facing instructions. Newlines are allowed (a venue writes
+ * "اكتب رقم الطاولة في ملاحظة التحويل" on its own line); every other control
+ * character and both angle brackets are refused.
+ */
+const transferInstructionsField = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(
+      MAX_TRANSFER_INSTRUCTIONS_LENGTH,
+      `${label} طويلة جداً — بحد أقصى ${MAX_TRANSFER_INSTRUCTIONS_LENGTH} حرفاً`
+    )
+    .refine((value) => isPrintableText(value, true), {
+      message: `${label} تحتوي محارف غير صالحة`,
+    })
+    .optional();
+
+/**
+ * The seven transfer-detail fields, declared once and spread into
+ * `brandingSchema` (which is `.strict()`: an undeclared key would 400 the whole
+ * branding save). NOT part of any paid entitlement — a venue must be able to
+ * publish its own account on the free plan.
+ */
+export const transferDetailsShape = {
+  transferBankName: transferNameField('اسم البنك'),
+  transferBankAccount: transferAccountField('رقم الحساب / IBAN'),
+  transferBankAccountHolder: transferNameField('اسم صاحب الحساب البنكي'),
+  transferWalletName: transferNameField('اسم المحفظة'),
+  transferWalletNumber: transferWalletNumberField('رقم المحفظة'),
+  transferWalletAccountHolder: transferNameField('اسم صاحب المحفظة'),
+  transferInstructions: transferInstructionsField('تعليمات التحويل'),
+} as const;
+
 export const brandingSchema = z
   .object({
     restaurantId: idSchema.optional(),
@@ -732,6 +872,12 @@ export const brandingSchema = z
       .array(assetReference('رابط صورة المعرض').unwrap())
       .max(30)
       .optional(),
+    // Customer transfer payment details (bank / wallet receiving account shown
+    // to the guest). Same write contract as every field above: omitted =
+    // unchanged, '' = explicit clear. Declared here because `.strict()` would
+    // otherwise 400 the entire branding save. Deliberately OUTSIDE the paid
+    // `CAN_CUSTOM_BRANDING` entitlement check in the route.
+    ...transferDetailsShape,
   })
   .strict();
 
