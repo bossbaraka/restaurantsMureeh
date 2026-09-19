@@ -14,7 +14,9 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 
 const require = createRequire(import.meta.url);
-const { PrismaClient } = require('/home/user/restaurantsMureeh/node_modules/.prisma/client/index.js');
+// Resolve the package (not a sandbox-absolute path) so the harness runs on
+// any machine/CI runner — mirrors seed-test-data.mjs.
+const { PrismaClient } = require('@prisma/client');
 const { seed, PASSWORD, PINS, USERNAMES } = await import('./seed-test-data.mjs');
 
 const prisma = new PrismaClient({ log: ['error'] });
