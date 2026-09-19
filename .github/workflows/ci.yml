@@ -29,6 +29,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -126,20 +127,44 @@ jobs:
       # Full-stack employee permission suite: boot the real server against the
       # migrated CI database and run the e2e functional/permission matrix
       # (restaurant-code + username + PIN logins, step-up, tenant isolation).
+      # On failure the suite tail is posted as a PR comment — the actionable
+      # summary (failed checks + server log) without digging through raw logs.
       - name: E2E employee functional & permission suite (real server)
         run: |
           # Export FIRST: the backgrounded server inherits this step's env —
           # starting it before the export boots a server with no database.
           export DATABASE_URL="postgres://${CI_DB_USER}:${CI_DB_PASSWORD}@localhost:5432/${CI_DB_NAME}"
-          npx tsx server/index.ts &
+          npx tsx server/index.ts > server-e2e.log 2>&1 &
           SERVER_PID=$!
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:3001/api/health >/dev/null 2>&1 && break
             sleep 1
           done
-          API_BASE=http://127.0.0.1:3001 node e2e/employee-functional-test.mjs
+          set +e
+          API_BASE=http://127.0.0.1:3001 node e2e/employee-functional-test.mjs > e2e-output.txt 2>&1
           RESULT=$?
+          set -e
           kill $SERVER_PID 2>/dev/null || true
+          cat e2e-output.txt
+          if [ "$RESULT" -ne 0 ]; then
+            {
+              echo "### E2E employee suite failed (exit $RESULT)"
+              echo ""
+              echo '```'
+              tail -n 60 e2e-output.txt
+              echo '```'
+              echo ""
+              echo "<details><summary>server-e2e.log (last 40 lines)</summary>"
+              echo ""
+              echo '```'
+              tail -n 40 server-e2e.log
+              echo '```'
+              echo "</details>"
+            } > e2e-failure.md
+            if [ -n "${PR_NUMBER:-}" ]; then
+              gh pr comment "$PR_NUMBER" --body-file e2e-failure.md || true
+            fi
+          fi
           exit $RESULT
         env:
           PORT: '3001'
@@ -147,3 +172,5 @@ jobs:
           RATE_LIMIT_BUDGET_SCALE: '50'
           STORAGE_DRIVER: local
           UPLOAD_DIR: ./uploads
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
