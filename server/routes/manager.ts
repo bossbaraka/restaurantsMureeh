@@ -63,6 +63,7 @@ import {
 } from '../services/orderVisibility';
 import { canReadQrToken, serializeStaffTable } from '../services/tableSerialization';
 import { generateQrToken, csvField, roundMoney, parsePagination, reconcileCashPayment } from '../utils/security';
+import { normalizeWhatsappNumber } from '../utils/contactChannels';
 
 /**
  * The shape the till needs from an order that ONLY the cash collection
@@ -101,6 +102,7 @@ import {
   planChangeSchema,
   tableSettleSchema,
   brandingSchema,
+  CONTACT_CHANNEL_FIELDS,
   branchCreateSchema,
   branchUpdateSchema,
   assignTablesSchema,
@@ -3201,6 +3203,17 @@ router.put(
         transferWalletNumber?: string;
         transferWalletAccountHolder?: string;
         transferInstructions?: string;
+        // Contact channels & reservations. Same contract as every other field
+        // here: `undefined` (omitted) leaves the column untouched, `''` is an
+        // explicit clear. Already validated by `validateBody(brandingSchema)`
+        // (HTTPS + per-platform host allowlist, no credentials, no control
+        // characters). Never gated by an entitlement.
+        whatsappNumber?: string;
+        instagramUrl?: string;
+        facebookUrl?: string;
+        tiktokUrl?: string;
+        youtubeUrl?: string;
+        websiteUrl?: string;
       };
 
       const hasCustomBrandingFields =
@@ -3350,6 +3363,19 @@ router.put(
         return value;
       };
 
+      // Contact channels & reservations: plain nullable TEXT columns, no
+      // storage driver and NO entitlement gate. Same write semantics as the
+      // transfer fields. The WhatsApp number is additionally NORMALIZED to
+      // canonical E.164 (`+` + digits) so the guest-side `wa.me` deep link is
+      // built from one shape only; a value `validateBody` already accepted can
+      // always be normalized, and `null` (the fallback) means "no reservation
+      // channel", which is what hides the CTA on the Live Menu.
+      const whatsappColumn = (value: string | undefined): string | null | undefined => {
+        if (value === undefined) return undefined;
+        if (value.trim() === '') return null;
+        return normalizeWhatsappNumber(value)?.e164 ?? null;
+      };
+
       const updated = await prisma.restaurant.update({
         where: { id: restaurantId },
         data: {
@@ -3406,6 +3432,13 @@ router.put(
           transferWalletNumber: transferColumn(b.transferWalletNumber),
           transferWalletAccountHolder: transferColumn(b.transferWalletAccountHolder),
           transferInstructions: transferColumn(b.transferInstructions),
+          // Contact channels & reservations (see `whatsappColumn` above).
+          whatsappNumber: whatsappColumn(b.whatsappNumber),
+          instagramUrl: transferColumn(b.instagramUrl),
+          facebookUrl: transferColumn(b.facebookUrl),
+          tiktokUrl: transferColumn(b.tiktokUrl),
+          youtubeUrl: transferColumn(b.youtubeUrl),
+          websiteUrl: transferColumn(b.websiteUrl),
         },
       });
       await logAuditEvent({
@@ -3449,6 +3482,26 @@ router.put(
           entityId: restaurantId,
           // Field NAMES only — never the account number, IBAN or wallet number.
           details: `تم تحديث بيانات التحويل المعروضة للعميل: ${touchedTransferFields.join('، ')}`,
+        });
+      }
+
+      // Same value-free policy for the contact channels: which channels the
+      // venue publishes is operationally useful, the phone number and the
+      // profile URLs are not audit material (they are already public to every
+      // guest, and audit rows are read by platform staff and exported).
+      const touchedContactFields = CONTACT_CHANNEL_FIELDS.filter(
+        ([key]) => b[key] !== undefined
+      ).map(([, label]) => label);
+      if (touchedContactFields.length > 0) {
+        await logAuditEvent({
+          restaurantId,
+          userId: req.user!.id,
+          actor: req.user!.name,
+          actorRole: req.user!.role,
+          action: 'CONTACT_CHANNELS_UPDATED',
+          entity: 'Restaurant',
+          entityId: restaurantId,
+          details: `تم تحديث قنوات التواصل والحجز: ${touchedContactFields.join('، ')}`,
         });
       }
 

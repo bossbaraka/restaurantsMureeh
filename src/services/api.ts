@@ -1,6 +1,7 @@
 import {
   Restaurant,
   RestaurantTransferDetails,
+  RestaurantSocials,
   Plan,
   Subscription,
   RestaurantUser,
@@ -165,6 +166,37 @@ function mapTransferDetails(raw: any): RestaurantTransferDetails | undefined {
   return Object.values(details).some((value) => value !== undefined) ? details : undefined;
 }
 
+/**
+ * Public contact channels published by the venue (social profiles + WhatsApp).
+ *
+ * Accepts BOTH server shapes through this single choke point:
+ *   - nested `socials: { instagram, … }` → GET /api/public/restaurants/:slug
+ *   - flat   `instagramUrl`, …           → /auth/login, /auth/me, PUT /branding
+ *
+ * Normalizes to "absent when empty": a trimmed-empty or non-string value becomes
+ * `undefined`, and when nothing was published the whole object is `undefined` —
+ * so the guest menu can never render an empty icon row. The WhatsApp number is
+ * mapped separately (it is a phone number, not a link).
+ */
+function mapSocials(raw: any): RestaurantSocials | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const nested = raw.socials && typeof raw.socials === 'object' ? raw.socials : null;
+  const text = (nestedValue: unknown, flatValue: unknown): string | undefined => {
+    const value = nestedValue ?? flatValue;
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  };
+  const socials: RestaurantSocials = {
+    instagram: text(nested?.instagram, raw.instagramUrl),
+    facebook: text(nested?.facebook, raw.facebookUrl),
+    tiktok: text(nested?.tiktok, raw.tiktokUrl),
+    youtube: text(nested?.youtube, raw.youtubeUrl),
+    website: text(nested?.website, raw.websiteUrl),
+  };
+  return Object.values(socials).some((value) => value !== undefined) ? socials : undefined;
+}
+
 export function mapRestaurantRow(raw: any): Restaurant {
   return {
     id: raw.id,
@@ -215,6 +247,14 @@ export function mapRestaurantRow(raw: any): Restaurant {
     // Additive: `undefined` when the venue configured nothing or on a legacy
     // payload, so the guest modal renders its safe fallback.
     transfer: mapTransferDetails(raw),
+    // Public contact channels (guest menu «تواصل معنا») and the WhatsApp number
+    // behind the Live Menu's reservation request. Additive: `undefined` when
+    // the venue published nothing or on a legacy payload.
+    socials: mapSocials(raw),
+    whatsappNumber:
+      typeof raw.whatsappNumber === 'string' && raw.whatsappNumber.trim()
+        ? raw.whatsappNumber.trim()
+        : undefined,
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
   };
@@ -1811,6 +1851,16 @@ class RestaurantApiService {
         transferWalletNumber: patch.transfer?.walletNumber,
         transferWalletAccountHolder: patch.transfer?.walletAccountHolder,
         transferInstructions: patch.transfer?.instructions,
+        // Contact channels & reservations, flattened to the server's column
+        // names. Identical contract: `undefined` is dropped by JSON.stringify
+        // (column untouched), `''` is an explicit clear. A caller that omits
+        // both `socials` and `whatsappNumber` changes nothing.
+        whatsappNumber: patch.whatsappNumber,
+        instagramUrl: patch.socials?.instagram,
+        facebookUrl: patch.socials?.facebook,
+        tiktokUrl: patch.socials?.tiktok,
+        youtubeUrl: patch.socials?.youtube,
+        websiteUrl: patch.socials?.website,
       },
     });
     if (res.success && res.data?.restaurant) {

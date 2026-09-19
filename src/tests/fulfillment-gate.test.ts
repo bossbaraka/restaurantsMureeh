@@ -225,8 +225,12 @@ describe('schema + migration', () => {
       // orderSource — additive, verified against real PostgreSQL.
       '20260919120000_employee_auth_redesign',
       '20260919120100_order_source_counter',
+      // Restaurant contact channels & reservations (WhatsApp number + social
+      // profiles). Additive nullable TEXT columns on Restaurant, no Order
+      // change, no index, no data backfill.
+      '20260919180000_add_restaurant_contact_channels',
     ]);
-    expect(sorted[sorted.length - 1]).toBe('20260919120100_order_source_counter');
+    expect(sorted[sorted.length - 1]).toBe('20260919180000_add_restaurant_contact_channels');
   });
 });
 

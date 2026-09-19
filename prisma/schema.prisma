@@ -155,6 +155,32 @@ model Restaurant {
   transferWalletNumber       String?
   transferWalletAccountHolder String?
   transferInstructions       String?
+  // ------------------------------------------------------------------
+  // CONTACT CHANNELS & RESERVATIONS (tenant-scoped, all optional)
+  // ------------------------------------------------------------------
+  // The venue's own public contact surface, entered once in
+  // «الإعدادات ← التواصل والحجز» and read from ONE place:
+  //   whatsappNumber  → the reservation CTA on the Live Menu screen and the
+  //                     «تواصل معنا» section of the guest menu. It is the
+  //                     venue's public business number (the equivalent of
+  //                     printing it on the door), stored in canonical E.164
+  //                     (`+` + digits) so the WhatsApp deep link can be built
+  //                     without guessing a country code.
+  //   *Url            → the social profile links shown in the guest menu's
+  //                     «تواصل معنا» section. HTTPS-only, credential-free and
+  //                     host-allowlisted per platform by the API validator, so
+  //                     a `javascript:`/`data:` payload can never be stored
+  //                     and rendered as an href.
+  //
+  // NULL means "this venue did not fill it in" — the UI then hides the channel
+  // entirely (no empty icon, no dead reservation button). Scope is the
+  // RESTAURANT (tenant), never a Branch: a guest reserves with the venue.
+  whatsappNumber  String?
+  instagramUrl    String?
+  facebookUrl     String?
+  tiktokUrl       String?
+  youtubeUrl      String?
+  websiteUrl      String?
   customDomain    String?
   planId          String?
   createdAt       DateTime          @default(now())

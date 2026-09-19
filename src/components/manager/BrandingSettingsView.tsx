@@ -53,6 +53,60 @@ const BUSINESS_TYPES: Array<{
   { id: 'BAKERY', label: 'مخبز / مشروع طعام', desc: 'استعراض منتجات + استلام', icon: Croissant },
 ];
 
+/**
+ * The venue's social channels, in the order the guest menu shows them.
+ * Declared once so the form, the placeholders and the help text cannot drift.
+ */
+const SOCIAL_FIELDS: Array<{
+  key: 'instagram' | 'facebook' | 'tiktok' | 'youtube' | 'website';
+  label: string;
+  placeholder: string;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+  stateKey: 'instagramUrl' | 'facebookUrl' | 'tiktokUrl' | 'youtubeUrl' | 'websiteUrl';
+}> = [
+  {
+    key: 'instagram',
+    label: 'إنستغرام',
+    placeholder: 'https://www.instagram.com/yourvenue',
+    hint: 'رابط HTTPS من نطاق instagram.com',
+    icon: Camera,
+    stateKey: 'instagramUrl',
+  },
+  {
+    key: 'facebook',
+    label: 'فيسبوك',
+    placeholder: 'https://www.facebook.com/yourvenue',
+    hint: 'رابط HTTPS من نطاق facebook.com',
+    icon: Landmark,
+    stateKey: 'facebookUrl',
+  },
+  {
+    key: 'tiktok',
+    label: 'تيك توك',
+    placeholder: 'https://www.tiktok.com/@yourvenue',
+    hint: 'رابط HTTPS من نطاق tiktok.com',
+    icon: Film,
+    stateKey: 'tiktokUrl',
+  },
+  {
+    key: 'youtube',
+    label: 'يوتيوب',
+    placeholder: 'https://www.youtube.com/@yourvenue',
+    hint: 'رابط HTTPS من نطاق youtube.com',
+    icon: Video,
+    stateKey: 'youtubeUrl',
+  },
+  {
+    key: 'website',
+    label: 'الموقع الإلكتروني',
+    placeholder: 'https://yourvenue.com',
+    hint: 'موقعك الرسمي — رابط HTTPS صالح',
+    icon: Star,
+    stateKey: 'websiteUrl',
+  },
+];
+
 /** اقتراحات جاهزة لشكل موقع المطعم (Theme Presets) */
 const THEME_PRESETS: Array<{
   id: string;
@@ -125,6 +179,16 @@ export const BrandingSettingsView: React.FC = () => {
   const [transferWalletNumber, setTransferWalletNumber] = useState('');
   const [transferWalletAccountHolder, setTransferWalletAccountHolder] = useState('');
   const [transferInstructions, setTransferInstructions] = useState('');
+  // Contact channels & reservations — the venue's own WhatsApp number (which
+  // powers «احجز طاولتك» on the Live Menu screen) and its social profiles
+  // (shown in the guest menu's «تواصل معنا»). '' means "not published";
+  // saving '' clears the stored value and the UI hides the channel.
+  const [whatsappNumber, setWhatsappNumber] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
+  const [tiktokUrl, setTiktokUrl] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
@@ -190,6 +254,13 @@ export const BrandingSettingsView: React.FC = () => {
       setTransferWalletNumber(currentRestaurant.transfer?.walletNumber || '');
       setTransferWalletAccountHolder(currentRestaurant.transfer?.walletAccountHolder || '');
       setTransferInstructions(currentRestaurant.transfer?.instructions || '');
+      // Contact channels (absent on tenants that published nothing).
+      setWhatsappNumber(currentRestaurant.whatsappNumber || '');
+      setInstagramUrl(currentRestaurant.socials?.instagram || '');
+      setFacebookUrl(currentRestaurant.socials?.facebook || '');
+      setTiktokUrl(currentRestaurant.socials?.tiktok || '');
+      setYoutubeUrl(currentRestaurant.socials?.youtube || '');
+      setWebsiteUrl(currentRestaurant.socials?.website || '');
     }
   }, [currentRestaurant]);
 
@@ -335,6 +406,17 @@ export const BrandingSettingsView: React.FC = () => {
         walletAccountHolder: transferWalletAccountHolder.trim(),
         instructions: transferInstructions.trim(),
       },
+      // Contact channels & reservations. Trimmed; '' is an explicit clear.
+      // The server validates the phone shape and every URL (HTTPS + the
+      // platform's own domain) and rejects the save with an Arabic message.
+      whatsappNumber: whatsappNumber.trim(),
+      socials: {
+        instagram: instagramUrl.trim(),
+        facebook: facebookUrl.trim(),
+        tiktok: tiktokUrl.trim(),
+        youtube: youtubeUrl.trim(),
+        website: websiteUrl.trim(),
+      },
     });
     setIsSaving(false);
     if (!res.success || !res.data) {
@@ -363,6 +445,23 @@ export const BrandingSettingsView: React.FC = () => {
     isEmbeddedImage(logoPreview) ||
     isEmbeddedImage(coverImage) ||
     galleryImages.some((u) => isEmbeddedImage(u));
+
+  // Contact-channel inputs, keyed so `SOCIAL_FIELDS` can render all five with
+  // one map instead of five near-identical blocks that drift apart.
+  const socialValues = {
+    instagramUrl,
+    facebookUrl,
+    tiktokUrl,
+    youtubeUrl,
+    websiteUrl,
+  } as const;
+  const socialSetters = {
+    instagramUrl: setInstagramUrl,
+    facebookUrl: setFacebookUrl,
+    tiktokUrl: setTiktokUrl,
+    youtubeUrl: setYoutubeUrl,
+    websiteUrl: setWebsiteUrl,
+  } as const;
 
   return (
     <div className="space-y-6 text-right max-w-6xl" dir="rtl">
@@ -708,6 +807,98 @@ export const BrandingSettingsView: React.FC = () => {
                   className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 resize-y"
                 />
               </div>
+            </div>
+          </form>
+
+          {/* ============ Contact channels & reservations ============ */}
+          <form
+            onSubmit={handleSave}
+            onInput={() => { isDirtyRef.current = true; }}
+            className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs"
+          >
+            <div>
+              <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                <Phone className="w-4 h-4 text-gold-400" />
+                التواصل والحجز
+              </h3>
+              <p className="text-[11px] text-luxury-400 mt-1 leading-relaxed">
+                رقم واتساب الخاص بمطعمك يشغّل زر <strong className="text-luxury-200">«احجز طاولتك»</strong> على شاشة العرض،
+                وصفحات التواصل تظهر للعميل في قسم «تابعنا» داخل المنيو.
+                كل الحقول اختيارية — ما لا تملأه لن يظهر للعميل إطلاقاً.
+              </p>
+            </div>
+
+            {/* WhatsApp — the reservation channel */}
+            <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+              <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
+                <Smartphone className="w-3.5 h-3.5 text-gold-400" />
+                واتساب المطعم (قناة الحجز)
+              </span>
+              <div>
+                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-contact-whatsapp">
+                  رقم واتساب
+                </label>
+                <input
+                  id="brandingsettingsview-contact-whatsapp"
+                  type="tel"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  maxLength={24}
+                  autoComplete="off"
+                  spellCheck={false}
+                  dir="ltr"
+                  inputMode="tel"
+                  placeholder="+970599123456"
+                  className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono"
+                />
+                <span className="block text-[10px] text-luxury-500 mt-1 leading-relaxed">
+                  أرقام فقط، ويفضَّل مع رمز الدولة (970+ / 972+). بدونه لا يظهر زر الحجز على شاشة العرض.
+                  الشاشة ترسل <strong>طلب</strong> حجز إلى واتساب — والتأكيد من موظفيك، فلا يوجد تأكيد تلقائي.
+                </span>
+              </div>
+            </div>
+
+            {/* Social profiles */}
+            <div className="space-y-4">
+              <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
+                <Star className="w-3.5 h-3.5 text-gold-400" />
+                صفحات التواصل الاجتماعي
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {SOCIAL_FIELDS.map((field) => {
+                  const Icon = field.icon;
+                  const value = socialValues[field.stateKey];
+                  const setValue = socialSetters[field.stateKey];
+                  const inputId = `brandingsettingsview-contact-${field.key}`;
+                  return (
+                    <div key={field.key}>
+                      <label className="flex items-center gap-1.5 font-bold text-luxury-200 mb-1" htmlFor={inputId}>
+                        <Icon className="w-3.5 h-3.5 text-luxury-500" />
+                        {field.label}
+                        <span className="font-normal text-luxury-500">(اختياري)</span>
+                      </label>
+                      <input
+                        id={inputId}
+                        type="url"
+                        value={value}
+                        onChange={(e) => setValue(e.target.value)}
+                        maxLength={1000}
+                        autoComplete="off"
+                        spellCheck={false}
+                        dir="ltr"
+                        inputMode="url"
+                        placeholder={field.placeholder}
+                        className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono text-[11px]"
+                      />
+                      <span className="block text-[10px] text-luxury-500 mt-1">{field.hint}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-luxury-500 leading-relaxed">
+                الروابط تُفتح للعميل في تبويب جديد. للحماية تُقبل روابط HTTPS فقط من نطاق المنصة نفسها —
+                أي رابط غير صالح سيُرفض عند الحفظ مع رسالة توضيحية.
+              </p>
             </div>
           </form>
 

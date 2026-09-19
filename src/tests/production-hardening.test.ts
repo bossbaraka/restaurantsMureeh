@@ -717,6 +717,16 @@ describe('P2: frontend XSS sinks', () => {
           arg === "''" ||
           arg.startsWith('`https://') ||
           arg === 'displayLink' ||
+          // The Live Menu reservation hand-off. `whatsappUrl` is not a
+          // caller- or venue-supplied link: it is the return value of
+          // `buildWhatsappUrl()`, which only ever produces
+          // `https://wa.me/<digits>[?text=…]` or null. The file must prove it
+          // by building the value from that helper and passing it straight
+          // through — anything else (a stored social link, a query param)
+          // fails this guard.
+          (arg === 'whatsappUrl' &&
+            /const whatsappUrl = buildWhatsappUrl\(/.test(src) &&
+            src.includes("from '../../utils/whatsapp'")) ||
           /^['"]https:/.test(arg);
         expect({ file: f, arg, ok }).toEqual({ file: f, arg, ok: true });
       }

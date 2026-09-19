@@ -21,6 +21,7 @@ import { OrderCompletedModal } from './OrderCompletedModal';
 import { CustomerLoadingExperience } from './CustomerLoadingExperience';
 import { RestaurantEntryExperience } from './RestaurantEntryExperience';
 import { DisplayMenu } from './DisplayMenu';
+import { CustomerSocialSection } from './CustomerSocialSection';
 import { UtensilsCrossed, AlertTriangle } from 'lucide-react';
 
 /** Cards rendered above the fold get eager loading + network priority. */
@@ -488,6 +489,10 @@ export const CustomerLayout: React.FC = () => {
             ))}
           </div>
         )}
+
+        {/* The venue's own channels. Renders nothing at all when the restaurant
+            published no link — never an empty heading or dead icons. */}
+        <CustomerSocialSection />
       </main>
 
       {/* Customer Footer */}

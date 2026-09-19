@@ -424,19 +424,32 @@ describe('transfer details — server source contracts', () => {
       managerRoute.indexOf('Best-effort cleanup of replaced/deleted managed assets')
     );
     expect(auditBlock.length).toBeGreaterThan(0);
-    // Field LABELS only — no interpolation of any submitted value. The single
-    // allowed interpolation is the label list itself.
+    // Field LABELS only — no interpolation of any submitted value. The only
+    // allowed interpolations are the two label lists themselves (transfer
+    // details + contact channels, both value-free by construction).
     expect(auditBlock).toContain('touchedTransferFields.join');
+    expect(auditBlock).toContain('touchedContactFields.join');
     expect(auditBlock).not.toMatch(/b\.transfer\w+/);
+    expect(auditBlock).not.toMatch(/b\.(whatsappNumber|instagramUrl|facebookUrl|tiktokUrl|youtubeUrl|websiteUrl)/);
     const interpolations = [...auditBlock.matchAll(/\$\{([^}]*)\}/g)].map((m) => m[1].trim());
-    expect(interpolations).toEqual(["touchedTransferFields.join('، ')"]);
-    // The touched-field list is derived from key PRESENCE, never from values.
+    expect(interpolations).toEqual([
+      "touchedTransferFields.join('، ')",
+      "touchedContactFields.join('، ')",
+    ]);
+    // Both touched-field lists are derived from key PRESENCE, never values.
     const touched = managerRoute.slice(
       managerRoute.indexOf('const touchedTransferFields ='),
       managerRoute.indexOf("action: 'TRANSFER_DETAILS_UPDATED'")
     );
     expect(touched).toContain('.filter(([key]) => b[key] !== undefined)');
     expect(touched).not.toMatch(/details:/);
+    const touchedContact = managerRoute.slice(
+      managerRoute.indexOf('const touchedContactFields ='),
+      managerRoute.indexOf("action: 'CONTACT_CHANNELS_UPDATED'")
+    );
+    expect(touchedContact).toContain('.filter(');
+    expect(touchedContact).toContain('b[key] !== undefined');
+    expect(touchedContact).not.toMatch(/details:/);
   });
 
   it('exposes the details on the guest catalog projection only', () => {
@@ -554,6 +567,9 @@ describe('GET /api/public/restaurants/:slug — transfer details (real router)',
     expect(dirs.filter((d) => d > '20260917120000_add_restaurant_transfer_details')).toEqual([
       '20260919120000_employee_auth_redesign',
       '20260919120100_order_source_counter',
+      // Contact channels & reservations — additive nullable TEXT columns,
+      // same shape and same guarantees as the transfer migration above.
+      '20260919180000_add_restaurant_contact_channels',
     ]);
   });
 });

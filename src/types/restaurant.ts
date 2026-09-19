@@ -65,6 +65,24 @@ export interface RestaurantTransferDetails {
   instructions?: string;
 }
 
+/**
+ * The venue's own public contact channels, configured in
+ * «الإعدادات ← التواصل والحجز» and read from a single source (the Restaurant
+ * row). Every field is optional: `undefined` means "this venue did not publish
+ * it", and the UI hides the channel entirely — no empty icon, no dead link.
+ *
+ * Values are validated server-side (HTTPS only, credential-free, and a
+ * per-platform host allowlist — see server/utils/contactChannels.ts), so the
+ * client may render them as an `href` after its own light re-check.
+ */
+export interface RestaurantSocials {
+  instagram?: string;
+  facebook?: string;
+  tiktok?: string;
+  youtube?: string;
+  website?: string;
+}
+
 // Restaurant / Tenant Entity
 export interface Restaurant {
   id: string;
@@ -118,6 +136,19 @@ export interface Restaurant {
    * configured nothing and on legacy/cached payloads.
    */
   transfer?: RestaurantTransferDetails;
+  /**
+   * Public social profiles published by the venue (guest menu
+   * «تواصل معنا»). Additive and optional: `undefined` when the venue published
+   * nothing and on legacy/cached payloads.
+   */
+  socials?: RestaurantSocials;
+  /**
+   * The venue's WhatsApp number in canonical E.164 (`+` + digits). Powers the
+   * ONE interaction the read-only Live Menu offers — «احجز طاولتك» composes a
+   * reservation request and opens WhatsApp with it. `undefined` means the
+   * venue has no reservation channel, so the CTA is not rendered at all.
+   */
+  whatsappNumber?: string;
   planId: string;
   customDomain?: string;
   createdAt: string;

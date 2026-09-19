@@ -35,6 +35,10 @@ import {
 import { generateSessionToken, roundMoney } from '../utils/security';
 import { normalizeCustomerPhone } from '../utils/phone';
 import {
+  isCanonicalWhatsappNumber,
+  sanitizeStoredSocialUrl,
+} from '../utils/contactChannels';
+import {
   GUEST_SESSION_PURPOSE,
   guestSessionCapabilityWhere,
   type GuestSessionPurpose,
@@ -433,6 +437,35 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
       (value) => value !== undefined
     );
 
+    // Contact channels the VENUE chose to publish: its social profiles and the
+    // WhatsApp number used by the reservation request on the Live Menu.
+    //
+    // Tenant scoping is the same as the transfer block above — one row,
+    // resolved by its unique slug; there is no caller-supplied id to swap.
+    //
+    // Each value passes through `sanitizeStoredSocialUrl` / the canonical
+    // E.164 check before it leaves the server, so a legacy row written before
+    // the validator existed can never reach a guest browser as an `href`
+    // (defence in depth — the write path already validated it).
+    //
+    // Empty/NULL values are omitted, and when the venue published nothing the
+    // whole `socials` key is absent — the guest menu then hides the section
+    // instead of rendering empty icons. `whatsappNumber` is included only when
+    // set: it is the venue's public business number (the equivalent of
+    // printing it on the door) and it is the ONLY thing the reservation flow
+    // needs — no admin field, plan, entitlement or storage path is exposed.
+    const socials = {
+      instagram: sanitizeStoredSocialUrl(restaurant.instagramUrl, 'instagram'),
+      facebook: sanitizeStoredSocialUrl(restaurant.facebookUrl, 'facebook'),
+      tiktok: sanitizeStoredSocialUrl(restaurant.tiktokUrl, 'tiktok'),
+      youtube: sanitizeStoredSocialUrl(restaurant.youtubeUrl, 'youtube'),
+      website: sanitizeStoredSocialUrl(restaurant.websiteUrl, 'website'),
+    };
+    const hasSocials = Object.values(socials).some((value) => value !== undefined);
+    const whatsappNumber = isCanonicalWhatsappNumber(restaurant.whatsappNumber)
+      ? (restaurant.whatsappNumber as string)
+      : undefined;
+
     return res.json({
       success: true,
       data: {
@@ -471,6 +504,11 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           // Additive: absent on tenants that configured nothing (and on legacy
           // payloads), so every existing consumer keeps working unchanged.
           transfer: hasTransferDetails ? transferDetails : undefined,
+          // Contact channels: the venue's social profiles (guest menu
+          // «تواصل معنا») and the WhatsApp number the Live Menu's reservation
+          // request dials. Absent when the venue published nothing.
+          socials: hasSocials ? socials : undefined,
+          whatsappNumber,
         },
         categories: restaurant.categories.map((c) => ({
           id: c.id,
