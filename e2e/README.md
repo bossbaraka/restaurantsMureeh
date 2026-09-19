@@ -6,7 +6,7 @@ resulting database rows. Nothing in here is imported by the product.
 
 | File | What it proves |
 |---|---|
-| `employee-functional-test.mjs` | 703–704 assertions: authentication, the full permission matrix (endpoint × role), per-role scenarios (WAITER/STAFF/CASHIER/RESTAURANT_MANAGER), tenant isolation, data integrity, error handling / information disclosure, public + QR ordering, plan limits & entitlements, order-number allocation |
+| `employee-functional-test.mjs` | 722 assertions: authentication, the full permission matrix (endpoint × role), per-role scenarios (WAITER/STAFF/CASHIER/RESTAURANT_MANAGER), tenant isolation, data integrity, error handling / information disclosure, public + QR ordering, plan limits & entitlements, order-number allocation |
 | `frontend-guard.check.tsx` | 6 behavioural permission checks on the real `AuthProvider` (role tampering in localStorage, boot re-verification, 401 session clearing) |
 | `seed-test-data.mjs` | Deterministic fixtures: tenants A/B + a trial tenant C, one user per role, menus, tables, sessions, orders, payments, offers, plan catalog |
 
