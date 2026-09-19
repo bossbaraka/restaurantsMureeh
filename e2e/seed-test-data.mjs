@@ -13,7 +13,10 @@ import bcrypt from 'bcryptjs';
 import { randomUUID } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
-const { PrismaClient } = require('/home/user/restaurantsMureeh/node_modules/.prisma/client/index.js');
+// Resolve the package (not a sandbox-absolute path) so the harness runs on
+// any machine/CI runner — @prisma/client re-exports the generated client,
+// patched or native.
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient({ log: ['error'] });
 
