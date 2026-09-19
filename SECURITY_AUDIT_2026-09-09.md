@@ -134,18 +134,18 @@ The **repository and deployment layer is where this platform is compromised.** T
 ```js
 // scratch/test-conn.cjs:19
 await test('direct-5432',
-  'postgresql://postgres.uhfdkcaxftcctnitqjvo:1611****aka@db.uhfdkcaxftcctnitqjvo.supabase.co:5432/postgres?sslmode=require');
+  'postgresql://postgres.<REDACTED-PROJECT-REF>:<REDACTED-PASSWORD>@db.<REDACTED-PROJECT-REF>.supabase.co:5432/postgres?sslmode=require');
 
 // scratch/seed-shoqrah.cjs:7-12 — automatic fallback to the live DB
 const connectionUrls = [
   process.env.DATABASE_URL,
-  'postgresql://postgres.uhfdkcaxftcctnitqjvo:1611****aka@db.uhfdkcaxftcctnitqjvo.supabase.co:5432/postgres?sslmode=require',
-  'postgresql://postgres.uhfdkcaxftcctnitqjvo:1611****aka@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require',
-  'postgresql://postgres.uhfdkcaxftcctnitqjvo:1611****aka@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?pgbouncer=true&sslmode=require'
+  'postgresql://postgres.<REDACTED-PROJECT-REF>:<REDACTED-PASSWORD>@db.<REDACTED-PROJECT-REF>.supabase.co:5432/postgres?sslmode=require',
+  'postgresql://postgres.<REDACTED-PROJECT-REF>:<REDACTED-PASSWORD>@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require',
+  'postgresql://postgres.<REDACTED-PROJECT-REF>:<REDACTED-PASSWORD>@aws-0-eu-central-1.pooler.supabase.com:5432/postgres?pgbouncer=true&sslmode=require'
 ].filter(Boolean);
 ```
 
-Three distinct endpoints are exposed (direct 5432, pooler 6543, pooler 5432), the Supabase project ref `uhfdkcaxftcctnitqjvo` is disclosed, and the account is `postgres` — the **Supabase superuser**, not a least-privilege application role.
+Three distinct endpoints are exposed (direct 5432, pooler 6543, pooler 5432), the Supabase project ref is disclosed (redacted from this document), and the account is `postgres` — the **Supabase superuser**, not a least-privilege application role.
 
 **Root cause.** Throwaway connectivity-debugging scripts were committed instead of being kept local. `.gitignore` covers `.env` and `.env.*` but nothing in `scratch/`. `seed-shoqrah.cjs` goes further than leaking: it *actively falls back* to the hardcoded production URL when `DATABASE_URL` is unset, so simply running it locally writes to production.
 

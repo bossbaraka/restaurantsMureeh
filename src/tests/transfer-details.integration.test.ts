@@ -178,12 +178,16 @@ describe.skipIf(!hasDb)('Customer transfer payment details (real PostgreSQL)', (
       resolve(__dirname, '../../prisma/migrations/20260917120000_add_restaurant_transfer_details/migration.sql'),
       'utf8'
     );
+    // F-02 fix: strip comment LINES first, THEN split on ';'. The previous
+    // order dropped every statement whose chunk began with a '--' comment
+    // (4 of 7 statements parsed), so the idempotency check never ran for
+    // three of the columns. The migration SQL itself is correct.
     const statements = sql
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n')
       .split(';')
       .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith('--'))
-      // Strip leading comment lines inside a statement chunk.
-      .map((s) => s.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n').trim())
       .filter((s) => s.length > 0);
 
     expect(statements.length).toBe(TRANSFER_COLUMNS.length);

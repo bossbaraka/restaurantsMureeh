@@ -1,0 +1,137 @@
+# ============================================================
+# Release gate (F-03 remediation): CI previously ran ONLY the
+# gitleaks secret scan — lint, build and tests never blocked a
+# merge, which is how a red lint shipped unnoticed (TEST 1).
+#
+# This pipeline enforces, in order:
+#   install → lint → typecheck (frontend, blocking) → build →
+#   unit tests (no DB) → migrate a REAL PostgreSQL service →
+#   integration tests against it (SAAS_E2E_SEED=1 SAAS_E2E_MUTATE=1).
+#
+# The DB-gated suites skip silently without DATABASE_URL (by
+# design); running them against the service container removes the
+# false-green gap. Server TypeScript diagnostics are NOT yet a
+# blocking gate (pre-existing debt, F-10) — they are reported
+# separately below so regressions are visible without failing
+# unrelated PRs.
+#
+# Required environment (safe placeholders — never real values):
+#   DATABASE_URL            postgres://ci:ci@localhost:5432/mureeh_ci
+#   JWT_SECRET              CI-only throwaway (≥ 32 chars)
+#   SAAS_E2E_SEED/MUTATE    integration fixtures
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Build · Unit tests
+    runs-on: ubuntu-latest
+    env:
+      # Throwaway values, never real credentials.
+      JWT_SECRET: ci-only-jwt-secret-32-chars-minimum!!
+      APP_URL: http://localhost:3001
+      CORS_ORIGIN: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (blocking — 0 errors required)
+        run: npm run lint
+
+      - name: Typecheck frontend (blocking)
+        run: npx tsc --noEmit -p tsconfig.app.json
+
+      - name: Server diagnostics (report-only, pre-existing debt F-10)
+        run: |
+          set +e
+          npx tsc --noEmit -p tsconfig.server-check.json > server-diagnostics.txt 2>&1
+          echo "Server TypeScript diagnostics: $(grep -c 'error TS' server-diagnostics.txt || true)"
+
+      - name: Build (production)
+        run: npm run build
+
+      - name: Unit tests (no DATABASE_URL — DB suites must report skipped, not fail)
+        run: npm test
+
+  integration:
+    name: Real PostgreSQL integration tests
+    runs-on: ubuntu-latest
+    needs: quality
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: mureeh_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://ci:ci@localhost:5432/mureeh_ci
+      JWT_SECRET: ci-only-jwt-secret-32-chars-minimum!!
+      APP_URL: http://localhost:3001
+      CORS_ORIGIN: http://localhost:3001
+      SAAS_E2E_SEED: '1'
+      SAAS_E2E_MUTATE: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations (prisma migrate deploy)
+        run: npx prisma migrate deploy
+
+      - name: Integration tests against real PostgreSQL
+        run: npm test
+
+      # Full-stack employee permission suite: boot the real server against the
+      # migrated CI database and run the e2e functional/permission matrix
+      # (restaurant-code + username + PIN logins, step-up, tenant isolation).
+      - name: E2E employee functional & permission suite (real server)
+        run: |
+          npx tsx server/index.ts &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:3001/api/health >/dev/null 2>&1 && break
+            sleep 1
+          done
+          API_BASE=http://127.0.0.1:3001 node e2e/employee-functional-test.mjs
+          RESULT=$?
+          kill $SERVER_PID 2>/dev/null || true
+          exit $RESULT
+        env:
+          PORT: '3001'
+          NODE_ENV: development
+          RATE_LIMIT_BUDGET_SCALE: '50'
+          STORAGE_DRIVER: local
+          UPLOAD_DIR: ./uploads

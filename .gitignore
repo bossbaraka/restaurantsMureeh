@@ -51,3 +51,6 @@ secrets.json
 *.njsproj
 *.sln
 *.sw?
+
+# e2e harness — local machine copy of the throwaway test env
+e2e/server.env

@@ -27,7 +27,7 @@ export interface AuthUser {
   id: string;
   restaurantId: string | null;
   name: string;
-  email: string;
+  email: string | null;
   role: string;
   status: string;
   tv: number;
@@ -37,7 +37,7 @@ interface JwtClaims {
   id: string;
   restaurantId: string | null;
   name: string;
-  email: string;
+  email: string | null;
   role: string;
   status: string;
   tv: number;
@@ -68,6 +68,88 @@ export function signToken(
       algorithm: JWT_ALGORITHM,
     }
   );
+}
+
+// ============================================================
+// Step-up authentication (2026-09 auth redesign).
+//
+// High-risk operations (payment void, employee credential/role/status
+// changes, employee deletion) require a FRESH verification of the actor's
+// secret: password for managers/platform staff, PIN for shift staff. The
+// /api/auth/step-up route verifies the secret and returns a short-lived
+// (5 min) step-up token, bound to the user id AND their current tokenVersion
+// — logout/credential/role changes invalidate outstanding step-up tokens
+// too. Routes call `requireStepUp(req, res)` and bail when it responds.
+// ============================================================
+
+export const JWT_STEPUP_AUDIENCE = 'mureeh-stepup';
+export const STEPUP_TOKEN_TTL_SECONDS = 5 * 60;
+
+interface StepUpClaims {
+  sub: string;
+  tv: number;
+  purpose: 'stepup';
+}
+
+export function signStepUpToken(user: { id: string; tv: number }): string {
+  return jwt.sign(
+    { sub: user.id, tv: user.tv, purpose: 'stepup' } satisfies StepUpClaims,
+    config.jwtSecret,
+    {
+      expiresIn: STEPUP_TOKEN_TTL_SECONDS,
+      issuer: JWT_ISSUER,
+      audience: JWT_STEPUP_AUDIENCE,
+      algorithm: JWT_ALGORITHM,
+      jwtid: randomUUID(),
+    }
+  );
+}
+
+/**
+ * Guard for sensitive routes: verifies the X-Step-Up-Token header against the
+ * CURRENT user (req.user must already be set by authenticateToken/requireAuth,
+ * so its tv is fresh). Responds 403 with a machine-readable marker and returns
+ * false when step-up is missing/expired/mismatched.
+ */
+export function requireStepUp(
+  req: Request,
+  res: Response
+): boolean {
+  const header = req.headers['x-step-up-token'];
+  const token = Array.isArray(header) ? header[0] : header;
+  if (!token || !req.user) {
+    res.status(403).json({
+      success: false,
+      error: 'هذا الإجراء حساس — أكّد هويتك بإعادة إدخال كلمة المرور أو رمز PIN',
+      statusCode: 403,
+      code: 'STEP_UP_REQUIRED',
+    });
+    return false;
+  }
+  try {
+    const decoded = jwt.verify(token, config.jwtSecret, {
+      algorithms: [JWT_ALGORITHM],
+      issuer: JWT_ISSUER,
+      audience: JWT_STEPUP_AUDIENCE,
+    }) as StepUpClaims;
+    if (decoded.purpose !== 'stepup' || decoded.sub !== req.user.id) {
+      throw new Error('step-up token mismatch');
+    }
+    // Bind to the CURRENT token version: role/credential/logout changes kill
+    // outstanding step-up tokens, not just the main session.
+    if (decoded.tv !== req.user.tv) {
+      throw new Error('stale step-up token version');
+    }
+    return true;
+  } catch {
+    res.status(403).json({
+      success: false,
+      error: 'انتهت صلاحية تأكيد الهوية — أعد إدخال كلمة المرور أو رمز PIN وحاول مجدداً',
+      statusCode: 403,
+      code: 'STEP_UP_REQUIRED',
+    });
+    return false;
+  }
 }
 
 function unauthorized(res: Response, message: string) {

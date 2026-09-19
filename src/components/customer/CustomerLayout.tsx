@@ -318,13 +318,10 @@ export const CustomerLayout: React.FC = () => {
 
   const currency = currentRestaurant?.currency || '₪';
 
-  // Read-only board (TV / social media): rendered before any gate so it never
-  // asks for a table and never mounts a cart or an ordering drawer.
-  if (displayMode) {
-    return <DisplayMenu />;
-  }
-
-  // Visual loading completion gate: ensures minimum visual duration and smooth 100% progress hand-off
+  // Visual loading completion gate: ensures minimum visual duration and smooth 100% progress hand-off.
+  // (Declared BEFORE the displayMode early return below: hooks must run in the
+  // same order on every render — the previous conditional placement was the
+  // rules-of-hooks lint error F-01. Behavior is unchanged.)
   const [visualLoadingComplete, setVisualLoadingComplete] = useState<boolean>(() => {
     return (entryPhase ?? 'READY') === 'READY';
   });
@@ -334,6 +331,12 @@ export const CustomerLayout: React.FC = () => {
       setVisualLoadingComplete(false);
     }
   }, [entryPhase]);
+
+  // Read-only board (TV / social media): rendered before any gate so it never
+  // asks for a table and never mounts a cart or an ordering drawer.
+  if (displayMode) {
+    return <DisplayMenu />;
+  }
 
   // Guest entry in flight: the premium loader / recovery / invalid state owns
   // the whole screen until the entry machine reaches READY and visual hand-off finishes.

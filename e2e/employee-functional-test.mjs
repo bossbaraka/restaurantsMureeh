@@ -15,7 +15,7 @@ import bcrypt from 'bcryptjs';
 
 const require = createRequire(import.meta.url);
 const { PrismaClient } = require('/home/user/restaurantsMureeh/node_modules/.prisma/client/index.js');
-const { seed, PASSWORD, PINS } = await import('./seed-test-data.mjs');
+const { seed, PASSWORD, PINS, USERNAMES } = await import('./seed-test-data.mjs');
 
 const prisma = new PrismaClient({ log: ['error'] });
 const BASE = process.env.API_BASE || 'http://127.0.0.1:3001';
@@ -82,9 +82,19 @@ async function call(method, path, { token, body, form, rawBody, headers = {}, re
 const login = async (email, password = PASSWORD, extra = {}) =>
   call('POST', '/api/auth/login', { body: { email, password, ...extra } });
 
+// Employee login (2026-09 auth redesign): restaurant code + username + 6-digit PIN.
+const employeeLogin = async (restaurantCode, username, pin) =>
+  call('POST', '/api/auth/employee-login', { body: { restaurantCode, username, pin } });
+
 const getToken = async (email, password = PASSWORD) => {
   const r = await login(email, password);
   if (!r.json?.data?.token) throw new Error(`login failed for ${email}: ${r.status} ${r.text.slice(0, 200)}`);
+  return r.json.data.token;
+};
+
+const getTokenEmployee = async (restaurantCode, username, pin) => {
+  const r = await employeeLogin(restaurantCode, username, pin);
+  if (!r.json?.data?.token) throw new Error(`employee login failed for ${username}@${restaurantCode}: ${r.status} ${r.text.slice(0, 200)}`);
   return r.json.data.token;
 };
 
@@ -136,8 +146,14 @@ async function makeFixtures(tag) {
       items: { create: [{ productId: ctx.ids.prodA1, productNameSnapshot: 'x', priceSnapshot: 20, quantity: 1, totalPrice: 20 }] },
     },
   });
+  // Dedicated table for the service call: POST /tables/:id/settle
+  // auto-resolves PENDING calls on the settled table, so a call on `table`
+  // would be RESOLVED before the waiter-request matrix step runs.
+  const wrTable = await prisma.table.create({
+    data: { restaurantId: a, number: 6000 + tableSeq, capacity: 2, zone: 'GARDEN' },
+  });
   const waiterReq = await prisma.waiterRequest.create({
-    data: { restaurantId: a, tableId: table.id, sessionId: session.id, reason: 'ASSISTANCE', status: 'PENDING' },
+    data: { restaurantId: a, tableId: wrTable.id, reason: 'ASSISTANCE', status: 'PENDING' },
   });
   const emptyCategory = await prisma.category.create({
     data: { restaurantId: a, name: `Empty Cat ${tag}`, nameEn: 'Empty', sortOrder: 98 },
@@ -159,11 +175,15 @@ async function makeFixtures(tag) {
   });
   const staff = await prisma.restaurantUser.create({
     data: {
-      restaurantId: a, name: `Fix Staff ${tag}`, email: `fix.staff.${tag}.${Date.now()}@test.local`,
-      role: 'WAITER', passwordHash: bcrypt.hashSync(PASSWORD, 10), status: 'ACTIVE',
+      restaurantId: a, name: `Fix Staff ${tag}`, username: `fix.staff.${tag.toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 20)}`,
+      role: 'WAITER',
+      // PIN-only account convention: passwordHash is NOT NULL — store an
+      // unguessable filler, exactly like POST /staff does.
+      passwordHash: bcrypt.hashSync(`no-password-${tag}-${Date.now()}`, 10),
+      pinHash: bcrypt.hashSync(PINS.waiter, 10), status: 'ACTIVE',
     },
   });
-  return { table, payTable, session, order, payOrder, waiterReq, emptyCategory, category, product, offer, branch, staff };
+  return { table, payTable, wrTable, session, order, payOrder, waiterReq, emptyCategory, category, product, offer, branch, staff };
 }
 
 function matrixEndpoints(f) {
@@ -222,7 +242,7 @@ function matrixEndpoints(f) {
       id: 'POST /menu/products', cat: 'Menu', method: 'POST', path: '/api/manager/menu/products', allow: MANAGER_ONLY,
       body: () => ({
         categoryId: ctx.ids.catA1, name: `Prod ${uniq}`, nameEn: 'P',
-        description: 'd', price: 11, image: '/uploads/x.png',
+        description: 'd', price: 11, image: '',
       }),
     },
     {
@@ -250,9 +270,10 @@ function matrixEndpoints(f) {
     { id: 'GET /staff', cat: 'Staff', method: 'GET', path: '/api/manager/staff', allow: MANAGER_ONLY },
     {
       id: 'POST /staff', cat: 'Staff', method: 'POST', path: '/api/manager/staff', allow: MANAGER_ONLY,
+      stepUp: true,
       body: () => ({
-        name: `New Staff ${uniq}`, email: `new.staff.${uniq}@test.local`,
-        password: 'StrongPass#2026', role: 'WAITER',
+        name: `New Staff ${uniq}`, username: `new.staff.${String(uniq).slice(-10)}`,
+        role: 'WAITER', pin: '481526',
       }),
     },
     {
@@ -261,7 +282,7 @@ function matrixEndpoints(f) {
     },
     {
       id: 'DELETE /staff/:id', cat: 'Staff', method: 'DELETE', path: () => `/api/manager/staff/${f.staff.id}`,
-      allow: MANAGER_ONLY,
+      allow: MANAGER_ONLY, stepUp: true,
     },
     // --- offers ----------------------------------------------------------------
     { id: 'GET /offers', cat: 'Menu', method: 'GET', path: '/api/manager/offers', allow: ALL_TENANT_ROLES },
@@ -343,7 +364,7 @@ function tinyPngBytes() {
   );
 }
 
-async function runMatrixEndpointForRole(ep, role, token) {
+async function runMatrixEndpointForRole(ep, role, token, stepUpToken) {
   let path = typeof ep.path === 'function' ? ep.path() : ep.path;
   let body = ep.body ? ep.body() : undefined;
 
@@ -362,6 +383,7 @@ async function runMatrixEndpointForRole(ep, role, token) {
   }
 
   let options = { token };
+  if (ep.stepUp && stepUpToken) options = { ...options, headers: { 'x-step-up-token': stepUpToken } };
 
   if (ep.multipart) {
     const fd = new FormData();
@@ -389,19 +411,24 @@ async function runMatrixEndpointForRole(ep, role, token) {
 // PHASE 1 — authentication
 // ===========================================================================
 async function phaseAuth(tokens) {
+  // [loginFn-arg1, ..., role, restaurantId, key] — managers/platform via
+  // email+password; shift staff via restaurant code + username + 6-digit PIN.
   const roles = [
-    ['manager.a@test.local', 'RESTAURANT_MANAGER', ctx.restaurantA.id, 'MANAGER'],
-    ['waiter.a@test.local', 'WAITER', ctx.restaurantA.id, 'WAITER'],
-    ['staff.a@test.local', 'STAFF', ctx.restaurantA.id, 'STAFF'],
-    ['cashier.a@test.local', 'CASHIER', ctx.restaurantA.id, 'CASHIER'],
-    ['kitchen.a@test.local', 'KITCHEN', ctx.restaurantA.id, 'KITCHEN'],
-    ['manager.b@test.local', 'RESTAURANT_MANAGER', ctx.restaurantB.id, 'MANAGER_B'],
-    ['platform.admin@test.local', 'PLATFORM_ADMIN', null, 'PLATFORM_ADMIN'],
+    { email: 'manager.a@test.local', role: 'RESTAURANT_MANAGER', restaurantId: ctx.restaurantA.id, key: 'MANAGER' },
+    { employee: ['test-tenant-a', USERNAMES.waiterA, PINS.waiter], role: 'WAITER', restaurantId: ctx.restaurantA.id, key: 'WAITER' },
+    { employee: ['test-tenant-a', USERNAMES.staffA, PINS.staff], role: 'STAFF', restaurantId: ctx.restaurantA.id, key: 'STAFF' },
+    { employee: ['test-tenant-a', USERNAMES.cashierA, PINS.cashier], role: 'CASHIER', restaurantId: ctx.restaurantA.id, key: 'CASHIER' },
+    { employee: ['test-tenant-a', USERNAMES.kitchenA, PINS.kitchen], role: 'KITCHEN', restaurantId: ctx.restaurantA.id, key: 'KITCHEN' },
+    { email: 'manager.b@test.local', role: 'RESTAURANT_MANAGER', restaurantId: ctx.restaurantB.id, key: 'MANAGER_B' },
+    { employee: ['test-tenant-b', USERNAMES.waiterB, PINS.waiter], role: 'WAITER', restaurantId: ctx.restaurantB.id, key: 'WAITER_B' },
+    { email: 'platform.admin@test.local', role: 'PLATFORM_ADMIN', restaurantId: null, key: 'PLATFORM_ADMIN' },
   ];
 
-  for (const [email, role, restaurantId, key] of roles) {
+  for (const { email, employee, role, restaurantId, key } of roles) {
     // correct login
-    const ok = await login(email);
+    const ok = email
+      ? await login(email)
+      : await employeeLogin(employee[0], employee[1], employee[2]);
     const token = ok.json?.data?.token;
     check('Authentication', `${key}: login with correct credentials → 200 + token`, ok.status === 200 && !!token, `status=${ok.status}`);
     check('Authentication', `${key}: login returns the DB role`, ok.json?.data?.user?.role === role, `got ${ok.json?.data?.user?.role}`);
@@ -430,10 +457,13 @@ async function phaseAuth(tokens) {
         !/passwordHash|pinHash|password"/.test(me.text));
     }
 
-    // wrong password (sample 4 roles to stay under the login rate limiter)
+    // Wrong secret (sample 4 roles): managers use the password path, shift
+    // staff use the PIN path — each on ITS OWN login route.
     if (['MANAGER', 'WAITER', 'CASHIER', 'STAFF'].includes(key)) {
-      const bad = await login(email, 'TotallyWrongPass!123');
-      check('Authentication', `${key}: login with wrong password → 401`,
+      const bad = email
+        ? await login(email, 'TotallyWrongPass!123')
+        : await employeeLogin(employee[0], employee[1], '000000');
+      check('Authentication', `${key}: login with wrong secret → 401`,
         bad.status === 401, `status=${bad.status} body=${bad.text.slice(0, 120)}`);
       check('Authentication', `${key}: failed login does not leak whether the account exists`,
         !/not found|غير موجود|no user/i.test(bad.text));
@@ -444,47 +474,80 @@ async function phaseAuth(tokens) {
     }
   }
 
-  // suspended account
-  const suspended = await login('suspended.a@test.local');
-  check('Authentication', 'SUSPENDED employee cannot log in → 403', suspended.status === 403, `status=${suspended.status}`);
+  // Suspended shift account: the PIN path returns the SAME generic 401 as an
+  // unknown account — status is never an oracle for employee login.
+  const suspended = await employeeLogin('test-tenant-a', USERNAMES.suspendedA, PINS.suspended);
+  check('Authentication', 'SUSPENDED employee cannot log in via PIN → generic 401 (no status oracle)',
+    suspended.status === 401, `status=${suspended.status}`);
 
   // suspended restaurant blocks its staff, not platform staff
   await prisma.restaurant.update({ where: { id: ctx.restaurantB.id }, data: { status: 'SUSPENDED' } });
-  const suspendedTenant = await login('waiter.b@test.local');
-  check('Authentication', 'Employee of a SUSPENDED restaurant → 403', suspendedTenant.status === 403, `status=${suspendedTenant.status}`);
+  const suspendedTenant = await employeeLogin('test-tenant-b', USERNAMES.waiterB, PINS.waiter);
+  check('Authentication', 'Employee of a SUSPENDED restaurant → generic 401', suspendedTenant.status === 401, `status=${suspendedTenant.status}`);
   const platformStillOk = await login('platform.admin@test.local');
   check('Authentication', 'Platform admin is exempt from tenant suspension', platformStillOk.status === 200, `status=${platformStillOk.status}`);
   await prisma.restaurant.update({ where: { id: ctx.restaurantB.id }, data: { status: 'ACTIVE' } });
 
-  // ---- PIN login -----------------------------------------------------------
+  // ---- Employee login (restaurant code + username + 6-digit PIN) ----------
   const pinCases = [
-    ['waiter', PINS.waiter, 'WAITER', ctx.restaurantA.id, 'waiter.a@test.local'],
-    ['staff', PINS.staff, 'STAFF', ctx.restaurantA.id, 'staff.a@test.local'],
-    ['cashier', PINS.cashier, 'CASHIER', ctx.restaurantA.id, 'cashier.a@test.local'],
-    ['kitchen', PINS.kitchen, 'KITCHEN', ctx.restaurantA.id, 'kitchen.a@test.local'],
+    ['waiter', USERNAMES.waiterA, PINS.waiter, 'WAITER', ctx.restaurantA.id],
+    ['staff', USERNAMES.staffA, PINS.staff, 'STAFF', ctx.restaurantA.id],
+    ['cashier', USERNAMES.cashierA, PINS.cashier, 'CASHIER', ctx.restaurantA.id],
+    ['kitchen', USERNAMES.kitchenA, PINS.kitchen, 'KITCHEN', ctx.restaurantA.id],
   ];
-  for (const [label, pin, role, restaurantId, email] of pinCases) {
-    const r = await call('POST', '/api/auth/pin', { body: { pin, restaurantId } });
-    check('Authentication', `PIN login (${label}) → 200 + correct role`,
-      r.status === 200 && r.json?.data?.user?.role === role && r.json?.data?.user?.email === email,
+  for (const [label, username, pin, role, restaurantId] of pinCases) {
+    const r = await employeeLogin('test-tenant-a', username, pin);
+    check('Authentication', `Employee login (${label}) → 200 + correct role`,
+      r.status === 200 && r.json?.data?.user?.role === role && r.json?.data?.user?.username === username,
       `status=${r.status} body=${r.text.slice(0, 150)}`);
-    check('Authentication', `PIN login (${label}) token tenant = own restaurant`,
+    check('Authentication', `Employee login (${label}) token tenant = own restaurant`,
       r.json?.data?.user?.restaurantId === restaurantId);
   }
 
-  const wrongPin = await call('POST', '/api/auth/pin', { body: { pin: '0000', restaurantId: ctx.restaurantA.id } });
-  check('Authentication', 'PIN login with wrong PIN → 401', wrongPin.status === 401, `status=${wrongPin.status}`);
+  const wrongPin = await employeeLogin('test-tenant-a', USERNAMES.waiterA, '314152');
+  check('Authentication', 'Employee login with wrong PIN → 401 (generic, no enumeration)', wrongPin.status === 401, `status=${wrongPin.status}`);
 
-  const crossTenantPin = await call('POST', '/api/auth/pin', { body: { pin: '7777', restaurantId: ctx.restaurantA.id } });
-  check('Authentication', 'PIN of Restaurant B cannot log in against Restaurant A → 401',
+  const crossTenantPin = await employeeLogin('test-tenant-a', USERNAMES.waiterB, PINS.waiter);
+  check('Authentication', 'Credentials of Restaurant B cannot log in against Restaurant A → 401',
     crossTenantPin.status === 401, `status=${crossTenantPin.status}`);
 
-  const noRestaurantPin = await call('POST', '/api/auth/pin', { body: { pin: PINS.waiter } });
-  check('Authentication', 'PIN login without restaurantId → 400 (pin is never tenant-guessed)',
-    noRestaurantPin.status === 400, `status=${noRestaurantPin.status}`);
+  const samePinOtherTenant = await employeeLogin('test-tenant-b', USERNAMES.waiterB, PINS.waiter);
+  check('Authentication', 'Same username+PIN in Restaurant B logs into B only (tenant-scoped identity)',
+    samePinOtherTenant.status === 200 && samePinOtherTenant.json?.data?.user?.restaurantId === ctx.restaurantB.id,
+    `status=${samePinOtherTenant.status}`);
 
-  const platformPin = await call('POST', '/api/auth/pin', { body: { pin: '1234', restaurantId: ctx.restaurantA.id } });
-  check('Authentication', 'Platform admin cannot be reached through staff PIN', platformPin.status === 401, `status=${platformPin.status}`);
+  const noCode = await call('POST', '/api/auth/employee-login', { body: { username: USERNAMES.waiterA, pin: PINS.waiter } });
+  check('Authentication', 'Employee login without restaurant code → 400 (Zod strict)', noCode.status === 400, `status=${noCode.status}`);
+
+  const oldFourDigit = await employeeLogin('test-tenant-a', USERNAMES.waiterA, '1234');
+  check('Authentication', 'Legacy 4-digit PIN is rejected by the 6-digit schema → 400',
+    oldFourDigit.status === 400, `status=${oldFourDigit.status}`);
+
+  const managerViaPin = await employeeLogin('test-tenant-a', 'manager.a', '123456');
+  check('Authentication', 'Manager/platform accounts cannot use employee PIN login → 401',
+    managerViaPin.status === 401, `status=${managerViaPin.status}`);
+
+  const unknownUsername = await employeeLogin('test-tenant-a', 'no.such.user', PINS.waiter);
+  check('Authentication', 'Unknown username → generic 401 (no account oracle)', unknownUsername.status === 401, `status=${unknownUsername.status}`);
+
+  // AUTH-01: an operational account that somehow still carries a password
+  // (legacy row) is REFUSED on the password route and pointed at employee
+  // login; a non-existent address gets the same generic 401 as anyone else.
+  const legacyPasswordRow = await prisma.restaurantUser.create({
+    data: {
+      restaurantId: ctx.restaurantA.id, name: 'Legacy Password Row',
+      email: `legacy.staff.${Date.now()}@test.local`, username: `legacy.staff.${String(Date.now()).slice(-8)}`,
+      role: 'STAFF', passwordHash: bcrypt.hashSync(PASSWORD, 10),
+      pinHash: bcrypt.hashSync(PINS.staff, 10), status: 'ACTIVE',
+    },
+  });
+  const staffPasswordLogin = await login(legacyPasswordRow.email, PASSWORD);
+  check('Authentication', 'Shift staff cannot authenticate via email+password (AUTH-01) → 403 with the employee-login pointer',
+    staffPasswordLogin.status === 403 && /دخول الموظفين/.test(staffPasswordLogin.text ?? ''),
+    `status=${staffPasswordLogin.status}`);
+  const ghostStaffEmail = await login('staff.a@test.local', PASSWORD);
+  check('Authentication', 'Non-existent staff email is a plain generic 401 (no oracle)',
+    ghostStaffEmail.status === 401, `status=${ghostStaffEmail.status}`);
 
   // ---- token integrity ------------------------------------------------------
   const forgedRole = jwt.sign(
@@ -521,7 +584,7 @@ async function phaseAuth(tokens) {
   check('Authentication', 'GET /me without token → 401', noToken.status === 401, `status=${noToken.status}`);
 
   // ---- logout + revocation --------------------------------------------------
-  const logoutToken = await getToken('staff.a@test.local');
+  const logoutToken = await getTokenEmployee('test-tenant-a', USERNAMES.staffA, PINS.staff);
   const beforeLogout = await call('GET', '/api/auth/me', { token: logoutToken });
   const doLogout = await call('POST', '/api/auth/logout', { token: logoutToken });
   const afterLogout = await call('GET', '/api/auth/me', { token: logoutToken });
@@ -538,36 +601,50 @@ async function phaseAuth(tokens) {
   check('Authentication', 'Logout without a token → 401', logoutNoAuth.status === 401, `status=${logoutNoAuth.status}`);
 
   // password reset is explicitly not implemented
-  const reset = await call('POST', '/api/auth/password-reset-request', { body: { email: 'waiter.a@test.local' } });
+  const reset = await call('POST', '/api/auth/password-reset-request', { body: { email: 'manager.a@test.local' } });
   check('Authentication', 'Password reset endpoint is honest about being unimplemented (501)', reset.status === 501, `status=${reset.status}`);
 }
 
 // ===========================================================================
 // PHASE 2 — full permission matrix (every tenant role × every endpoint)
 // ===========================================================================
-async function phaseMatrix(tokens) {
+async function phaseMatrix(_tokens) {
   const roles = ['RESTAURANT_MANAGER', 'CASHIER', 'WAITER', 'KITCHEN', 'STAFF'];
+  // Fresh sessions per role: phaseAuth exercises credential rotation and
+  // lifecycle revocation, so tokens captured at boot may already be retired.
   const tokenFor = {
-    RESTAURANT_MANAGER: tokens.MANAGER, CASHIER: tokens.CASHIER, WAITER: tokens.WAITER,
-    KITCHEN: tokens.KITCHEN, STAFF: tokens.STAFF,
+    RESTAURANT_MANAGER: await getToken('manager.a@test.local'),
+    CASHIER: await getTokenEmployee('test-tenant-a', USERNAMES.cashierA, PINS.cashier),
+    WAITER: await getTokenEmployee('test-tenant-a', USERNAMES.waiterA, PINS.waiter),
+    KITCHEN: await getTokenEmployee('test-tenant-a', USERNAMES.kitchenA, PINS.kitchen),
+    STAFF: await getTokenEmployee('test-tenant-a', USERNAMES.staffA, PINS.staff),
   };
+  // Step-up token for the sensitive staff endpoints (manager password path).
+  const mgrStepUp = await call('POST', '/api/auth/step-up', {
+    token: tokenFor.RESTAURANT_MANAGER,
+    body: { password: PASSWORD },
+  });
+  const mgrStepUpToken = mgrStepUp.json?.data?.stepUpToken;
+  check('Permission Matrix', 'Manager can obtain a step-up token for sensitive endpoints',
+    !!mgrStepUpToken, `status=${mgrStepUp.status}`);
+  const stepUpFor = { RESTAURANT_MANAGER: mgrStepUpToken, CASHIER: undefined, WAITER: undefined, KITCHEN: undefined, STAFF: undefined };
   const results = [];
   for (const role of roles) {
     const f = await makeFixtures(`${role}-${Date.now()}`);
     const endpoints = matrixEndpoints(f);
     for (const ep of endpoints) {
-      results.push(await runMatrixEndpointForRole(ep, role, tokenFor[role]));
+      results.push(await runMatrixEndpointForRole(ep, role, tokenFor[role], stepUpFor[role]));
     }
   }
   // Defense in depth: KITCHEN passes requireServiceStaff but must not edit tables.
   const kitchenF = await makeFixtures(`KITCHEN-TABLE-${Date.now()}`);
   const kitchenTable = await call('PUT', `/api/manager/tables/${kitchenF.table.id}`, {
-    token: tokens.KITCHEN, body: { status: 'OCCUPIED' },
+    token: tokenFor.KITCHEN, body: { status: 'OCCUPIED' },
   });
   check('Permission Matrix', 'KITCHEN → PUT /tables/:id denied (status flips are cashier/waiter/staff only)',
     kitchenTable.status === 403, `status=${kitchenTable.status} ${kitchenTable.text.slice(0, 120)}`);
   const kitchenStructural = await call('PUT', `/api/manager/tables/${kitchenF.table.id}`, {
-    token: tokens.WAITER, body: { tableNumber: 4900 + (tableSeq += 1) },
+    token: tokenFor.WAITER, body: { tableNumber: 4900 + (tableSeq += 1) },
   });
   check('Permission Matrix', 'WAITER cannot change structural table fields (only status)',
     kitchenStructural.status === 403, `status=${kitchenStructural.status}`);
@@ -576,6 +653,12 @@ async function phaseMatrix(tokens) {
   // (clear fixture branches so the plan's branch quota is not exhausted)
   await prisma.branch.deleteMany({ where: { restaurantId: ctx.restaurantA.id } });
   const fA = await makeFixtures(`PLATFORM-${Date.now()}`);
+  const platformToken = await getToken('platform.admin@test.local');
+  const platformStepUp = await call('POST', '/api/auth/step-up', {
+    token: platformToken,
+    body: { password: PASSWORD },
+  });
+  const platformStepUpToken = platformStepUp.json?.data?.stepUpToken;
   for (const ep of matrixEndpoints(fA)) {
     let path = typeof ep.path === 'function' ? ep.path() : ep.path;
     const sep = path.includes('?') ? '&' : '?';
@@ -583,14 +666,15 @@ async function phaseMatrix(tokens) {
     let body = ep.body
       ? (ep.platformTenantInBody ? { restaurantId: ctx.restaurantA.id, ...ep.body() } : ep.body())
       : undefined;
-    let options = { token: tokens.PLATFORM_ADMIN };
+    let options = { token: platformToken };
+    if (ep.stepUp && platformStepUpToken) options = { ...options, headers: { 'x-step-up-token': platformStepUpToken } };
     if (ep.id === 'POST /uploads/delete') {
       // Platform admin hits requireManager's documented bypass, so the call is
       // a real delete: upload an asset first (with the tenant hint) and remove it.
       const fd = new FormData();
       fd.append('image', new Blob([tinyPngBytes()], { type: 'image/png' }), `platform-${Date.now()}.png`);
       fd.append('restaurantId', ctx.restaurantA.id);
-      const up = await call('POST', '/api/uploads/image', { token: tokens.PLATFORM_ADMIN, form: fd });
+      const up = await call('POST', '/api/uploads/image', { token: platformToken, form: fd });
       const uploaded = up.json?.data?.url || up.json?.data?.imageUrl || up.json?.data?.file?.url;
       body = { url: uploaded || '/uploads/not-owned-by-this-tenant.png' };
       options = { ...options, body };
@@ -612,8 +696,8 @@ async function phaseMatrix(tokens) {
 // ===========================================================================
 // PHASE 3 — WAITER end-to-end scenario
 // ===========================================================================
-async function phaseWaiter(tokens) {
-  const waiter = await getToken('waiter.a@test.local');
+async function phaseWaiter(_tokens) {
+  const waiter = await getTokenEmployee('test-tenant-a', USERNAMES.waiterA, PINS.waiter);
   const f = await makeFixtures(`waiter-scenario-${Date.now()}`);
   const A = ctx.restaurantA.id;
   const B = ctx.restaurantB.id;
@@ -750,10 +834,9 @@ async function phaseWaiter(tokens) {
 // ===========================================================================
 // PHASE 4 — STAFF scenario
 // ===========================================================================
-async function phaseStaff(tokens) {
-  const staff = await getToken('staff.a@test.local');
-  const staffPin = await call('POST', '/api/auth/pin', { body: { pin: PINS.staff, restaurantId: ctx.restaurantA.id } });
-  check('STAFF', 'PIN login works for STAFF', staffPin.status === 200 && staffPin.json?.data?.user?.role === 'STAFF', `status=${staffPin.status}`);
+async function phaseStaff(_tokens) {
+  const staff = await getTokenEmployee('test-tenant-a', USERNAMES.staffA, PINS.staff);
+  check('STAFF', 'Employee login works for STAFF', staff.length > 20);
 
   const f = await makeFixtures(`staff-scenario-${Date.now()}`);
   const reads = await Promise.all([
@@ -769,21 +852,24 @@ async function phaseStaff(tokens) {
 
   // STAFF scope (AuthContext.tsx:42 + TABLE_STATUS_WRITE_ROLES): order status,
   // table status and waiter calls are exactly the three allowed writes.
-  const serviceWrites = await Promise.all([
-    call('PUT', `/api/manager/orders/${encodeURIComponent(f.order.id)}/status`, { token: staff, body: { status: 'READY' } }),
-    call('PUT', `/api/manager/waiter-requests/${f.waiterReq.id}/status`, { token: staff, body: { status: 'RESOLVED' } }),
-    call('PUT', `/api/manager/tables/${f.table.id}`, { token: staff, body: { status: 'OCCUPIED' } }),
-  ]);
+  // Legal transitions only: the order machine is PENDING→PREPARING→READY→SERVED
+  // and a call must be ACKNOWLEDGED before it can be RESOLVED.
+  const orderAdvance = await call('PUT', `/api/manager/orders/${encodeURIComponent(f.order.id)}/status`, { token: staff, body: { status: 'PREPARING' } });
   check('STAFF', 'STAFF can advance order status (service duty)',
-    serviceWrites[0].status === 200, `status=${serviceWrites[0].status} ${serviceWrites[0].text.slice(0, 120)}`);
-  check('STAFF', 'STAFF can resolve a waiter call (service duty)',
-    serviceWrites[1].status === 200, `status=${serviceWrites[1].status} ${serviceWrites[1].text.slice(0, 120)}`);
+    orderAdvance.status === 200, `status=${orderAdvance.status} ${orderAdvance.text.slice(0, 120)}`);
+  const callAck = await call('PUT', `/api/manager/waiter-requests/${f.waiterReq.id}/status`, { token: staff, body: { status: 'ACKNOWLEDGED' } });
+  const callResolve = await call('PUT', `/api/manager/waiter-requests/${f.waiterReq.id}/status`, { token: staff, body: { status: 'RESOLVED' } });
+  check('STAFF', 'STAFF can resolve a waiter call (service duty, legal transition chain)',
+    callAck.status === 200 && callResolve.status === 200, `ack=${callAck.status} resolve=${callResolve.status} ${callResolve.text.slice(0, 120)}`);
+  const tableFlip = await call('PUT', `/api/manager/tables/${f.table.id}`, { token: staff, body: { status: 'OCCUPIED' } });
   check('STAFF', 'STAFF can flip table availability (service duty)',
-    serviceWrites[2].status === 200, `status=${serviceWrites[2].status} ${serviceWrites[2].text.slice(0, 120)}`);
-  check('STAFF', 'Service writes really landed in the DB (order READY / call RESOLVED / table OCCUPIED)',
-    (await prisma.order.findUnique({ where: { id: f.order.id } })).status === 'READY' &&
+    tableFlip.status === 200, `status=${tableFlip.status} ${tableFlip.text.slice(0, 120)}`);
+  check('STAFF', 'Service writes really landed in the DB (order PREPARING / call RESOLVED / table OCCUPIED)',
+    (await prisma.order.findUnique({ where: { id: f.order.id } })).status === 'PREPARING' &&
     (await prisma.waiterRequest.findUnique({ where: { id: f.waiterReq.id } })).status === 'RESOLVED' &&
     (await prisma.table.findUnique({ where: { id: f.table.id } })).status === 'OCCUPIED');
+  check('STAFF', 'Illegal transition is refused (PENDING-like skips rejected at the authority boundary)',
+    (await call('PUT', `/api/manager/orders/${encodeURIComponent(f.payOrder.id)}/status`, { token: staff, body: { status: 'READY' } })).status === 409);
 
   const writeAttempts = [
     ['Order creation (POS)', 'POST', '/api/manager/orders', { tableId: f.table.id, items: [{ productId: ctx.ids.prodA1, quantity: 1 }] }],
@@ -800,8 +886,8 @@ async function phaseStaff(tokens) {
     const res = await call(method, path, { token: staff, body });
     check('STAFF', `Denied: ${label}`, res.status === 403, `status=${res.status} ${res.text.slice(0, 120)}`);
   }
-  check('STAFF', 'Denied operations changed nothing (order still READY, table still OCCUPIED only by the STAFF write)',
-    (await prisma.order.findUnique({ where: { id: f.order.id } })).status === 'READY' &&
+  check('STAFF', 'Denied operations changed nothing (order still PREPARING, table still OCCUPIED only by the STAFF write)',
+    (await prisma.order.findUnique({ where: { id: f.order.id } })).status === 'PREPARING' &&
     (await prisma.table.findUnique({ where: { id: f.table.id } })).status === 'OCCUPIED' &&
     (await prisma.waiterRequest.findUnique({ where: { id: f.waiterReq.id } })).status === 'RESOLVED');
 }
@@ -809,13 +895,12 @@ async function phaseStaff(tokens) {
 // ===========================================================================
 // PHASE 5 — CASHIER / POS / payments
 // ===========================================================================
-async function phaseCashier(tokens) {
-  const cashier = await getToken('cashier.a@test.local');
+async function phaseCashier(_tokens) {
+  const cashier = await getTokenEmployee('test-tenant-a', USERNAMES.cashierA, PINS.cashier);
   const A = ctx.restaurantA.id;
   const f = await makeFixtures(`cashier-${Date.now()}`);
 
-  const pin = await call('POST', '/api/auth/pin', { body: { pin: PINS.cashier, restaurantId: A } });
-  check('CASHIER', 'PIN login works for CASHIER', pin.status === 200 && pin.json?.data?.user?.role === 'CASHIER', `status=${pin.status}`);
+  check('CASHIER', 'Employee login works for CASHIER', cashier.length > 20);
 
   const posList = await call('GET', '/api/manager/orders', { token: cashier });
   check('CASHIER', 'Can open the POS order queue', posList.status === 200, `status=${posList.status}`);
@@ -835,8 +920,14 @@ async function phaseCashier(tokens) {
   check('CASHIER', 'No duplicate order created by a single POST',
     new Set(dbOrders.map((o) => o.id)).size === dbOrders.length);
 
-  const statusUpd = await call('PUT', `/api/manager/orders/${encodeURIComponent(dbOrders[0].id)}/status`, { token: cashier, body: { status: 'SERVED' } });
-  check('CASHIER', 'Can update order status (cashier serves orders)', statusUpd.status === 200, `status=${statusUpd.status}`);
+  // Advance through the legal chain PENDING→PREPARING→READY→SERVED (skips
+  // are rejected by the operational state machine at the authority boundary).
+  const statusChain = [];
+  for (const nextStatus of ['PREPARING', 'READY', 'SERVED']) {
+    statusChain.push(await call('PUT', `/api/manager/orders/${encodeURIComponent(dbOrders[0].id)}/status`, { token: cashier, body: { status: nextStatus } }));
+  }
+  check('CASHIER', 'Can update order status (cashier serves orders, legal chain)',
+    statusChain.every((r) => r.status === 200), statusChain.map((r) => r.status).join(','));
 
   // settle the table → closes the session and marks orders paid
   const settle = await call('POST', `/api/manager/tables/${f.table.id}/settle`, { token: cashier, body: { paymentMethod: 'CASH', note: 'cash settlement' } });
@@ -957,7 +1048,7 @@ async function phaseManager(tokens) {
   // products CRUD
   const prodCreate = await call('POST', '/api/manager/menu/products', {
     token: manager,
-    body: { categoryId: ctx.ids.catA1, name: 'منتج مدير', nameEn: 'Manager Prod', description: 'd', price: 42, image: '/uploads/mgr.png' },
+    body: { categoryId: ctx.ids.catA1, name: 'منتج مدير', nameEn: 'Manager Prod', description: 'd', price: 42, image: '' },
   });
   const prodId = prodCreate.json?.data?.product?.id ?? prodCreate.json?.data?.id;
   check('RESTAURANT_MANAGER', 'Product create works', prodCreate.status === 200 || prodCreate.status === 201, `status=${prodCreate.status} ${prodCreate.text.slice(0, 150)}`);
@@ -1006,34 +1097,45 @@ async function phaseManager(tokens) {
   const offerDelete = await call('DELETE', `/api/manager/offers/${offerId}`, { token: manager });
   check('RESTAURANT_MANAGER', 'Offer delete works', offerDelete.status === 200 || offerDelete.status === 204, `status=${offerDelete.status}`);
 
-  // staff management
-  const staffEmail = `mgr.created.${Date.now()}@test.local`;
+  // staff management (2026-09 model: shift staff = username + 6-digit PIN,
+  // sensitive routes require the manager's fresh step-up token)
+  const mgrStepUp = await call('POST', '/api/auth/step-up', { token: manager, body: { password: PASSWORD } });
+  const mgrStepUpToken = mgrStepUp.json?.data?.stepUpToken;
+  const staffUsername = `mgr.created.${String(Date.now()).slice(-10)}`;
   const staffCreate = await call('POST', '/api/manager/staff', {
-    token: manager, body: { name: 'موظف جديد', email: staffEmail, password: 'StrongPass#2026', role: 'WAITER', pin: '6543' },
+    token: manager, headers: { 'x-step-up-token': mgrStepUpToken },
+    body: { name: 'موظف جديد', username: staffUsername, role: 'WAITER', pin: '481526' },
   });
   const staffId = staffCreate.json?.data?.staff?.id ?? staffCreate.json?.data?.user?.id ?? staffCreate.json?.data?.id;
-  check('RESTAURANT_MANAGER', 'Staff creation works', staffCreate.status === 200 || staffCreate.status === 201, `status=${staffCreate.status} ${staffCreate.text.slice(0, 200)}`);
+  check('RESTAURANT_MANAGER', 'Staff creation works (step-up verified)', staffCreate.status === 200 || staffCreate.status === 201, `status=${staffCreate.status} ${staffCreate.text.slice(0, 200)}`);
   const staffRow = staffId ? await prisma.restaurantUser.findUnique({ where: { id: staffId } }) : null;
   check('RESTAURANT_MANAGER', 'Created staff belongs to the manager’s tenant', staffRow?.restaurantId === A, `${staffRow?.restaurantId}`);
-  check('RESTAURANT_MANAGER', 'Created staff password is hashed (never stored in clear)',
-    !!staffRow && staffRow.passwordHash !== 'StrongPass#2026' && staffRow.passwordHash.startsWith('$2'));
-  check('RESTAURANT_MANAGER', 'Created staff can actually log in and gets the assigned role',
-    (await login(staffEmail, 'StrongPass#2026')).json?.data?.user?.role === 'WAITER');
-  const staffUpdate = await call('PUT', `/api/manager/staff/${staffId}`, { token: manager, body: { role: 'CASHIER' } });
-  check('RESTAURANT_MANAGER', 'Staff update works', staffUpdate.status === 200, `status=${staffUpdate.status}`);
+  check('RESTAURANT_MANAGER', 'Created staff never stores a usable password (PIN-only account, unguessable filler hash)',
+    !!staffRow && staffRow.pinHash?.startsWith('$2') && !staffRow.pinHash?.includes('481526'));
+  check('RESTAURANT_MANAGER', 'Created staff can actually log in (employee login) and gets the assigned role',
+    (await employeeLogin('test-tenant-a', staffUsername, '481526')).json?.data?.user?.role === 'WAITER');
+  check('RESTAURANT_MANAGER', 'Staff role change WITHOUT step-up is refused (403 STEP_UP_REQUIRED)',
+    (await call('PUT', `/api/manager/staff/${staffId}`, { token: manager, body: { role: 'CASHIER' } })).json?.code === 'STEP_UP_REQUIRED');
+  const staffUpdate = await call('PUT', `/api/manager/staff/${staffId}`, {
+    token: manager, headers: { 'x-step-up-token': mgrStepUpToken },
+    body: { role: 'CASHIER', pin: '571384' },
+  });
+  check('RESTAURANT_MANAGER', 'Staff update works (with step-up)', staffUpdate.status === 200, `status=${staffUpdate.status}`);
   check('RESTAURANT_MANAGER', 'Staff role update persisted', (await prisma.restaurantUser.findUnique({ where: { id: staffId } }))?.role === 'CASHIER');
-  const staffDelete = await call('DELETE', `/api/manager/staff/${staffId}`, { token: manager });
-  check('RESTAURANT_MANAGER', 'Staff delete works', staffDelete.status === 200 || staffDelete.status === 204, `status=${staffDelete.status}`);
+  const staffDelete = await call('DELETE', `/api/manager/staff/${staffId}`, { token: manager, headers: { 'x-step-up-token': mgrStepUpToken } });
+  check('RESTAURANT_MANAGER', 'Staff delete works (with step-up)', staffDelete.status === 200 || staffDelete.status === 204, `status=${staffDelete.status}`);
   const deletedStaff = await prisma.restaurantUser.findUnique({ where: { id: staffId } });
   check('RESTAURANT_MANAGER', 'Deleted staff can no longer authenticate',
     deletedStaff === null || deletedStaff.status !== 'ACTIVE', `row=${JSON.stringify(deletedStaff?.status)}`);
   check('RESTAURANT_MANAGER', 'Manager cannot escalate a tenant user to PLATFORM_ADMIN',
     (await call('POST', '/api/manager/staff', {
-      token: manager, body: { name: 'Esc', email: `esc.${Date.now()}@test.local`, password: 'StrongPass#2026', role: 'PLATFORM_ADMIN' },
+      token: manager, headers: { 'x-step-up-token': mgrStepUpToken },
+      body: { name: 'Esc', username: `esc.${String(Date.now()).slice(-8)}`, role: 'PLATFORM_ADMIN', pin: '481526' },
     })).status === 400);
   check('RESTAURANT_MANAGER', 'Manager cannot grant SUPER_ADMIN either',
     (await call('POST', '/api/manager/staff', {
-      token: manager, body: { name: 'Esc2', email: `esc2.${Date.now()}@test.local`, password: 'StrongPass#2026', role: 'SUPER_ADMIN' },
+      token: manager, headers: { 'x-step-up-token': mgrStepUpToken },
+      body: { name: 'Esc2', username: `esc2.${String(Date.now()).slice(-8)}`, role: 'SUPER_ADMIN', pin: '481526' },
     })).status === 400);
 
   // settings / branding
@@ -1131,9 +1233,9 @@ async function phaseTenantIsolation(tokens) {
   const A = ctx.restaurantA.id;
   const B = ctx.restaurantB.id;
   const actorTokens = {
-    WAITER: await getToken('waiter.a@test.local'),
-    STAFF: await getToken('staff.a@test.local'),
-    CASHIER: await getToken('cashier.a@test.local'),
+    WAITER: await getTokenEmployee('test-tenant-a', USERNAMES.waiterA, PINS.waiter),
+    STAFF: await getTokenEmployee('test-tenant-a', USERNAMES.staffA, PINS.staff),
+    CASHIER: await getTokenEmployee('test-tenant-a', USERNAMES.cashierA, PINS.cashier),
     MANAGER: tokens.MANAGER,
   };
   const B_RESOURCES = {
@@ -1299,11 +1401,20 @@ async function phaseDataIntegrity(tokens) {
   `);
   check('Data Integrity', 'No cross-tenant contamination in relational joins', true, JSON.stringify(contamination[0]));
 
-  // duplicate detection
+  // duplicate detection — emails are unique where present; shift staff are
+  // PIN-only accounts with NULL emails (2026-09 model), so exclude NULL.
   const dupEmails = await prisma.$queryRawUnsafe(`
-    SELECT LOWER(email) AS e, COUNT(*)::int AS c FROM "RestaurantUser" GROUP BY LOWER(email) HAVING COUNT(*) > 1
+    SELECT LOWER(email) AS e, COUNT(*)::int AS c FROM "RestaurantUser"
+    WHERE email IS NOT NULL GROUP BY LOWER(email) HAVING COUNT(*) > 1
   `);
-  check('Data Integrity', 'No duplicate employee accounts (email uniqueness enforced)', dupEmails.length === 0, JSON.stringify(dupEmails));
+  check('Data Integrity', 'No duplicate employee emails (unique where present; PIN-only staff have none)',
+    dupEmails.length === 0, JSON.stringify(dupEmails));
+  const dupUsernames = await prisma.$queryRawUnsafe(`
+    SELECT "restaurantId", username, COUNT(*)::int AS c FROM "RestaurantUser"
+    WHERE username IS NOT NULL GROUP BY "restaurantId", username HAVING COUNT(*) > 1
+  `);
+  check('Data Integrity', 'No duplicate usernames inside a tenant (compound unique enforced)',
+    dupUsernames.length === 0, JSON.stringify(dupUsernames));
   const dupTables = await prisma.$queryRawUnsafe(`
     SELECT "restaurantId", number, COUNT(*)::int AS c FROM "Table" GROUP BY "restaurantId", number HAVING COUNT(*) > 1
   `);
@@ -1321,20 +1432,28 @@ async function phaseDataIntegrity(tokens) {
     (actions.STAFF_CREATED ?? 0) + (actions.STAFF_UPDATED ?? 0) + (actions.STAFF_DELETED ?? 0) + (actions.PAYMENT_RECORDED ?? 0) + (actions.ORDER_CREATED ?? 0) > 0,
     JSON.stringify(actions));
 
-  // a real end-to-end mutation check: role change revokes live sessions
+  // A real end-to-end mutation check: role change revokes live sessions.
+  // The victim is a MANAGER (password login) demoted to an operational role —
+  // the sensitive change requires the manager's fresh step-up token.
   const victim = await prisma.restaurantUser.create({
     data: {
       restaurantId: A, name: 'Session Victim', email: `victim.${Date.now()}@test.local`,
-      role: 'KITCHEN', passwordHash: bcrypt.hashSync(PASSWORD, 10), status: 'ACTIVE',
+      role: 'RESTAURANT_MANAGER', passwordHash: bcrypt.hashSync(PASSWORD, 10), status: 'ACTIVE',
     },
   });
   const victimToken = await getToken(victim.email);
+  const freshManager = await getToken('manager.a@test.local');
+  const freshStepUp = await call('POST', '/api/auth/step-up', { token: freshManager, body: { password: PASSWORD } });
   const before = await call('GET', '/api/manager/orders', { token: victimToken });
-  await call('PUT', `/api/manager/staff/${victim.id}`, { token: tokens.MANAGER, body: { role: 'WAITER' } });
+  const demote = await call('PUT', `/api/manager/staff/${victim.id}`, {
+    token: freshManager,
+    headers: { 'x-step-up-token': freshStepUp.json?.data?.stepUpToken },
+    body: { role: 'WAITER', username: `victim.${String(Date.now()).slice(-8)}`, pin: PINS.staff },
+  });
   const after = await call('GET', '/api/manager/orders', { token: victimToken });
-  check('Data Integrity', 'Changing a staff role invalidates their existing session (fresh role enforced)',
-    before.status === 200 && after.status === 401, `before=${before.status} after=${after.status}`);
-  await prisma.restaurantUser.update({ where: { id: victim.id }, data: { role: 'KITCHEN' } });
+  check('Data Integrity', 'Changing a staff role (step-up protected) invalidates their existing session (fresh role enforced)',
+    before.status === 200 && demote.status === 200 && after.status === 401,
+    `before=${before.status} demote=${demote.status} after=${after.status}`);
 }
 
 // ===========================================================================
@@ -1594,10 +1713,10 @@ async function main() {
   const tokens = {};
   // tokens captured from the auth phase (keyed by role label)
   tokens.MANAGER = await getToken('manager.a@test.local');
-  tokens.WAITER = await getToken('waiter.a@test.local');
-  tokens.STAFF = await getToken('staff.a@test.local');
-  tokens.CASHIER = await getToken('cashier.a@test.local');
-  tokens.KITCHEN = await getToken('kitchen.a@test.local');
+  tokens.WAITER = await getTokenEmployee('test-tenant-a', USERNAMES.waiterA, PINS.waiter);
+  tokens.STAFF = await getTokenEmployee('test-tenant-a', USERNAMES.staffA, PINS.staff);
+  tokens.CASHIER = await getTokenEmployee('test-tenant-a', USERNAMES.cashierA, PINS.cashier);
+  tokens.KITCHEN = await getTokenEmployee('test-tenant-a', USERNAMES.kitchenA, PINS.kitchen);
   tokens.MANAGER_B = await getToken('manager.b@test.local');
   tokens.PLATFORM_ADMIN = await getToken('platform.admin@test.local');
 

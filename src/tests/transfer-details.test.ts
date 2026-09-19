@@ -545,6 +545,15 @@ describe('GET /api/public/restaurants/:slug — transfer details (real router)',
 
   it('is ordered by directory name after the gate + H-02 migrations (deploy order)', () => {
     const dirs = readdirSync(resolve(repoRoot, 'prisma/migrations')).sort();
-    expect(dirs[dirs.length - 1]).toBe('20260917120000_add_restaurant_transfer_details');
+    // The transfer migration must come after the payment-void migration, and
+    // everything after it is a known additive migration (auth redesign +
+    // counter orderSource — both verified on real PostgreSQL).
+    expect(dirs.indexOf('20260915120000_staff_cancel_and_payment_void')).toBeLessThan(
+      dirs.indexOf('20260917120000_add_restaurant_transfer_details')
+    );
+    expect(dirs.filter((d) => d > '20260917120000_add_restaurant_transfer_details')).toEqual([
+      '20260919120000_employee_auth_redesign',
+      '20260919120100_order_source_counter',
+    ]);
   });
 });

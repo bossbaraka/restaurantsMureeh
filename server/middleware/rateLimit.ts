@@ -26,11 +26,24 @@ const base = {
   validate: false as const,
 };
 
+// Limiter budgets are deliberately strict in production/development.
+// Automated suites (vitest NODE_ENV=test, the e2e permission run, and CI)
+// fire dozens of INTENTIONAL mutations/failures from a single address; a
+// scale env keeps those suites deterministic without weakening a real
+// deployment (never set RATE_LIMIT_BUDGET_SCALE outside test harnesses).
+const BUDGET_SCALE = Math.min(
+  200,
+  Math.max(
+    1,
+    Number(process.env.RATE_LIMIT_BUDGET_SCALE ?? (process.env.NODE_ENV === 'test' ? 50 : 1)) || 1
+  )
+);
+
 // Login: count only failed attempts so normal users are unaffected.
 export const loginLimiter = rateLimit({
   ...base,
   windowMs: 15 * 60 * 1000,
-  limit: 20,
+  limit: 20 * BUDGET_SCALE,
   skipSuccessfulRequests: true,
   message: limiterError(
     'محاولات دخول كثيرة. يرجى الانتظار 15 دقيقة قبل إعادة المحاولة.'
@@ -38,13 +51,28 @@ export const loginLimiter = rateLimit({
 });
 
 // Staff PIN: short secrets need a much tighter budget.
-export const pinLimiter = rateLimit({
+// (Legacy /auth/pin route removed 2026-09; the limiter stays because the
+// per-account failure budget in auth.ts is ADDITIVE to this per-IP budget —
+// layered defense against distributed PIN guessing, AUTH-02.)
+export const employeeLoginLimiter = rateLimit({
   ...base,
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: 10 * BUDGET_SCALE,
   skipSuccessfulRequests: true,
   message: limiterError(
-    'محاولات PIN كثيرة. يرجى الانتظار 15 دقيقة قبل إعادة المحاولة.'
+    'محاولات دخول كثيرة. يرجى الانتظار 15 دقيقة قبل إعادة المحاولة.'
+  ),
+});
+
+// Step-up re-authentication (void payments / staff credential changes):
+// same tight failure budget as employee login — it verifies a secret too.
+export const stepUpLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 10 * BUDGET_SCALE,
+  skipSuccessfulRequests: true,
+  message: limiterError(
+    'محاولات تأكيد هوية كثيرة. يرجى الانتظار 15 دقيقة قبل إعادة المحاولة.'
   ),
 });
 
@@ -106,7 +134,7 @@ export const adminOnboardLimiter = onboardLimiter;
 export const paymentLimiter = rateLimit({
   ...base,
   windowMs: 15 * 60 * 1000,
-  limit: 60,
+  limit: 60 * BUDGET_SCALE,
   message: limiterError('عمليات دفع كثيرة. يرجى الانتظار قليلاً.'),
 });
 
@@ -139,7 +167,7 @@ export const orderStatusLimiter = rateLimit({
 export const staffMutationLimiter = rateLimit({
   ...base,
   windowMs: 60 * 60 * 1000,
-  limit: 30,
+  limit: 30 * BUDGET_SCALE,
   message: limiterError('عمليات موظفين كثيرة. حاول لاحقاً.'),
 });
 

@@ -129,7 +129,11 @@ export interface RestaurantUser {
   id: string;
   restaurantId: string | null; // null if Super Admin / Platform Admin
   name: string;
-  email: string;
+  // Email: managers/platform only (nullable for shift staff — they use
+  // restaurant code + username + 6-digit PIN, no synthetic emails).
+  email: string | null;
+  // Shift-staff login identifier, unique per restaurant (nullable for managers).
+  username?: string | null;
   role: TenantRole;
   token?: string;
   avatar?: string;

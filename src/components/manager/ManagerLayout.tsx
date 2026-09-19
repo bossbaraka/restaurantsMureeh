@@ -189,6 +189,30 @@ export const ManagerLayout: React.FC = () => {
     }
   }, [activeTab, navItems]);
 
+  // Shared-device idle timeout (session hardening): 20 minutes without
+  // interaction logs this console out. Manager/POS workflows constantly
+  // produce pointer/keyboard/touch events, so an ACTIVE shift is never
+  // interrupted; an abandoned unlocked device loses access instead of
+  // staying authenticated for the full 12h token life.
+  React.useEffect(() => {
+    if (!currentUser) return;
+    const IDLE_MS = 20 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('merar:idle-logout'));
+      }, IDLE_MS);
+    };
+    const events: (keyof WindowEventMap)[] = ['pointerdown', 'keydown', 'touchstart', 'wheel'];
+    events.forEach((evt) => window.addEventListener(evt, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((evt) => window.removeEventListener(evt, reset));
+    };
+  }, [currentUser]);
+
   const handleSwitchTenant = (slug: string, restId: string) => {
     setCurrentTenantBySlug(slug);
     switchManagerRestaurant(restId);

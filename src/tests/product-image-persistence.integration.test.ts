@@ -243,11 +243,11 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
     // The value ProductFormModal sends is `pathUrl ?? url` -> the key.
     const { res, body } = await createDish(dish({ image: uploaded.pathUrl }));
     expect(res.status).toBe(201);
-    expect(await storedImageUrl(body.id)).toBe(uploaded.pathUrl);
+    expect(await storedImageUrl(body.data.id)).toBe(uploaded.pathUrl);
     // …while the response still hands the caller a renderable URL.
-    expect(body.imageUrl).toContain(uploaded.pathUrl);
-    expect(body.imageUrl).not.toBe(uploaded.pathUrl);
-    expect(body.imageStoragePath).toBe(uploaded.pathUrl);
+    expect(body.data.imageUrl).toContain(uploaded.pathUrl);
+    expect(body.data.imageUrl).not.toBe(uploaded.pathUrl);
+    expect(body.data.imageStoragePath).toBe(uploaded.pathUrl);
     // The object really is in the (throwaway) bucket.
     expect(fs.existsSync(path.join(TMP_UPLOADS, uploaded.pathUrl))).toBe(true);
   });
@@ -256,13 +256,13 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
     const uploaded = await uploadDishPhoto();
     const { res, body } = await createDish(dish({ image: uploaded.url }));
     expect(res.status).toBe(201);
-    expect(await storedImageUrl(body.id)).toBe(uploaded.pathUrl);
+    expect(await storedImageUrl(body.data.id)).toBe(uploaded.pathUrl);
   });
 
   it('3. an already canonical key stays canonical (re-save is idempotent)', async () => {
     const uploaded = await uploadDishPhoto();
     const created = await createDish(dish({ image: uploaded.pathUrl }));
-    const id = created.body.id;
+    const id = created.body.data.id;
     const put = await fetch(`${ctx!.base}/api/manager/menu/products/${id}`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json', ...ctx!.authA },
@@ -277,7 +277,7 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
   it('4. reads re-resolve the key after a fresh instance', async () => {
     const uploaded = await uploadDishPhoto();
     const created = await createDish(dish({ image: uploaded.pathUrl }));
-    const id = created.body.id;
+    const id = created.body.data.id;
 
     // A restarted process: the storage singleton is rebuilt from env alone.
     const { resetStorageForTests } = await import('../../server/services/storage');
@@ -304,7 +304,7 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
     const external = 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800';
     const { res, body } = await createDish(dish({ image: external }));
     expect(res.status).toBe(201);
-    expect(await storedImageUrl(body.id)).toBe(external);
+    expect(await storedImageUrl(body.data.id)).toBe(external);
   });
 
   it('6. data: and blob: payloads are refused with 400 and never written', async () => {
@@ -349,7 +349,7 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
   it('8. replacing a dish photo deletes the old object; re-saving does not', async () => {
     const first = await uploadDishPhoto();
     const created = await createDish(dish({ image: first.pathUrl }));
-    const id = created.body.id;
+    const id = created.body.data.id;
     const firstPath = path.join(TMP_UPLOADS, first.pathUrl);
     expect(fs.existsSync(firstPath)).toBe(true);
 
@@ -385,20 +385,19 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
     const foreignKey = foreignBody.data.pathUrl as string;
 
     // …tenant A cannot point one of its dishes at it.
-    const { res } = await createDish(dish({ image: foreignKey }));
+    const { res, body } = await createDish(dish({ image: foreignKey }));
     expect(res.status).toBe(400);
-    const body = await json(res);
     expect(body.error).toContain('مطعمك');
     expect(fs.existsSync(path.join(TMP_UPLOADS, foreignKey))).toBe(true);
   });
 
   it('offers follow the same contract (key persisted, URL returned)', async () => {
-    const uploaded = await (
+    const uploaded = await json(
       await fetch(
         `${ctx!.base}/api/uploads/image?restaurantId=${encodeURIComponent(ctx!.idA)}`,
         {
           method: 'POST',
-          headers: { 'content-type': 'application/json', ...ctx!.authA },
+          headers: { ...ctx!.authA },
           body: (() => {
             const f = new FormData();
             f.append('image', new Blob([PNG_1x1], { type: 'image/png' }), 'offer.png');
@@ -407,7 +406,7 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
           })(),
         }
       )
-    ).then(json);
+    );
     expect(uploaded.data.pathUrl).toContain(`/offers/`);
 
     const created = await json(
@@ -421,11 +420,12 @@ describe.skipIf(RUN !== 'on')('product/offer image persistence (real routers + D
         }),
       })
     );
-    const offerId = created.offer.id;
+    const offerId = created.data?.offer?.id ?? created.offer?.id;
     const row = await ctx!.prisma.offer.findUnique({ where: { id: offerId } });
     expect(row.image).toBe(uploaded.data.pathUrl);
-    expect(created.offer.image).toContain(uploaded.data.pathUrl);
-    expect(created.offer.image).not.toBe(uploaded.data.pathUrl);
+    const offer = created.data?.offer ?? created.offer;
+    expect(offer.image).toContain(uploaded.data.pathUrl);
+    expect(offer.image).not.toBe(uploaded.data.pathUrl);
 
     // External offer URL stays external, and clearing is explicit ('').
     const cleared = await json(

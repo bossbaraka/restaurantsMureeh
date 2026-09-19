@@ -259,6 +259,85 @@ const hexColor = z
 export const strongPassword = (_minMsg?: string) =>
   safePasswordSchema('كلمة المرور', 8);
 
+// ============================================================
+// Employee authentication policy (2026-09 redesign)
+//
+// Shift staff (WAITER / KITCHEN / CASHIER / STAFF) authenticate with:
+//     restaurant code (public slug) + username (per tenant) + 6-digit PIN.
+// Managers / platform staff authenticate with email + strong password.
+//
+// The legacy 4-digit PIN and the derived `Staff-{PIN}!` passwords are gone.
+// ============================================================
+
+/** Employee PIN is EXACTLY six numeric digits. */
+export const EMPLOYEE_PIN_LENGTH = 6;
+
+/**
+ * Weak-PIN policy (documented, deliberately small — do not over-restrict):
+ *   1. all six digits identical            (000000, 111111, …)
+ *   2. ascending / descending keyboard run (012345…567890, 987654…098765)
+ *   3. two-digit block repeated 3×         (121212, 424242, …)
+ *   4. three-digit block repeated 2×       (123123, 789789, …)
+ *   5. a few famous patterns               (112233)
+ */
+export function isWeakEmployeePin(pin: string): boolean {
+  if (!/^\d{6}$/.test(pin)) return true;
+  if (/^(\d)\1{5}$/.test(pin)) return true;
+  if ('0123456789'.includes(pin)) return true;
+  if ('9876543210'.includes(pin)) return true;
+  if (/^(\d{2})\1\1$/.test(pin)) return true;
+  if (/^(\d{3})\1$/.test(pin)) return true;
+  return pin === '112233';
+}
+
+/** Login-comparison shape: 6 digits, no weak check (stored PINs are vetted at creation). */
+export const employeePinLoginSchema = z
+  .string()
+  .regex(/^\d{6}$/, 'رمز PIN يجب أن يكون 6 أرقام');
+
+/** Creation/update shape: 6 digits AND not obviously predictable. */
+export const employeePinSchema = z
+  .string()
+  .regex(/^\d{6}$/, 'رمز PIN يجب أن يكون 6 أرقام بالضبط')
+  .refine((pin) => !isWeakEmployeePin(pin), {
+    message: 'رمز PIN ضعيف ومتوقع (متسلسل أو مكرر) — اختر رقماً أصعب تخميناً',
+  });
+
+/**
+ * Username identifiers (NOT secrets — typed in the open on shared devices).
+ * Lowercase [a-z0-9._-], 2–32 chars, unique per restaurant, case-insensitive
+ * by normalization to lowercase.
+ */
+export const usernameSchema = z
+  .string()
+  .trim()
+  .min(2, 'اسم المستخدم قصير جداً')
+  .max(32, 'اسم المستخدم طويل جداً')
+  .regex(/^[a-zA-Z0-9._-]+$/, 'اسم المستخدم يقبل الأحرف والأرقام و . _ - فقط')
+  .transform((value) => value.toLowerCase());
+
+/** Restaurant code = the venue's public slug (identifier, not a secret). */
+export const restaurantCodeSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(2, 'رمز المطعم غير صالح')
+  .max(64, 'رمز المطعم غير صالح')
+  .regex(/^[a-z0-9-]+$/, 'رمز المطعم يقبل الأحرف والأرقام والشرطة فقط');
+
+/**
+ * Employee login: restaurant code + username + 6-digit PIN.
+ * Tenant resolution is 100% server-side from the code — the client never
+ * supplies a restaurantId to this route.
+ */
+export const employeeLoginSchema = z
+  .object({
+    restaurantCode: restaurantCodeSchema,
+    username: usernameSchema,
+    pin: employeePinLoginSchema,
+  })
+  .strict();
+
 // Roles a tenant (non-platform) actor may ever assign. Platform roles
 // can never be granted through tenant routes.
 export const TENANT_ASSIGNABLE_ROLES = [
@@ -326,25 +405,21 @@ export const loginSchema = z
     email: z
       .string()
       .trim()
+      .toLowerCase()
       .max(254)
       .email('صيغة البريد الإلكتروني غير صحيحة'),
     password: z
       .string()
       .min(1, 'كلمة المرور مطلوبة')
       .max(128, 'كلمة المرور طويلة جداً'),
-    pin: z
-      .string()
-      .regex(/^\d{4,10}$/, 'رمز PIN يجب أن يكون من 4 إلى 10 أرقام')
-      .optional(),
   })
   .strict();
 
-export const pinLoginSchema = z
+export const stepUpSchema = z
   .object({
-    pin: z
-      .string()
-      .regex(/^\d{4,10}$/, 'رمز PIN يجب أن يكون من 4 إلى 10 أرقام'),
-    restaurantId: idSchema,
+    // Manager/platform: current password. Shift staff: current PIN.
+    password: z.string().min(1).max(128).optional(),
+    pin: employeePinLoginSchema.optional(),
   })
   .strict();
 
@@ -354,16 +429,22 @@ export const staffCreateSchema = z
   .object({
     restaurantId: idSchema.optional(),
     name: safeName('اسم الموظف'),
+    // Email: managers/platform only (password login). Shift staff get NO
+    // email — synthetic emails minted as auth identifiers are gone (AUTH-01).
     email: z
       .string()
       .trim()
+      .toLowerCase()
       .max(254)
-      .email('صيغة البريد الإلكتروني غير صحيحة'),
-    password: safePasswordSchema('كلمة المرور', 8),
-    pin: z
-      .string()
-      .regex(/^\d{4,10}$/, 'رمز PIN يجب أن يكون من 4 إلى 10 أرقام')
+      .email('صيغة البريد الإلكتروني غير صحيحة')
       .optional(),
+    // Username: required for shift staff (employee login identity).
+    username: usernameSchema.optional(),
+    // Strong password: REQUIRED for RESTAURANT_MANAGER. REJECTED for shift
+    // roles — staff never carry passwords (killed Staff-{PIN}! at the API).
+    password: safePasswordSchema('كلمة المرور', 8).optional(),
+    // 6-digit non-weak PIN: required for shift roles, optional for managers.
+    pin: employeePinSchema.optional(),
     role: z.enum(TENANT_ASSIGNABLE_ROLES, 'دور غير صالح'),
   })
   .strict();
@@ -372,14 +453,21 @@ export const staffUpdateSchema = z
   .object({
     restaurantId: idSchema.optional(),
     name: safeName('اسم الموظف').optional(),
+    // Email can be set when a staff member is promoted to a manager role.
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(254)
+      .email('صيغة البريد الإلكتروني غير صحيحة')
+      .optional(),
+    username: usernameSchema.optional(),
     role: z.enum(TENANT_ASSIGNABLE_ROLES, 'دور غير صالح').optional(),
     status: z.enum(USER_STATUSES, 'حالة غير صالحة').optional(),
     password: safePasswordSchema('كلمة المرور', 8).optional(),
+    // 6-digit non-weak PIN, or '' to clear (employee loses PIN login).
     pin: z
-      .union([
-        z.string().regex(/^\d{4,10}$/, 'رمز PIN غير صالح'),
-        z.literal(''),
-      ])
+      .union([employeePinSchema, z.literal('')])
       .optional(),
   })
   .strict();
