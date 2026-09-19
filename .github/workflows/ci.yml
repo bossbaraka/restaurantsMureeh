@@ -128,13 +128,15 @@ jobs:
       # (restaurant-code + username + PIN logins, step-up, tenant isolation).
       - name: E2E employee functional & permission suite (real server)
         run: |
+          # Export FIRST: the backgrounded server inherits this step's env —
+          # starting it before the export boots a server with no database.
+          export DATABASE_URL="postgres://${CI_DB_USER}:${CI_DB_PASSWORD}@localhost:5432/${CI_DB_NAME}"
           npx tsx server/index.ts &
           SERVER_PID=$!
           for i in $(seq 1 30); do
             curl -sf http://127.0.0.1:3001/api/health >/dev/null 2>&1 && break
             sleep 1
           done
-          export DATABASE_URL="postgres://${CI_DB_USER}:${CI_DB_PASSWORD}@localhost:5432/${CI_DB_NAME}"
           API_BASE=http://127.0.0.1:3001 node e2e/employee-functional-test.mjs
           RESULT=$?
           kill $SERVER_PID 2>/dev/null || true
