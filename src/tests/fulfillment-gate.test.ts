@@ -221,10 +221,12 @@ describe('schema + migration', () => {
       // Customer transfer payment details (Restaurant settings — the venue's
       // receiving account). Additive nullable TEXT columns, no Order change.
       '20260917120000_add_restaurant_transfer_details',
+      // 2026-09 auth redesign (username/PIN/lockout columns) and counter
+      // orderSource — additive, verified against real PostgreSQL.
+      '20260919120000_employee_auth_redesign',
+      '20260919120100_order_source_counter',
     ]);
-    expect(sorted[sorted.length - 1]).toBe(
-      '20260917120000_add_restaurant_transfer_details'
-    );
+    expect(sorted[sorted.length - 1]).toBe('20260919120100_order_source_counter');
   });
 });
 

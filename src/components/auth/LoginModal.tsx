@@ -2,74 +2,84 @@ import React, { useState } from 'react';
 import { useDialog } from '../../hooks/useDialog';
 import { useAuth } from '../../context/AuthContext';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { api } from '../../services/api';
-import { BrandLogo } from '../brand/BrandLogo';
 import {
   X,
   Lock,
   Eye,
   EyeOff,
   ShieldCheck,
-  Key,
   Users,
   AlertTriangle,
   Clock,
   CheckCircle2,
 } from 'lucide-react';
 
+// ============================================================
+// Login modal — two authentication paths (2026-09 auth redesign):
+//
+//   Managers / platform staff : email + strong password.
+//   Shift staff (WAITER/KITCHEN/CASHIER/STAFF):
+//                              restaurant code (public slug — an identifier,
+//                              not a secret) + per-tenant username + 6-digit
+//                              PIN, resolved entirely server-side.
+//
+// There is deliberately NO public restaurant dropdown: the employee types
+// the venue code once; it is remembered on this device for fast shift login.
+// ============================================================
+
 export const LoginModal: React.FC = () => {
   const {
     isLoginModalOpen,
     setIsLoginModalOpen,
     login,
-    loginWithPin,
+    employeeLogin,
     currentUser,
     logout,
-    failedAttempts,
     lockoutRemainingSeconds,
   } = useAuth();
-  const { showToast, setViewMode, currentRestaurant, tenantsList } = useRestaurant();
+  const { showToast, setViewMode, currentRestaurant } = useRestaurant();
 
-  const WORKER_REST_KEY = 'merar_worker_restaurant_id';
+  const WORKER_REST_CODE_KEY = 'merar_worker_restaurant_code';
+  const WORKER_USERNAME_KEY = 'merar_worker_username';
 
   const [authTab, setAuthTab] = useState<'MANAGERS' | 'STAFF_PIN'>('MANAGERS');
-  const [selectedRestaurantId, setSelectedRestaurantId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(WORKER_REST_KEY);
-      if (saved) return saved;
-    }
-    return currentRestaurant?.id || tenantsList[0]?.id || '';
-  });
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Employee path state.
+  const [restaurantCodeInput, setRestaurantCodeInput] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(WORKER_REST_CODE_KEY);
+      if (saved) return saved;
+    }
+    return currentRestaurant?.slug || '';
+  });
+  const [usernameInput, setUsernameInput] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(WORKER_USERNAME_KEY) || '';
+    }
+    return '';
+  });
   const [pinInput, setPinInput] = useState('');
+
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-
-  const [staffPinInput, setStaffPinInput] = useState('');
-  // Staff arriving from the public landing page have no tenant directory (it
-  // loads post-auth) and no QR context — they identify their venue by the
-  // exact slug from their menu link instead.
-  const [tenantSlugInput, setTenantSlugInput] = useState('');
-
-  React.useEffect(() => {
-    if (selectedRestaurantId) {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(WORKER_REST_KEY, selectedRestaurantId);
-      }
-    } else if (currentRestaurant?.id) {
-      setSelectedRestaurantId(currentRestaurant.id);
-    } else if (tenantsList.length > 0) {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem(WORKER_REST_KEY) : null;
-      const found = saved ? tenantsList.find((t) => t.id === saved) : null;
-      setSelectedRestaurantId(found ? found.id : tenantsList[0].id);
-    }
-  }, [currentRestaurant?.id, tenantsList, selectedRestaurantId]);
 
   useDialog({ isOpen: isLoginModalOpen, onClose: () => setIsLoginModalOpen(false) });
 
   if (!isLoginModalOpen) return null;
+
+  const afterSuccessfulLogin = (role: string | undefined) => {
+    showToast('success', 'تم تسجيل الدخول بنجاح', 'مرحباً بك في وردية العمل.');
+    setIsLoginModalOpen(false);
+    const effectiveRole = role || currentUser?.role;
+    if (effectiveRole === 'KITCHEN') {
+      setViewMode('KITCHEN_KDS');
+    } else {
+      setViewMode('MANAGER');
+    }
+  };
 
   const handleManagerLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,91 +91,52 @@ export const LoginModal: React.FC = () => {
     }
     setIsLoading(true);
     setErrorMsg('');
-    const res = await login(
-      emailInput.trim(),
-      passwordInput,
-      staffPinInput.trim() || undefined
-    );
+    const res = await login(emailInput.trim(), passwordInput);
     setIsLoading(false);
 
     if (res.success) {
-      showToast('success', 'تم تسجيل الدخول بنجاح', 'مرحباً بك في وردية العمل والمساعد.');
-      setIsLoginModalOpen(false);
-      const role = (res as any).role || currentUser?.role;
-      if (role === 'KITCHEN') {
-        setViewMode('KITCHEN_KDS');
-      } else {
-        setViewMode('MANAGER');
-      }
+      afterSuccessfulLogin(res.role);
     } else {
       setErrorMsg(res.error || 'بيانات الدخول غير صحيحة');
     }
   };
 
-  const handlePinSubmit = async (pinToVerify: string) => {
-    if (pinToVerify.length < 4) {
-      setErrorMsg('رمز PIN يجب أن يتكون من 4 أرقام على الأقل');
+  const handleEmployeeLogin = async (pinToVerify: string) => {
+    if (!restaurantCodeInput.trim()) {
+      setErrorMsg('أدخل رمز المطعم (تجده في رابط قائمة مطعمك: /r/رمز-المطعم)');
+      return;
+    }
+    if (!usernameInput.trim()) {
+      setErrorMsg('أدخل اسم المستخدم الخاص بك');
+      return;
+    }
+    if (!/^\d{6}$/.test(pinToVerify)) {
+      setErrorMsg('رمز PIN يجب أن يتكون من 6 أرقام بالضبط');
       return;
     }
 
-    let targetRestaurantId = selectedRestaurantId || currentRestaurant?.id || tenantsList[0]?.id;
-
-    // Logged-out worker with no tenant context: resolve the restaurant from
-    // its exact public slug (no new endpoint and no tenant enumeration — the
-    // slug must be known, exactly like scanning the venue's QR code).
-    if (!targetRestaurantId && tenantSlugInput.trim()) {
-      setIsLoading(true);
-      setErrorMsg('');
-      try {
-        const resolveRes = await api.getPublicRestaurantBySlug(tenantSlugInput.trim().toLowerCase());
-        if (resolveRes.success && resolveRes.data?.restaurant?.id) {
-          targetRestaurantId = resolveRes.data.restaurant.id;
-        } else {
-          setErrorMsg('تعذر العثور على مطعم بهذا المعرّف. تأكد من الرابط أو امسح رمز QR الخاص بمطعمك.');
-          setPinInput('');
-          setIsLoading(false);
-          return;
-        }
-      } catch {
-        setErrorMsg('تعذر التحقق من معرّف المطعم حالياً. أعد المحاولة بعد لحظات.');
-        setPinInput('');
-        setIsLoading(false);
-        return;
-      }
-      setIsLoading(false);
-    }
-
-    if (!targetRestaurantId) {
-      setErrorMsg('يرجى اختيار المطعم أو كتابة معرّفه (من رابط المنيو) قبل إدخال الرمز');
-      return;
+    // Remember code + username on this (shared) device: identifiers only,
+    // never secrets — makes the next shift login a 6-digit tap-away.
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(WORKER_REST_CODE_KEY, restaurantCodeInput.trim().toLowerCase());
+      localStorage.setItem(WORKER_USERNAME_KEY, usernameInput.trim().toLowerCase());
     }
 
     setIsLoading(true);
     setErrorMsg('');
-    const res = await loginWithPin(pinToVerify, targetRestaurantId);
+    const res = await employeeLogin(restaurantCodeInput.trim(), usernameInput.trim(), pinToVerify);
     setIsLoading(false);
 
     if (res.success) {
-      showToast('success', 'تم الدخول بنجاح', 'مرحباً بك في وردية العمل.');
-      setIsLoginModalOpen(false);
-
-      const staffRole = res.role || currentUser?.role || 'WAITER';
-      if (staffRole === 'KITCHEN') {
-        setViewMode('KITCHEN_KDS');
-      } else {
-        setViewMode('MANAGER');
-      }
+      afterSuccessfulLogin(res.role);
     } else {
-      setErrorMsg(res.error || 'رمز PIN غير صالح');
+      setErrorMsg(res.error || 'رمز المطعم أو اسم المستخدم أو رمز PIN غير صحيح');
       setPinInput('');
     }
   };
 
   const handlePinKeyPress = (num: string) => {
     if (pinInput.length < 6) {
-      // No auto-submit at 4 digits: PINs may legitimately be 5–6 digits
-      // (schema allows 4–10), and submitting the first four digits early
-      // locked those workers out after repeated 401s.
       setPinInput(pinInput + num);
     }
   };
@@ -186,9 +157,8 @@ export const LoginModal: React.FC = () => {
         {/* Header */}
         <div className="p-5 bg-gradient-to-r from-luxury-950 to-luxury-900 border-b border-luxury-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BrandLogo size={40} subtitle="Manager Portal" />
             <div className="flex-1">
-              <p className="text-xs text-luxury-400 mt-0.5">بوابة دخول الإدارة والعمال — Bcrypt & JWT</p>
+              <p className="text-xs text-luxury-400 mt-0.5">بوابة دخول الإدارة والموظفين — Bcrypt & JWT</p>
             </div>
           </div>
 
@@ -242,7 +212,7 @@ export const LoginModal: React.FC = () => {
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>دخول العمال السريع (PIN)</span>
+            <span>دخول الموظفين</span>
           </button>
         </div>
 
@@ -254,7 +224,7 @@ export const LoginModal: React.FC = () => {
               <div>
                 <span className="text-luxury-400 block text-[11px]">أنت مسجل حالياً:</span>
                 <span className="text-luxury-100 font-bold">{currentUser.name}</span>
-                <span className="text-gold-400 block font-mono text-[10px]">{currentUser.email}</span>
+                <span className="text-gold-400 block font-mono text-[10px]">{currentUser.email || currentUser.username}</span>
               </div>
               <button
                 onClick={() => {
@@ -273,12 +243,13 @@ export const LoginModal: React.FC = () => {
             <form onSubmit={handleManagerLogin} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-medium text-luxury-300 mb-1.5" htmlFor="loginmodal-f1">
-                  البريد الإلكتروني الإداري أو حساب المطعم *
+                  البريد الإلكتروني الإداري *
                 </label>
                 <input id="loginmodal-f1"
                   type="email"
                   required
-                  placeholder="staff@merar.com أو manager@your-restaurant.com"
+                  dir="ltr"
+                  placeholder="manager@your-restaurant.com"
                   value={emailInput}
                   onChange={(e) => setEmailInput(e.target.value)}
                   className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
@@ -289,12 +260,12 @@ export const LoginModal: React.FC = () => {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="block text-xs font-medium text-luxury-300" htmlFor="loginmodal-f2">
-                    كلمة المرور المشفرة *
+                    كلمة المرور *
                   </label>
                   <span className="text-[10px] text-luxury-500">Bcrypt Protected</span>
                 </div>
                 <div className="relative">
-                  <input aria-label="••••••••"
+                  <input id="loginmodal-f2" aria-label="••••••••"
                     type={showPassword ? 'text' : 'password'}
                     required
                     placeholder="••••••••"
@@ -313,28 +284,6 @@ export const LoginModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Staff Worker PIN (Optional for managers, required for specific worker shift identification) */}
-              <div className="p-3 bg-luxury-950/80 rounded-2xl border border-luxury-800 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-gold-400">
-                    رمز PIN الخاص بالعامل (لتأكيد هويتك في الوردية)
-                  </label>
-                  <span className="text-[10px] text-luxury-500">مثال: 1234</span>
-                </div>
-                <input aria-label="أدخل رمز الـ PIN المكون من 4 أرقام (إن وجد)"
-                  type="password"
-                  maxLength={6}
-                  placeholder="أدخل رمز الـ PIN المكون من 4 أرقام (إن وجد)"
-                  value={staffPinInput}
-                  onChange={(e) => setStaffPinInput(e.target.value)}
-                  className="w-full bg-luxury-900 border border-luxury-750 rounded-xl px-3 py-2 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60 text-center tracking-widest font-bold"
-                  disabled={lockoutRemainingSeconds > 0 || isLoading}
-                />
-                <p className="text-[10px] text-luxury-400">
-                  عند إدخال رمز الـ PIN الخاص بك كعامل، سيتم تسجيل دخولك مباشرة باسمك ودورك (نادل / كاشير / مطبخ).
-                </p>
-              </div>
-
               {errorMsg && (
                 <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -351,68 +300,63 @@ export const LoginModal: React.FC = () => {
                 <span>{isLoading ? 'جاري التحقق والمصادقة...' : 'دخول وردية العمل واللوحة'}</span>
               </button>
 
+              <p className="text-[10px] text-luxury-500 text-center">
+                حسابات الموظفين (نادل / كاشير / مطبخ) تستخدم تبويب «دخول الموظفين».
+              </p>
             </form>
           )}
 
-          {/* TAB 2: STAFF NUMERIC PIN PAD */}
+          {/* TAB 2: EMPLOYEE LOGIN — restaurant code + username + 6-digit PIN */}
           {authTab === 'STAFF_PIN' && (
             <div className="space-y-4 text-center">
-              {/* Restaurant Selector for PIN login */}
-              {tenantsList.length > 0 ? (
-                <div className="text-right bg-luxury-950 p-3 rounded-2xl border border-luxury-800 space-y-1">
-                  <label className="block text-[11px] font-semibold text-luxury-300">
-                    اختر المطعم للوردية *
+              <div className="text-right bg-luxury-950 p-3 rounded-2xl border border-luxury-800 space-y-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-luxury-300" htmlFor="loginmodal-rest-code">
+                    رمز المطعم *
                   </label>
-                  <select id="loginmodal-f2"
-                    value={selectedRestaurantId}
-                    onChange={(e) => {
-                      setSelectedRestaurantId(e.target.value);
-                      if (typeof window !== 'undefined') {
-                        localStorage.setItem(WORKER_REST_KEY, e.target.value);
-                      }
-                    }}
-                    className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-gold-500/60 cursor-pointer"
-                  >
-                    {tenantsList.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} {t.id === currentRestaurant?.id ? '(المطعم الحالي)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                  <input
+                    id="loginmodal-rest-code"
+                    type="text"
+                    dir="ltr"
+                    placeholder="مثال: mureeh"
+                    value={restaurantCodeInput}
+                    onChange={(e) => setRestaurantCodeInput(e.target.value)}
+                    className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-mono font-bold placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
+                    disabled={lockoutRemainingSeconds > 0 || isLoading}
+                    autoComplete="off"
+                  />
+                  <p className="text-[10px] text-luxury-500 mt-1">
+                    تجده في رابط قائمة مطعمك: <span dir="ltr">/r/رمز-المطعم</span> — يُحفظ على هذا الجهاز لدخول أسرع.
+                  </p>
                 </div>
-              ) : (
-                // Logged-out worker on the public landing page: no tenant
-                // directory exists before auth, so identify the venue by its
-                // exact slug from the menu link (e.g. /r/mureeh).
-                !currentRestaurant && (
-                  <div className="text-right bg-luxury-950 p-3 rounded-2xl border border-luxury-800 space-y-1">
-                    <label className="block text-[11px] font-semibold text-luxury-300" htmlFor="loginmodal-tenant-slug">
-                      معرّف المطعم (من رابط المنيو) *
-                    </label>
-                    <input
-                      id="loginmodal-tenant-slug"
-                      type="text"
-                      dir="ltr"
-                      placeholder="مثال: mureeh"
-                      value={tenantSlugInput}
-                      onChange={(e) => setTenantSlugInput(e.target.value)}
-                      className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-mono font-bold placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
-                      disabled={lockoutRemainingSeconds > 0 || isLoading}
-                    />
-                    <p className="text-[10px] text-luxury-500">
-                      تجده في رابط قائمة مطعمك: <span dir="ltr">/r/معرّف-المطعم</span>
-                    </p>
-                  </div>
-                )
-              )}
+                <div>
+                  <label className="block text-[11px] font-semibold text-luxury-300" htmlFor="loginmodal-username">
+                    اسم المستخدم *
+                  </label>
+                  <input
+                    id="loginmodal-username"
+                    type="text"
+                    dir="ltr"
+                    placeholder="مثال: ahmad"
+                    value={usernameInput}
+                    onChange={(e) => setUsernameInput(e.target.value)}
+                    className="w-full bg-luxury-900 border border-luxury-750 text-luxury-100 rounded-xl px-3 py-2 text-xs font-mono font-bold placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
+                    disabled={lockoutRemainingSeconds > 0 || isLoading}
+                    autoComplete="off"
+                  />
+                  <p className="text-[10px] text-luxury-500 mt-1">
+                    اسم المستخدم يعيّنه لك مدير المطعم — يُحفظ على هذا الجهاز.
+                  </p>
+                </div>
+              </div>
 
               <div>
-                <span className="text-xs text-luxury-300 font-medium">أدخل رمز PIN (4–6 أرقام) ثم اضغط تأكيد</span>
-                <div className="flex justify-center gap-3 my-3">
-                  {Array.from({ length: Math.max(4, pinInput.length) }, (_, i) => (
+                <span className="text-xs text-luxury-300 font-medium">أدخل رمز PIN (6 أرقام) ثم اضغط تأكيد</span>
+                <div className="flex justify-center gap-2.5 my-3" dir="ltr">
+                  {Array.from({ length: 6 }, (_, i) => (
                     <div
                       key={i}
-                      className={`w-10 h-12 rounded-xl border flex items-center justify-center font-mono text-lg font-bold transition-all ${
+                      className={`w-9 h-12 rounded-xl border flex items-center justify-center font-mono text-lg font-bold transition-all ${
                         pinInput[i]
                           ? 'border-gold-500 bg-gold-500/20 text-gold-300 shadow-gold-glow scale-105'
                           : 'border-luxury-800 bg-luxury-950 text-luxury-600'
@@ -454,8 +398,8 @@ export const LoginModal: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handlePinSubmit(pinInput)}
-                  disabled={pinInput.length < 4 || lockoutRemainingSeconds > 0 || isLoading}
+                  onClick={() => handleEmployeeLogin(pinInput)}
+                  disabled={pinInput.length !== 6 || lockoutRemainingSeconds > 0 || isLoading}
                   className="h-11 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs transition-all cursor-pointer flex items-center justify-center disabled:opacity-40"
                 >
                   تأكيد
@@ -476,9 +420,9 @@ export const LoginModal: React.FC = () => {
         <div className="p-4 bg-luxury-950 border-t border-luxury-800 text-[11px] text-luxury-400 flex items-center justify-between">
           <span className="flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>حماية من التخمين المتكرر (Anti-Brute Force)</span>
+            <span>حماية مزدوجة من التخمين (لكل جهاز ولكل حساب)</span>
           </span>
-          <span className="font-mono text-gold-400">v2.0 SaaS</span>
+          <span className="font-mono text-gold-400">v3.0 SaaS</span>
         </div>
       </div>
     </div>

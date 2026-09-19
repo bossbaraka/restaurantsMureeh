@@ -28,6 +28,19 @@ services:
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in the production environment}
       CORS_ORIGIN: ${CORS_ORIGIN:?Set CORS_ORIGIN in the production environment}
       APP_URL: ${APP_URL:?Set APP_URL in the production environment}
+      # F-07 fix: this compose file mounts a persistent `uploads` volume, so
+      # the fail-closed storage guard must be opted in explicitly (self-hosted
+      # deployment with a mounted volume — exactly the case config.ts allows).
+      # Without this the production boot REFUSES to start.
+      STORAGE_DRIVER: local
+      STORAGE_ALLOW_LOCAL_IN_PROD: "true"
+      UPLOAD_DIR: /app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     ports:
       - "3001:3001"
     volumes:

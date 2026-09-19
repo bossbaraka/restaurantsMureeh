@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import compression from 'compression';
+import { compressionMiddleware } from './middleware/compression';
 import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
@@ -111,7 +111,8 @@ app.use(
 // PERFORMANCE / PARSING
 // ============================================================
 
-app.use(compression());
+// Shared gzip filter (SSE excluded) — see server/middleware/compression.ts.
+app.use(compressionMiddleware);
 
 // 1MB is plenty for JSON APIs (menu payloads are paged client-side);
 // the 10MB legacy limit invited trivial payload bombs.
@@ -177,6 +178,14 @@ app.use(
         'Content-Security-Policy',
         "default-src 'none'; sandbox"
       );
+      // Uploaded objects use immutable UUID object keys (re-uploads mint a
+      // NEW key and the old object is deleted server-side), so the same URL
+      // always serves the same bytes — safe to cache hard. Previously
+      // `max-age=0` re-downloaded every menu image on every render (TEST 4
+      // performance finding).
+      if (/\.(png|jpe?g|webp|gif|svg|avif|ico)$/i.test(filePath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
       if (!/\.(png|jpe?g|webp|gif|svg|avif)$/i.test(filePath)) {
         res.setHeader(
           'Content-Disposition',
@@ -509,6 +518,42 @@ if (process.env.NODE_ENV !== 'test') {
   // Prevent 502 race conditions behind Render/reverse proxy
   server.keepAliveTimeout = 65000;
   server.headersTimeout = 66000;
+
+  // ------------------------------------------------------------------
+  // Graceful shutdown (F-08): Render/containers send SIGTERM before the
+  // hard SIGKILL. Stop accepting new connections, give in-flight requests
+  // (including SSE streams, which `server.close()` terminates) a bounded
+  // window to finish, then drain the Prisma pool and exit.
+  // ------------------------------------------------------------------
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n🛑 ${signal} received — draining connections…`);
+    const forceExit = setTimeout(() => {
+      console.error('⏱️ Graceful shutdown window elapsed — forcing exit.');
+      process.exit(1);
+    }, 15_000);
+    forceExit.unref();
+    try {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+        // SSE keeps connections open by design; close() alone would hang on
+        // them for the full window, so also destroy idle keep-alive sockets.
+        server.closeAllConnections?.();
+        setTimeout(resolve, 2_000).unref();
+      });
+      const { prisma } = await import('./db/prisma');
+      await prisma.$disconnect();
+      console.log('✅ Shutdown complete.');
+      process.exit(0);
+    } catch (err) {
+      console.error('Error during shutdown:', err);
+      process.exit(1);
+    }
+  };
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
 process.on('uncaughtException', (err) => {

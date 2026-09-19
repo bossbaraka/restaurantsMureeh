@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { StepUpModal } from '../auth/StepUpModal';
 import { isAwaitingGuestPayment } from '../../utils/orderLifecycle';
 import { useAuth } from '../../context/AuthContext';
 import { api, newClientRequestId } from '../../services/api';
@@ -61,8 +62,10 @@ export const CashierPOSView: React.FC = () => {
   } = useRestaurant();
   const { currentUser } = useAuth();
 
-  // Two-step void confirm (audit H-02): first tap arms, second executes.
+  // Two-step void confirm (audit H-02): first tap arms, second opens the
+  // step-up verification (the server refuses a void without a fresh token).
   const [armedVoidPaymentId, setArmedVoidPaymentId] = useState<string | null>(null);
+  const [stepUpVoidPaymentId, setStepUpVoidPaymentId] = useState<string | null>(null);
 
   const tenantId = currentRestaurant?.id || '';
   const isWalkInId = '__WALKIN__';
@@ -611,8 +614,10 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                     <button
                       onClick={() => {
                         if (armedVoidPaymentId === p.id) {
+                          // Void is step-up protected (audit H-02): verify the
+                          // cashier's PIN / manager password, then execute.
                           setArmedVoidPaymentId(null);
-                          void voidStaffPayment(p.id);
+                          setStepUpVoidPaymentId(p.id);
                         } else {
                           setArmedVoidPaymentId(p.id);
                         }
@@ -798,6 +803,19 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
           </div>
         </div>
       )}
+
+      {/* Step-up verification for payment void — the server refuses the
+          mutation without a fresh PIN/password confirmation. */}
+      <StepUpModal
+        isOpen={stepUpVoidPaymentId !== null}
+        actionLabel="إلغاء إيصال دفع (خطوة حساسة)"
+        onCancel={() => setStepUpVoidPaymentId(null)}
+        onVerified={(token) => {
+          const paymentId = stepUpVoidPaymentId;
+          setStepUpVoidPaymentId(null);
+          if (paymentId) void voidStaffPayment(paymentId, undefined, token);
+        }}
+      />
     </div>
   );
 };

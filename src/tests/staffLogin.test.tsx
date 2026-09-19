@@ -44,17 +44,36 @@ describe('staff PIN login — server schema parity', () => {
     expect(sql).toMatch(/ALTER TABLE "RestaurantUser" ADD COLUMN IF NOT EXISTS "lastLoginAt"/);
   });
 
-  it('keeps the intent: /auth/pin still records the login timestamp', () => {
-    const pinRoute = authRoutes.match(/router\.post\(\s*'\/pin'[\s\S]*?\n\);/)?.[0] || '';
-    expect(pinRoute).toContain('lastLoginAt');
+  it('keeps the intent: employee login still records the login timestamp', () => {
+    // 2026-09 auth redesign: the legacy 4-digit /auth/pin route was replaced
+    // by /auth/employee-login (restaurant code + username + 6-digit PIN).
+    // Both login routes share issueSession(), which performs the
+    // lastLoginAt write — the original 500 regression cannot recur silently.
+    expect(authRoutes).toContain("'/employee-login'");
+    expect(authRoutes).toContain('issueSession');
+    const issueSessionFn = authRoutes.match(/async function issueSession\([\s\S]*?\n\}/)?.[0] || '';
+    expect(issueSessionFn).toContain('lastLoginAt');
+    // The legacy 4-digit PIN route is gone entirely.
+    expect(authRoutes).not.toContain("'/pin'");
   });
 });
 
-describe('staff PIN login — client entry paths', () => {
-  it('lets a logged-out worker identify their venue by exact public slug', () => {
-    expect(loginModal).toContain('tenantSlugInput');
-    expect(loginModal).toContain('api.getPublicRestaurantBySlug');
-    expect(loginModal).toContain('معرّف المطعم');
+describe('employee login — client entry paths (2026-09 redesign)', () => {
+  it('lets a logged-out worker identify their venue by restaurant code input', () => {
+    expect(loginModal).toContain('restaurantCodeInput');
+    expect(loginModal).toContain('WORKER_REST_CODE_KEY');
+    expect(loginModal).toContain('رمز المطعم');
+  });
+
+  it('collects a per-tenant username next to the restaurant code', () => {
+    expect(loginModal).toContain('usernameInput');
+    expect(loginModal).toContain('WORKER_USERNAME_KEY');
+    expect(loginModal).toContain('اسم المستخدم');
+  });
+
+  it('exposes NO public restaurant dropdown (tenant listing removed from login)', () => {
+    expect(loginModal).not.toContain('tenantsList.map');
+    expect(loginModal).not.toContain('<select');
   });
 
   it('never auto-submits the PIN pad at 4 digits (5–6 digit PINs must be typable)', () => {

@@ -1,43 +1,78 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { TenantRole } from '../../types/restaurant';
 import { api } from '../../services/api';
+import { StepUpModal } from '../auth/StepUpModal';
 import {
   Users,
   UserPlus,
   Shield,
-  KeyRound,
   Utensils,
   CreditCard,
   UserCheck,
   Trash2,
-  Lock,
   CheckCircle2,
-  Sparkles,
   Search,
   Loader2,
   Edit3,
   AlertTriangle,
+  KeyRound,
+  PowerOff,
+  Power,
 } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
+
+// ============================================================
+// Staff management — 2026-09 employee authentication redesign.
+//
+//   Managers : email + strong password (no PIN).
+//   Staff    : per-tenant USERNAME + 6-digit PIN (no password, no email —
+//              the derived `Staff-{PIN}!` pattern is permanently gone).
+//
+// Creating/editing credentials, changing roles/status and deleting a user
+// are step-up protected: the manager re-enters their password first.
+// Deactivation (not deletion) is the primary way to remove access.
+// ============================================================
 
 interface StaffUser {
   id: string;
   restaurantId: string;
   name: string;
-  email: string;
+  email: string | null;
+  username: string | null;
   role: TenantRole;
-  pin: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  lastActive?: string;
-  assignedZone?: string;
+  hasPin: boolean;
+  status: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
+  lastLoginAt?: string | null;
 }
+
+/** Client-side mirror of the server's documented weak-PIN policy. */
+function isWeakPin(pin: string): boolean {
+  if (!/^\d{6}$/.test(pin)) return true;
+  if (/^(\d)\1{5}$/.test(pin)) return true;
+  if ('0123456789'.includes(pin)) return true;
+  if ('9876543210'.includes(pin)) return true;
+  if (/^(\d{2})\1\1$/.test(pin)) return true;
+  if (/^(\d{3})\1$/.test(pin)) return true;
+  return pin === '112233';
+}
+
+/** CSPRNG 6-digit PIN that also satisfies the weak-PIN policy. */
+function generateSixDigitPin(): string {
+  for (let i = 0; i < 64; i += 1) {
+    const n = 100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000);
+    const pin = n.toString();
+    if (!isWeakPin(pin)) return pin;
+  }
+  return '739104'; // astronomically unreachable fallback
+}
+
+const SHIFT_ROLES: TenantRole[] = ['WAITER', 'KITCHEN', 'CASHIER', 'STAFF'];
 
 export const StaffManagement: React.FC = () => {
   const { currentRestaurant, showToast } = useRestaurant();
   const { currentUser } = useAuth();
-  const isDemo = currentUser?.email.toLowerCase().includes('demo');
 
   const [staffList, setStaffList] = useState<StaffUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +81,12 @@ export const StaffManagement: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('ALL');
+
+  // Step-up state: sensitive actions open the verification modal first.
+  const [stepUpAction, setStepUpAction] = useState<string | null>(null);
+  const [stepUpLabel, setStepUpLabel] = useState('');
+  const [pendingAction, setPendingAction] = useState<((token: string) => Promise<void>) | null>(null);
 
   // Add/edit staff dialogs: Escape, scroll lock and focus management.
   useDialog({
@@ -53,25 +94,25 @@ export const StaffManagement: React.FC = () => {
     onClose: () => setIsAddModalOpen(false),
   });
   useDialog({ isOpen: !!editingStaff, onClose: () => setEditingStaff(null) });
-  const [roleFilter, setRoleFilter] = useState<string>('ALL');
 
   // Form State for Add
   const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
+  const [newUsername, setNewUsername] = useState('');
   const [newRole, setNewRole] = useState<TenantRole>('WAITER');
   const [newPin, setNewPin] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newZone, setNewZone] = useState('الصالة الرئيسية');
 
   // Form State for Edit
   const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editRole, setEditRole] = useState<TenantRole>('WAITER');
   const [editPin, setEditPin] = useState('');
-  const [editZone, setEditZone] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editEmail, setEditEmail] = useState('');
 
   // Load the real staff directory of this tenant from the API.
-  const loadStaff = async () => {
+  const loadStaff = useCallback(async () => {
     if (!currentRestaurant) return;
     setIsLoading(true);
     setLoadError(null);
@@ -83,25 +124,87 @@ export const StaffManagement: React.FC = () => {
       return;
     }
     setLoadError(null);
-    const list: StaffUser[] = res.data.map((u) => ({
-        id: u.id,
-        restaurantId: u.restaurantId || currentRestaurant.id,
-        name: u.name,
-        email: u.email,
-        role: u.role as TenantRole,
-        pin: '••••',
-        status: 'ACTIVE',
-        lastActive: 'مسجل بالنظام',
-        assignedZone: 'الصالة الرئيسية',
-      }));
+    const list: StaffUser[] = (res.data as any[]).map((u) => ({
+      id: u.id,
+      restaurantId: u.restaurantId || currentRestaurant.id,
+      name: u.name,
+      email: u.email ?? null,
+      username: u.username ?? null,
+      role: u.role as TenantRole,
+      hasPin: !!u.pinHash || !!u.hasPin || u.pin === '••••',
+      status: (u.status as StaffUser['status']) || 'ACTIVE',
+      lastLoginAt: u.lastLoginAt ?? null,
+    }));
     setStaffList(list);
-  };
+  }, [currentRestaurant, showToast]);
 
   useEffect(() => {
     setIsLoading(true);
-    loadStaff();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRestaurant?.id]);
+    void loadStaff();
+  }, [currentRestaurant?.id, loadStaff]);
+
+  // ------------------------------------------------------------------
+  // Step-up orchestration: run a sensitive action behind verification.
+  // ------------------------------------------------------------------
+  const runWithStepUp = (label: string, action: (token: string) => Promise<void>) => {
+    setStepUpLabel(label);
+    setPendingAction(() => action);
+    setStepUpAction('pending');
+  };
+
+  const handleStepUpVerified = async (token: string) => {
+    setStepUpAction(null);
+    const action = pendingAction;
+    setPendingAction(null);
+    if (action) await action(token);
+  };
+
+  // ------------------------------------------------------------------
+  // ADD STAFF
+  // ------------------------------------------------------------------
+  const submitAddStaff = async (stepUpToken: string) => {
+    if (!currentRestaurant || !newName.trim()) return;
+    const isManagerRole = newRole === 'RESTAURANT_MANAGER';
+
+    setIsSaving(true);
+    const generatedPin = newPin.trim() || generateSixDigitPin();
+    const res = await api.createStaff(
+      currentRestaurant.id,
+      isManagerRole
+        ? {
+            name: newName.trim(),
+            email: newEmail.trim().toLowerCase(),
+            password: newPassword,
+            role: newRole,
+          }
+        : {
+            name: newName.trim(),
+            username: newUsername.trim().toLowerCase(),
+            pin: generatedPin,
+            role: newRole,
+          },
+      stepUpToken
+    );
+    setIsSaving(false);
+    if (!res.success || !res.data) {
+      showToast('error', 'تعذر إضافة الموظف', res.error);
+      return;
+    }
+    void loadStaff();
+    setIsAddModalOpen(false);
+    setNewName('');
+    setNewEmail('');
+    setNewUsername('');
+    setNewPin('');
+    setNewPassword('');
+    showToast(
+      'success',
+      'تم بنجاح',
+      isManagerRole
+        ? `تمت إضافة المدير ${newName.trim()} — الدخول عبر البريد وكلمة المرور`
+        : `تمت إضافة ${newName.trim()} — اسم المستخدم: ${newUsername.trim().toLowerCase()} — رمز PIN: ${generatedPin}`
+    );
+  };
 
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,118 +213,67 @@ export const StaffManagement: React.FC = () => {
       return;
     }
     if (isSaving) return;
-
-    if (isDemo) {
-      showToast(
-        'warning',
-        '🔒 تنبيه النسخة التجريبية',
-        'لا يمكن حفظ التعديل الدائم في النسخة التجريبية. لتأكيد وتفعيل إضافة الموظفين، اشترك في منصة مريح.'
-      );
-      const tempId = `temp-staff-${Date.now()}`;
-      setStaffList((prev) => [
-        ...prev,
-        {
-          id: tempId,
-          restaurantId: currentRestaurant.id,
-          name: newName.trim(),
-          email: newEmail.trim() || `${newName.trim().toLowerCase().replace(/\s+/g, '')}@demo.com`,
-          role: newRole,
-          pin: newPin || '1234',
-          status: 'ACTIVE',
-          lastActive: 'معاينة تجريبية',
-          assignedZone: newZone,
-        },
-      ]);
-      setIsAddModalOpen(false);
-      setNewName('');
-      setNewEmail('');
-      setNewPin('');
-      return;
-    }
-
-    setIsSaving(true);
-    // CSPRNG PIN: Math.random is predictable and must never mint credentials.
-    const generatedPin =
-      newPin.trim() ||
-      (1000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 9000)).toString();
-    const emailValue = newEmail.trim().toLowerCase() || `${newName.trim().toLowerCase().replace(/\s+/g, '')}@${currentRestaurant.slug}.com`;
     const isManagerRole = newRole === 'RESTAURANT_MANAGER';
-    if (isManagerRole && newPassword.length < 8) {
-      showToast('error', 'كلمة مرور المساعد مطلوبة', 'يجب أن لا تقل عن 8 أحرف.');
-      setIsSaving(false);
-      return;
+
+    if (isManagerRole) {
+      if (!newEmail.trim()) {
+        showToast('error', 'البريد مطلوب', 'حساب المدير يدخل عبر البريد وكلمة المرور');
+        return;
+      }
+      if (newPassword.length < 8) {
+        showToast('error', 'كلمة مرور ضعيفة', 'يجب ألا تقل كلمة مرور المدير عن 8 أحرف.');
+        return;
+      }
+    } else {
+      if (!/^[a-zA-Z0-9._-]{2,32}$/.test(newUsername.trim())) {
+        showToast('error', 'اسم مستخدم غير صالح', 'من 2 إلى 32 حرفاً: أحرف وأرقام و . _ - فقط');
+        return;
+      }
+      if (newPin.trim() && isWeakPin(newPin.trim())) {
+        showToast('error', 'رمز PIN ضعيف', 'اختر رقماً غير متسلسل وغير مكرر (6 أرقام).');
+        return;
+      }
     }
 
-    const res = await api.createStaff(currentRestaurant.id, {
-      name: newName.trim(),
-      email: emailValue,
-      role: newRole,
-      pin: isManagerRole ? undefined : generatedPin,
-      password: isManagerRole ? newPassword : `Staff-${generatedPin}!`,
-    });
-    setIsSaving(false);
-    if (!res.success || !res.data) {
-      showToast('error', 'تعذر إضافة الموظف', res.error);
-      return;
-    }
-    loadStaff();
-    setIsAddModalOpen(false);
-    setNewName('');
-    setNewEmail('');
-    setNewPin('');
-    setNewPassword('');
-    showToast(
-      'success',
-      'تم بنجاح',
-      isManagerRole
-        ? `تمت إضافة المساعد ${newName.trim()} (دخول عبر البريد وكلمة المرور)`
-        : `تمت إضافة ${newName.trim()} — رمز PIN: ${generatedPin}`
-    );
+    runWithStepUp('إضافة موظف جديد', submitAddStaff);
   };
 
+  // ------------------------------------------------------------------
+  // EDIT STAFF
+  // ------------------------------------------------------------------
   const openEditModal = (staff: StaffUser) => {
     setEditingStaff(staff);
     setEditName(staff.name);
-    setEditEmail(staff.email);
+    setEditEmail(staff.email || '');
+    setEditUsername(staff.username || '');
     setEditRole(staff.role);
-    setEditPin(staff.pin === '••••' ? '' : staff.pin);
-    setEditZone(staff.assignedZone || 'الصالة الرئيسية');
+    setEditPin('');
+    setEditPassword('');
   };
 
-  const handleSaveEditStaff = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingStaff || !editName.trim()) return;
-
-    if (isDemo) {
-      showToast(
-        'warning',
-        '🔒 تنبيه النسخة التجريبية',
-        'لا يمكن حفظ التعديل الدائم في النسخة التجريبية. لتعديل وحفظ بيانات الموظفين الحقيقية، اشترك في منصة مريح.'
-      );
-      setStaffList((prev) =>
-        prev.map((s) =>
-          s.id === editingStaff.id
-            ? {
-                ...s,
-                name: editName.trim(),
-                email: editEmail.trim(),
-                role: editRole,
-                assignedZone: editZone,
-                pin: editPin || s.pin,
-              }
-            : s
-        )
-      );
-      setEditingStaff(null);
-      return;
-    }
+  const submitSaveEditStaff = async (stepUpToken: string) => {
+    if (!editingStaff || !currentRestaurant || !editName.trim()) return;
+    const targetWillBeManager = editRole === 'RESTAURANT_MANAGER';
 
     setIsSaving(true);
-    const res = await api.updateStaff(currentRestaurant.id, editingStaff.id, {
-      name: editName.trim(),
-      role: editRole,
-      ...(editPin.trim() ? { pin: editPin.trim() } : {}),
-    });
+    const res = await api.updateStaff(
+      currentRestaurant.id,
+      editingStaff.id,
+      {
+        name: editName.trim(),
+        role: editRole,
+        ...(targetWillBeManager
+          ? {
+              ...(editEmail.trim() ? { email: editEmail.trim().toLowerCase() } : {}),
+              ...(editPassword ? { password: editPassword } : {}),
+            }
+          : {
+              ...(editUsername.trim() ? { username: editUsername.trim().toLowerCase() } : {}),
+              ...(editPin.trim() ? { pin: editPin.trim() } : {}),
+            }),
+      },
+      stepUpToken
+    );
     setIsSaving(false);
     if (!res.success) {
       showToast('error', 'تعذر تعديل بيانات الموظف', `${res.error || 'لم يتم الحفظ'}. بقيت بياناتك في النموذج.`);
@@ -232,32 +284,84 @@ export const StaffManagement: React.FC = () => {
     showToast('success', 'تم تعديل بيانات الموظف بنجاح', editName.trim());
   };
 
-  const handleDeleteStaff = async (id: string, name: string) => {
-    if (!currentRestaurant || !staffList.length) return;
-    const managersCount = staffList.filter((s) => s.role === 'RESTAURANT_MANAGER').length;
-    const target = staffList.find((s) => s.id === id);
-    if (target?.role === 'RESTAURANT_MANAGER' && managersCount <= 1) {
-      showToast('warning', 'تنبيه', 'لا يمكن حذف الحساب الإداري الوحيد للمطعم');
+  const handleSaveEditStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff || !editName.trim()) return;
+    const targetWillBeManager = editRole === 'RESTAURANT_MANAGER';
+
+    if (!targetWillBeManager && editPin.trim() && isWeakPin(editPin.trim())) {
+      showToast('error', 'رمز PIN ضعيف', 'اختر رقماً غير متسلسل وغير مكرر (6 أرقام).');
+      return;
+    }
+    if (targetWillBeManager && editPassword && editPassword.length < 8) {
+      showToast('error', 'كلمة مرور ضعيفة', 'يجب ألا تقل كلمة مرور المدير عن 8 أحرف.');
+      return;
+    }
+    if (!targetWillBeManager && !editUsername.trim() && !editingStaff.username) {
+      showToast('error', 'اسم مستخدم مطلوب', 'عيّن اسم مستخدم للموظف قبل الحفظ.');
       return;
     }
 
-    if (isDemo) {
-      showToast(
-        'warning',
-        '🔒 تنبيه النسخة التجريبية',
-        'لا يمكن إجراء الحذف الدائم في النسخة التجريبية. لحذف وتعديل بيانات الموظفين الحقيقية، اشترك في منصة مريح.'
-      );
-      setStaffList((prev) => prev.filter((s) => s.id !== id));
+    runWithStepUp('تعديل بيانات ودور الموظف', submitSaveEditStaff);
+  };
+
+  // ------------------------------------------------------------------
+  // DEACTIVATE / REACTIVATE (primary access-removal path)
+  // ------------------------------------------------------------------
+  const submitToggleStatus = async (staff: StaffUser, token: string) => {
+    if (!currentRestaurant) return;
+    const nextStatus = staff.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    const res = await api.updateStaff(
+      currentRestaurant.id,
+      staff.id,
+      { status: nextStatus },
+      token
+    );
+    if (!res.success) {
+      showToast('error', 'تعذر تغيير حالة الموظف', res.error);
       return;
     }
+    void loadStaff();
+    showToast(
+      nextStatus === 'ACTIVE' ? 'success' : 'info',
+      nextStatus === 'ACTIVE' ? 'تم تنشيط الحساب' : 'تم إيقاف الحساب',
+      nextStatus === 'ACTIVE'
+        ? `${staff.name} يستطيع تسجيل الدخول مجدداً`
+        : `${staff.name} لن يستطيع الدخول، وجلساته الحالية أُبطلت فوراً`
+    );
+  };
 
-    const res = await api.deleteStaff(currentRestaurant.id, id);
+  const handleToggleStatus = (staff: StaffUser) => {
+    runWithStepUp(
+      staff.status === 'ACTIVE' ? 'إيقاف حساب موظف' : 'تنشيط حساب موظف',
+      (token) => submitToggleStatus(staff, token)
+    );
+  };
+
+  // ------------------------------------------------------------------
+  // DELETE (exceptional — prefer deactivation)
+  // ------------------------------------------------------------------
+  const submitDeleteStaff = async (staff: StaffUser, token: string) => {
+    if (!currentRestaurant) return;
+    const res = await api.deleteStaff(currentRestaurant.id, staff.id, token);
     if (!res.success) {
       showToast('error', 'تعذر حذف الموظف', res.error);
       return;
     }
-    loadStaff();
-    showToast('info', 'تم الحذف', `تم إيقاف حساب الموظف ${name}`);
+    void loadStaff();
+    showToast('info', 'تم الحذف', `تم حذف حساب ${staff.name} نهائياً (التاريخ المحاسبي محفوظ)`);
+  };
+
+  const handleDeleteStaff = (staff: StaffUser) => {
+    if (!currentRestaurant || !staffList.length) return;
+    const managersCount = staffList.filter(
+      (s) => s.role === 'RESTAURANT_MANAGER' && s.status === 'ACTIVE'
+    ).length;
+    if (staff.role === 'RESTAURANT_MANAGER' && managersCount <= 1) {
+      showToast('warning', 'تنبيه', 'لا يمكن حذف الحساب الإداري الوحيد النشط للمطعم');
+      return;
+    }
+    runWithStepUp('حذف حساب موظف نهائياً', (token) => submitDeleteStaff(staff, token));
   };
 
   const getRoleBadge = (role: TenantRole) => {
@@ -298,7 +402,11 @@ export const StaffManagement: React.FC = () => {
   const filteredStaff = staffList.filter((s) => {
     if (!currentRestaurant) return false;
     if (s.restaurantId !== currentRestaurant.id) return false;
-    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      s.name.toLowerCase().includes(q) ||
+      (s.email || '').toLowerCase().includes(q) ||
+      (s.username || '').toLowerCase().includes(q);
     const matchesRole = roleFilter === 'ALL' || s.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -311,11 +419,11 @@ export const StaffManagement: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 text-gold-400 text-xs font-bold uppercase tracking-wider mb-1">
               <Users className="w-4 h-4" />
-              <span>إدارة طاقم العمل والعمال</span>
+              <span>إدارة طاقم العمل والموظفين</span>
             </div>
-            <h1 className="text-2xl font-bold font-serif text-luxury-50">إضافة وتعديل وحذف مستخدمي المطعم</h1>
+            <h1 className="text-2xl font-bold font-serif text-luxury-50">إضافة وتعديل وإيقاف مستخدمي المطعم</h1>
             <p className="text-luxury-400 text-sm mt-1">
-              تحكم كامل في حسابات المدير، الكاشير، النادل، وشيف المطبخ مع إمكانية تعديل الأدوار ورموز الـ PIN.
+              المديرون يدخلون بالبريد وكلمة المرور · الموظفون يدخلون برمز المطعم + اسم المستخدم + PIN من 6 أرقام
             </p>
           </div>
 
@@ -329,26 +437,13 @@ export const StaffManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Demo Notice Bar */}
-      {isDemo && (
-        <div className="p-4 rounded-2xl bg-[#0072BC]/15 border border-[#0072BC]/40 flex items-center justify-between text-xs text-[#38BDF8]">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#38BDF8] shrink-0" />
-            <span>
-              <strong>وضع المعاينة التجريبية:</strong> يمكنك إضافة وتعديل وحذف الموظفين لاختبار التجربة والتطبيق الفوري.
-            </span>
-          </div>
-          <span className="text-[10px] bg-[#0072BC]/30 px-2 py-1 rounded-lg font-mono">Demo Protected</span>
-        </div>
-      )}
-
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
         <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 absolute right-3.5 top-1/2 -translate-y-1/2 text-luxury-400" />
-          <input aria-label="بحث بالاسم أو البريد..."
+          <input aria-label="بحث بالاسم أو اسم المستخدم..."
             type="text"
-            placeholder="بحث بالاسم أو البريد..."
+            placeholder="بحث بالاسم أو اسم المستخدم..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-luxury-900 border border-luxury-800 rounded-xl pr-10 pl-4 py-2.5 text-sm text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-gold-500/50"
@@ -426,7 +521,11 @@ export const StaffManagement: React.FC = () => {
         {filteredStaff.map((staff) => (
           <div
             key={staff.id}
-            className="bg-luxury-900/80 border border-luxury-800 hover:border-luxury-700 rounded-2xl p-5 transition-all shadow-md relative group flex flex-col justify-between"
+            className={`bg-luxury-900/80 border rounded-2xl p-5 transition-all shadow-md relative group flex flex-col justify-between ${
+              staff.status === 'ACTIVE'
+                ? 'border-luxury-800 hover:border-luxury-700'
+                : 'border-red-500/30 opacity-80'
+            }`}
           >
             <div>
               <div className="flex items-start justify-between gap-3 mb-3">
@@ -436,11 +535,26 @@ export const StaffManagement: React.FC = () => {
                   </div>
                   <div>
                     <h3 className="font-bold text-luxury-100 text-base">{staff.name}</h3>
-                    <p className="text-luxury-400 text-xs">{staff.email}</p>
+                    <p className="text-luxury-400 text-xs font-mono" dir="ltr">
+                      {staff.role === 'RESTAURANT_MANAGER' ? staff.email : `@${staff.username || '—'} · ${currentRestaurant?.slug ?? ''}`}
+                    </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1">
+                  {/* Toggle Status Button */}
+                  <button
+                    onClick={() => handleToggleStatus(staff)}
+                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                      staff.status === 'ACTIVE'
+                        ? 'text-luxury-400 hover:text-amber-400 hover:bg-amber-500/10'
+                        : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                    }`}
+                    title={staff.status === 'ACTIVE' ? 'إيقاف الحساب (يفصل جلساته فوراً)' : 'إعادة تنشيط الحساب'}
+                  >
+                    {staff.status === 'ACTIVE' ? <PowerOff className="w-4 h-4" /> : <Power className="w-4 h-4" />}
+                  </button>
+
                   {/* Edit Staff Button */}
                   <button
                     onClick={() => openEditModal(staff)}
@@ -450,12 +564,12 @@ export const StaffManagement: React.FC = () => {
                     <Edit3 className="w-4 h-4" />
                   </button>
 
-                  {/* Delete Staff Button */}
+                  {/* Delete Staff Button (exceptional) */}
                   {staff.role !== 'RESTAURANT_MANAGER' && (
                     <button
-                      onClick={() => handleDeleteStaff(staff.id, staff.name)}
+                      onClick={() => handleDeleteStaff(staff)}
                       className="text-luxury-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors cursor-pointer"
-                      title="حذف حساب الموظف"
+                      title="حذف نهائي (استخدم الإيقاف بدلاً منه عند الإمكان)"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -470,14 +584,25 @@ export const StaffManagement: React.FC = () => {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-luxury-400">منطقة الخدمة:</span>
-                  <span className="text-luxury-200 font-medium">{staff.assignedZone || 'العامة'}</span>
+                  <span className="text-luxury-400">طريقة الدخول:</span>
+                  <span className="font-mono bg-luxury-950 px-2.5 py-0.5 rounded border border-luxury-800 text-gold-300 font-bold">
+                    {staff.role === 'RESTAURANT_MANAGER'
+                      ? 'بريد + كلمة مرور'
+                      : staff.status === 'ACTIVE'
+                        ? 'رمز مطعم + مستخدم + PIN'
+                        : 'موقوف'}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-luxury-400">{staff.role === 'RESTAURANT_MANAGER' ? 'الدخول عبر:' : 'رمز المرور (PIN):'}</span>
-                  <span className="font-mono bg-luxury-950 px-2.5 py-0.5 rounded border border-luxury-800 text-gold-300 font-bold tracking-widest">
-                    {staff.role === 'RESTAURANT_MANAGER' ? 'بريد + كلمة مرور' : staff.pin}
+                  <span className="text-luxury-400">الحالة:</span>
+                  <span
+                    className={`inline-flex items-center gap-1.5 font-bold ${
+                      staff.status === 'ACTIVE' ? 'text-emerald-400' : 'text-red-400'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${staff.status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+                    {staff.status === 'ACTIVE' ? 'نشط' : 'موقوف'}
                   </span>
                 </div>
               </div>
@@ -485,8 +610,10 @@ export const StaffManagement: React.FC = () => {
 
             <div className="mt-4 pt-2 flex items-center justify-between text-xs text-luxury-400">
               <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                {staff.lastActive}
+                <CheckCircle2 className="w-3 h-3 text-luxury-500" />
+                {staff.lastLoginAt
+                  ? `آخر دخول: ${new Date(staff.lastLoginAt).toLocaleDateString('ar')}`
+                  : 'لم يسجل الدخول بعد'}
               </span>
               <span className="text-luxury-500">MUREEH #{staff.id.slice(-4)}</span>
             </div>
@@ -509,7 +636,7 @@ export const StaffManagement: React.FC = () => {
               <span>إضافة موظف جديد للمطعم</span>
             </h2>
             <p className="text-luxury-400 text-xs mb-5">
-              عين دور الموظف (نادل / شيف / كاشير / مدير) مع رمز PIN سريع لتسجيل الدخول
+              عيّن الدور وبيانات الدخول — المديرون بالبريد وكلمة المرور، والموظفون باسم مستخدم ورمز PIN من 6 أرقام
             </p>
 
             <form onSubmit={handleAddStaff} className="space-y-4">
@@ -539,41 +666,69 @@ export const StaffManagement: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f3">الصالة أو المكان المخصص</label>
-                <input id="staffmanagement-f3"
-                  type="text"
-                  placeholder="مثال: الصالة الرئيسية (الطاولات 1-20)"
-                  value={newZone}
-                  onChange={(e) => setNewZone(e.target.value)}
-                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
-                />
-              </div>
-
               {newRole === 'RESTAURANT_MANAGER' ? (
-                <div>
-                  <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f4">كلمة مرور المساعد (تُستخدم للدخول بلوحة التحكم) *</label>
-                  <input id="staffmanagement-f4"
-                    type="password"
-                    minLength={6}
-                    placeholder="6 أحرف على الأقل"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f4a">البريد الإلكتروني (للدخول) *</label>
+                    <input id="staffmanagement-f4a"
+                      type="email"
+                      dir="ltr"
+                      required
+                      placeholder="manager@your-restaurant.com"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono focus:outline-none focus:border-gold-500/60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f4">كلمة مرور قوية (8 أحرف فأكثر) *</label>
+                    <input id="staffmanagement-f4"
+                      type="password"
+                      minLength={8}
+                      required
+                      placeholder="••••••••"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
+                    />
+                  </div>
+                </>
               ) : (
-                <div>
-                  <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f5">رمز الدخول السريع (PIN 4-Digits)</label>
-                  <input id="staffmanagement-f5"
-                    type="text"
-                    maxLength={6}
-                    placeholder="مثال: 5566 (أو اتركه لتوليده تلقائياً)"
-                    value={newPin}
-                    onChange={(e) => setNewPin(e.target.value)}
-                    className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f5a">اسم المستخدم (للدخول) *</label>
+                    <input id="staffmanagement-f5a"
+                      type="text"
+                      dir="ltr"
+                      required
+                      minLength={2}
+                      maxLength={32}
+                      placeholder="مثال: ahmad"
+                      value={newUsername}
+                      onChange={(e) => setNewUsername(e.target.value)}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono focus:outline-none focus:border-gold-500/60"
+                    />
+                    <p className="text-[10px] text-luxury-500 mt-1">
+                      فريد داخل المطعم — يستخدمه الموظف مع رمز المطعم ورمز PIN.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f5">رمز PIN (6 أرقام)</label>
+                    <input id="staffmanagement-f5"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="\d{6}"
+                      maxLength={6}
+                      placeholder="اتركه فارغاً لتوليد رمز آمن تلقائياً"
+                      value={newPin}
+                      onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
+                    />
+                    <p className="text-[10px] text-luxury-500 mt-1">
+                      يُعرض مرة واحدة بعد الحفظ — يُمنع الأرقام المتسلسلة والمكررة.
+                    </p>
+                  </div>
+                </>
               )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-luxury-800">
@@ -590,7 +745,7 @@ export const StaffManagement: React.FC = () => {
                   className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gold-500 hover:bg-gold-400 text-luxury-950 transition-colors shadow-gold-glow cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
                 >
                   {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {isSaving ? 'جاري الحفظ في قاعدة البيانات...' : 'حفظ الموظف'}
+                  {isSaving ? 'جاري الحفظ...' : 'حفظ الموظف'}
                 </button>
               </div>
             </form>
@@ -613,7 +768,7 @@ export const StaffManagement: React.FC = () => {
               <span>تعديل بيانات الموظف ({editingStaff.name})</span>
             </h2>
             <p className="text-luxury-400 text-xs mb-5">
-              تعديل الدور الوظيفي، الصالة المخصصة، أو رمز الدخول السريع (PIN)
+              تعديل الدور أو بيانات الدخول يتطلب تأكيد هويتك (كلمة المرور للمدير)
             </p>
 
             <form onSubmit={handleSaveEditStaff} className="space-y-4">
@@ -625,18 +780,6 @@ export const StaffManagement: React.FC = () => {
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5 font-mono" htmlFor="staffmanagement-f7">البريد الإلكتروني</label>
-                <input id="staffmanagement-f7"
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  disabled={!isDemo}
-                  title={!isDemo ? 'تغيير البريد غير مدعوم من واجهة تعديل الموظف الحالية' : undefined}
-                  className="w-full bg-luxury-950 disabled:opacity-60 disabled:cursor-not-allowed border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60 font-mono"
                 />
               </div>
 
@@ -654,30 +797,64 @@ export const StaffManagement: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f9">الصالة المخصصة</label>
-                <input id="staffmanagement-f9"
-                  type="text"
-                  value={editZone}
-                  onChange={(e) => setEditZone(e.target.value)}
-                  disabled={!isDemo}
-                  title={!isDemo ? 'توزيع الصالات غير محفوظ في نموذج بيانات الموظف الحالي' : undefined}
-                  className="w-full bg-luxury-950 disabled:opacity-60 disabled:cursor-not-allowed border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 focus:outline-none focus:border-gold-500/60"
-                />
-              </div>
-
-              {editRole !== 'RESTAURANT_MANAGER' && (
-                <div>
-                  <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f10">رمز PIN الجديد</label>
-                  <input id="staffmanagement-f10"
-                    type="text"
-                    maxLength={6}
-                    placeholder="أدخل رمز PIN الجديد..."
-                    value={editPin}
-                    onChange={(e) => setEditPin(e.target.value)}
-                    className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
-                  />
-                </div>
+              {editRole === 'RESTAURANT_MANAGER' ? (
+                <>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f7">البريد الإلكتروني</label>
+                    <input id="staffmanagement-f7"
+                      type="email"
+                      dir="ltr"
+                      placeholder="manager@your-restaurant.com"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono focus:outline-none focus:border-gold-500/60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f10p">كلمة مرور جديدة (اختياري)</label>
+                    <input id="staffmanagement-f10p"
+                      type="password"
+                      minLength={8}
+                      placeholder="اتركها فارغة للإبقاء على الحالية"
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f10u">اسم المستخدم</label>
+                    <input id="staffmanagement-f10u"
+                      type="text"
+                      dir="ltr"
+                      minLength={2}
+                      maxLength={32}
+                      placeholder="مثال: ahmad"
+                      value={editUsername}
+                      onChange={(e) => setEditUsername(e.target.value)}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono focus:outline-none focus:border-gold-500/60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-luxury-300 font-medium mb-1.5" htmlFor="staffmanagement-f10">إعادة إصدار رمز PIN (6 أرقام)</label>
+                    <input id="staffmanagement-f10"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="\d{6}"
+                      maxLength={6}
+                      placeholder="اتركه فارغاً للإبقاء على الرمز الحالي"
+                      value={editPin}
+                      onChange={(e) => setEditPin(e.target.value.replace(/\D/g, ''))}
+                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-4 py-2.5 text-sm text-luxury-100 font-mono tracking-widest focus:outline-none focus:border-gold-500/60"
+                    />
+                    <p className="text-[10px] text-luxury-500 mt-1 flex items-center gap-1">
+                      <KeyRound className="w-3 h-3" />
+                      إعادة الإصدار تُبطل جلسات الموظف الحالية فوراً وتُظهر الرمز مرة واحدة.
+                    </p>
+                  </div>
+                </>
               )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-luxury-800">
@@ -690,8 +867,10 @@ export const StaffManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gold-500 hover:bg-gold-400 text-luxury-950 transition-colors shadow-gold-glow cursor-pointer flex items-center gap-1.5"
+                  disabled={isSaving}
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-gold-500 hover:bg-gold-400 text-luxury-950 transition-colors shadow-gold-glow cursor-pointer flex items-center gap-1.5 disabled:opacity-60"
                 >
+                  {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   حفظ التعديلات
                 </button>
               </div>
@@ -699,6 +878,17 @@ export const StaffManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Step-up verification for sensitive staff operations */}
+      <StepUpModal
+        isOpen={stepUpAction === 'pending'}
+        actionLabel={stepUpLabel}
+        onCancel={() => {
+          setStepUpAction(null);
+          setPendingAction(null);
+        }}
+        onVerified={(token) => void handleStepUpVerified(token)}
+      />
     </div>
   );
 };

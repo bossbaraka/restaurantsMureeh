@@ -94,7 +94,7 @@ CORS_ORIGIN=https://menu.yourdomain.com
 DATABASE_URL="postgresql://restaurant_user:StrongPasswordHere123!@localhost:5432/restaurant_saas?schema=public"
 
 # مفتاح تشفير JWT (32 حرف على الأقل عشوائي)
-JWT_SECRET="a98f7e6d5c4b3a210987654321fedcba0123456789abcdef"
+JWT_SECRET="<GENERATE-YOUR-OWN-SECRET>"   # openssl rand -base64 48 — NEVER reuse an example value
 ```
 
 ---

@@ -225,7 +225,8 @@ export function mapUserRow(raw: any): RestaurantUser {
     id: raw.id,
     restaurantId: raw.restaurantId ?? null,
     name: raw.name,
-    email: raw.email,
+    email: raw.email ?? null,
+    username: raw.username ?? null,
     role: raw.role,
     avatar: raw.avatar || undefined,
     createdAt: toISO(raw.createdAt),
@@ -552,7 +553,7 @@ class RestaurantApiService {
   private async request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
     path: string,
-    options: { body?: unknown; auth?: boolean; raw?: boolean } = {}
+    options: { body?: unknown; auth?: boolean; raw?: boolean; headers?: Record<string, string> } = {}
   ): Promise<ApiResponse<T>> {
     if (typeof window === 'undefined') {
       return { success: false, error: 'البيانات تُحمّل من الخادم فقط داخل المتصفح', statusCode: 503 };
@@ -564,12 +565,24 @@ class RestaurantApiService {
         headers: {
           ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
           ...(options.auth === false ? {} : this.getAuthHeader()),
+          ...(options.headers || {}),
         },
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       });
       const json = await res.json().catch(() => null);
       if (options.raw) return json as ApiResponse<T>;
       if (res.ok && json?.success) return json as ApiResponse<T>;
+      // Central session-expiry handling: an authenticated call that comes
+      // back 401 means the token was revoked (logout elsewhere / credential
+      // or role change / suspension). Drop local state once and notify the
+      // app so the user is returned to the login modal with a clear message
+      // instead of every screen failing individually.
+      if (res.status === 401 && options.auth !== false && typeof window !== 'undefined') {
+        window.localStorage.removeItem(AUTH_TOKEN_KEY);
+        window.localStorage.removeItem('merar_user_session');
+        window.localStorage.removeItem('merar_manager_restaurant');
+        window.dispatchEvent(new CustomEvent('merar:auth-expired'));
+      }
       if (json && typeof json === 'object' && 'error' in json) {
         return json as ApiResponse<T>;
       }
@@ -597,10 +610,10 @@ class RestaurantApiService {
     return res;
   }
 
-  public async login(email: string, password: string, pin?: string): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
+  public async login(email: string, password: string): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
     const res = await this.request<{ user: any; restaurant: any | null; token?: string }>('POST', '/auth/login', {
       auth: false,
-      body: { email: email.trim().toLowerCase(), password, pin: pin ? pin.trim() : undefined },
+      body: { email: email.trim().toLowerCase(), password },
     });
     if (res.success && res.data) {
       if (res.data.token && typeof window !== 'undefined') {
@@ -612,10 +625,14 @@ class RestaurantApiService {
     return res as ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>;
   }
 
-  public async pinLogin(pin: string, restaurantId?: string): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
-    const res = await this.request<{ user: any; restaurant: any | null; token?: string }>('POST', '/auth/pin', {
+  public async employeeLogin(restaurantCode: string, username: string, pin: string): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
+    const res = await this.request<{ user: any; restaurant: any | null; token?: string }>('POST', '/auth/employee-login', {
       auth: false,
-      body: { pin, restaurantId },
+      body: {
+        restaurantCode: restaurantCode.trim().toLowerCase(),
+        username: username.trim().toLowerCase(),
+        pin,
+      },
     });
     if (res.success && res.data) {
       if (res.data.token && typeof window !== 'undefined') {
@@ -649,6 +666,15 @@ class RestaurantApiService {
         localStorage.removeItem(AUTH_TOKEN_KEY);
       }
     }
+  }
+
+  // Fresh re-verification for sensitive operations (payment void, staff
+  // credential/role changes). Returns a 5-minute step-up token that the
+  // caller attaches as X-Step-Up-Token on the sensitive request.
+  public async stepUp(payload: { password?: string; pin?: string }): Promise<ApiResponse<{ stepUpToken: string; expiresInSeconds: number }>> {
+    return this.request<{ stepUpToken: string; expiresInSeconds: number }>('POST', '/auth/step-up', {
+      body: payload,
+    });
   }
 
   // Uploads an image (logo / cover / dish) to the real server storage and
@@ -1340,7 +1366,10 @@ class RestaurantApiService {
     user: RestaurantUser,
     restaurantId: string,
     paymentId: string,
-    reason?: string
+    reason?: string,
+    // High-risk action: the server requires a fresh step-up token
+    // (POST /auth/step-up) attached to the request.
+    stepUpToken?: string
   ): Promise<
     ApiResponse<{
       paymentId: string;
@@ -1352,7 +1381,10 @@ class RestaurantApiService {
     const res = await this.request<any>(
       'POST',
       `/manager/payments/${encodeURIComponent(paymentId)}/void`,
-      { body: { restaurantId, ...(reason ? { reason } : {}) } }
+      {
+        body: { restaurantId, ...(reason ? { reason } : {}) },
+        headers: stepUpToken ? { 'X-Step-Up-Token': stepUpToken } : undefined,
+      }
     );
     if (res.success && res.data?.paymentId) {
       return { success: true, data: res.data, statusCode: 200 };
@@ -1646,9 +1678,22 @@ class RestaurantApiService {
 
   public async createStaff(
     restaurantId: string,
-    input: { name: string; email: string; password: string; pin?: string; role: RestaurantUser['role'] }
+    input: {
+      name: string;
+      role: RestaurantUser['role'];
+      // Manager accounts: email + strong password (no PIN).
+      email?: string;
+      password?: string;
+      // Shift staff: per-tenant username + 6-digit PIN (no password/email).
+      username?: string;
+      pin?: string;
+    },
+    stepUpToken?: string
   ): Promise<ApiResponse<{ user: RestaurantUser }>> {
-    const res = await this.request<any>('POST', '/manager/staff', { body: { restaurantId, ...input } });
+    const res = await this.request<any>('POST', '/manager/staff', {
+      body: { restaurantId, ...input },
+      headers: stepUpToken ? { 'X-Step-Up-Token': stepUpToken } : undefined,
+    });
     if (res.success && res.data?.user) {
       return { success: true, data: { user: mapUserRow({ ...res.data.user, restaurantId }) }, statusCode: 201 };
     }
@@ -1658,10 +1703,12 @@ class RestaurantApiService {
   public async updateStaff(
     restaurantId: string,
     userId: string,
-    input: Partial<{ name: string; role: RestaurantUser['role']; status: string; password: string; pin: string }>
+    input: Partial<{ name: string; username: string; role: RestaurantUser['role']; status: string; password: string; pin: string }>,
+    stepUpToken?: string
   ): Promise<ApiResponse<{ user: RestaurantUser }>> {
     const res = await this.request<any>('PUT', `/manager/staff/${encodeURIComponent(userId)}`, {
       body: { restaurantId, ...input },
+      headers: stepUpToken ? { 'X-Step-Up-Token': stepUpToken } : undefined,
     });
     if (res.success && res.data?.user) {
       return { success: true, data: { user: mapUserRow({ ...res.data.user, restaurantId }) }, statusCode: 200 };
@@ -1669,8 +1716,11 @@ class RestaurantApiService {
     return res as ApiResponse<never>;
   }
 
-  public async deleteStaff(restaurantId: string, userId: string): Promise<ApiResponse<null>> {
-    return this.request<null>('DELETE', `/manager/staff/${encodeURIComponent(userId)}`, { body: { restaurantId } });
+  public async deleteStaff(restaurantId: string, userId: string, stepUpToken?: string): Promise<ApiResponse<null>> {
+    return this.request<null>('DELETE', `/manager/staff/${encodeURIComponent(userId)}`, {
+      body: { restaurantId },
+      headers: stepUpToken ? { 'X-Step-Up-Token': stepUpToken } : undefined,
+    });
   }
 
   // ---- Subscription / Plans / Branding ----

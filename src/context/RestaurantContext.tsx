@@ -174,7 +174,11 @@ interface RestaurantContextType {
   /** Staff cancellation (audit H-02): cashier/manager transition to CANCELLED with an optional reason. */
   cancelStaffOrder: (orderId: string, reason?: string) => Promise<boolean>;
   /** Payment void (audit H-02): reverse a ledger receipt; covered orders return to UNPAID. */
-  voidStaffPayment: (paymentId: string, reason?: string) => Promise<boolean>;
+  voidStaffPayment: (
+    paymentId: string,
+    reason?: string,
+    stepUpToken?: string
+  ) => Promise<boolean>;
   updateTableStatus: (tableId: string, status: RestaurantTable['status']) => Promise<boolean>;
   isMutationPending: (key: string) => boolean;
   settleTableAndFree: (tableId: string) => void;
@@ -1544,14 +1548,30 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Payment void (audit H-02): reverse a ledger receipt; the covered orders
   // return to UNPAID (collectable again, or cancellable afterwards).
   const voidStaffPayment = useCallback(
-    async (paymentId: string, reason?: string): Promise<boolean> => {
+    async (
+      paymentId: string,
+      reason?: string,
+      stepUpToken?: string
+    ): Promise<boolean> => {
       if (!currentRestaurant || !currentUser) return false;
       const key = `payment:${paymentId}`;
       if (!beginMutation(key)) return false;
       try {
-        const res = await api.voidPayment(currentUser, currentRestaurant.id, paymentId, reason);
+        const res = await api.voidPayment(
+          currentUser,
+          currentRestaurant.id,
+          paymentId,
+          reason,
+          stepUpToken
+        );
         if (!res.success) {
-          showToast('error', 'تعذر إلغاء الإيصال', res.error || 'لم يقبل الخادم الإلغاء.');
+          showToast(
+            'error',
+            res.statusCode === 403 ? 'يلزم تأكيد الهوية' : 'تعذر إلغاء الإيصال',
+            res.statusCode === 403
+              ? 'أدخل كلمة المرور أو رمز PIN لتأكيد إلغاء الإيصال.'
+              : res.error || 'لم يقبل الخادم الإلغاء.'
+          );
           return false;
         }
         await refreshTenantData();

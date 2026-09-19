@@ -94,6 +94,9 @@ export default {
       // painted UNDER the z-50 layer they were meant to cover.
       zIndex: {
         '60': '60',
+        // Step-up re-verification overlay — above the z-60 app overlays,
+        // below the z-[100] full screens.
+        '70': '70',
       }
     },
   },

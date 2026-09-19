@@ -194,7 +194,11 @@ describe('Cashier Payment Hotfix & Contract Verification', () => {
     });
 
     it('l) Payment enforces tenant isolation and rejects mixed or foreign table orders', () => {
-      expect(managerTs).toContain('const foreignOrder = ordersToPay.find((o) => o.tableId !== tableId);');
+      // 2026-09: the mixed-table guard compares against the EFFECTIVE table
+      // (null for counter collections) so walk-in bills work while TABLE
+      // orders can never be billed under a foreign or walk-in collection.
+      expect(managerTs).toContain('const effectiveBillTableId = isWalkIn ? null : tableId;');
+      expect(managerTs).toContain('const foreignOrder = ordersToPay.find((o) => o.tableId !== effectiveBillTableId);');
       expect(managerTs).toContain('لا تنتمي لهذه الطاولة ولا يمكن تحصيلها معها');
       expect(managerTs).toContain('where: { restaurantId }');
     });

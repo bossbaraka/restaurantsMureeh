@@ -10,14 +10,24 @@
  */
 import { createRequire } from 'module';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
-const { PrismaClient } = require('/home/user/restaurantsMureeh/node_modules/.prisma/client/index.js');
+// Resolve the package (not a sandbox-absolute path) so the harness runs on
+// any machine/CI runner — @prisma/client re-exports the generated client,
+// patched or native.
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient({ log: ['error'] });
 
 export const PASSWORD = 'Mureeh#Test2026';
-export const PINS = { waiter: '1111', staff: '2222', cashier: '3333', kitchen: '4444' };
+// 2026-09 auth redesign: employee PINs are EXACTLY 6 digits (non-weak) and
+// shift staff authenticate via restaurant code + username + PIN.
+// Managers use email + password (no PIN).
+export const PINS = {
+  suspended: '135790', waiter: '147036', staff: '258149', cashier: '369258', kitchen: '741852' };
+export const USERNAMES = {
+  suspendedA: 'suspended.a', waiterA: 'waiter.a', staffA: 'staff.a', cashierA: 'cashier.a', kitchenA: 'kitchen.a', waiterB: 'waiter.b' };
 
 const hash = (v) => bcrypt.hashSync(v, 10);
 
@@ -133,51 +143,58 @@ export async function seed() {
     },
   });
 
+  // Managers/platform authenticate with PASSWORD; shift staff are PIN-only.
+  // passwordHash is a NOT NULL column, so PIN-only accounts get an unguessable
+  // filler (same convention as POST /staff) — never the shared test password.
   const mkUser = (data) =>
     prisma.restaurantUser.create({
-      data: { passwordHash: hash(PASSWORD), status: 'ACTIVE', ...data },
+      data: {
+        passwordHash: data.email ? hash(PASSWORD) : hash(`no-password-${randomUUID()}`),
+        status: 'ACTIVE',
+        ...data,
+      },
     });
 
   const users = {
     managerA: await mkUser({
       restaurantId: restaurantA.id, name: 'Manager A', email: 'manager.a@test.local',
-      role: 'RESTAURANT_MANAGER', pinHash: hash('9999'),
+      role: 'RESTAURANT_MANAGER',
     }),
     waiterA: await mkUser({
-      restaurantId: restaurantA.id, name: 'Waiter A', email: 'waiter.a@test.local',
-      role: 'WAITER', pinHash: hash(PINS.waiter),
+      restaurantId: restaurantA.id, name: 'Waiter A',
+      role: 'WAITER', username: USERNAMES.waiterA, pinHash: hash(PINS.waiter),
     }),
     staffA: await mkUser({
-      restaurantId: restaurantA.id, name: 'Staff A', email: 'staff.a@test.local',
-      role: 'STAFF', pinHash: hash(PINS.staff),
+      restaurantId: restaurantA.id, name: 'Staff A',
+      role: 'STAFF', username: USERNAMES.staffA, pinHash: hash(PINS.staff),
     }),
     cashierA: await mkUser({
-      restaurantId: restaurantA.id, name: 'Cashier A', email: 'cashier.a@test.local',
-      role: 'CASHIER', pinHash: hash(PINS.cashier),
+      restaurantId: restaurantA.id, name: 'Cashier A',
+      role: 'CASHIER', username: USERNAMES.cashierA, pinHash: hash(PINS.cashier),
     }),
     kitchenA: await mkUser({
-      restaurantId: restaurantA.id, name: 'Kitchen A', email: 'kitchen.a@test.local',
-      role: 'KITCHEN', pinHash: hash(PINS.kitchen),
+      restaurantId: restaurantA.id, name: 'Kitchen A',
+      role: 'KITCHEN', username: USERNAMES.kitchenA, pinHash: hash(PINS.kitchen),
     }),
     suspendedA: await mkUser({
-      restaurantId: restaurantA.id, name: 'Suspended A', email: 'suspended.a@test.local',
-      role: 'STAFF', status: 'SUSPENDED',
+      restaurantId: restaurantA.id, name: 'Suspended A',
+      role: 'STAFF', username: 'suspended.a', status: 'SUSPENDED', pinHash: hash('135790'),
     }),
     managerB: await mkUser({
       restaurantId: restaurantB.id, name: 'Manager B', email: 'manager.b@test.local',
-      role: 'RESTAURANT_MANAGER', pinHash: hash('8888'),
+      role: 'RESTAURANT_MANAGER',
     }),
     waiterB: await mkUser({
-      restaurantId: restaurantB.id, name: 'Waiter B', email: 'waiter.b@test.local',
-      role: 'WAITER', pinHash: hash('7777'),
+      restaurantId: restaurantB.id, name: 'Waiter B',
+      role: 'WAITER', username: USERNAMES.waiterB, pinHash: hash(PINS.waiter),
     }),
     managerC: await mkUser({
       restaurantId: restaurantC.id, name: 'Manager C', email: 'manager.c@test.local',
-      role: 'RESTAURANT_MANAGER', pinHash: hash('6666'),
+      role: 'RESTAURANT_MANAGER',
     }),
     platformAdmin: await mkUser({
       restaurantId: null, name: 'Platform Admin', email: 'platform.admin@test.local',
-      role: 'PLATFORM_ADMIN', pinHash: null,
+      role: 'PLATFORM_ADMIN',
     }),
   };
 

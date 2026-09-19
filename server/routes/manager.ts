@@ -8,6 +8,7 @@ import {
   requireManager,
   requireCashierOrManager,
   requireServiceStaff,
+  requireStepUp,
   isPlatformUser,
 } from '../middleware/auth';
 import { realtimeService } from '../services/realtime';
@@ -412,6 +413,8 @@ function formatManagerOrderRow(o: ManagerOrderRow) {
     tableId: o.tableId,
     tableNumber: o.table?.number,
     tableName: o.table?.name || undefined,
+    // 'TABLE' (QR/table service) or 'COUNTER' (POS walk-in, tableId NULL).
+    orderSource: o.orderSource,
     sessionId: o.sessionId || undefined,
     subtotal: o.subtotal,
     total: o.total,
@@ -599,6 +602,11 @@ router.post(
       const effectiveClientRequestId = clientRequestId || randomUUID();
 
       const isWalkIn = tableId === '__WALKIN__';
+      // '__WALKIN__' is an INPUT sentinel only — never persisted. Counter
+      // orders are represented properly: tableId NULL + orderSource COUNTER
+      // (the old code passed the literal straight into the Order→Table FK
+      // and 500'd — P1-A).
+      const effectiveTableId: string | null = isWalkIn ? null : tableId;
       if (!isWalkIn) {
         const table = await prisma.table.findUnique({ where: { id: tableId } });
         if (!table || table.restaurantId !== restaurantId) {
@@ -641,7 +649,7 @@ router.post(
       const subtotal = roundMoney(pricedItems.reduce((sum, item) => sum + item.totalPrice, 0));
 
       const isSameLogicalRequest = (order: {
-        tableId: string;
+        tableId: string | null;
         notes: string | null;
         items: Array<{
           productId: string | null;
@@ -650,7 +658,7 @@ router.post(
           specialInstructions: string | null;
         }>;
       }) =>
-        order.tableId === tableId &&
+        order.tableId === effectiveTableId &&
         (order.notes || '') === (notes || '') &&
         order.items.length === pricedItems.length &&
         order.items.every((saved, index) => {
@@ -707,7 +715,8 @@ router.post(
             id: `#${nextNum}`,
             numericId: nextNum,
             restaurantId,
-            tableId,
+            tableId: effectiveTableId,
+            orderSource: isWalkIn ? 'COUNTER' : 'TABLE',
             sessionId: null,
             clientRequestId: effectiveClientRequestId,
             status: 'PENDING',
@@ -796,13 +805,25 @@ router.post(
         },
       });
 
-      realtimeService.broadcastToTable(restaurantId, tableId, 'ORDER_CREATED', {
-        orderId: newOrder.id,
-        tableId,
-        total: newOrder.total,
-        status: newOrder.status,
-        itemsCount: newOrder.items.length,
-      });
+      // Counter orders have no table channel — broadcast to the restaurant's
+      // staff channel so KDS/waiter screens still get the live event.
+      if (effectiveTableId) {
+        realtimeService.broadcastToTable(restaurantId, effectiveTableId, 'ORDER_CREATED', {
+          orderId: newOrder.id,
+          tableId: effectiveTableId,
+          total: newOrder.total,
+          status: newOrder.status,
+          itemsCount: newOrder.items.length,
+        });
+      } else {
+        realtimeService.broadcastToRestaurant(restaurantId, 'ORDER_CREATED', {
+          orderId: newOrder.id,
+          tableId: null,
+          total: newOrder.total,
+          status: newOrder.status,
+          itemsCount: newOrder.items.length,
+        });
+      }
 
       return res.status(201).json({ success: true, data: { order: newOrder }, statusCode: 201 });
     } catch (err) {
@@ -942,12 +963,21 @@ router.put(
           ipAddress: req.ip,
         });
 
-        realtimeService.broadcastToTable(targetRestId, order.tableId, 'ORDER_CANCELLED', {
-          orderId,
-          tableId: order.tableId,
-          previousStatus: order.status,
-          cancelledAt: cancelledAt.toISOString(),
-        });
+        if (order.tableId) {
+          realtimeService.broadcastToTable(targetRestId, order.tableId, 'ORDER_CANCELLED', {
+            orderId,
+            tableId: order.tableId,
+            previousStatus: order.status,
+            cancelledAt: cancelledAt.toISOString(),
+          });
+        } else {
+          realtimeService.broadcastToRestaurant(targetRestId, 'ORDER_CANCELLED', {
+            orderId,
+            tableId: null,
+            previousStatus: order.status,
+            cancelledAt: cancelledAt.toISOString(),
+          });
+        }
 
         return res.json({ success: true, data: { order: cancelledOrder }, statusCode: 200 });
       }
@@ -998,11 +1028,19 @@ router.put(
       });
 
       // Broadcast update via SSE (table-scoped: no cross-table leakage)
-      realtimeService.broadcastToTable(targetRestId, order.tableId, 'ORDER_STATUS_UPDATED', {
-        orderId,
-        status,
-        tableId: order.tableId,
-      });
+      if (order.tableId) {
+        realtimeService.broadcastToTable(targetRestId, order.tableId, 'ORDER_STATUS_UPDATED', {
+          orderId,
+          status,
+          tableId: order.tableId,
+        });
+      } else {
+        realtimeService.broadcastToRestaurant(targetRestId, 'ORDER_STATUS_UPDATED', {
+          orderId,
+          status,
+          tableId: null,
+        });
+      }
 
       return res.json({ success: true, data: { order: updated }, statusCode: 200 });
     } catch (err) {
@@ -2368,10 +2406,12 @@ const STAFF_SAFE_SELECT = {
   restaurantId: true,
   name: true,
   email: true,
+  username: true,
   role: true,
   status: true,
   avatar: true,
   createdAt: true,
+  lastLoginAt: true,
 } as const;
 
 const PLATFORM_ROLE_SET = new Set(['PLATFORM_ADMIN', 'SUPER_ADMIN']);
@@ -2381,10 +2421,16 @@ router.get('/staff', requireManager(), async (req: Request, res: Response) => {
     const restaurantId = getTenantId(req);
     if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
 
-    const staff = await prisma.restaurantUser.findMany({
+    // hasPin is computed server-side: the hash itself never leaves the DB.
+    const rows = await prisma.restaurantUser.findMany({
       where: { restaurantId },
       orderBy: { createdAt: 'asc' },
-      select: STAFF_SAFE_SELECT,
+      select: { ...STAFF_SAFE_SELECT, pinHash: true },
+    });
+    const staff = rows.map((r) => {
+      const hasPin = !!r.pinHash;
+      const { pinHash, ...safe } = r;
+      return { ...safe, hasPin };
     });
     return res.json({ success: true, data: staff, statusCode: 200 });
   } catch (err) {
@@ -2402,17 +2448,61 @@ router.post(
       const restaurantId = getTenantId(req);
       if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
 
-      const { name, email, password, pin, role } = req.body as {
+      const { name, email, username, password, pin, role } = req.body as {
         name: string;
-        email: string;
-        password: string;
+        email?: string;
+        username?: string;
+        password?: string;
         pin?: string;
         role: 'RESTAURANT_MANAGER' | 'WAITER' | 'KITCHEN' | 'CASHIER' | 'STAFF';
       };
 
-      const normalizedEmail = email.toLowerCase();
-      const existing = await prisma.restaurantUser.findUnique({ where: { email: normalizedEmail } });
-      if (existing) return res.status(409).json({ success: false, error: 'هذا البريد مستخدم مسبقًا', statusCode: 409 });
+      // Creating staff is a sensitive operation: require fresh step-up
+      // verification (password) from the manager.
+      if (!requireStepUp(req, res)) return;
+
+      const isManagerRole = role === 'RESTAURANT_MANAGER';
+
+      // ---- Credential policy (2026-09 auth redesign) --------------------
+      // Managers:      email + strong password (NO PIN — never PIN-only).
+      // Shift staff:   per-tenant username + 6-digit PIN (NO password and
+      //                NO email — synthetic emails and derived
+      //                `Staff-{PIN}!` passwords are permanently gone).
+      if (isManagerRole) {
+        if (!email) {
+          return res.status(400).json({ success: false, error: 'البريد الإلكتروني مطلوب لحساب المدير', statusCode: 400 });
+        }
+        if (!password) {
+          return res.status(400).json({ success: false, error: 'كلمة مرور قوية (8 أحرف فأكثر) مطلوبة لحساب المدير', statusCode: 400 });
+        }
+        if (pin) {
+          return res.status(400).json({ success: false, error: 'حسابات المديرين لا تستخدم رمز PIN — البريد وكلمة المرور فقط', statusCode: 400 });
+        }
+      } else {
+        if (!username) {
+          return res.status(400).json({ success: false, error: 'اسم المستخدم مطلوب للموظف (يستخدمه في دخول الموظفين)', statusCode: 400 });
+        }
+        if (!pin) {
+          return res.status(400).json({ success: false, error: 'رمز PIN من 6 أرقام مطلوب للموظف', statusCode: 400 });
+        }
+        if (password) {
+          return res.status(400).json({ success: false, error: 'حسابات الموظفين لا تحمل كلمات مرور — اسم المستخدم ورمز PIN فقط', statusCode: 400 });
+        }
+      }
+
+      const normalizedEmail = email ? email.toLowerCase() : undefined;
+      if (normalizedEmail) {
+        const existing = await prisma.restaurantUser.findUnique({ where: { email: normalizedEmail } });
+        if (existing) return res.status(409).json({ success: false, error: 'هذا البريد مستخدم مسبقًا', statusCode: 409 });
+      }
+      if (username) {
+        const existingUsername = await prisma.restaurantUser.findUnique({
+          where: { restaurantId_username: { restaurantId: String(restaurantId), username } },
+        });
+        if (existingUsername) {
+          return res.status(409).json({ success: false, error: 'اسم المستخدم مستخدم مسبقاً في هذا المطعم', statusCode: 409 });
+        }
+      }
 
       const user = await prisma.restaurantUser.create({
         data: {
@@ -2420,7 +2510,13 @@ router.post(
           restaurantId,
           name,
           email: normalizedEmail,
-          passwordHash: await bcrypt.hash(password, 12),
+          username: username || undefined,
+          // Shift staff never receive a password: passwordHash is a NOT NULL
+          // column, so an unguessable random value is stored and NO route
+          // will ever accept it (password login rejects shift roles first).
+          passwordHash: password
+            ? await bcrypt.hash(password, 12)
+            : await bcrypt.hash(`no-password-${randomUUID()}`, 12),
           pinHash: pin ? await bcrypt.hash(pin, 10) : undefined,
           role,
           status: 'ACTIVE',
@@ -2435,7 +2531,8 @@ router.post(
         action: 'STAFF_CREATED',
         entity: 'RestaurantUser',
         entityId: user.id,
-        details: `تمت إضافة موظف ${name} بدور ${role}`,
+        details: `تمت إضافة موظف ${name} بدور ${role} — ${isManagerRole ? 'دخول بالبريد وكلمة المرور' : `دخول الموظفين (اسم المستخدم: ${username})`}`,
+        ipAddress: req.ip,
       });
       return res.status(201).json({ success: true, data: { user }, statusCode: 201 });
     } catch (err) {
@@ -2451,7 +2548,7 @@ router.put(
   validateBody(staffUpdateSchema),
   async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = String(req.params.id);
       const target = await prisma.restaurantUser.findUnique({ where: { id } });
       if (!target) return res.status(404).json({ success: false, error: 'الموظف غير موجود', statusCode: 404 });
       if (!target.restaurantId || !ownTenant(req, target.restaurantId)) return deny(req, res);
@@ -2461,13 +2558,26 @@ router.put(
         return deny(req, res, 'غير مصرح لك بتعديل حسابات إدارة المنصة');
       }
 
-      const { name, role, status, password, pin } = req.body as {
+      const { name, username, email, role, status, password, pin } = req.body as {
         name?: string;
+        username?: string;
+        email?: string;
         role?: 'RESTAURANT_MANAGER' | 'WAITER' | 'KITCHEN' | 'CASHIER' | 'STAFF';
         status?: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
         password?: string;
         pin?: string;
       };
+
+      // Sensitive changes (credentials / role / status) require fresh
+      // step-up verification. Plain name edits stay friction-free.
+      const sensitiveChange =
+        username !== undefined ||
+        email !== undefined ||
+        role !== undefined ||
+        status !== undefined ||
+        password !== undefined ||
+        pin !== undefined;
+      if (sensitiveChange && !requireStepUp(req, res)) return;
 
       // Nobody may change their own role or status (self-lockout / self-heal).
       if (req.user!.id === id && (role !== undefined || status !== undefined)) {
@@ -2501,16 +2611,80 @@ router.put(
         }
       }
 
+      // ---- Role-transition credential completeness -----------------------
+      // The target must end up with the credentials its NEW role requires:
+      //   manager     → email + password (PIN is not used);
+      //   shift staff → username + PIN (password/email not used).
+      const effectiveRole = role ?? target.role;
+      const willBeManager = effectiveRole === 'RESTAURANT_MANAGER';
+      const effectivePin = pin === undefined ? null : pin === '' ? null : pin;
+      const effectivePassword = password ?? null;
+
+      if (willBeManager) {
+        if (pin !== undefined && pin !== '') {
+          return res.status(400).json({ success: false, error: 'حسابات المديرين لا تستخدم رمز PIN', statusCode: 400 });
+        }
+        const effectiveEmail = email ?? target.email;
+        if (!effectiveEmail || !effectivePassword) {
+          return res.status(400).json({
+            success: false,
+            error: 'عند تحويل الموظف إلى مدير: أدخل بريداً إلكترونياً وكلمة مرور قوية له',
+            statusCode: 400,
+          });
+        }
+        // Hygiene: managers do not use PIN login — clear a legacy shift PIN
+        // when the account moves to the manager model.
+        if (target.pinHash && pin === undefined) {
+          await prisma.restaurantUser.update({
+            where: { id },
+            data: { pinHash: null },
+          });
+        }
+      } else {
+        if (password) {
+          return res.status(400).json({ success: false, error: 'حسابات الموظفين لا تحمل كلمات مرور', statusCode: 400 });
+        }
+        const effectiveUsername = username ?? target.username;
+        if (!effectiveUsername) {
+          return res.status(400).json({
+            success: false,
+            error: 'اسم المستخدم مطلوب للموظف قبل تحويله إلى دور تشغيلي',
+            statusCode: 400,
+          });
+        }
+      }
+
+      // Username uniqueness within the tenant (when changed).
+      if (username !== undefined && username !== target.username) {
+        const clash = await prisma.restaurantUser.findUnique({
+          where: { restaurantId_username: { restaurantId: target.restaurantId!, username } },
+        });
+        if (clash) {
+          return res.status(409).json({ success: false, error: 'اسم المستخدم مستخدم مسبقاً في هذا المطعم', statusCode: 409 });
+        }
+      }
+
       const credentialsChanged =
         password !== undefined ||
         (pin !== undefined && pin !== '') ||
+        username !== undefined ||
+        email !== undefined ||
         (role !== undefined && role !== target.role) ||
         (status !== undefined && status !== target.status);
+
+      if (email !== undefined && email !== target.email) {
+        const emailClash = await prisma.restaurantUser.findUnique({ where: { email } });
+        if (emailClash) {
+          return res.status(409).json({ success: false, error: 'هذا البريد مستخدم مسبقًا', statusCode: 409 });
+        }
+      }
 
       const updated = await prisma.restaurantUser.update({
         where: { id },
         data: {
           name: name !== undefined ? name : undefined,
+          email: email !== undefined ? email : undefined,
+          username: username !== undefined ? username : undefined,
           role: role !== undefined ? role : undefined,
           status: status !== undefined ? status : undefined,
           passwordHash: password ? await bcrypt.hash(password, 12) : undefined,
@@ -2520,8 +2694,12 @@ router.put(
               : pin === ''
                 ? null
                 : undefined,
-          // Revoke the target's sessions when their authority changes.
+          // Revoke the target's sessions when their authority changes, and
+          // reset the per-account failure budget so a re-issued credential
+          // doubles as an early unlock (AUTH-02 recovery path).
           tokenVersion: credentialsChanged ? { increment: 1 } : undefined,
+          failedAuthCount: credentialsChanged ? 0 : undefined,
+          authLockedUntil: credentialsChanged ? null : undefined,
         },
         select: STAFF_SAFE_SELECT,
       });
@@ -2533,7 +2711,14 @@ router.put(
         action: 'STAFF_UPDATED',
         entity: 'RestaurantUser',
         entityId: id,
-        details: `تم تحديث بيانات الموظف ${target.name}`,
+        details: `تم تحديث بيانات الموظف ${target.name}` +
+          (role !== undefined && role !== target.role ? ` — تغيير الدور من ${target.role} إلى ${role}` : '') +
+          (status !== undefined && status !== target.status ? ` — تغيير الحالة إلى ${status}` : '') +
+          (password !== undefined ? ' — تغيير كلمة المرور' : '') +
+          (pin !== undefined ? (pin === '' ? ' — إلغاء رمز PIN' : ' — إعادة إصدار رمز PIN') : '') +
+          (username !== undefined ? ' — تغيير اسم المستخدم' : '') +
+          (email !== undefined ? ' — تغيير البريد' : ''),
+        ipAddress: req.ip,
       });
       return res.json({ success: true, data: { user: updated }, statusCode: 200 });
     } catch (err) {
@@ -2544,7 +2729,11 @@ router.put(
 
 router.delete('/staff/:id', requireManager(), async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
+    // Deleting a user record is destructive (historical attribution moves to
+    // SetNull). Prefer DEACTIVATION (status=INACTIVE) — deletion requires a
+    // fresh step-up verification on top of the manager role.
+    if (!requireStepUp(req, res)) return;
     const target = await prisma.restaurantUser.findUnique({ where: { id } });
     if (!target) return res.status(404).json({ success: false, error: 'الموظف غير موجود', statusCode: 404 });
     if (!target.restaurantId || !ownTenant(req, target.restaurantId)) return deny(req, res);
@@ -3583,6 +3772,9 @@ router.post(
     try {
       const restaurantId = getTenantId(req);
       if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+      // Voiding money movement is a high-risk action: require fresh step-up
+      // verification (cashier: PIN, manager: password).
+      if (!requireStepUp(req, res)) return;
       const paymentId = String(req.params.paymentId);
       const { reason } = req.body as { reason?: string };
 
@@ -3749,8 +3941,12 @@ router.post(
       const releasedByCollection = ordersToPay.filter((o) => !isOperational(o.fulfillmentState));
       const closingOperational = ordersToPay.filter((o) => isOperational(o.fulfillmentState));
 
-      // Every billed order must belong to the billed table (no mixed-table bills).
-      const foreignOrder = ordersToPay.find((o) => o.tableId !== tableId);
+      // Every billed order must belong to the billed table (no mixed-table
+      // bills). Walk-in collections bill counter orders, whose persisted
+      // tableId is NULL — compare against the effective value, not the input
+      // sentinel (null !== '__WALKIN__' would reject every counter bill).
+      const effectiveBillTableId = isWalkIn ? null : tableId;
+      const foreignOrder = ordersToPay.find((o) => o.tableId !== effectiveBillTableId);
       if (foreignOrder) {
         return res.status(400).json({
           success: false,

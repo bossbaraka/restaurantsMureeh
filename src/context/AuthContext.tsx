@@ -15,8 +15,8 @@ interface AuthContextType {
   lockoutRemainingSeconds: number;
   canAccessView: (view: string) => boolean;
   canAccessManagerTab: (tab: string) => boolean;
-  login: (email: string, password: string, pin?: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
-  loginWithPin: (pin: string, restaurantId?: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
+  employeeLogin: (restaurantCode: string, username: string, pin: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
   logout: () => void;
   switchManagerRestaurant: (restaurantId: string) => void;
   isLoginModalOpen: boolean;
@@ -141,6 +141,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // Central session-expiry: the API client dispatches 'merar:auth-expired'
+  // when an authenticated call returns 401 (revoked elsewhere / credential or
+  // role change / suspension). Clear state and bring the user back to login.
+  useEffect(() => {
+    const handleExpired = () => {
+      setCurrentUser(null);
+      setCurrentManagerRestaurant(null);
+      setIsLoginModalOpen(true);
+    };
+    // Idle logout (shared-device hardening): same cleanup as expiry, but with
+    // a server-side logout too — the token is revoked, not just dropped.
+    const handleIdle = () => {
+      setCurrentUser(null);
+      setCurrentManagerRestaurant(null);
+      setIsLoginModalOpen(true);
+      void api.logout().catch(() => {});
+    };
+    window.addEventListener('merar:auth-expired', handleExpired as EventListener);
+    window.addEventListener('merar:idle-logout', handleIdle as EventListener);
+    return () => {
+      window.removeEventListener('merar:auth-expired', handleExpired as EventListener);
+      window.removeEventListener('merar:idle-logout', handleIdle as EventListener);
+    };
+  }, []);
+
   useEffect(() => {
     if (lockoutRemainingSeconds > 0) {
       const timer = setInterval(() => {
@@ -157,7 +182,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [lockoutRemainingSeconds]);
 
   const login = useCallback(
-    async (email: string, password: string, pin?: string) => {
+    async (email: string, password: string) => {
       if (lockoutRemainingSeconds > 0) {
         return {
           success: false,
@@ -165,7 +190,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      const res = await api.login(email.trim().toLowerCase(), password, pin);
+      const res = await api.login(email.trim().toLowerCase(), password);
 
       if (res.success && res.data) {
         setFailedAttempts(0);
@@ -196,11 +221,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [failedAttempts, lockoutRemainingSeconds]
   );
 
-  // Staff PIN login — validated against the real DB (hashed PIN per account).
-  // The PIN is always verified within ONE tenant: the caller passes the
-  // active venue, falling back to the manager's selected restaurant.
-  const loginWithPin = useCallback(
-    async (pin: string, restaurantId?: string) => {
+  // Employee login — restaurant code + username + 6-digit PIN, validated
+  // against the real DB. The tenant is resolved SERVER-SIDE from the public
+  // restaurant code; a username valid in one venue can never authenticate in
+  // another (tenant isolation enforced by the API, not the client).
+  const employeeLogin = useCallback(
+    async (restaurantCode: string, username: string, pin: string) => {
       if (lockoutRemainingSeconds > 0) {
         return {
           success: false,
@@ -208,15 +234,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
       }
 
-      const tenantId = restaurantId || currentManagerRestaurant?.id;
-      if (!tenantId) {
+      if (!restaurantCode.trim() || !username.trim() || !/^\d{6}$/.test(pin)) {
         return {
           success: false,
-          error: 'اختر المطعم أولاً قبل الدخول برمز PIN.',
+          error: 'أدخل رمز المطعم واسم المستخدم ورمز PIN المكوّن من 6 أرقام.',
         };
       }
 
-      const res = await api.pinLogin(pin, tenantId);
+      const res = await api.employeeLogin(restaurantCode.trim(), username.trim(), pin);
 
       if (res.success && res.data) {
         setFailedAttempts(0);
@@ -237,10 +262,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return {
         success: false,
-        error: `${res.error || 'رمز PIN غير صحيح. يرجى مراجعة مدير المطعم.'} (تبقى ${Math.max(0, MAX_FAILED_ATTEMPTS - nextAttempts)} محاولات)`,
+        error: `${res.error || 'رمز المطعم أو اسم المستخدم أو رمز PIN غير صحيح.'} (تبقى ${Math.max(0, MAX_FAILED_ATTEMPTS - nextAttempts)} محاولات)`,
       };
     },
-    [failedAttempts, lockoutRemainingSeconds, currentManagerRestaurant?.id]
+    [failedAttempts, lockoutRemainingSeconds]
   );
 
   const logout = useCallback(() => {
@@ -311,7 +336,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         canAccessView,
         canAccessManagerTab,
         login,
-        loginWithPin,
+        employeeLogin,
         logout,
         switchManagerRestaurant,
         isLoginModalOpen,

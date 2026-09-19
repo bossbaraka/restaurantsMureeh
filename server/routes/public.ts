@@ -227,6 +227,8 @@ router.get('/events', sseConnectionLimiter, async (req: Request, res: Response) 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  // Reverse proxies (nginx & friends) must stream, not buffer, this response.
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
   const clientId = `sse-${randomUUID()}`;
