@@ -4,6 +4,13 @@ import {
   MAX_PHONE_INPUT_LENGTH,
   normalizeCustomerPhone,
 } from '../utils/phone';
+import {
+  MAX_WHATSAPP_INPUT_LENGTH,
+  SOCIAL_PLATFORM_LABELS,
+  isAllowedSocialUrl,
+  normalizeWhatsappNumber,
+  type SocialPlatform,
+} from '../utils/contactChannels';
 
 // ============================================================
 // Central input validation (OWASP API3/API4, CWE-20).
@@ -897,6 +904,82 @@ export const transferDetailsShape = {
   transferInstructions: transferInstructionsField('تعليمات التحويل'),
 } as const;
 
+// ---------------------------------------------------------------------------
+// Contact channels & reservations (Restaurant settings).
+//
+// The venue's own public contact surface: a WhatsApp number that powers the
+// ONE interaction allowed on the read-only Live Menu («احجز طاولتك» →
+// reservation request over WhatsApp) and the social profiles rendered in the
+// guest menu's «تواصل معنا» section.
+//
+// Same write contract as every other branding field:
+//   field omitted → UNCHANGED (Prisma `undefined`)
+//   ''            → EXPLICIT clear (the route writes NULL, the UI hides it)
+//   value         → validated here, normalized by the route
+//
+// These values end up as an `href` in a guest browser and as a `wa.me` deep
+// link, so the validation is the security boundary (see
+// server/utils/contactChannels.ts): HTTPS only, no credentials, no IP
+// literals, no control characters, and a per-platform host allowlist.
+// NOT part of any paid entitlement — a venue must be able to publish its own
+// contact details on the free plan.
+// ---------------------------------------------------------------------------
+
+/** WhatsApp number for reservation requests. Stored canonically as E.164. */
+const whatsappNumberField = z
+  .string()
+  .trim()
+  .max(
+    MAX_WHATSAPP_INPUT_LENGTH,
+    `رقم واتساب طويل جداً — بحد أقصى ${MAX_WHATSAPP_INPUT_LENGTH} خانة`
+  )
+  .refine((value) => value === '' || normalizeWhatsappNumber(value) !== null, {
+    message:
+      'رقم واتساب غير صالح — أرقام فقط مع رمز الدولة (مثال: 970599123456+ أو 0599123456)',
+  })
+  .optional();
+
+/** A social profile link. `''` is the explicit clear signal. */
+const socialLinkField = (platform: SocialPlatform) =>
+  z
+    .string()
+    .trim()
+    .max(1000, `رابط ${SOCIAL_PLATFORM_LABELS[platform]} طويل جداً`)
+    .refine((value) => value === '' || isAllowedSocialUrl(value, platform), {
+      message:
+        platform === 'website'
+          ? 'رابط الموقع الإلكتروني يجب أن يكون رابط HTTPS صالحاً'
+          : `رابط ${SOCIAL_PLATFORM_LABELS[platform]} يجب أن يكون رابط HTTPS صالحاً من نطاق المنصة نفسها`,
+    })
+    .optional();
+
+/**
+ * The six contact fields, declared once and spread into `brandingSchema`
+ * (which is `.strict()`: an undeclared key would 400 the whole branding save).
+ */
+export const contactChannelsShape = {
+  whatsappNumber: whatsappNumberField,
+  instagramUrl: socialLinkField('instagram'),
+  facebookUrl: socialLinkField('facebook'),
+  tiktokUrl: socialLinkField('tiktok'),
+  youtubeUrl: socialLinkField('youtube'),
+  websiteUrl: socialLinkField('website'),
+} as const;
+
+/**
+ * The contact-channel keys in the branding payload, paired with the label used
+ * in the (value-free) audit trail. Kept next to the schema so the route, the
+ * audit log and the tests can never drift apart.
+ */
+export const CONTACT_CHANNEL_FIELDS = [
+  ['whatsappNumber', 'رقم واتساب'],
+  ['instagramUrl', SOCIAL_PLATFORM_LABELS.instagram],
+  ['facebookUrl', SOCIAL_PLATFORM_LABELS.facebook],
+  ['tiktokUrl', SOCIAL_PLATFORM_LABELS.tiktok],
+  ['youtubeUrl', SOCIAL_PLATFORM_LABELS.youtube],
+  ['websiteUrl', SOCIAL_PLATFORM_LABELS.website],
+] as const satisfies readonly [keyof typeof contactChannelsShape, string][];
+
 export const brandingSchema = z
   .object({
     restaurantId: idSchema.optional(),
@@ -966,6 +1049,9 @@ export const brandingSchema = z
     // otherwise 400 the entire branding save. Deliberately OUTSIDE the paid
     // `CAN_CUSTOM_BRANDING` entitlement check in the route.
     ...transferDetailsShape,
+    // Contact channels & reservations (WhatsApp number + social profiles).
+    // Same write contract, same "outside the paid entitlement" reasoning.
+    ...contactChannelsShape,
   })
   .strict();
 

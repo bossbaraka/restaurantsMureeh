@@ -90,6 +90,10 @@ vi.mock(import('../context/RestaurantContext'), async (importOriginal) => {
 // Imported after the mock is registered.
 const { DisplayMenu } = await import('../components/customer/DisplayMenu');
 const { isDisplayModeUrl } = await import('../context/RestaurantContext');
+const { buildLiveScenes, buildLiveSections, resolveLiveProfile } = await import(
+  '../components/display/liveMenuModel'
+);
+const { LiveBoardScene } = await import('../components/display/LiveScenes');
 
 const render = (ui: React.ReactElement) => renderToStaticMarkup(ui);
 
@@ -105,18 +109,47 @@ function selectorExists(selector: string): boolean {
   return found;
 }
 
-describe('DisplayMenu (read-only board)', () => {
-  it('renders the tenant identity and the first category as a board', () => {
+/** The board page of a given section, exactly as the screen plays it. */
+function renderBoard(sectionIndex: number): string {
+  const sections = buildLiveSections(categories, products);
+  const profile = resolveLiveProfile(restaurant, sections);
+  const scenes = buildLiveScenes(sections, { profile });
+  const board = scenes.find(
+    (scene) => scene.kind === 'board' && scene.sectionIndex === sectionIndex
+  );
+  if (!board || board.kind !== 'board') throw new Error('no board scene');
+  return render(
+    <LiveBoardScene
+      scene={board}
+      chrome={{ restaurantName: restaurant.name, restaurantNameEn: restaurant.nameEn, currency: '₪' }}
+      leaders={profile.layout === 'type-led'}
+    />
+  );
+}
+
+describe('DisplayMenu (read-only signage)', () => {
+  it('opens on the tenant identity and keeps it on screen at all times', () => {
     const html = render(<DisplayMenu />);
 
     expect(html).toContain('display-menu');
     expect(html).toContain('مطعم الديوان');
     expect(html).toContain('Diwan Restaurant');
-    expect(html).toContain('المقبلات');
-    expect(html).toContain('حمص بالصنوبر');
-    expect(html).toContain('24');
+    // The first frame is the brand bumper; the menu starts right after it.
+    expect(html).toContain('display-menu__scene--intro');
     // The board is branded with the platform so a filmed clip credits it.
     expect(html).toContain('منصة مريح MUREEH');
+  });
+
+  it('paints the screen from the tenant brand, not a fixed template', () => {
+    const html = render(<DisplayMenu />);
+
+    // The visual profile is written as custom properties on the root, derived
+    // from the venue's own colours — a different venue gets different values.
+    expect(html).toContain('--lm-brand:');
+    expect(html).toContain('--lm-title-face:');
+    expect(html).toContain('--lm-ken-burns:');
+    // ...and the CSS keeps brand-token fallbacks for the pre-profile paint.
+    expect(cssText).toContain('--lm-brand: var(--brand-primary-strong');
   });
 
   it('offers no way to order: no cart, no add button, no quantity stepper', () => {
@@ -125,14 +158,18 @@ describe('DisplayMenu (read-only board)', () => {
     for (const forbidden of ['إضافة', 'السلة', 'اطلب الآن', 'menu-card', 'menu-qty', 'cart']) {
       expect(html).not.toContain(forbidden);
     }
-    // ...and it says so on screen, for guests standing in front of a TV.
-    expect(html).toContain('للطلب يرجى التوجه إلى الكاشير');
+  });
+
+  it('hides the reservation CTA when the venue published no WhatsApp number', () => {
+    const html = render(<DisplayMenu />);
+
+    expect(html).not.toContain('احجز طاولتك');
+    expect(html).not.toContain('display-menu__cta');
   });
 
   it('never advertises a dish the kitchen marked unavailable', () => {
-    const html = render(<DisplayMenu />);
-
-    expect(html).not.toContain('طبق نفذ من المطبخ');
+    expect(render(<DisplayMenu />)).not.toContain('طبق نفذ من المطبخ');
+    expect(renderBoard(1)).not.toContain('طبق نفذ من المطبخ');
   });
 
   it('skips categories left with nothing to show', () => {
@@ -140,15 +177,33 @@ describe('DisplayMenu (read-only board)', () => {
 
     // "قسم مغلق" has no products at all, so it must not appear as a section.
     expect(html).not.toContain('قسم مغلق');
-    // Only the starters category is on screen at first: 1 of 2 sections.
+    // Two sections are on the loop, and the rail says so from frame one.
     expect(html).toContain('1 / 2');
   });
 
-  it('keeps the price in a tabular, currency-prefixed cell', () => {
-    const html = render(<DisplayMenu />);
+  it('renders a priced board with the dish, its note and a tabular price', () => {
+    const html = renderBoard(0);
 
+    expect(html).toContain('المقبلات');
+    expect(html).toContain('حمص بالصنوبر');
     expect(html).toContain('display-menu__price');
     expect(html).toContain('₪24');
+    // A filmed board tells the guest how to order without offering to take it.
+    expect(html).toContain('للطلب يرجى التوجه إلى الكاشير');
+  });
+
+  it('keeps every dish reachable by paginating long categories', () => {
+    const sections = buildLiveSections(categories, products);
+    const profile = resolveLiveProfile(restaurant, sections);
+    const scenes = buildLiveScenes(sections, { profile });
+    const boards = scenes.filter((scene) => scene.kind === 'board');
+    const shown = boards.flatMap((scene) =>
+      scene.kind === 'board' ? scene.items.map((item) => item.id) : []
+    );
+
+    // Every available dish appears on exactly one board page.
+    expect(new Set(shown).size).toBe(shown.length);
+    expect(shown).toEqual(expect.arrayContaining(['p1', 'p2']));
   });
 });
 
@@ -202,14 +257,19 @@ describe('display menu styles', () => {
     expect(boardUsesBrand).toBe(true);
   });
 
-  it('hides the controls when the board is printed or reduced-motion is on', () => {
-    expect(cssText).toContain('@media print');
-    expect(cssText).toContain('prefers-reduced-motion');
-  });
-
-  it('does not reintroduce the containment hack that broke card layout', () => {
+  it('animates on the compositor only, and never fakes card height', () => {
+    // Signage runs for hours: motion is limited to opacity/transform.
+    expect(cssText).toContain('@keyframes lm-scene-in');
+    expect(cssText).toContain('@keyframes lm-ken-burns');
+    expect(cssText).not.toMatch(/lm-[a-z-]+\s*\{[^}]*\b(top|left|width|height|margin)\s*:[^}]*\banimation/);
     // Regression guard: content-visibility on menu cards caused overlapping cards.
     expect(cssText).not.toContain('content-visibility');
     expect(cssText).not.toContain('contain-intrinsic-size');
+  });
+
+  it('hides the controls when the board is printed or reduced-motion is on', () => {
+    expect(cssText).toContain('@media print');
+    expect(cssText).toContain('prefers-reduced-motion');
+    expect(cssText).toContain('.display-menu__cta,');
   });
 });
