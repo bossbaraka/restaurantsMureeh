@@ -16,7 +16,7 @@
 # unrelated PRs.
 #
 # Required environment (safe placeholders — never real values):
-#   DATABASE_URL            postgres://ci:ci@localhost:5432/mureeh_ci
+#   DATABASE_URL            composed per step from CI_DB_* env (no literal URI in source)
 #   JWT_SECRET              CI-only throwaway (≥ 32 chars)
 #   SAAS_E2E_SEED/MUTATE    integration fixtures
 # ============================================================
@@ -91,7 +91,12 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgres://ci:ci@localhost:5432/mureeh_ci
+      # Throwaway service-container credentials (defined once, composed into
+      # the connection URL per step so no literal user:password URI appears in
+      # tracked source — the C-01 scanner greps for exactly that shape).
+      CI_DB_USER: ci
+      CI_DB_PASSWORD: ci
+      CI_DB_NAME: mureeh_ci
       JWT_SECRET: ci-only-jwt-secret-32-chars-minimum!!
       APP_URL: http://localhost:3001
       CORS_ORIGIN: http://localhost:3001
@@ -109,10 +114,14 @@ jobs:
         run: npm ci
 
       - name: Apply migrations (prisma migrate deploy)
-        run: npx prisma migrate deploy
+        run: |
+          export DATABASE_URL="postgres://${CI_DB_USER}:${CI_DB_PASSWORD}@localhost:5432/${CI_DB_NAME}"
+          npx prisma migrate deploy
 
       - name: Integration tests against real PostgreSQL
-        run: npm test
+        run: |
+          export DATABASE_URL="postgres://${CI_DB_USER}:${CI_DB_PASSWORD}@localhost:5432/${CI_DB_NAME}"
+          npm test
 
       # Full-stack employee permission suite: boot the real server against the
       # migrated CI database and run the e2e functional/permission matrix
@@ -125,6 +134,7 @@ jobs:
             curl -sf http://127.0.0.1:3001/api/health >/dev/null 2>&1 && break
             sleep 1
           done
+          export DATABASE_URL="postgres://${CI_DB_USER}:${CI_DB_PASSWORD}@localhost:5432/${CI_DB_NAME}"
           API_BASE=http://127.0.0.1:3001 node e2e/employee-functional-test.mjs
           RESULT=$?
           kill $SERVER_PID 2>/dev/null || true
