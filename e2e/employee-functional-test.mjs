@@ -1167,7 +1167,12 @@ async function phaseManager(tokens) {
   const upload = await call('POST', '/api/uploads/image', { token: manager, form: fd });
   const uploadUrl = upload.json?.data?.url ?? upload.json?.url;
   check('RESTAURANT_MANAGER', 'Image upload works', upload.status === 200 || upload.status === 201, `status=${upload.status} ${upload.text.slice(0, 200)}`);
-  check('RESTAURANT_MANAGER', 'Upload returns a usable /uploads path', typeof uploadUrl === 'string' && uploadUrl.startsWith('/uploads/'), `${uploadUrl}`);
+  // Asset resolver contract: the uploads URL is relative by default and
+  // absolute when APP_URL is configured (CI sets it) — both are usable.
+  const uploadIsUsable = typeof uploadUrl === 'string' &&
+    (/^\/uploads\//.test(uploadUrl) || /^https?:\/\/[^/]+\/uploads\//.test(uploadUrl));
+  check('RESTAURANT_MANAGER', 'Upload returns a usable /uploads path (relative, or absolute when APP_URL is set)',
+    uploadIsUsable, `${uploadUrl}`);
   if (uploadUrl) {
     const del = await call('POST', '/api/uploads/delete', { token: manager, body: { url: uploadUrl } });
     check('RESTAURANT_MANAGER', 'Upload delete works', del.status === 200, `status=${del.status}`);
