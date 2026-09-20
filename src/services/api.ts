@@ -2,6 +2,8 @@ import {
   Restaurant,
   RestaurantTransferDetails,
   RestaurantSocials,
+  RestaurantDisplaySettings,
+  DisplayFontKey,
   Plan,
   Subscription,
   RestaurantUser,
@@ -108,6 +110,20 @@ export function newClientRequestId(): string {
   });
 }
 
+/**
+ * Display faces the read-only board may use («شاشة العرض ← الخط») — mirrors
+ * `DISPLAY_FONT_KEYS` in server/validation/schemas.ts, which is the authority:
+ * the server rejects any other value, so a drifted list here could only ever
+ * offer a font the save would refuse.
+ */
+export const DISPLAY_FONT_KEYS: DisplayFontKey[] = [
+  'auto',
+  'tajawal',
+  'cairo',
+  'amiri',
+  'cormorant',
+];
+
 // A pasted/legacy base64 data URL (megabytes of text) must never be sent
 // back inside a JSON save payload — it trips the server's 1MB body limit
 // (413) and bloats every guest menu response. The canonical flow is:
@@ -197,6 +213,34 @@ function mapSocials(raw: any): RestaurantSocials | undefined {
   return Object.values(socials).some((value) => value !== undefined) ? socials : undefined;
 }
 
+/**
+ * Display screen (شاشة العرض — read-only board) settings.
+ *
+ * The server stores them as flat columns on the restaurant row; the client
+ * works with the nested `display` object. `undefined` means "the venue
+ * configured nothing" (or the payload predates the fields), so the board keeps
+ * its existing themed canvas and derived identity font.
+ */
+function mapDisplaySettings(raw: any): RestaurantDisplaySettings | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const backgroundMode = raw.displayBackgroundMode === 'image' ? 'image' : 'theme';
+  const font: DisplayFontKey = DISPLAY_FONT_KEYS.includes(raw.displayFont)
+    ? (raw.displayFont as DisplayFontKey)
+    : 'auto';
+  const backgroundImage =
+    typeof raw.displayBackgroundImageUrl === 'string' && raw.displayBackgroundImageUrl
+      ? absoluteAssetUrl(raw.displayBackgroundImageUrl)
+      : undefined;
+  const backgroundStoragePath =
+    typeof raw.displayBackgroundStoragePath === 'string' && raw.displayBackgroundStoragePath
+      ? raw.displayBackgroundStoragePath
+      : undefined;
+  // Nothing configured (and nothing to clear): keep the payload lean, exactly
+  // like `mapSocials`/`mapTransferDetails` do for their empty cases.
+  if (backgroundMode === 'theme' && font === 'auto' && !backgroundImage) return undefined;
+  return { backgroundMode, backgroundImage, backgroundStoragePath, font };
+}
+
 export function mapRestaurantRow(raw: any): Restaurant {
   return {
     id: raw.id,
@@ -255,6 +299,9 @@ export function mapRestaurantRow(raw: any): Restaurant {
       typeof raw.whatsappNumber === 'string' && raw.whatsappNumber.trim()
         ? raw.whatsappNumber.trim()
         : undefined,
+    // Display screen (شاشة العرض) settings — additive, `undefined` for a venue
+    // that configured nothing.
+    display: mapDisplaySettings(raw),
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
   };
@@ -1812,6 +1859,7 @@ class RestaurantApiService {
     if (
       isEmbeddedImage(patch.logo) ||
       isEmbeddedImage(patch.coverImage) ||
+      isEmbeddedImage(patch.display?.backgroundImage) ||
       galleryHasEmbedded
     ) {
       return { success: false, error: EMBEDDED_IMAGE_ERROR, statusCode: 413 };
@@ -1861,6 +1909,13 @@ class RestaurantApiService {
         tiktokUrl: patch.socials?.tiktok,
         youtubeUrl: patch.socials?.youtube,
         websiteUrl: patch.socials?.website,
+        // Display screen (شاشة العرض), flattened to the server's column names.
+        // Same contract as every field above: `undefined` is dropped by
+        // JSON.stringify (column untouched), `''` is an explicit clear that
+        // writes NULL and returns the board to its themed canvas.
+        displayBackgroundMode: patch.display?.backgroundMode,
+        displayBackgroundImage: patch.display?.backgroundImage,
+        displayFont: patch.display?.font,
       },
     });
     if (res.success && res.data?.restaurant) {

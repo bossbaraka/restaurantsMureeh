@@ -18,6 +18,7 @@ const css = readFileSync(resolve(root, 'src/index.css'), 'utf8');
 const COMPONENTS = [
   'src/components/display/LiveScenes.tsx',
   'src/components/display/LiveMenuStage.tsx',
+  'src/components/display/LiveStaticMenu.tsx',
   'src/components/display/LiveReservation.tsx',
   'src/components/customer/DisplayMenu.tsx',
 ];

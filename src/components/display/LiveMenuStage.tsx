@@ -42,10 +42,13 @@ import {
   buildLiveSections,
   resolveLiveProfile,
   sectionBackdrop,
+  shouldPlayFilm,
   type LiveScene,
   type LiveSection,
 } from './liveMenuModel';
 import { useLiveSequence } from './useLiveSequence';
+import { LiveStaticMenu } from './LiveStaticMenu';
+import { optimizeImageUrl } from '../customer/ProductImage';
 import {
   LiveBoardScene,
   LiveCategoryScene,
@@ -110,6 +113,39 @@ const BUSINESS_LABELS: Record<string, string> = {
   BAKERY: 'مخبز ومعجنات',
 };
 
+/**
+ * Is this screen a phone/tablet (static menu) or a big panel (automatic film)?
+ *
+ * Server rendering and the very first client frame answer "big panel", which is
+ * exactly the behaviour that existed before this decision: the film paints, and
+ * a hand-held screen swaps to the static menu as soon as the viewport is known
+ * (see `shouldPlayFilm` for the rule itself).
+ */
+const useStaticViewport = (): boolean => {
+  const read = () => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return !shouldPlayFilm({
+      width: window.innerWidth,
+      coarsePointer: window.matchMedia('(pointer: coarse)').matches,
+      hasTouch: (window.navigator?.maxTouchPoints || 0) > 0,
+    });
+  };
+  const [isStatic, setIsStatic] = useState(read);
+  useEffect(() => {
+    const update = () => setIsStatic(read());
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
+    };
+  }, []);
+  return isStatic;
+};
+
 const useClock = (enabled: boolean): string => {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -132,6 +168,8 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
   useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
 
   const [settings, setSettings] = useState<DisplaySettings>(DISPLAY_FALLBACK);
+  // Phones and tablets never autoplay: they get the static menu instead.
+  const staticPreview = useStaticViewport();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
@@ -154,12 +192,21 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
     [categories, products]
   );
 
-  const profileKey = `${currentRestaurant?.primaryColor || ''}|${currentRestaurant?.accentColor || ''}|${currentRestaurant?.businessType || ''}`;
+  const display = currentRestaurant?.display;
+  const displayKey = `${display?.backgroundMode || 'theme'}|${display?.font || 'auto'}`;
+  const profileKey = `${currentRestaurant?.primaryColor || ''}|${currentRestaurant?.accentColor || ''}|${currentRestaurant?.businessType || ''}|${displayKey}`;
   const profile = useMemo(
-    () => resolveLiveProfile(currentRestaurant, sections),
+    () => resolveLiveProfile(currentRestaurant, sections, display),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [profileKey, sections]
   );
+
+  // «شاشة العرض» background: the venue's own photograph, or its brand canvas.
+  // A mode of `image` without a stored photograph falls back to the canvas.
+  const wallpaper =
+    display?.backgroundMode === 'image' && display.backgroundImage
+      ? display.backgroundImage
+      : undefined;
 
   const pacedScenes: LiveScene[] = useMemo(() => {
     let scenes = buildLiveScenes(sections, { profile });
@@ -184,7 +231,8 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
   }, [sections, profile, settings.pace, settings.showImages]);
 
   const { scene, progressRef, goTo, next, prev } = useLiveSequence(pacedScenes, {
-    playing: settings.autoplay,
+    // The automatic film is for the big panels only.
+    playing: settings.autoplay && !staticPreview,
     hold: anyOverlay,
   });
 
@@ -400,6 +448,66 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
   const paceIndex = PACE_OPTIONS.findIndex((option) => option.value === settings.pace);
   const activeSection = scene && scene.sectionIndex >= 0 ? sections[scene.sectionIndex] : undefined;
 
+  // ---------------------------------------------------------------------
+  // Phone / tablet: the same read-only menu, still.
+  // ---------------------------------------------------------------------
+  if (staticPreview) {
+    return (
+      <div
+        className="display-menu"
+        dir="rtl"
+        data-testid="display-menu"
+        data-static="true"
+        data-motion={profile.displayFace === 'serif' ? 'editorial' : 'vivid'}
+        style={profile.vars as React.CSSProperties}
+      >
+        {wallpaper ? (
+          <div className="display-menu__wallpaper" aria-hidden="true">
+            <img src={optimizeImageUrl(wallpaper, 1600, 66)} alt="" />
+          </div>
+        ) : (
+          <div className="display-menu__ambient" aria-hidden="true">
+            <span className="display-menu__ambient-glow display-menu__ambient-glow--a" />
+            <span className="display-menu__ambient-glow display-menu__ambient-glow--b" />
+            <span className="display-menu__ambient-grain" />
+            <span className="display-menu__ambient-vignette" />
+          </div>
+        )}
+
+        <LiveStaticMenu
+          chrome={chrome}
+          sections={sections}
+          logo={logo}
+          tagline={currentRestaurant?.description}
+          displayUrl={displayUrl}
+        />
+
+        {/* The venue's own reservation request stays reachable (it is not an
+            order); everything else — tools, export, QR — belongs to the panel
+            the film plays on. */}
+        {canReserve && (
+          <div className="display-menu__static-foot">
+            <LiveReserveCta
+              restaurantName={restaurantName}
+              whatsappNumber={whatsappNumber}
+              onOpen={() => setReserveOpen(true)}
+              hidden={reserveOpen}
+            />
+          </div>
+        )}
+
+        {canReserve && (
+          <LiveReservationPanel
+            isOpen={reserveOpen}
+            restaurantName={restaurantName}
+            whatsappNumber={whatsappNumber}
+            onClose={() => setReserveOpen(false)}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className="display-menu"
@@ -408,14 +516,20 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
       data-motion={profile.displayFace === 'serif' ? 'editorial' : 'vivid'}
       style={profile.vars as React.CSSProperties}
     >
-      {/* Ambient brand field: tinted by the venue's own hue, animated on the
-          compositor only (transform/opacity), so it costs nothing per frame. */}
-      <div className="display-menu__ambient" aria-hidden="true">
-        <span className="display-menu__ambient-glow display-menu__ambient-glow--a" />
-        <span className="display-menu__ambient-glow display-menu__ambient-glow--b" />
-        <span className="display-menu__ambient-grain" />
-        <span className="display-menu__ambient-vignette" />
-      </div>
+      {/* Background: the venue's photograph («شاشة العرض ← خلفية صورة») or the
+          ambient brand field (its default canvas), never both. */}
+      {wallpaper ? (
+        <div className="display-menu__wallpaper" aria-hidden="true">
+          <img src={optimizeImageUrl(wallpaper, 1920, 68)} alt="" />
+        </div>
+      ) : (
+        <div className="display-menu__ambient" aria-hidden="true">
+          <span className="display-menu__ambient-glow display-menu__ambient-glow--a" />
+          <span className="display-menu__ambient-glow display-menu__ambient-glow--b" />
+          <span className="display-menu__ambient-grain" />
+          <span className="display-menu__ambient-vignette" />
+        </div>
+      )}
 
       <div className="display-menu__stage">
         {/* ---------- Persistent chrome: the venue is always on screen ---------- */}

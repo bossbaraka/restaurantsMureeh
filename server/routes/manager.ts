@@ -378,6 +378,13 @@ router.get('/dashboard/stats', requireManager(), async (req: Request, res: Respo
           mapImageUrl: dashboardRestaurant.mapImageUrl,
           mapStoragePath: dashboardRestaurant.mapStoragePath,
           promoVideoUrl: restaurant.promoVideoUrl,
+          // Display screen (شاشة العرض) settings, so a workspace reload never
+          // replaces a restaurant object that carries them with one missing
+          // them. Additive: legacy rows simply report the defaults.
+          displayBackgroundMode: restaurant.displayBackgroundMode,
+          displayBackgroundImageUrl: dashboardRestaurant.displayBackgroundImageUrl,
+          displayBackgroundStoragePath: dashboardRestaurant.displayBackgroundStoragePath,
+          displayFont: restaurant.displayFont,
         },
         subscription: restaurant.subscription,
         plan: restaurant.subscription?.plan,
@@ -3214,6 +3221,13 @@ router.put(
         tiktokUrl?: string;
         youtubeUrl?: string;
         websiteUrl?: string;
+        // Display screen (شاشة العرض — the read-only board). Same write
+        // contract as every field here: omitted = unchanged, '' = explicit
+        // clear of the backdrop. Presentational only, never an ordering
+        // surface, and never gated by an entitlement.
+        displayBackgroundMode?: 'theme' | 'image';
+        displayBackgroundImage?: string;
+        displayFont?: 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
       };
 
       const hasCustomBrandingFields =
@@ -3266,12 +3280,17 @@ router.put(
         b.galleryImages !== undefined
           ? b.galleryImages.map((u) => normalizeAssetReference(u, normalizer))
           : undefined;
+      const normDisplayBackground: NormalizedAsset | undefined =
+        b.displayBackgroundImage !== undefined
+          ? normalizeAssetReference(b.displayBackgroundImage, normalizer)
+          : undefined;
 
       const rejected = [
         ...(normLogo ? [normLogo] : []),
         ...(normCover ? [normCover] : []),
         ...(normMap ? [normMap] : []),
         ...(normGallery ?? []),
+        ...(normDisplayBackground ? [normDisplayBackground] : []),
       ].filter(
         (n): n is Extract<NormalizedAsset, { kind: 'reject' }> => n.kind === 'reject'
       );
@@ -3300,6 +3319,7 @@ router.put(
         ['الشعار', normLogo],
         ['صورة الغلاف', normCover],
         ['صورة الخريطة', normMap],
+        ['خلفية شاشة العرض', normDisplayBackground],
       ] as const) {
         const tenantError = keyTenantError(n, label);
         if (tenantError) {
@@ -3331,6 +3351,7 @@ router.put(
           coverImageUrl: true,
           mapImageUrl: true,
           galleryImages: true,
+          displayBackgroundImageUrl: true,
         },
       });
 
@@ -3425,6 +3446,16 @@ router.put(
               ? null
               : persistableRef(normMap)
             : undefined,
+          // Display screen (شاشة العرض). Same contract: omitted = unchanged,
+          // clear = NULL (the board falls back to its themed canvas).
+          displayBackgroundMode:
+            b.displayBackgroundMode !== undefined ? b.displayBackgroundMode : undefined,
+          displayBackgroundImageUrl: normDisplayBackground
+            ? normDisplayBackground.kind === 'clear'
+              ? null
+              : persistableRef(normDisplayBackground)
+            : undefined,
+          displayFont: b.displayFont !== undefined ? b.displayFont : undefined,
           transferBankName: transferColumn(b.transferBankName),
           transferBankAccount: transferColumn(b.transferBankAccount),
           transferBankAccountHolder: transferColumn(b.transferBankAccountHolder),
@@ -3529,6 +3560,7 @@ router.put(
         replacedByField(normLogo, existing.logoUrl);
         replacedByField(normCover, existing.coverImageUrl);
         replacedByField(normMap, existing.mapImageUrl);
+        replacedByField(normDisplayBackground, existing.displayBackgroundImageUrl);
         if (normGallery) {
           const nextKeys = new Set(
             normGallery

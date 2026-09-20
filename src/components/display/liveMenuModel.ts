@@ -1,4 +1,10 @@
-import type { Category, Product, Restaurant } from '../../types/restaurant';
+import type {
+  Category,
+  DisplayFontKey,
+  Product,
+  Restaurant,
+  RestaurantDisplaySettings,
+} from '../../types/restaurant';
 import {
   buildBrandTokens,
   hslToCss,
@@ -147,6 +153,117 @@ export interface LiveVisualProfile {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+// ---------------------------------------------------------------------------
+// Display screen settings (شاشة العرض)
+// ---------------------------------------------------------------------------
+
+/**
+ * Display faces the venue may pick for the board — the ONLY families the
+ * product ships (see the Google Fonts link in index.html), so a chosen font is
+ * always available on a screen that has never seen this browser before.
+ *
+ * `auto` is not a font: it keeps the derived identity (`--lm-title-face`
+ * computed from the venue's own colours and photography by
+ * `resolveLiveProfile`), i.e. today's behaviour. Every other key writes an
+ * explicit face for the headings AND for the running text, and re-balances the
+ * weight/tracking so a serif never renders at a sans-serif's 900.
+ */
+export interface DisplayFontPreset {
+  key: Exclude<DisplayFontKey, 'auto'>;
+  /** Arabic label shown in the manager's font picker. */
+  label: string;
+  titleFace: string;
+  bodyFace: string;
+  titleWeight: string;
+  titleTracking: string;
+}
+
+export const DISPLAY_FONT_PRESETS: Record<
+  Exclude<DisplayFontKey, 'auto'>,
+  DisplayFontPreset
+> = {
+  tajawal: {
+    key: 'tajawal',
+    label: 'طجوال — عصري',
+    titleFace: "'Tajawal', 'Cairo', sans-serif",
+    bodyFace: "'Tajawal', 'Cairo', system-ui, sans-serif",
+    titleWeight: '900',
+    titleTracking: '-0.022em',
+  },
+  cairo: {
+    key: 'cairo',
+    label: 'القاهرة — حديث',
+    titleFace: "'Cairo', 'Tajawal', sans-serif",
+    bodyFace: "'Cairo', 'Tajawal', system-ui, sans-serif",
+    titleWeight: '900',
+    titleTracking: '-0.015em',
+  },
+  amiri: {
+    key: 'amiri',
+    label: 'أميري — كلاسيكي',
+    titleFace: "'Amiri', 'Cormorant Garamond', serif",
+    bodyFace: "'Amiri', 'Tajawal', serif",
+    titleWeight: '700',
+    titleTracking: '0.005em',
+  },
+  cormorant: {
+    key: 'cormorant',
+    label: 'كورمورانت — فخم',
+    titleFace: "'Cormorant Garamond', 'Amiri', serif",
+    bodyFace: "'Tajawal', 'Cairo', system-ui, sans-serif",
+    titleWeight: '600',
+    titleTracking: '0.005em',
+  },
+};
+
+/** The font tokens a chosen face overrides on the stage (`auto` → none). */
+export function displayFontVars(
+  font?: DisplayFontKey | null
+): Record<string, string> {
+  if (!font || font === 'auto') return {};
+  const preset = DISPLAY_FONT_PRESETS[font];
+  if (!preset) return {};
+  return {
+    '--lm-title-face': preset.titleFace,
+    '--lm-body-face': preset.bodyFace,
+    '--lm-title-weight': preset.titleWeight,
+    '--lm-title-tracking': preset.titleTracking,
+  };
+}
+
+/**
+ * The automatic film plays on the BIG panels only — a TV or a computer. A phone
+ * or a tablet gets the static, scrollable menu instead: the same read-only
+ * board content (and the same ban on ordering), composed for a hand-held screen
+ * that is read up close, at its own pace.
+ *
+ * Three facts about the device decide it, and each one covers a case the others
+ * cannot:
+ *   width        — a phone is never 1024px wide, even in landscape (≤ ~930px),
+ *                  so width alone already excludes every phone;
+ *   coarsePointer + touch — an iPad in landscape IS ≥ 1024px wide, but it is a
+ *                  hand-held screen with a finger as its pointer, so it stays
+ *                  on the static menu, exactly as specified;
+ *   hasTouch     — a TV set has a large screen and NO touch input (its remote
+ *                  often reports a coarse pointer!), so it must never be
+ *                  demoted to the static menu for that reason alone. A
+ *                  touchscreen laptop keeps its mouse/trackpad as the primary
+ *                  pointer and therefore keeps the film.
+ */
+export const SIGNAGE_MIN_WIDTH = 1024;
+
+export function shouldPlayFilm(viewport: {
+  width: number;
+  coarsePointer: boolean;
+  /** `navigator.maxTouchPoints > 0` — a screen the user can touch. */
+  hasTouch: boolean;
+}): boolean {
+  if (viewport.width < SIGNAGE_MIN_WIDTH) return false;
+  // A touch-first device (tablet) is hand-held even when it is 1024px+ wide.
+  if (viewport.coarsePointer && viewport.hasTouch) return false;
+  return true;
+}
+
 /** Share of dishes that carry photography (0..1). */
 export function imageCoverage(sections: LiveSection[]): number {
   const items = sections.reduce((total, section) => total + section.items.length, 0);
@@ -176,7 +293,12 @@ export function resolveLiveProfile(
     Restaurant,
     'primaryColor' | 'accentColor' | 'businessType' | 'name'
   > | null | undefined,
-  sections: LiveSection[]
+  sections: LiveSection[],
+  /**
+   * The venue's display-screen settings (شاشة العرض). Optional: omitted (or
+   * `font: 'auto'`) keeps the derived identity untouched.
+   */
+  display?: RestaurantDisplaySettings | null
 ): LiveVisualProfile {
   const tokens = buildBrandTokens(restaurant?.primaryColor, restaurant?.accentColor);
   const primary = (parseColor(tokens.primary) as Rgb) || { r: 212, g: 175, b: 55 };
@@ -257,6 +379,9 @@ export function resolveLiveProfile(
     '--lm-ken-burns': String(1 + kenBurns),
     '--lm-stagger': `${stagger}ms`,
     '--lm-scene-in': '820ms',
+    // A font picked in «شاشة العرض» overrides the derived face (and re-balances
+    // its weight/tracking); `auto` leaves the identity above in place.
+    ...displayFontVars(display?.font),
   };
 
   return { vars, displayFace, layout, perPage, kenBurns, stagger, rhythm, rationale };

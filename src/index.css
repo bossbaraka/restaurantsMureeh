@@ -1680,6 +1680,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   --lm-radius: 16px;
   --lm-radius-sm: 10px;
   --lm-title-face: 'Tajawal', 'Cairo', sans-serif;
+  --lm-body-face: 'Tajawal', 'Cairo', system-ui, sans-serif;
   --lm-title-weight: 900;
   --lm-title-tracking: -0.022em;
   --lm-eyebrow-spacing: 0.26em;
@@ -1692,7 +1693,9 @@ input[type='range'].saas-range::-moz-range-thumb {
   overflow: hidden;
   background-color: var(--lm-bg-0);
   color: var(--lm-ink);
-  font-family: 'Tajawal', 'Cairo', system-ui, sans-serif;
+  /* The running text uses the display face the venue picked in «شاشة العرض»
+     (`--lm-body-face`); the fallback is the product's own Arabic body font. */
+  font-family: var(--lm-body-face, 'Tajawal', 'Cairo', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -1733,6 +1736,31 @@ input[type='range'].saas-range::-moz-range-thumb {
   background:
     linear-gradient(to bottom, rgb(0 0 0 / 0.42), transparent 22%, transparent 62%, rgb(0 0 0 / 0.62)),
     radial-gradient(120% 90% at 50% 45%, transparent 42%, rgb(0 0 0 / 0.55) 100%);
+}
+/* ---------- Wallpaper (شاشة العرض ← خلفية صورة) --------------------------
+   The venue's own photograph behind the whole board — used INSTEAD of the
+   ambient brand field when the display screen's background is set to «صورة».
+   Dimmed and scrimmed so a busy photo can never cost the menu its legibility. */
+.display-menu__wallpaper {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.62;
+  animation: lm-fade-in 1200ms ease both;
+}
+.display-menu__wallpaper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.02);
+}
+.display-menu__wallpaper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgb(0 0 0 / 0.5), rgb(0 0 0 / 0.28) 40%, rgb(0 0 0 / 0.66)),
+    radial-gradient(120% 90% at 50% 45%, transparent 40%, rgb(0 0 0 / 0.5) 100%);
 }
 @keyframes lm-drift-a {
   from { transform: translate3d(0, 0, 0) scale(1); }
@@ -2724,6 +2752,102 @@ input[type='range'].saas-range::-moz-range-thumb {
 .display-menu__hint { margin: 0.85rem 0 0; font-size: 0.66rem; line-height: 1.7; color: var(--lm-ink-faint); }
 .display-menu__spin { animation: display-spin 0.9s linear infinite; }
 @keyframes display-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Static menu (phones & tablets) --------------------------------
+   Under 1024px (or on a coarse pointer: a tablet in landscape, an iPad) the
+   board is not a film. It is ONE still, scrolling page that carries the same
+   read-only content — so the screen reads at the guest's own pace, with the
+   photography as thumbnails and type sized for a hand-held screen. No
+   autoplay, no controls, no ordering: the rows are the film's own rows. */
+.display-menu[data-static='true'] {
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+.display-menu__static {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1rem, 4vw, 2rem);
+  min-height: 100%;
+  padding:
+    max(clamp(0.9rem, 3vw, 1.6rem), env(safe-area-inset-top))
+    clamp(0.9rem, 4vw, 2rem)
+    max(clamp(5rem, 16vw, 7rem), env(safe-area-inset-bottom));
+}
+.display-menu__header--static {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: 0.7rem;
+  margin-inline: clamp(-0.9rem, -4vw, -2rem);
+  padding-inline: clamp(0.9rem, 4vw, 2rem);
+  background-color: rgb(6 7 9 / 0.72);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--lm-hairline-soft);
+}
+.display-menu__static-body { display: flex; flex-direction: column; gap: clamp(1.25rem, 5vw, 2.25rem); }
+.display-menu__static-section {
+  padding: clamp(0.85rem, 3.5vw, 1.5rem);
+  border-radius: var(--lm-radius);
+  background-color: rgb(255 255 255 / 0.035);
+  border: 1px solid var(--lm-hairline-soft);
+}
+[data-static='true'] .display-menu__section-title { font-size: clamp(1.25rem, 5vw, 1.9rem); }
+[data-static='true'] .display-menu__dish { font-size: clamp(0.98rem, 4.2vw, 1.25rem); }
+[data-static='true'] .display-menu__price { font-size: clamp(1rem, 4.4vw, 1.3rem); }
+[data-static='true'] .display-menu__desc {
+  font-size: clamp(0.76rem, 3.4vw, 0.95rem);
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+[data-static='true'] .display-menu__dish-en { font-size: clamp(0.6rem, 2.6vw, 0.72rem); }
+[data-static='true'] .display-menu__tagline,
+[data-static='true'] .display-menu__chip,
+[data-static='true'] .display-menu__counter,
+[data-static='true'] .display-menu__section-sub,
+[data-static='true'] .display-menu__eyebrow { font-size: clamp(0.62rem, 2.6vw, 0.78rem); }
+[data-static='true'] .display-menu__note { font-size: clamp(0.62rem, 2.6vw, 0.78rem); }
+[data-static='true'] .display-menu__foot { font-size: clamp(0.62rem, 2.6vw, 0.78rem); }
+/* The sheet is anchored to the panel in the film; on the still page the
+   reservation button is simply the last thing under the menu. */
+.display-menu__note--static { margin-top: 0; text-align: center; }
+.display-menu__static-foot {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: clamp(0.75rem, 3vw, 1.25rem);
+}
+[data-static='true'] .display-menu__cta {
+  position: static;
+  animation: none;
+  font-size: clamp(0.78rem, 3.4vw, 0.95rem);
+}
+/* This page scrolls, so its background must not scroll away with the content:
+   the wallpaper and the ambient brand field are pinned to the viewport. */
+[data-static='true'] .display-menu__wallpaper,
+[data-static='true'] .display-menu__ambient { position: fixed; }
+/* A still preview: the entry animations belong to the film, not to this page. */
+[data-static='true'] .display-menu__item,
+[data-static='true'] .display-menu__static-section,
+[data-static='true'] .display-menu__wallpaper { animation: none !important; }
+.display-menu__thumb {
+  grid-row: span 2;
+  width: clamp(58px, 18vw, 104px);
+  aspect-ratio: 1 / 1;
+  border-radius: var(--lm-radius-sm);
+  border: 1px solid var(--lm-hairline-soft);
+  overflow: hidden;
+  align-self: center;
+  flex-shrink: 0;
+}
+.display-menu__thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.display-menu__item[data-thumb='true'] {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.7rem;
+}
 
 /* ---------- Small landscape screens (phone recordings) ---------- */
 @media (max-width: 900px) {

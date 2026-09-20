@@ -83,6 +83,41 @@ export interface RestaurantSocials {
   website?: string;
 }
 
+// ============================================
+// Display screen (شاشة العرض — read-only signage board)
+// ============================================
+/**
+ * What sits behind the menu on the read-only board:
+ *   theme → the venue's own brand canvas (the ambient brand field), the default;
+ *   image → a photograph the venue uploaded ("خلفية صورة").
+ * A venue that picked `image` but uploaded nothing falls back to `theme`.
+ */
+export type DisplayBackgroundMode = 'theme' | 'image';
+
+/**
+ * The display face of the board. `auto` keeps the derived identity (the
+ * `resolveLiveProfile()` choice from the venue's own colours/photography);
+ * every other key is an explicit font the venue picked in
+ * «الإعدادات ← شاشة العرض».
+ */
+export type DisplayFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
+
+/**
+ * The venue's display-screen settings — edited once in the manager's
+ * «شاشة العرض» section and applied on every screen that opens the board
+ * (`/r/{slug}?view=display`), on the TV as well as on the phone/tablet static
+ * preview. Additive and optional: absent on tenants that configured nothing
+ * and on legacy/cached payloads, where the board keeps its existing look.
+ */
+export interface RestaurantDisplaySettings {
+  backgroundMode: DisplayBackgroundMode;
+  /** Renderable URL of the backdrop photo (resolved server-side). */
+  backgroundImage?: string;
+  /** Stable storage path persisted for the backdrop (additive). */
+  backgroundStoragePath?: string;
+  font: DisplayFontKey;
+}
+
 // Restaurant / Tenant Entity
 export interface Restaurant {
   id: string;
@@ -149,6 +184,13 @@ export interface Restaurant {
    * venue has no reservation channel, so the CTA is not rendered at all.
    */
   whatsappNumber?: string;
+  /**
+   * شاشة العرض (read-only board) settings: the background source and the
+   * display face. Additive and optional: `undefined` means "nothing was
+   * configured", so the board renders exactly as it did before this setting
+   * existed (themed brand canvas + derived identity font).
+   */
+  display?: RestaurantDisplaySettings;
   planId: string;
   customDomain?: string;
   createdAt: string;
