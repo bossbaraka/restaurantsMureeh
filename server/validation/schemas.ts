@@ -1363,6 +1363,217 @@ export const onboardSchema = z
   .strict();
 
 // ============================================================
+// Central Theme Management — validation (closed, storagePath-only)
+// ============================================================
+
+export const THEME_MODES = ['light', 'dark', 'auto'] as const;
+export const BACKGROUND_TYPES = ['solid', 'gradient', 'image', 'image+overlay', 'none'] as const;
+export const BACKGROUND_SIZES = ['cover', 'contain', 'auto'] as const;
+export const THEME_FONT_KEYS = ['tajawal', 'cairo', 'amiri', 'cormorant', 'auto'] as const;
+
+const hexColorRequired = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'اللون يجب أن يكون بصيغة HEX مثل #D4AF37');
+
+const hexColorOptional = hexColorRequired.optional();
+
+const storagePathOnly = (label: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, `${label} مطلوب`)
+    .max(512, `${label} طويل جداً`)
+    .refine((v) => !v.toLowerCase().startsWith('data:'), {
+      message: `${label}: الصور المضمّنة كنص (base64) غير مسموحة`,
+    })
+    .refine(
+      (v) => v.startsWith('restaurants/') && !v.includes('..') && !v.includes('\\') && !v.includes('://') && !v.includes('//'),
+      { message: `${label} يجب أن يكون مسار تخزين صالح (restaurants/...)` }
+    );
+
+const optionalStoragePath = (label: string) =>
+  z
+    .string()
+    .trim()
+    .max(512, `${label} طويل جداً`)
+    .refine((v) => !v || !v.toLowerCase().startsWith('data:'), {
+      message: `${label}: الصور المضمّنة كنص (base64) غير مسموحة`,
+    })
+    .refine(
+      (v) => !v || (v.startsWith('restaurants/') && !v.includes('..') && !v.includes('\\') && !v.includes('://') && !v.includes('//')),
+      { message: `${label} يجب أن يكون مسار تخزين صالح (restaurants/...)` }
+    )
+    .optional();
+
+const cssGradient = z
+  .string()
+  .trim()
+  .max(1000, 'التدرج طويل جداً')
+  .refine((v) => !v || /^(linear-gradient|radial-gradient)\(.+\)$/i.test(v) || /^#[0-9a-fA-F]{3,8}$/.test(v) || v.startsWith('rgb'), {
+    message: 'التدرج يجب أن يكون تدرج CSS صالح أو لون',
+  })
+  .optional();
+
+const overlayColor = z
+  .string()
+  .trim()
+  .max(100, 'لون الطبقة طويل جداً')
+  .refine((v) => !v || /^#[0-9a-fA-F]{6}$/.test(v) || /^rgba?\(.+\)$/i.test(v) || /^hsla?\(.+\)$/i.test(v), {
+    message: 'لون الطبقة يجب أن يكون HEX أو rgba صالح',
+  })
+  .optional();
+
+const backgroundImageRefSchema = z
+  .object({
+    storagePath: storagePathOnly('مسار صورة الخلفية'),
+    aiGenerated: z.boolean().optional(),
+    source: z.enum(['upload', 'gallery', 'ai', 'preset']).optional(),
+    presetId: z.string().trim().max(120).optional(),
+  })
+  .strict();
+
+const backgroundConfigSchema = z
+  .object({
+    type: z.enum(BACKGROUND_TYPES),
+    color: hexColorOptional,
+    gradient: cssGradient,
+    image: backgroundImageRefSchema.optional(),
+    overlay: overlayColor,
+    overlayOpacity: z.number().min(0).max(1).optional(),
+    blur: z.number().min(0).max(20).optional(),
+    position: z.string().trim().max(60).optional(),
+    size: z.enum(BACKGROUND_SIZES).optional(),
+    readability: z
+      .object({
+        scrimOpacity: z.number().min(0).max(1).optional(),
+        textShadow: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (data) => {
+      if ((data.type === 'image' || data.type === 'image+overlay') && !data.image) return false;
+      if (data.type === 'solid' && !data.color) return false;
+      if (data.type === 'gradient' && !data.gradient) return false;
+      return true;
+    },
+    { message: 'إعدادات الخلفية غير مكتملة حسب النوع المحدد' }
+  );
+
+const themeColorsSchema = z
+  .object({
+    primary: hexColorRequired,
+    secondary: hexColorRequired,
+    accent: hexColorRequired,
+    background: hexColorRequired,
+    surface: hexColorRequired,
+    textPrimary: hexColorRequired,
+    textSecondary: hexColorRequired,
+    border: hexColorRequired,
+    success: hexColorRequired,
+    warning: hexColorRequired,
+    error: hexColorRequired,
+    button: z
+      .object({
+        primaryBg: hexColorOptional,
+        primaryText: hexColorOptional,
+        secondaryBg: hexColorOptional,
+        secondaryText: hexColorOptional,
+      })
+      .strict()
+      .optional(),
+    card: z
+      .object({
+        bg: hexColorOptional,
+        border: hexColorOptional,
+        shadow: z.string().trim().max(300).optional(),
+        radius: z.string().trim().max(20).optional(),
+      })
+      .strict()
+      .optional(),
+    badge: z
+      .object({
+        bg: hexColorOptional,
+        text: hexColorOptional,
+      })
+      .strict()
+      .optional(),
+    category: z
+      .object({
+        bg: hexColorOptional,
+        text: hexColorOptional,
+        activeBg: hexColorOptional,
+        activeText: hexColorOptional,
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+const themeRadiusSchema = z
+  .object({
+    sm: z.string().trim().max(20).optional(),
+    md: z.string().trim().max(20).optional(),
+    lg: z.string().trim().max(20).optional(),
+    xl: z.string().trim().max(20).optional(),
+    full: z.string().trim().max(20).optional(),
+  })
+  .strict()
+  .optional();
+
+const themeShadowsSchema = z
+  .object({
+    sm: z.string().trim().max(300).optional(),
+    md: z.string().trim().max(300).optional(),
+    lg: z.string().trim().max(300).optional(),
+  })
+  .strict()
+  .optional();
+
+const themeTypographySchema = z
+  .object({
+    fontFamily: z.enum(THEME_FONT_KEYS).optional(),
+    headingWeight: z.number().int().min(100).max(900).optional(),
+    bodyWeight: z.number().int().min(100).max(900).optional(),
+  })
+  .strict()
+  .optional();
+
+export const themeConfigSchema = z
+  .object({
+    mode: z.enum(THEME_MODES).optional(),
+    colors: themeColorsSchema.optional(),
+    radius: themeRadiusSchema,
+    shadows: themeShadowsSchema,
+    typography: themeTypographySchema,
+    background: z
+      .object({
+        light: backgroundConfigSchema.optional(),
+        dark: backgroundConfigSchema.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export const managerThemeUpsertSchema = z
+  .object({
+    restaurantId: idSchema.optional(),
+    branchId: z.union([idSchema, z.literal(''), z.null()]).optional(),
+    config: themeConfigSchema,
+  })
+  .strict();
+
+export const platformThemeUpsertSchema = z
+  .object({
+    config: themeConfigSchema,
+  })
+  .strict();
+
+// ============================================================
 // Express helpers
 // ============================================================
 

@@ -573,6 +573,8 @@ describe('GET /api/public/restaurants/:slug — transfer details (real router)',
       // Display screen settings (شاشة العرض) — two defaulted TEXT columns and
       // one nullable TEXT column on Restaurant, same additive guarantees.
       '20260920120000_add_restaurant_display_settings',
+      // Central Theme Management — Theme table with platform default partial unique index.
+      '20260920130000_add_central_theme',
     ]);
   });
 });

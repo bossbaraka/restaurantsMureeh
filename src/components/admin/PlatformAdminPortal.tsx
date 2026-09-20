@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
-import { Restaurant, Subscription, Plan, AuditLog } from '../../types/restaurant';
+import { Restaurant, Subscription, Plan, AuditLog, ThemeConfig, ThemeRow } from '../../types/restaurant';
 import { api } from '../../services/api';
 import { formatPrice, formatTime, formatRelativeMinutes, daysUntil } from '../../utils/formatting';
 import {
@@ -23,6 +23,9 @@ import {
   Gift,
   Clock,
   Ban,
+  Palette,
+  Save,
+  Loader2,
 } from 'lucide-react';
 
 export const PlatformAdminPortal: React.FC = () => {
@@ -35,7 +38,13 @@ export const PlatformAdminPortal: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'RESTAURANTS' | 'SUBSCRIPTIONS' | 'LOGS'>('RESTAURANTS');
+  const [activeTab, setActiveTab] = useState<'RESTAURANTS' | 'SUBSCRIPTIONS' | 'LOGS' | 'THEMES'>('RESTAURANTS');
+
+  // Platform theme
+  const [platformTheme, setPlatformTheme] = useState<ThemeRow | null>(null);
+  const [platformEditConfig, setPlatformEditConfig] = useState<ThemeConfig>({});
+  const [platformThemeLoading, setPlatformThemeLoading] = useState(false);
+  const [platformThemeSaving, setPlatformThemeSaving] = useState(false);
 
   const loadData = async () => {
     if (!currentUser) return;
@@ -52,6 +61,35 @@ export const PlatformAdminPortal: React.FC = () => {
   useEffect(() => {
     loadData();
   }, [currentUser]);
+
+  const loadPlatformTheme = async () => {
+    setPlatformThemeLoading(true);
+    try {
+      const res = await api.getPlatformTheme();
+      if (res.success && res.data) {
+        setPlatformTheme(res.data.theme);
+        setPlatformEditConfig(res.data.effective || res.data.theme?.config || {});
+      }
+    } catch {}
+    finally { setPlatformThemeLoading(false); }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'THEMES') loadPlatformTheme();
+  }, [activeTab]);
+
+  const handleSavePlatformTheme = async () => {
+    setPlatformThemeSaving(true);
+    try {
+      const res = await api.upsertPlatformTheme(platformEditConfig);
+      if (!res.success) {
+        showToast('error', 'تعذر حفظ ثيم المنصة', (res as any).error);
+        return;
+      }
+      setPlatformTheme(res.data.theme);
+      showToast('success', 'تم حفظ ثيم المنصة الافتراضي', 'سيورث لجميع المطاعم التي لم تحدد ثيماً خاصاً');
+    } finally { setPlatformThemeSaving(false); }
+  };
 
   const handleToggleStatus = async (restaurantId: string, currentStatus: Restaurant['status']) => {
     if (!currentUser) return;
@@ -198,10 +236,11 @@ export const PlatformAdminPortal: React.FC = () => {
       </div>
 
       {/* Tabs Navigator */}
-      <div className="flex items-center gap-2 border-b border-luxury-800 pb-2">
+      <div className="flex items-center gap-2 border-b border-luxury-800 pb-2 flex-wrap">
         {[
           { id: 'RESTAURANTS', label: `المطاعم المشتركة (${restaurants.length})` },
           { id: 'SUBSCRIPTIONS', label: 'باقات الاشتراكات والأسعار' },
+          { id: 'THEMES', label: 'ثيم المنصة الافتراضي' },
           { id: 'LOGS', label: `سجلات التدقيق الأمني (${auditLogs.length})` },
         ].map((tab) => (
           <button
@@ -404,7 +443,59 @@ export const PlatformAdminPortal: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: AUDIT LOGS */}
+      {/* TAB 3: PLATFORM THEME */}
+      {activeTab === 'THEMES' && (
+        <div className="space-y-4">
+          <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-luxury-100 flex items-center gap-2"><Palette className="w-4 h-4 text-gold-400" /> ثيم المنصة الافتراضي — يورث لجميع المطاعم</h3>
+              <button onClick={handleSavePlatformTheme} disabled={platformThemeSaving || platformThemeLoading} className="px-4 py-2 rounded-xl bg-gold-500 text-luxury-950 font-bold text-xs flex items-center gap-1.5 disabled:opacity-60">
+                {platformThemeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} حفظ الثيم الافتراضي
+              </button>
+            </div>
+
+            {platformThemeLoading ? <div className="text-xs text-luxury-400 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> جاري تحميل ثيم المنصة...</div> : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { key: 'primary', label: 'أساسي' },
+                    { key: 'secondary', label: 'ثانوي' },
+                    { key: 'accent', label: 'مميز' },
+                    { key: 'background', label: 'خلفية' },
+                    { key: 'surface', label: 'سطح' },
+                    { key: 'textPrimary', label: 'نص أساسي' },
+                    { key: 'textSecondary', label: 'نص ثانوي' },
+                    { key: 'border', label: 'حدود' },
+                  ].map((c) => {
+                    const val = (platformEditConfig.colors as any)?.[c.key] || '#0A0B0D';
+                    return (
+                      <div key={c.key} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2.5 space-y-1.5">
+                        <span className="text-[11px] text-luxury-300 font-bold">{c.label}</span>
+                        <div className="flex items-center gap-2">
+                          <input type="color" value={val.startsWith('#') ? val : '#0A0B0D'} onChange={(e) => setPlatformEditConfig((p) => ({ ...p, colors: { ...(p.colors as any), [c.key]: e.target.value } as any }))} className="w-8 h-8 rounded bg-transparent border-0" />
+                          <span className="font-mono text-[10px] text-luxury-400" dir="ltr">{val}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+
+                <div className="pt-4 border-t border-luxury-800">
+                  <span className="text-xs font-bold text-luxury-200">وضع الثيم الافتراضي</span>
+                  <div className="flex gap-2 mt-2">
+                    {['light', 'dark', 'auto'].map((m) => (
+                      <button key={m} onClick={() => setPlatformEditConfig((p) => ({ ...p, mode: m as any }))} className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${platformEditConfig.mode === m ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>{m}</button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: AUDIT LOGS */}
       {activeTab === 'LOGS' && (
         <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 shadow-luxury space-y-3">
           <h3 className="text-sm font-bold text-luxury-100 flex items-center gap-2">

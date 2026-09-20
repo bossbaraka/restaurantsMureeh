@@ -1,7 +1,7 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { CartItem, Product } from '../../types/restaurant';
-import { useBrandTheme } from '../../theme/brandTheme';
+import { useBrandTheme, useEffectiveTheme } from '../../theme/brandTheme';
 import { useMenuPreferences } from '../../hooks/useMenuPreferences';
 import { CustomerHeader } from './CustomerHeader';
 import { CustomerHero } from './CustomerHero';
@@ -130,7 +130,10 @@ export const CustomerLayout: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Tenant palette -> CSS custom properties consumed by the whole menu.
+  // Legacy brand tokens for backward compat
   useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
+  // Central effective theme (Platform→Restaurant→Branch) — applies full vars including background
+  useEffectiveTheme(currentRestaurant?.theme);
 
   const [preferences, updatePreferences] = useMenuPreferences(currentRestaurant?.slug || 'default');
   const { sort, layout, availableOnly } = preferences;
@@ -382,11 +385,59 @@ export const CustomerLayout: React.FC = () => {
     );
   }
 
+  const theme = currentRestaurant?.theme;
+  const bg = theme?.background
+    ? (theme.mode === 'dark' || (theme.mode === 'auto' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ? theme.background.dark
+        : theme.background.light)
+    : null;
+
   return (
     <div
-      className={`customer-shell ${menuReveal ? 'customer-shell--reveal' : ''} min-h-screen bg-[#0A0B0D] text-luxury-50 flex flex-col pb-24 touch-manipulation`}
+      className={`customer-shell ${menuReveal ? 'customer-shell--reveal' : ''} min-h-screen text-luxury-50 flex flex-col pb-24 touch-manipulation relative`}
       dir="rtl"
+      style={{
+        backgroundColor: theme?.colors.background || '#0A0B0D',
+        color: theme?.colors.textPrimary || undefined,
+        fontFamily: 'var(--font-family)',
+      }}
     >
+      {/* Central Theme Background Layer — professional menu background */}
+      {bg && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+          style={{
+            backgroundColor: bg.type === 'solid' ? bg.color || theme?.colors.background : undefined,
+            backgroundImage:
+              bg.type === 'gradient'
+                ? bg.gradient || undefined
+                : bg.type === 'image' && bg.url
+                  ? `url("${bg.url}")`
+                  : bg.type === 'image+overlay' && bg.url
+                    ? `${bg.overlayColor ? `linear-gradient(${bg.overlayColor}, ${bg.overlayColor}), ` : ''}url("${bg.url}")`
+                    : undefined,
+            backgroundPosition: bg.position || 'center',
+            backgroundSize: bg.size || 'cover',
+            backgroundRepeat: 'no-repeat',
+            filter: bg.blur ? `blur(${bg.blur}px)` : undefined,
+            opacity: bg.type === 'image+overlay' ? bg.overlayOpacity ?? 0.85 : 1,
+          }}
+        >
+          {/* Readability boost overlay */}
+          {bg.readabilityBoost && (
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  theme?.mode === 'light' || theme?.colors.background === '#FFFFFF'
+                    ? 'rgba(255,255,255,0.65)'
+                    : 'rgba(0,0,0,0.55)',
+              }}
+            />
+          )}
+        </div>
+      )}
       {/* Entry experience shown right after a QR scan. Dismissing it hands the
           guest straight to the menu below, unchanged. */}
       {showWelcome && <RestaurantEntryExperience onEnter={handleDismissWelcome} />}
@@ -495,43 +546,20 @@ export const CustomerLayout: React.FC = () => {
         <CustomerSocialSection />
       </main>
 
-      {/* Customer Footer */}
-      <footer className="mt-16 border-t border-luxury-850 py-8 px-4 text-center text-xs text-luxury-500 bg-luxury-950">
+      {/* Customer Footer — White-label: only venue identity */}
+      <footer
+        className="mt-16 border-t py-8 px-4 text-center text-xs bg-transparent"
+        style={{
+          borderColor: theme?.colors.border || 'rgba(255,255,255,0.08)',
+          color: theme?.colors.textSecondary || undefined,
+        }}
+      >
         <div className="max-w-md mx-auto space-y-3">
-          <div className="font-serif text-sm font-bold brand-text tracking-widest uppercase">
-            {currentRestaurant?.name} · {currentRestaurant?.nameEn}
+          <div className="font-serif text-sm font-bold tracking-widest uppercase" style={{ color: theme?.colors.textPrimary }}>
+            {currentRestaurant?.name} {currentRestaurant?.nameEn ? `· ${currentRestaurant?.nameEn}` : ''}
           </div>
-          <p className="text-[11px] text-luxury-400">
+          <p className="text-[11px]" style={{ color: theme?.colors.textSecondary }}>
             جميع الأسعار تشمل ضريبة القيمة المضافة · المحاسبة عند الكاشير
-          </p>
-
-          {/* Platform Branding & WhatsApp Support */}
-          <div className="pt-3 border-t border-luxury-850/80 space-y-2">
-            <p className="text-xs font-semibold text-luxury-300">
-              الخدمة تعمل بوساطة <strong className="text-[#38BDF8]">منصة مريح MUREEH</strong>
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
-              <button
-                onClick={() => setViewMode('SAAS_LANDING')}
-                className="text-[11px] text-[#38BDF8]/90 hover:text-[#38BDF8] hover:underline font-semibold transition-colors cursor-pointer"
-                title="التعرف على خدمات المنصة واشتراكات المطاعم"
-              >
-                هل تملك مطعماً؟ احصل على نظام مريح الذكي ⚡
-              </button>
-              <a
-                href="https://t.me/Mureeh_tech_bot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0072BC]/20 border border-[#0072BC]/40 text-[#38BDF8] text-[11px] font-bold hover:bg-[#0072BC]/30 transition-colors"
-              >
-                <span>تليجرام الدعم الفني:</span>
-                <span className="font-mono text-[#38BDF8] font-bold direction-ltr">@Mureeh_tech_bot</span>
-              </a>
-            </div>
-          </div>
-
-          <p className="text-[10px] text-luxury-600">
-            MUREEH Digital Dining & Smart Hospitality Platform © 2026
           </p>
         </div>
       </footer>
