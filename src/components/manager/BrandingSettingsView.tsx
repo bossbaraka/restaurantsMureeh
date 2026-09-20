@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api, isEmbeddedImage } from '../../services/api';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { applyBrandTheme, getCachedBrandTheme, buildEffectiveThemeVars, backgroundToCssVars } from '../../theme/brandTheme';
+import { applyBrandTheme, getCachedBrandTheme, buildEffectiveThemeVars, backgroundToCssVars, parseColor, rgbToHex } from '../../theme/brandTheme';
 import {
   AlertTriangle,
   Palette,
@@ -133,6 +133,343 @@ const DEFAULT_THEME_FALLBACK: ThemeConfig = {
     dark: { type: 'solid', color: '#0A0B0D', readabilityBoost: false },
   },
 };
+
+// ============================================================
+// Theme save adapter — UI Theme Model → Server Theme Contract
+// ============================================================
+// The manager UI edits the CLIENT theme shape: top-level `buttons/cards/
+// badges/categories`, `background.overlayColor`, `background.readabilityBoost`,
+// string font weights and two extra display faces (inter/poppins). The server's
+// `PUT /manager/theme` validates with the STRICT `themeConfigSchema`: style
+// groups live inside `colors.button/card/badge/category`, backgrounds use
+// `overlay` + `readability`, weights are numeric, and only five fonts exist.
+// `toServerThemePayload` below is the SINGLE explicit conversion point between
+// the two models. It whitelists every key it emits, so the strict schema never
+// sees an unknown key, and every conversion is spelled out field-by-field —
+// no blind spreading of the UI object into the request.
+
+type ServerThemeFontKey = 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'auto';
+type ServerBackgroundType = 'solid' | 'gradient' | 'image' | 'image+overlay' | 'none';
+type ServerBackgroundSize = 'cover' | 'contain' | 'auto';
+
+interface ServerThemeButtonColors {
+  primaryBg?: string;
+  primaryText?: string;
+  secondaryBg?: string;
+  secondaryText?: string;
+}
+
+interface ServerThemeCardColors {
+  bg?: string;
+  border?: string;
+  shadow?: string;
+  radius?: string;
+}
+
+interface ServerThemeBadgeColors {
+  bg?: string;
+  text?: string;
+}
+
+interface ServerThemeCategoryColors {
+  bg?: string;
+  text?: string;
+  activeBg?: string;
+  activeText?: string;
+}
+
+interface ServerThemeColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  textPrimary: string;
+  textSecondary: string;
+  border: string;
+  success: string;
+  warning: string;
+  error: string;
+  button?: ServerThemeButtonColors;
+  card?: ServerThemeCardColors;
+  badge?: ServerThemeBadgeColors;
+  category?: ServerThemeCategoryColors;
+}
+
+interface ServerBackgroundPayload {
+  type: ServerBackgroundType;
+  color?: string;
+  gradient?: string;
+  image?: { storagePath: string; aiGenerated?: boolean };
+  overlay?: string;
+  overlayOpacity?: number;
+  blur?: number;
+  position?: string;
+  size?: ServerBackgroundSize;
+  readability?: { scrimOpacity?: number; textShadow?: boolean };
+}
+
+interface ServerThemePayload {
+  mode?: ThemeMode;
+  colors: ServerThemeColors;
+  radius?: Partial<Record<'sm' | 'md' | 'lg' | 'xl' | 'full', string>>;
+  shadows?: Partial<Record<'sm' | 'md' | 'lg', string>>;
+  typography?: {
+    fontFamily?: ServerThemeFontKey;
+    headingWeight?: number;
+    bodyWeight?: number;
+  };
+  background?: {
+    light?: ServerBackgroundPayload;
+    dark?: ServerBackgroundPayload;
+  };
+}
+
+const SERVER_THEME_FONT_KEYS: readonly ServerThemeFontKey[] = ['tajawal', 'cairo', 'amiri', 'cormorant', 'auto'];
+const SERVER_BACKGROUND_TYPES: readonly ServerBackgroundType[] = ['solid', 'gradient', 'image', 'image+overlay', 'none'];
+const SERVER_BACKGROUND_SIZES: readonly ServerBackgroundSize[] = ['cover', 'contain', 'auto'];
+// Mirrors the server's `overlayColor` validation (HEX, rgb()/rgba(), hsl()/hsla()).
+const SERVER_OVERLAY_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$|^rgba?\(.+\)$|^hsla?\(.+\)$/i;
+// Scrim used when the UI's `readabilityBoost` checkbox is converted to the
+// server's `readability` object — matches the dark scrim CustomerLayout paints.
+const THEME_READABILITY_SCRIM_OPACITY = 0.55;
+const THEME_MAX_RADIUS_LENGTH = 20;
+const THEME_MAX_SHADOW_LENGTH = 300;
+const THEME_MAX_POSITION_LENGTH = 60;
+const THEME_MAX_GRADIENT_LENGTH = 1000;
+const THEME_MAX_STORAGE_PATH_LENGTH = 512;
+
+/** Any parseable color (hex / rgb / rgba) → canonical `#RRGGBB`; otherwise the fallback. */
+function normalizeThemeHexColor(value: unknown, fallback: string): string {
+  const parsed = typeof value === 'string' ? parseColor(value) : null;
+  return parsed ? rgbToHex(parsed) : fallback;
+}
+
+/** String/number font weight → integer clamped to the server's 100–900 range; invalid → omitted. */
+function normalizeThemeFontWeight(value: unknown): number | undefined {
+  const numeric =
+    typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value.trim()) : NaN;
+  if (!Number.isFinite(numeric)) return undefined;
+  return Math.min(900, Math.max(100, Math.round(numeric)));
+}
+
+/** Mirrors the server's tenant storage-path shape check (`restaurants/...`, no traversal/URLs). */
+function isTenantThemeStoragePath(value: string): boolean {
+  return (
+    value.length <= THEME_MAX_STORAGE_PATH_LENGTH &&
+    value.startsWith('restaurants/') &&
+    !value.includes('..') &&
+    !value.includes('\\') &&
+    !value.includes('://') &&
+    !value.includes('//')
+  );
+}
+
+/**
+ * `buttons → colors.button`. The server group holds explicit fill/text COLORS;
+ * the UI's buttons model only carries shape properties (`variant`, `radius`),
+ * which have no place in the strict server contract — so nothing is emitted
+ * for them today. Stated explicitly instead of spreading the UI object.
+ */
+function buttonsStyleToServerColors(buttons: ThemeConfig['buttons']): ServerThemeButtonColors | undefined {
+  if (!buttons) return undefined;
+  const out: ServerThemeButtonColors = {};
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * `cards → colors.card`. Mappable today: `radius` (string) and `shadow`
+ * (string). The UI's boolean `border` flag has no server counterpart
+ * (`colors.card.border` is a color string), so it is not sent.
+ */
+function cardsStyleToServerColors(cards: ThemeConfig['cards']): ServerThemeCardColors | undefined {
+  if (!cards) return undefined;
+  const out: ServerThemeCardColors = {};
+  if (typeof cards.radius === 'string') {
+    const radius = cards.radius.trim();
+    if (radius && radius.length <= THEME_MAX_RADIUS_LENGTH) out.radius = radius;
+  }
+  if (typeof cards.shadow === 'string') {
+    const shadow = cards.shadow.trim();
+    if (shadow && shadow.length <= THEME_MAX_SHADOW_LENGTH) out.shadow = shadow;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * `badges → colors.badge`. The server group holds bg/text colors; the UI's
+ * badges model only carries `variant`/`radius` shape properties with no server
+ * counterpart — nothing is emitted today (see `buttonsStyleToServerColors`).
+ */
+function badgesStyleToServerColors(badges: ThemeConfig['badges']): ServerThemeBadgeColors | undefined {
+  if (!badges) return undefined;
+  const out: ServerThemeBadgeColors = {};
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * `categories → colors.category`. The server group holds bg/text colors; the
+ * UI's categories model only carries a `variant` shape property with no server
+ * counterpart — nothing is emitted today (see `buttonsStyleToServerColors`).
+ */
+function categoriesStyleToServerColors(categories: ThemeConfig['categories']): ServerThemeCategoryColors | undefined {
+  if (!categories) return undefined;
+  const out: ServerThemeCategoryColors = {};
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** One background variant (light/dark): UI field names → server field names. */
+function backgroundConfigToServer(ui: BackgroundConfig | undefined): ServerBackgroundPayload | undefined {
+  if (!ui) return undefined;
+  const type = SERVER_BACKGROUND_TYPES.includes(ui.type as ServerBackgroundType)
+    ? (ui.type as ServerBackgroundType)
+    : undefined;
+  if (!type) return undefined;
+
+  const out: ServerBackgroundPayload = { type };
+
+  // color — hex-normalized; dropped when not a real color (never sent raw).
+  if (typeof ui.color === 'string' && ui.color.trim()) {
+    const parsed = parseColor(ui.color);
+    if (parsed) out.color = rgbToHex(parsed);
+  }
+
+  // gradient — free-form CSS, passed through bounded (server keeps final validation).
+  if (typeof ui.gradient === 'string') {
+    const gradient = ui.gradient.trim();
+    if (gradient && gradient.length <= THEME_MAX_GRADIENT_LENGTH) out.gradient = gradient;
+  }
+
+  // image — only a valid tenant-scoped storage path is sent.
+  if (ui.image && typeof ui.image.storagePath === 'string' && isTenantThemeStoragePath(ui.image.storagePath)) {
+    out.image = { storagePath: ui.image.storagePath };
+    if (typeof ui.image.aiGenerated === 'boolean') out.image.aiGenerated = ui.image.aiGenerated;
+  }
+
+  // overlayColor → overlay (name differs between the two contracts).
+  if (typeof ui.overlayColor === 'string') {
+    const overlay = ui.overlayColor.trim();
+    if (overlay && SERVER_OVERLAY_COLOR_PATTERN.test(overlay)) out.overlay = overlay;
+  }
+
+  if (typeof ui.overlayOpacity === 'number' && Number.isFinite(ui.overlayOpacity)) {
+    out.overlayOpacity = Math.min(1, Math.max(0, ui.overlayOpacity));
+  }
+
+  if (typeof ui.blur === 'number' && Number.isFinite(ui.blur)) {
+    out.blur = Math.min(20, Math.max(0, ui.blur));
+  }
+
+  if (typeof ui.position === 'string') {
+    const position = ui.position.trim();
+    if (position && position.length <= THEME_MAX_POSITION_LENGTH) out.position = position;
+  }
+
+  if (SERVER_BACKGROUND_SIZES.includes(ui.size as ServerBackgroundSize)) {
+    out.size = ui.size as ServerBackgroundSize;
+  }
+
+  // readabilityBoost → readability (server object shape). Reverse mapping in
+  // mapEffectiveTheme treats a truthy scrimOpacity as the checked box.
+  if (ui.readabilityBoost === true) {
+    out.readability = { scrimOpacity: THEME_READABILITY_SCRIM_OPACITY };
+  }
+
+  return out;
+}
+
+/**
+ * Convert the UI's edited ThemeConfig into the exact server contract accepted
+ * by `PUT /manager/theme`. Legacy `primaryColor`/`accentColor` remain the
+ * fallback for primary/accent exactly as the previous inline merge did.
+ */
+export function toServerThemePayload(
+  ui: ThemeConfig,
+  legacy: { primaryColor: string; accentColor: string }
+): ServerThemePayload {
+  const fallbackColors = DEFAULT_THEME_FALLBACK.colors!;
+  const uiColors: Partial<NonNullable<ThemeConfig['colors']>> = ui.colors || {};
+
+  const colors: ServerThemeColors = {
+    primary: normalizeThemeHexColor(uiColors.primary, normalizeThemeHexColor(legacy.primaryColor, fallbackColors.primary)),
+    secondary: normalizeThemeHexColor(uiColors.secondary, fallbackColors.secondary),
+    accent: normalizeThemeHexColor(uiColors.accent, normalizeThemeHexColor(legacy.accentColor, fallbackColors.accent)),
+    background: normalizeThemeHexColor(uiColors.background, fallbackColors.background),
+    surface: normalizeThemeHexColor(uiColors.surface, fallbackColors.surface),
+    textPrimary: normalizeThemeHexColor(uiColors.textPrimary, fallbackColors.textPrimary),
+    textSecondary: normalizeThemeHexColor(uiColors.textSecondary, fallbackColors.textSecondary),
+    border: normalizeThemeHexColor(uiColors.border, fallbackColors.border),
+    success: normalizeThemeHexColor(uiColors.success, fallbackColors.success),
+    warning: normalizeThemeHexColor(uiColors.warning, fallbackColors.warning),
+    error: normalizeThemeHexColor(uiColors.error, fallbackColors.error),
+  };
+
+  const button = buttonsStyleToServerColors(ui.buttons);
+  if (button) colors.button = button;
+  const card = cardsStyleToServerColors(ui.cards);
+  if (card) colors.card = card;
+  const badge = badgesStyleToServerColors(ui.badges);
+  if (badge) colors.badge = badge;
+  const category = categoriesStyleToServerColors(ui.categories);
+  if (category) colors.category = category;
+
+  const payload: ServerThemePayload = { colors };
+
+  if (ui.mode === 'light' || ui.mode === 'dark' || ui.mode === 'auto') {
+    payload.mode = ui.mode;
+  }
+
+  const RADIUS_KEYS = ['sm', 'md', 'lg', 'xl', 'full'] as const;
+  if (ui.radius) {
+    const radius: NonNullable<ServerThemePayload['radius']> = {};
+    for (const key of RADIUS_KEYS) {
+      const value = (ui.radius as unknown as Record<string, unknown>)[key];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed && trimmed.length <= THEME_MAX_RADIUS_LENGTH) radius[key] = trimmed;
+      }
+    }
+    if (Object.keys(radius).length > 0) payload.radius = radius;
+  }
+
+  const SHADOW_KEYS = ['sm', 'md', 'lg'] as const;
+  if (ui.shadows) {
+    const shadows: NonNullable<ServerThemePayload['shadows']> = {};
+    for (const key of SHADOW_KEYS) {
+      const value = (ui.shadows as unknown as Record<string, unknown>)[key];
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed && trimmed.length <= THEME_MAX_SHADOW_LENGTH) shadows[key] = trimmed;
+      }
+    }
+    if (Object.keys(shadows).length > 0) payload.shadows = shadows;
+  }
+
+  if (ui.typography) {
+    const typography: NonNullable<ServerThemePayload['typography']> = {};
+    // Unsupported faces (the UI picker also offers inter/poppins) are never
+    // sent — they are not part of the server contract.
+    if (SERVER_THEME_FONT_KEYS.includes(ui.typography.fontFamily as ServerThemeFontKey)) {
+      typography.fontFamily = ui.typography.fontFamily as ServerThemeFontKey;
+    }
+    const headingWeight = normalizeThemeFontWeight(ui.typography.headingWeight);
+    if (headingWeight !== undefined) typography.headingWeight = headingWeight;
+    const bodyWeight = normalizeThemeFontWeight(ui.typography.bodyWeight);
+    if (bodyWeight !== undefined) typography.bodyWeight = bodyWeight;
+    if (Object.keys(typography).length > 0) payload.typography = typography;
+  }
+
+  const light = backgroundConfigToServer(ui.background?.light);
+  const dark = backgroundConfigToServer(ui.background?.dark);
+  if (light || dark) {
+    payload.background = {
+      ...(light ? { light } : {}),
+      ...(dark ? { dark } : {}),
+    };
+  }
+
+  return payload;
+}
 
 export const BrandingSettingsView: React.FC = () => {
   const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast, branches } = useRestaurant();
@@ -430,17 +767,20 @@ export const BrandingSettingsView: React.FC = () => {
     if (!currentRestaurant) return;
     setThemeSaving(true);
     try {
-      // Merge legacy primary/accent into colors for backward compat
-      const merged: ThemeConfig = {
-        ...editConfig,
-        colors: {
-          ...(editConfig.colors || DEFAULT_THEME_FALLBACK.colors!),
-          primary: editConfig.colors?.primary || primaryColor,
-          secondary: editConfig.colors?.secondary || DEFAULT_THEME_FALLBACK.colors!.secondary,
-          accent: editConfig.colors?.accent || accentColor,
-        },
-      };
-      const res = await api.upsertTheme(currentRestaurant.id, merged, selectedBranchId);
+      // Explicit UI → server-contract normalization (single choke point):
+      // whitelists every emitted key, maps overlayColor→overlay,
+      // readabilityBoost→readability, style groups→colors.button/card/…,
+      // string weights→numbers, and keeps legacy primary/accent as the
+      // primary/accent fallback exactly like the previous inline merge.
+      const serverConfig = toServerThemePayload(editConfig, { primaryColor, accentColor });
+      const res = await api.upsertTheme(
+        currentRestaurant.id,
+        // The client ThemeConfig type predates the server's nested style
+        // groups; the adapter output above follows the server contract and is
+        // validated by themeConfigSchema on PUT /manager/theme.
+        serverConfig as unknown as ThemeConfig,
+        selectedBranchId
+      );
       if (!res.success || !res.data) {
         showToast('error', 'تعذر حفظ الثيم', (res as any).error || 'حاول مجدداً');
         return;

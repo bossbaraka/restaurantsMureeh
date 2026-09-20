@@ -388,6 +388,28 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
       }
     }
 
+    // QR entry: the guest scanned a table's QR and the catalog request already
+    // carries that token (?qrToken=). The token is an opaque capability that
+    // maps server-side to exactly ONE table, so the branch context is DERIVED
+    // from the scanned table — never guest-supplied. Same tenant check as the
+    // tableId hint above: a token belonging to another venue's table resolves
+    // nothing here, and the theme resolver re-validates branch ownership as
+    // defence in depth.
+    const qrTokenHint = (req.query.qrToken as string) || null;
+    if (!themeBranchId && qrTokenHint) {
+      try {
+        const qrTable = await prisma.table.findUnique({
+          where: { qrToken: qrTokenHint },
+          select: { branchId: true, restaurantId: true },
+        });
+        if (qrTable && qrTable.restaurantId === restaurant.id) {
+          themeBranchId = qrTable.branchId || null;
+        }
+      } catch {
+        // Best-effort: ignore branch resolution failure, fall back to restaurant theme
+      }
+    }
+
     let effectiveTheme: Awaited<ReturnType<typeof resolveEffectiveTheme>> | null = null;
     let publicTheme: any = null;
     try {

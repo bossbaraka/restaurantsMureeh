@@ -1,7 +1,7 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { CartItem, Product } from '../../types/restaurant';
-import { useBrandTheme, useEffectiveTheme } from '../../theme/brandTheme';
+import { useEffectiveTheme } from '../../theme/brandTheme';
 import { useMenuPreferences } from '../../hooks/useMenuPreferences';
 import { CustomerHeader } from './CustomerHeader';
 import { CustomerHero } from './CustomerHero';
@@ -130,9 +130,12 @@ export const CustomerLayout: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   // Tenant palette -> CSS custom properties consumed by the whole menu.
-  // Legacy brand tokens for backward compat
-  useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
-  // Central effective theme (Platform→Restaurant→Branch) — applies full vars including background
+  // Single --brand-* writer in this path: useEffectiveTheme applies the brand
+  // tokens itself (from theme.colors.primary/accent) alongside the full
+  // --theme-*/--radius-*/--shadow-*/--bg-* set. A second useBrandTheme call
+  // here used to write the same variables from the legacy columns, racing the
+  // effective theme. When no theme is loaded yet (entry window), the
+  // app-level useBrandTheme + context sync effect cover the legacy fallback.
   useEffectiveTheme(currentRestaurant?.theme);
 
   const [preferences, updatePreferences] = useMenuPreferences(currentRestaurant?.slug || 'default');
