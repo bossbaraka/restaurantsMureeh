@@ -89,7 +89,10 @@ export const BranchManagementView: React.FC = () => {
     setPendingSave(true);
     const existing = editing || creating ? (editing ? editing : null) : null;
     const branch: Branch = existing
-      ? { ...existing, name: name.trim(), address: address.trim() || undefined, phone: phone.trim() || undefined, color }
+      ? // Edit: '' travels as an EXPLICIT clear (the route writes NULL) and an
+        // omitted key would mean «unchanged», so the trimmed value is sent as
+        // is — emptying the address/phone must actually clear it.
+        { ...existing, name: name.trim(), address: address.trim(), phone: phone.trim(), color }
       : {
           id: `branch-${Date.now()}`,
           restaurantId: tenantId,
@@ -100,7 +103,11 @@ export const BranchManagementView: React.FC = () => {
           isActive: true,
           createdAt: new Date().toISOString(),
         };
-    const res = await api.saveBranch(currentUser, tenantId, branch);
+    // Create → POST, edit → PUT on the SAME branch row. Posting an edit went
+    // to POST /manager/branches and silently created a duplicate branch.
+    const res = existing
+      ? await api.updateBranch(tenantId, branch)
+      : await api.saveBranch(currentUser, tenantId, branch);
     setPendingSave(false);
     if (res.success) {
       refreshTenantData();

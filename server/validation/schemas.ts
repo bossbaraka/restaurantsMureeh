@@ -500,6 +500,11 @@ export const categoryUpdateSchema = z
 
 const sizeInputSchema = z
   .object({
+    // The manager form round-trips the row's own id (`size-…` for a size the
+    // user just added, the ProductOption id for one loaded from the API).
+    // DECLARED and IGNORED — the server always mints the child row's id, so
+    // this key can neither address nor overwrite another product's row.
+    id: z.unknown().optional(),
     name: safeName('اسم الحجم', 80),
     nameEn: optionalText(80),
     price: moneySchema.optional(),
@@ -510,9 +515,14 @@ const sizeInputSchema = z
 
 const addOnInputSchema = z
   .object({
+    // Same contract as `sizeInputSchema.id` (accepted, never trusted).
+    id: z.unknown().optional(),
     name: safeName('اسم الإضافة', 80),
     nameEn: optionalText(80),
     price: moneySchema.optional(),
+    // Availability is a display state of the manager form; every add-on is
+    // created available (the route sets it), so the flag is IGNORED.
+    isAvailable: z.boolean().optional(),
   })
   .strict();
 
@@ -562,6 +572,19 @@ export const productUpdateSchema = z
     calories: z.number().int().min(0).max(20000).optional(),
     isAvailable: z.boolean().optional(),
     isFeatured: z.boolean().optional(),
+    // Dish customizations. The manager form submits the SAME body for create
+    // and update (`api.saveProduct`), so these five keys must be declared here
+    // too — without them `.strict()` 400s every edit with
+    // «Unrecognized keys: sizes, addOns, …». Absent = unchanged; present (even
+    // empty) = the form's full list, which the route writes as a replacement.
+    allergens: z.array(z.string().trim().max(60)).max(50).optional(),
+    ingredients: z.array(z.string().trim().max(80)).max(100).optional(),
+    removableIngredients: z
+      .array(z.string().trim().max(80))
+      .max(100)
+      .optional(),
+    sizes: z.array(sizeInputSchema).max(30).optional(),
+    addOns: z.array(addOnInputSchema).max(50).optional(),
   })
   .strict();
 

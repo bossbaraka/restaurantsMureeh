@@ -2016,7 +2016,18 @@ router.put(
         calories?: number;
         isAvailable?: boolean;
         isFeatured?: boolean;
+        allergens?: string[];
+        ingredients?: string[];
+        removableIngredients?: string[];
+        sizes?: Array<{ name: string; nameEn?: string; price?: number; priceModifier?: number }>;
+        addOns?: Array<{ name: string; nameEn?: string; price?: number }>;
       };
+
+      // Sizes / add-ons are FULL-LIST replacements: the manager form always
+      // submits the complete list, so a present key (even `[]`) replaces the
+      // children while an absent key leaves them untouched.
+      const sizes = Array.isArray(data.sizes) ? data.sizes : undefined;
+      const addOns = Array.isArray(data.addOns) ? data.addOns : undefined;
 
       const existingProduct = await prisma.product.findUnique({ where: { id } });
       if (!existingProduct) return res.status(404).json({ success: false, error: 'الطبق غير موجود', statusCode: 404 });
@@ -2062,7 +2073,42 @@ router.put(
           badge: data.badge !== undefined ? data.badge : undefined,
           preparationTimeMinutes: data.preparationTimeMinutes !== undefined ? data.preparationTimeMinutes : undefined,
           calories: data.calories !== undefined ? data.calories : undefined,
+          allergens: data.allergens !== undefined ? data.allergens : undefined,
+          ingredients: data.ingredients !== undefined ? data.ingredients : undefined,
+          // Same fallback as create: a client that only sends `ingredients`
+          // (the manager form does) still gets its removable ingredients.
+          removableIngredients:
+            data.removableIngredients !== undefined
+              ? data.removableIngredients
+              : data.ingredients !== undefined
+                ? data.ingredients
+                : undefined,
+          options: sizes
+            ? {
+                deleteMany: {},
+                create: sizes.map((s) => ({
+                  name: s.name,
+                  nameEn: s.nameEn || undefined,
+                  priceModifier: s.priceModifier ?? s.price ?? 0,
+                  price: s.price ?? s.priceModifier ?? 0,
+                })),
+              }
+            : undefined,
+          addOns: addOns
+            ? {
+                deleteMany: {},
+                create: addOns.map((a) => ({
+                  name: a.name,
+                  nameEn: a.nameEn || undefined,
+                  price: a.price ?? 0,
+                  isAvailable: true,
+                })),
+              }
+            : undefined,
         },
+        // Same children as create/GET so the caller gets the saved sizes and
+        // add-ons back (and `mapProductRow` never blanks them).
+        include: { options: true, addOns: true },
       });
 
       // Best-effort cleanup of a replaced dish image — AFTER the DB commit.
@@ -3700,8 +3746,12 @@ router.put(
         where: { id },
         data: {
           name: b.name !== undefined ? b.name : undefined,
-          address: b.address !== undefined ? b.address : undefined,
-          phone: b.phone !== undefined ? b.phone : undefined,
+          // Same contract as the branding/transfer settings: field omitted →
+          // UNCHANGED, '' → EXPLICIT clear (NULL). Without this, emptying the
+          // address/phone in the branch form (which then sends '') would leave
+          // the old value in place.
+          address: b.address !== undefined ? b.address || null : undefined,
+          phone: b.phone !== undefined ? b.phone || null : undefined,
           color: b.color !== undefined ? b.color : undefined,
           isActive: b.isActive !== undefined ? b.isActive : undefined,
         },
