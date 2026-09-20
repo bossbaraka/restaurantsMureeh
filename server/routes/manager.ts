@@ -110,7 +110,15 @@ import {
   paymentConfirmSchema,
   paymentRejectSchema,
   paymentVoidSchema,
+  managerThemeUpsertSchema,
 } from '../validation/schemas';
+import {
+  resolveEffectiveTheme,
+  getStoredTheme,
+  FALLBACK_THEME,
+  type ThemeConfig,
+} from '../services/themeResolver';
+import { isStorageKey as isStorageKeyTheme } from '../services/storage/resolve';
 import bcrypt from 'bcryptjs';
 import { OrderStatus, TableZone, TableStatus, TenantRole } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
@@ -4907,5 +4915,190 @@ router.post(
     }
   }
 );
+
+// ============================================================
+// ============================================================
+// Central Theme Management — Restaurant / Branch scope
+// Scope: Platform Default → Restaurant Theme → Optional Branch Theme → Effective
+// APIs: GET /theme, PUT /theme, DELETE /theme only (no copy/presets/lockedFields)
+// ============================================================
+
+function validateBackgroundTenantIsolation(config: ThemeConfig, restaurantId: string): string | null {
+  const checkBg = (bg: any, label: string): string | null => {
+    if (!bg) return null;
+    if ((bg.type === 'image' || bg.type === 'image+overlay') && bg.image?.storagePath) {
+      const key = bg.image.storagePath;
+      if (!isStorageKeyTheme(key)) return `${label}: مسار تخزين غير صالح`;
+      if (!keyBelongsToRestaurant(key, restaurantId)) return `${label}: الصورة لا تنتمي لمطعمك`;
+    }
+    return null;
+  };
+  if (config.background?.light) {
+    const err = checkBg(config.background.light, 'خلفية Light');
+    if (err) return err;
+  }
+  if (config.background?.dark) {
+    const err = checkBg(config.background.dark, 'خلفية Dark');
+    if (err) return err;
+  }
+  return null;
+}
+
+// GET /api/manager/theme?restaurantId=&branchId=
+// Returns effective theme (merged) + stored theme for the requested scope
+router.get('/theme', requireManager(), async (req: Request, res: Response) => {
+  try {
+    const restaurantId = getTenantId(req);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+
+    const branchId = (req.query.branchId as string) || null;
+
+    if (branchId) {
+      const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+      if (!branch || branch.restaurantId !== restaurantId) {
+        return res.status(400).json({ success: false, error: 'الفرع لا ينتمي لمطعمك', statusCode: 400 });
+      }
+    }
+
+    const [effective, storedRestaurant, storedBranch, platform] = await Promise.all([
+      resolveEffectiveTheme({ restaurantId, branchId }),
+      getStoredTheme({ restaurantId, branchId: null }),
+      branchId ? getStoredTheme({ restaurantId, branchId }) : Promise.resolve(null),
+      getStoredTheme({ restaurantId: null, branchId: null }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        effective,
+        stored: branchId ? storedBranch : storedRestaurant,
+        restaurantTheme: storedRestaurant,
+        branchTheme: storedBranch,
+        platformTheme: platform,
+        fallback: FALLBACK_THEME,
+      },
+      statusCode: 200,
+    });
+  } catch (err) {
+    console.error('Get theme error:', err);
+    return res.status(500).json({ success: false, error: 'تعذر استرجاع الثيم', statusCode: 500 });
+  }
+});
+
+// PUT /api/manager/theme — upsert restaurant or branch theme
+router.put(
+  '/theme',
+  requireManager(),
+  validateBody(managerThemeUpsertSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const restaurantId = getTenantId(req);
+      if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+
+      const { branchId: rawBranchId, config: incomingConfig } = req.body as {
+        branchId?: string | null;
+        config: ThemeConfig;
+      };
+
+      const branchId = rawBranchId && String(rawBranchId).trim() ? String(rawBranchId).trim() : null;
+
+      if (branchId) {
+        const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+        if (!branch || branch.restaurantId !== restaurantId) {
+          return res.status(400).json({ success: false, error: 'الفرع لا ينتمي لمطعمك', statusCode: 400 });
+        }
+      }
+
+      // Tenant isolation for background images — storagePath must belong to restaurant
+      const isolationError = validateBackgroundTenantIsolation(incomingConfig, restaurantId);
+      if (isolationError) {
+        return res.status(400).json({ success: false, error: isolationError, statusCode: 400 });
+      }
+
+      // Upsert via findFirst to avoid composite-unique null semantics (Postgres null != null)
+      const existingTheme = await prisma.theme.findFirst({
+        where: { restaurantId, branchId: branchId || null },
+      });
+      const theme = existingTheme
+        ? await prisma.theme.update({
+            where: { id: existingTheme.id },
+            data: { config: incomingConfig as any },
+          })
+        : await prisma.theme.create({
+            data: {
+              restaurantId,
+              branchId,
+              config: incomingConfig as any,
+            },
+          });
+
+      await logAuditEvent({
+        restaurantId,
+        userId: req.user!.id,
+        actor: req.user!.name,
+        actorRole: req.user!.role,
+        action: branchId ? 'BRANCH_THEME_UPDATED' : 'RESTAURANT_THEME_UPDATED',
+        entity: 'Theme',
+        entityId: theme.id,
+        details: branchId ? `تم تحديث ثيم فرع ${branchId}` : `تم تحديث ثيم المطعم ${restaurantId}`,
+      });
+
+      const effective = await resolveEffectiveTheme({ restaurantId, branchId });
+
+      return res.json({
+        success: true,
+        data: { theme: { id: theme.id, config: theme.config }, effective },
+        statusCode: 200,
+      });
+    } catch (err) {
+      console.error('Upsert theme error:', err);
+      return res.status(500).json({ success: false, error: 'تعذر حفظ الثيم', statusCode: 500 });
+    }
+  }
+);
+
+// DELETE /api/manager/theme?branchId= — reset to parent/default (Platform → Restaurant → Branch inheritance)
+router.delete('/theme', requireManager(), async (req: Request, res: Response) => {
+  try {
+    const restaurantId = getTenantId(req);
+    if (!restaurantId || !ownTenant(req, restaurantId)) return deny(req, res);
+
+    const branchId = (req.query.branchId as string) || (req.body as any)?.branchId || null;
+    const normalizedBranchId = branchId && String(branchId).trim() ? String(branchId).trim() : null;
+
+    if (normalizedBranchId) {
+      const branch = await prisma.branch.findUnique({ where: { id: normalizedBranchId } });
+      if (!branch || branch.restaurantId !== restaurantId) {
+        return res.status(400).json({ success: false, error: 'الفرع لا ينتمي لمطعمك', statusCode: 400 });
+      }
+    }
+
+    const existing = await getStoredTheme({ restaurantId, branchId: normalizedBranchId });
+    if (!existing) {
+      const effective = await resolveEffectiveTheme({ restaurantId, branchId: normalizedBranchId });
+      return res.json({ success: true, data: { effective, message: 'الثيم بالفعل على الافتراضي' }, statusCode: 200 });
+    }
+
+    await prisma.theme.delete({ where: { id: existing.id } });
+
+    await logAuditEvent({
+      restaurantId,
+      userId: req.user!.id,
+      actor: req.user!.name,
+      actorRole: req.user!.role,
+      action: normalizedBranchId ? 'BRANCH_THEME_RESET' : 'RESTAURANT_THEME_RESET',
+      entity: 'Theme',
+      entityId: existing.id,
+      details: normalizedBranchId ? `تم إعادة تعيين ثيم فرع ${normalizedBranchId} إلى الافتراضي` : `تم إعادة تعيين ثيم المطعم إلى الافتراضي`,
+    });
+
+    const effective = await resolveEffectiveTheme({ restaurantId, branchId: normalizedBranchId });
+
+    return res.json({ success: true, data: { effective, message: 'تمت إعادة التعيين إلى الافتراضي' }, statusCode: 200 });
+  } catch (err) {
+    console.error('Delete theme error:', err);
+    return res.status(500).json({ success: false, error: 'تعذر إعادة تعيين الثيم', statusCode: 500 });
+  }
+});
 
 export default router;

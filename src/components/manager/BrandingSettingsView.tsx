@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api, isEmbeddedImage } from '../../services/api';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { applyBrandTheme, getCachedBrandTheme } from '../../theme/brandTheme';
+import { applyBrandTheme, getCachedBrandTheme, buildEffectiveThemeVars, backgroundToCssVars } from '../../theme/brandTheme';
 import {
   AlertTriangle,
   Palette,
@@ -24,39 +24,34 @@ import {
   Film,
   Camera,
   Trash2,
-  Eye,
   Coffee,
   Croissant,
   Landmark,
   Wallet,
   CreditCard,
+  Sun,
+  Moon,
+  Monitor,
+  RotateCcw,
+  Layers,
+  Type,
+  Square,
+  Sparkles,
+  Eye,
 } from 'lucide-react';
-import type { BusinessType } from '../../types/restaurant';
+import type { BusinessType, ThemeConfig, EffectiveTheme, ThemeRow, BackgroundConfig, ThemeMode, BackgroundType, ThemeFontKey, ResolvedBackground } from '../../types/restaurant';
 
-/**
- * Venue kinds. Selecting one changes how the guest QR experience is composed,
- * so the manager picks it here next to the rest of the restaurant's identity.
- */
 const BUSINESS_TYPES: Array<{
   id: BusinessType;
   label: string;
   desc: string;
   icon: React.ComponentType<{ className?: string }>;
 }> = [
-  {
-    id: 'RESTAURANT',
-    label: 'مطعم',
-    desc: 'طلب من الطاولة + نداء النادل',
-    icon: UtensilsCrossed,
-  },
+  { id: 'RESTAURANT', label: 'مطعم', desc: 'طلب من الطاولة + نداء النادل', icon: UtensilsCrossed },
   { id: 'CAFE', label: 'كافيه', desc: 'طلب سريع + تيك أواي', icon: Coffee },
   { id: 'BAKERY', label: 'مخبز / مشروع طعام', desc: 'استعراض منتجات + استلام', icon: Croissant },
 ];
 
-/**
- * The venue's social channels, in the order the guest menu shows them.
- * Declared once so the form, the placeholders and the help text cannot drift.
- */
 const SOCIAL_FIELDS: Array<{
   key: 'instagram' | 'facebook' | 'tiktok' | 'youtube' | 'website';
   label: string;
@@ -65,56 +60,14 @@ const SOCIAL_FIELDS: Array<{
   icon: React.ComponentType<{ className?: string }>;
   stateKey: 'instagramUrl' | 'facebookUrl' | 'tiktokUrl' | 'youtubeUrl' | 'websiteUrl';
 }> = [
-  {
-    key: 'instagram',
-    label: 'إنستغرام',
-    placeholder: 'https://www.instagram.com/yourvenue',
-    hint: 'رابط HTTPS من نطاق instagram.com',
-    icon: Camera,
-    stateKey: 'instagramUrl',
-  },
-  {
-    key: 'facebook',
-    label: 'فيسبوك',
-    placeholder: 'https://www.facebook.com/yourvenue',
-    hint: 'رابط HTTPS من نطاق facebook.com',
-    icon: Landmark,
-    stateKey: 'facebookUrl',
-  },
-  {
-    key: 'tiktok',
-    label: 'تيك توك',
-    placeholder: 'https://www.tiktok.com/@yourvenue',
-    hint: 'رابط HTTPS من نطاق tiktok.com',
-    icon: Film,
-    stateKey: 'tiktokUrl',
-  },
-  {
-    key: 'youtube',
-    label: 'يوتيوب',
-    placeholder: 'https://www.youtube.com/@yourvenue',
-    hint: 'رابط HTTPS من نطاق youtube.com',
-    icon: Video,
-    stateKey: 'youtubeUrl',
-  },
-  {
-    key: 'website',
-    label: 'الموقع الإلكتروني',
-    placeholder: 'https://yourvenue.com',
-    hint: 'موقعك الرسمي — رابط HTTPS صالح',
-    icon: Star,
-    stateKey: 'websiteUrl',
-  },
+  { key: 'instagram', label: 'إنستغرام', placeholder: 'https://www.instagram.com/yourvenue', hint: 'رابط HTTPS من نطاق instagram.com', icon: Camera, stateKey: 'instagramUrl' },
+  { key: 'facebook', label: 'فيسبوك', placeholder: 'https://www.facebook.com/yourvenue', hint: 'رابط HTTPS من نطاق facebook.com', icon: Landmark, stateKey: 'facebookUrl' },
+  { key: 'tiktok', label: 'تيك توك', placeholder: 'https://www.tiktok.com/@yourvenue', hint: 'رابط HTTPS من نطاق tiktok.com', icon: Film, stateKey: 'tiktokUrl' },
+  { key: 'youtube', label: 'يوتيوب', placeholder: 'https://www.youtube.com/@yourvenue', hint: 'رابط HTTPS من نطاق youtube.com', icon: Video, stateKey: 'youtubeUrl' },
+  { key: 'website', label: 'الموقع الإلكتروني', placeholder: 'https://yourvenue.com', hint: 'موقعك الرسمي — رابط HTTPS صالح', icon: Star, stateKey: 'websiteUrl' },
 ];
 
-/** اقتراحات جاهزة لشكل موقع المطعم (Theme Presets) */
-const THEME_PRESETS: Array<{
-  id: string;
-  label: string;
-  desc: string;
-  primary: string;
-  accent: string;
-}> = [
+const THEME_PRESETS: Array<{ id: string; label: string; desc: string; primary: string; accent: string }> = [
   { id: 'royal-gold', label: 'ذهبي ملكي', desc: 'كلاسيكي فاخر دافئ', primary: '#D4AF37', accent: '#8C6D1F' },
   { id: 'midnight-blue', label: 'أزرق ليلي', desc: 'هادئ وعصري وأنيق', primary: '#4F7CFF', accent: '#1E2F6E' },
   { id: 'emerald', label: 'زمردي ملكي', desc: 'انتعاش وثقة راقية', primary: '#10B981', accent: '#065F46' },
@@ -124,15 +77,24 @@ const THEME_PRESETS: Array<{
   { id: 'silver', label: 'فضي معدني', desc: 'حديث بسيط نظيف', primary: '#94A3B8', accent: '#3E4A5B' },
 ];
 
-/**
- * Logo framing presets. A 3×3 grid maps to CSS `object-position` anchors so a
- * manager can keep the focal point of a wide/tall logo visible inside the
- * fixed square box, instead of having it cropped awkwardly.
- */
+const FONT_OPTIONS: Array<{ id: ThemeFontKey; label: string; family: string }> = [
+  { id: 'auto', label: 'تلقائي', family: 'system-ui' },
+  { id: 'tajawal', label: 'Tajawal', family: 'Tajawal' },
+  { id: 'cairo', label: 'Cairo', family: 'Cairo' },
+  { id: 'amiri', label: 'Amiri', family: 'Amiri' },
+  { id: 'cormorant', label: 'Cormorant', family: 'Cormorant Garamond' },
+  { id: 'inter', label: 'Inter', family: 'Inter' },
+  { id: 'poppins', label: 'Poppins', family: 'Poppins' },
+];
+
+const BG_TYPES: Array<{ id: BackgroundType; label: string }> = [
+  { id: 'solid', label: 'لون ثابت' },
+  { id: 'gradient', label: 'تدرج لوني' },
+  { id: 'image', label: 'صورة كاملة' },
+  { id: 'image+overlay', label: 'صورة + Overlay' },
+];
+
 const LOGO_POSITION_GRID: Array<{ label: string; value: string }> = [
-  // Rendered inside a dir="rtl" page, so the grid flows right-to-left: the
-  // first cell of each row sits on the RIGHT, matching its label. The stored
-  // value is a physical CSS object-position (0% = left, 100% = right).
   { label: 'أعلى يمين', value: '100% 0%' },
   { label: 'أعلى وسط', value: '50% 0%' },
   { label: 'أعلى يسار', value: '0% 0%' },
@@ -144,15 +106,38 @@ const LOGO_POSITION_GRID: Array<{ label: string; value: string }> = [
   { label: 'أسفل يسار', value: '0% 100%' },
 ];
 
-/**
- * ضغط الصورة على جهاز المدير قبل الرفع — عبر خط الضغط الموحّد
- * (سياسة لكل نوع: شعار/غلاف/معرض/خريطة، WebP عندما يدعمه المتصفح).
- * الخادم يبقى حد الأمان: يتحقق من البصمة الثنائية والحجم والملكية.
- */
+const DEFAULT_THEME_FALLBACK: ThemeConfig = {
+  mode: 'dark',
+  colors: {
+    primary: '#D4AF37',
+    secondary: '#94A3B8',
+    accent: '#C5A880',
+    background: '#0A0B0D',
+    surface: '#121416',
+    textPrimary: '#F8FAFC',
+    textSecondary: '#94A3B8',
+    border: '#1E293B',
+    success: '#10B981',
+    warning: '#F59E0B',
+    error: '#EF4444',
+  },
+  radius: { sm: '6px', md: '10px', lg: '16px', xl: '24px', full: '9999px' },
+  shadows: { sm: '0 1px 2px rgba(0,0,0,0.2)', md: '0 4px 12px rgba(0,0,0,0.3)', lg: '0 12px 32px rgba(0,0,0,0.4)' },
+  typography: { fontFamily: 'tajawal', headingWeight: '700', bodyWeight: '400' },
+  buttons: { variant: 'solid', radius: '12px' },
+  cards: { radius: '16px', shadow: 'md', border: true },
+  badges: { variant: 'soft', radius: '9999px' },
+  categories: { variant: 'pill' },
+  background: {
+    light: { type: 'solid', color: '#FFFFFF', readabilityBoost: true },
+    dark: { type: 'solid', color: '#0A0B0D', readabilityBoost: false },
+  },
+};
 
 export const BrandingSettingsView: React.FC = () => {
-  const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast } = useRestaurant();
+  const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast, branches } = useRestaurant();
 
+  // ==== Branding states (legacy) ====
   const [name, setName] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [description, setDescription] = useState('');
@@ -169,9 +154,6 @@ export const BrandingSettingsView: React.FC = () => {
   const [promoVideoUrl, setPromoVideoUrl] = useState('');
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [newGalleryUrl, setNewGalleryUrl] = useState('');
-  // Customer transfer payment details — the venue's receiving account, shown to
-  // the guest in the transfer modal. '' means "not filled in"; saving '' clears
-  // the stored value (server writes NULL).
   const [transferBankName, setTransferBankName] = useState('');
   const [transferBankAccount, setTransferBankAccount] = useState('');
   const [transferBankAccountHolder, setTransferBankAccountHolder] = useState('');
@@ -179,10 +161,6 @@ export const BrandingSettingsView: React.FC = () => {
   const [transferWalletNumber, setTransferWalletNumber] = useState('');
   const [transferWalletAccountHolder, setTransferWalletAccountHolder] = useState('');
   const [transferInstructions, setTransferInstructions] = useState('');
-  // Contact channels & reservations — the venue's own WhatsApp number (which
-  // powers «احجز طاولتك» on the Live Menu screen) and its social profiles
-  // (shown in the guest menu's «تواصل معنا»). '' means "not published";
-  // saving '' clears the stored value and the UI hides the channel.
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
@@ -203,14 +181,24 @@ export const BrandingSettingsView: React.FC = () => {
   const lastCommittedRestaurantRef = useRef<string>('');
   const isDirtyRef = useRef<boolean>(false);
 
+  // ==== New Theme Management states ====
+  const [activeTab, setActiveTab] = useState<'branding' | 'theme' | 'background' | 'advanced'>('branding');
+  const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
+  const [effectiveTheme, setEffectiveTheme] = useState<EffectiveTheme | null>(null);
+  const [storedTheme, setStoredTheme] = useState<ThemeRow | null>(null);
+  const [themeLoading, setThemeLoading] = useState(false);
+  const [themeSaving, setThemeSaving] = useState(false);
+  const [editConfig, setEditConfig] = useState<ThemeConfig>(DEFAULT_THEME_FALLBACK);
+  const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
+  const [bgUploading, setBgUploading] = useState<'light' | 'dark' | null>(null);
+  const bgLightInputRef = useRef<HTMLInputElement>(null);
+  const bgDarkInputRef = useRef<HTMLInputElement>(null);
+
+  // Load branding from restaurant
   useEffect(() => {
     if (currentRestaurant) {
       const isDifferentTenant = lastRestaurantIdRef.current !== currentRestaurant.id;
-      // If user has unsaved edits on the current restaurant, never overwrite them on background sync
-      if (!isDifferentTenant && isDirtyRef.current) {
-        return;
-      }
-
+      if (!isDifferentTenant && isDirtyRef.current) return;
       const restaurantKey = `${currentRestaurant.id}-${currentRestaurant.updatedAt || ''}-${currentRestaurant.logo}-${currentRestaurant.coverImage}-${currentRestaurant.name}`;
       if (lastCommittedRestaurantRef.current === restaurantKey) return;
       lastCommittedRestaurantRef.current = restaurantKey;
@@ -231,22 +219,15 @@ export const BrandingSettingsView: React.FC = () => {
       const acc = currentRestaurant.accentColor || '#C5A880';
       setPrimaryColor(prim);
       setAccentColor(acc);
-      // Automatically detect and select matching preset
-      const matched = THEME_PRESETS.find(
-        (p) => p.primary.toLowerCase() === prim.toLowerCase() && p.accent.toLowerCase() === acc.toLowerCase()
-      );
-      if (matched) {
-        setActivePreset(matched.id);
-      } else {
+      const matched = THEME_PRESETS.find((p) => p.primary.toLowerCase() === prim.toLowerCase() && p.accent.toLowerCase() === acc.toLowerCase());
+      if (matched) setActivePreset(matched.id);
+      else {
         const cached = getCachedBrandTheme();
-        if (cached?.presetId) {
-          setActivePreset(cached.presetId);
-        }
+        if (cached?.presetId) setActivePreset(cached.presetId);
       }
       setBusinessType(currentRestaurant.businessType || 'RESTAURANT');
       setPromoVideoUrl(currentRestaurant.promoVideoUrl || '');
       setGalleryImages(currentRestaurant.galleryImages || []);
-      // Transfer receiving account (absent on tenants that configured nothing).
       setTransferBankName(currentRestaurant.transfer?.bankName || '');
       setTransferBankAccount(currentRestaurant.transfer?.bankAccount || '');
       setTransferBankAccountHolder(currentRestaurant.transfer?.bankAccountHolder || '');
@@ -254,17 +235,42 @@ export const BrandingSettingsView: React.FC = () => {
       setTransferWalletNumber(currentRestaurant.transfer?.walletNumber || '');
       setTransferWalletAccountHolder(currentRestaurant.transfer?.walletAccountHolder || '');
       setTransferInstructions(currentRestaurant.transfer?.instructions || '');
-      // Contact channels (absent on tenants that published nothing).
       setWhatsappNumber(currentRestaurant.whatsappNumber || '');
       setInstagramUrl(currentRestaurant.socials?.instagram || '');
       setFacebookUrl(currentRestaurant.socials?.facebook || '');
       setTiktokUrl(currentRestaurant.socials?.tiktok || '');
       setYoutubeUrl(currentRestaurant.socials?.youtube || '');
       setWebsiteUrl(currentRestaurant.socials?.website || '');
+      if (currentRestaurant.theme) {
+        setEffectiveTheme(currentRestaurant.theme);
+        setEditConfig(currentRestaurant.theme.rawConfig || DEFAULT_THEME_FALLBACK);
+      }
     }
   }, [currentRestaurant]);
 
-  if (!currentRestaurant) return null;
+  // Fetch theme for selected scope
+  const fetchTheme = async (branchId: string | null) => {
+    if (!currentRestaurant) return;
+    setThemeLoading(true);
+    try {
+      const res = await api.getTheme(currentRestaurant.id, branchId);
+      if (res.success && res.data) {
+        setEffectiveTheme(res.data.effective);
+        setStoredTheme(res.data.stored);
+        // Merge stored config over fallback for editing
+        setEditConfig(res.data.effective.rawConfig || res.data.stored?.config || DEFAULT_THEME_FALLBACK);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setThemeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTheme(selectedBranchId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBranchId, currentRestaurant?.id]);
 
   const applyPreset = (presetId: string) => {
     const preset = THEME_PRESETS.find((p) => p.id === presetId);
@@ -272,15 +278,16 @@ export const BrandingSettingsView: React.FC = () => {
     setPrimaryColor(preset.primary);
     setAccentColor(preset.accent);
     setActivePreset(presetId);
-    applyBrandTheme(preset.primary, preset.accent, null, {
-      presetId,
-      restaurantId: currentRestaurant?.id,
-      slug: currentRestaurant?.slug,
-    });
+    applyBrandTheme(preset.primary, preset.accent, null, { presetId, restaurantId: currentRestaurant?.id, slug: currentRestaurant?.slug });
+    // Also update theme config
+    setEditConfig((prev) => ({
+      ...prev,
+      colors: { ...(prev.colors || DEFAULT_THEME_FALLBACK.colors!), primary: preset.primary, secondary: prev.colors?.secondary || '#94A3B8', accent: preset.accent, background: prev.colors?.background || '#0A0B0D', surface: prev.colors?.surface || '#121416', textPrimary: prev.colors?.textPrimary || '#F8FAFC', textSecondary: prev.colors?.textSecondary || '#94A3B8', border: prev.colors?.border || '#1E293B', success: prev.colors?.success || '#10B981', warning: prev.colors?.warning || '#F59E0B', error: prev.colors?.error || '#EF4444' },
+    }));
   };
 
   const handleUpload = async (kind: 'logo' | 'cover', file?: File) => {
-    if (!file) return;
+    if (!file || !currentRestaurant) return;
     if (!file.type.startsWith('image/')) {
       showToast('error', 'صيغة غير مدعومة', 'يرجى اختيار صورة JPG أو PNG أو WEBP');
       return;
@@ -310,13 +317,9 @@ export const BrandingSettingsView: React.FC = () => {
     setGalleryImages((prev) => [...prev, newGalleryUrl.trim()]);
     setNewGalleryUrl('');
   };
-
-  const handleRemoveGalleryImage = (index: number) => {
-    setGalleryImages((prev) => prev.filter((_, i) => i !== index));
-  };
-
+  const handleRemoveGalleryImage = (index: number) => setGalleryImages((prev) => prev.filter((_, i) => i !== index));
   const handleUploadGalleryFile = async (file?: File) => {
-    if (!file) return;
+    if (!file || !currentRestaurant) return;
     if (!file.type.startsWith('image/')) {
       showToast('error', 'صيغة غير مدعومة', 'يرجى اختيار صورة JPG أو PNG أو WEBP');
       return;
@@ -338,9 +341,8 @@ export const BrandingSettingsView: React.FC = () => {
       if (galleryInputRef.current) galleryInputRef.current.value = '';
     }
   };
-
   const handleUploadMap = async (file?: File) => {
-    if (!file) return;
+    if (!file || !currentRestaurant) return;
     if (!file.type.startsWith('image/')) {
       showToast('error', 'صيغة غير مدعومة', 'يرجى اختيار صورة JPG أو PNG أو WEBP');
       return;
@@ -366,18 +368,10 @@ export const BrandingSettingsView: React.FC = () => {
   const handleSave = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!currentRestaurant || isSaving) return;
-
-    // A base64 data URL in any image field would 413 the save (server JSON
-    // limit is 1MB) — stop here with guidance instead of a failed request.
-    if (
-      isEmbeddedImage(logo) ||
-      isEmbeddedImage(coverImage) ||
-      galleryImages.some((u) => isEmbeddedImage(u))
-    ) {
+    if (isEmbeddedImage(logo) || isEmbeddedImage(coverImage) || galleryImages.some((u) => isEmbeddedImage(u))) {
       showToast('error', 'تعذر حفظ الهوية البصرية', 'إحدى الصور مخزنة كنص ثقيل (base64) — أعد رفعها عبر أزرار الرفع من جهازك ثم اضغط حفظ مجدداً');
       return;
     }
-
     setIsSaving(true);
     const res = await api.saveBranding(currentRestaurant.id, {
       name: name.trim(),
@@ -395,8 +389,6 @@ export const BrandingSettingsView: React.FC = () => {
       businessType,
       promoVideoUrl: promoVideoUrl.trim(),
       galleryImages,
-      // Transfer receiving account. Trimmed, and '' is an explicit clear — the
-      // server validates bounds/characters and writes NULL for ''.
       transfer: {
         bankName: transferBankName.trim(),
         bankAccount: transferBankAccount.trim(),
@@ -406,9 +398,6 @@ export const BrandingSettingsView: React.FC = () => {
         walletAccountHolder: transferWalletAccountHolder.trim(),
         instructions: transferInstructions.trim(),
       },
-      // Contact channels & reservations. Trimmed; '' is an explicit clear.
-      // The server validates the phone shape and every URL (HTTPS + the
-      // platform's own domain) and rejects the save with an Arabic message.
       whatsappNumber: whatsappNumber.trim(),
       socials: {
         instagram: instagramUrl.trim(),
@@ -436,950 +425,673 @@ export const BrandingSettingsView: React.FC = () => {
     showToast('success', 'تم حفظ إعدادات الهوية بنجاح', 'تم تثبيت وتطبيق ألوان الـ Theme والشعار والمعرض مباشرة عبر النظام.');
   };
 
-  const currency = currentRestaurant.currency || '₪';
-  const logoPreview = logo || currentRestaurant.logo || '';
+  // ==== Theme Save ====
+  const handleSaveTheme = async () => {
+    if (!currentRestaurant) return;
+    setThemeSaving(true);
+    try {
+      // Merge legacy primary/accent into colors for backward compat
+      const merged: ThemeConfig = {
+        ...editConfig,
+        colors: {
+          ...(editConfig.colors || DEFAULT_THEME_FALLBACK.colors!),
+          primary: editConfig.colors?.primary || primaryColor,
+          secondary: editConfig.colors?.secondary || DEFAULT_THEME_FALLBACK.colors!.secondary,
+          accent: editConfig.colors?.accent || accentColor,
+        },
+      };
+      const res = await api.upsertTheme(currentRestaurant.id, merged, selectedBranchId);
+      if (!res.success || !res.data) {
+        showToast('error', 'تعذر حفظ الثيم', (res as any).error || 'حاول مجدداً');
+        return;
+      }
+      setEffectiveTheme(res.data.effective);
+      setStoredTheme(res.data.theme);
+      // Update currentRestaurant theme for live preview
+      setCurrentRestaurant({ ...currentRestaurant, theme: res.data.effective } as any);
+      showToast('success', 'تم حفظ الثيم', selectedBranchId ? 'تم تطبيق الثيم على الفرع المحدد' : 'تم تطبيق الثيم على مستوى المطعم');
+    } finally {
+      setThemeSaving(false);
+    }
+  };
 
-  // Images stored with the legacy base64 flow must be re-uploaded before the
-  // next save, otherwise the save is blocked by the guards above.
-  const hasLegacyEmbeddedImages =
-    isEmbeddedImage(logoPreview) ||
-    isEmbeddedImage(coverImage) ||
-    galleryImages.some((u) => isEmbeddedImage(u));
+  const handleResetTheme = async () => {
+    if (!currentRestaurant) return;
+    setThemeSaving(true);
+    try {
+      const res = await api.deleteTheme(currentRestaurant.id, selectedBranchId);
+      if (!res.success || !res.data) {
+        showToast('error', 'تعذر إعادة التعيين', (res as any).error);
+        return;
+      }
+      setEffectiveTheme(res.data.effective);
+      setEditConfig(res.data.effective.rawConfig);
+      setStoredTheme(null);
+      setCurrentRestaurant({ ...currentRestaurant, theme: res.data.effective } as any);
+      showToast('success', 'تمت إعادة التعيين', 'تم الرجوع للثيم الافتراضي (Platform → Restaurant → Branch)');
+    } finally {
+      setThemeSaving(false);
+    }
+  };
 
-  // Contact-channel inputs, keyed so `SOCIAL_FIELDS` can render all five with
-  // one map instead of five near-identical blocks that drift apart.
-  const socialValues = {
-    instagramUrl,
-    facebookUrl,
-    tiktokUrl,
-    youtubeUrl,
-    websiteUrl,
-  } as const;
-  const socialSetters = {
-    instagramUrl: setInstagramUrl,
-    facebookUrl: setFacebookUrl,
-    tiktokUrl: setTiktokUrl,
-    youtubeUrl: setYoutubeUrl,
-    websiteUrl: setWebsiteUrl,
-  } as const;
+  const handleBgUpload = async (variant: 'light' | 'dark', file?: File) => {
+    if (!file || !currentRestaurant) return;
+    setBgUploading(variant);
+    try {
+      const { blob, ext } = await optimizeImageFile(file, 'cover');
+      const res = await api.uploadImage(blob, `bg-${variant}-${Date.now()}.${ext}`, 'cover', currentRestaurant.id);
+      if (!res.success || !res.data) {
+        showToast('error', 'تعذر رفع خلفية المنيو', res.error);
+        return;
+      }
+      // Update editConfig background
+      setEditConfig((prev) => {
+        const currentBg = prev.background?.[variant] || { type: 'image' as BackgroundType };
+        return {
+          ...prev,
+          background: {
+            ...(prev.background || {}),
+            [variant]: {
+              ...currentBg,
+              type: currentBg.type === 'solid' || currentBg.type === 'gradient' ? 'image' as BackgroundType : currentBg.type || 'image',
+              image: { storagePath: (res.data as any).storagePath || (res.data as any).key || res.data.url, aiGenerated: false },
+            },
+          },
+        };
+      });
+      showToast('success', 'تم رفع الخلفية', `خلفية ${variant === 'light' ? 'الوضع الفاتح' : 'الداكن'} جاهزة — احفظ الثيم`);
+    } catch {
+      showToast('error', 'تعذر معالجة الصورة', 'تعذر قراءة الملف');
+    } finally {
+      setBgUploading(null);
+    }
+  };
+
+  // Live preview vars
+  const previewVars = useMemo(() => {
+    if (!effectiveTheme) return {};
+    // Build vars from editConfig merged with effective for preview
+    const tempEffective: EffectiveTheme = {
+      ...(effectiveTheme as EffectiveTheme),
+      ...{ rawConfig: editConfig },
+      colors: { ...(effectiveTheme.colors), ...(editConfig.colors || {}) } as any,
+      background: {
+        light: {
+          ...(effectiveTheme.background.light),
+          ...(editConfig.background?.light ? { type: editConfig.background.light.type, color: editConfig.background.light.color, gradient: editConfig.background.light.gradient, overlayColor: editConfig.background.light.overlayColor, overlayOpacity: editConfig.background.light.overlayOpacity, blur: editConfig.background.light.blur, position: editConfig.background.light.position, size: editConfig.background.light.size, readabilityBoost: editConfig.background.light.readabilityBoost } as any : {}),
+        } as any,
+        dark: {
+          ...(effectiveTheme.background.dark),
+          ...(editConfig.background?.dark ? { type: editConfig.background.dark.type, color: editConfig.background.dark.color, gradient: editConfig.background.dark.gradient, overlayColor: editConfig.background.dark.overlayColor, overlayOpacity: editConfig.background.dark.overlayOpacity, blur: editConfig.background.dark.blur, position: editConfig.background.dark.position, size: editConfig.background.dark.size, readabilityBoost: editConfig.background.dark.readabilityBoost } as any : {}),
+        } as any,
+      },
+    } as any;
+    // Simplified: use buildEffectiveThemeVars if available, else manual
+    try {
+      return buildEffectiveThemeVars(tempEffective as any);
+    } catch {
+      return {};
+    }
+  }, [effectiveTheme, editConfig]);
+
+  const currency = currentRestaurant?.currency || '₪';
+  const logoPreview = logo || currentRestaurant?.logo || '';
+
+  const hasLegacyEmbeddedImages = isEmbeddedImage(logoPreview) || isEmbeddedImage(coverImage) || galleryImages.some((u) => isEmbeddedImage(u));
+
+  const socialValues = { instagramUrl, facebookUrl, tiktokUrl, youtubeUrl, websiteUrl } as const;
+  const socialSetters = { instagramUrl: setInstagramUrl, facebookUrl: setFacebookUrl, tiktokUrl: setTiktokUrl, youtubeUrl: setYoutubeUrl, websiteUrl: setWebsiteUrl } as const;
+
+  if (!currentRestaurant) return null;
+
+  const currentBgLight: BackgroundConfig = editConfig.background?.light || { type: 'solid', color: '#FFFFFF' };
+  const currentBgDark: BackgroundConfig = editConfig.background?.dark || { type: 'solid', color: '#0A0B0D' };
 
   return (
-    <div className="space-y-6 text-right max-w-6xl" dir="rtl">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-luxury-900 border border-luxury-800 p-5 rounded-2xl">
-        <div>
+    <div className="space-y-6 text-right max-w-7xl" dir="rtl">
+      {/* Header with branch selector and inheritance info */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-luxury-900 border border-luxury-800 p-5 rounded-2xl">
+        <div className="space-y-1">
           <h2 className="text-lg font-bold text-luxury-50 font-serif flex items-center gap-2">
             <Palette className="w-5 h-5 text-gold-400" />
-            <span>هوية مطعمك — الشعار والألوان والمعرض والفيديو</span>
+            <span>هوية وثيم مطعمك — نظام مركزي</span>
+            {effectiveTheme && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-luxury-800 border border-luxury-700 text-luxury-300 flex items-center gap-1">
+                <Layers className="w-3 h-3" />
+                {effectiveTheme.source === 'branch' ? 'فرع' : effectiveTheme.source === 'restaurant' ? 'مطعم' : effectiveTheme.source === 'platform' ? 'منصة' : 'افتراضي'}
+              </span>
+            )}
           </h2>
-          <p className="text-xs text-luxury-400 mt-0.5">
-            تحديث الهوية البصرية، إرفاق صور صالة المطعم، وفيديو الأجواء لتظهر مباشرة للعميل عند مسح كود QR
+          <p className="text-xs text-luxury-400">
+            تحكم كامل بمظهر المنيو: Light/Dark/Auto، ألوان، خلفية احترافية، خطوط، أزرار، بطاقات — مع وراثة Platform → Restaurant → Branch
           </p>
+
         </div>
 
-        <button
-          onClick={() => handleSave()}
-          disabled={isSaving || uploading !== null}
-          className="px-5 py-2.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-gold-glow disabled:opacity-60"
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          <span>{isSaving ? 'جاري الحفظ في قاعدة البيانات...' : 'حفظ ونشر الهوية الجديدة'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Branch selector */}
+          <div className="flex items-center gap-2 bg-luxury-950 border border-luxury-800 rounded-xl px-3 py-2">
+            <span className="text-[11px] text-luxury-400">النطاق:</span>
+            <select
+              value={selectedBranchId || ''}
+              onChange={(e) => setSelectedBranchId(e.target.value || null)}
+              className="bg-luxury-900 border border-luxury-800 rounded-lg px-2 py-1 text-xs text-luxury-100"
+            >
+              <option value="">المطعم (كل الفروع)</option>
+              {(branches || []).map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <button onClick={handleSaveTheme} disabled={themeSaving || themeLoading} className="px-4 py-2.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 disabled:opacity-60">
+            {themeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>حفظ الثيم {selectedBranchId ? '(فرع)' : '(مطعم)'}</span>
+          </button>
+
+          <button onClick={handleResetTheme} disabled={themeSaving} className="px-3 py-2.5 rounded-xl bg-luxury-800 hover:bg-luxury-700 border border-luxury-700 text-luxury-200 text-xs flex items-center gap-1.5">
+            <RotateCcw className="w-4 h-4" />
+            إعادة تعيين
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex flex-wrap gap-2 p-1 bg-luxury-900 border border-luxury-800 rounded-2xl w-fit">
+        {[
+          { id: 'theme', label: 'الثيم المركزي', icon: Palette },
+          { id: 'background', label: 'خلفية المنيو', icon: ImageIcon },
+          { id: 'branding', label: 'الهوية والشعار', icon: Star },
+          { id: 'advanced', label: 'متقدم ونسخ', icon: Layers },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const active = activeTab === tab.id;
+          return (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all ${active ? 'bg-gold-500 text-luxury-950 shadow-gold-glow' : 'text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800'}`}>
+              <Icon className="w-4 h-4" /> {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {hasLegacyEmbeddedImages && (
         <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/40 rounded-2xl p-4 text-xs leading-relaxed">
           <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-amber-200">
-            <span className="font-bold">تنبيه: بعض الصور مخزنة بالصيغة القديمة الثقيلة</span> ولن يكتمل الحفظ قبل معالجتها —
-            أعد رفع الشعار / الغلاف / صور الصالة عبر أزرار الرفع من جهازك (ستُحفظ كروابط خفيفة)، ثم اضغط «حفظ ونشر الهوية الجديدة».
-          </p>
+          <p className="text-amber-200"><span className="font-bold">تنبيه: بعض الصور مخزنة بالصيغة القديمة الثقيلة</span> ولن يكتمل الحفظ قبل معالجتها — أعد رفع الشعار / الغلاف / صور الصالة عبر أزرار الرفع.</p>
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-        {/* ============ Right column: editors ============ */}
+        {/* Left: Editors */}
         <div className="lg:col-span-3 space-y-6">
-          {/* Basic info */}
-          <form
-            onSubmit={handleSave}
-            onInput={() => { isDirtyRef.current = true; }}
-            className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs"
-          >
-            <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
-              <UtensilsCrossed className="w-4 h-4 text-gold-400" />
-              بيانات المطعم الأساسية
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f1">اسم المطعم (بالعربية)</label>
-                <input id="brandingsettingsview-f1"
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f2">الاسم بالإنجليزية</label>
-                <input id="brandingsettingsview-f2"
-                  type="text"
-                  value={nameEn}
-                  onChange={(e) => setNameEn(e.target.value)}
-                  className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-f3">الوصف (يظهر للعميل تحت اسم المطعم)</label>
-              <textarea id="brandingsettingsview-f3"
-                rows={2}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 resize-none"
-              />
-            </div>
 
-            {/* Venue kind — decides how the guest QR experience is composed */}
-            <div>
-              <span className="block font-bold text-luxury-200 mb-1.5">
-                نوع النشاط (يشكّل شاشة الترحيب التي يراها العميل بعد مسح QR)
-              </span>
-              <div
-                role="radiogroup"
-                aria-label="نوع النشاط"
-                className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"
-              >
-                {BUSINESS_TYPES.map((type) => {
-                  const Icon = type.icon;
-                  const selected = businessType === type.id;
-                  return (
-                    <button
-                      key={type.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setBusinessType(type.id)}
-                      className={`p-3 rounded-xl border text-right transition-all flex items-start gap-2.5 cursor-pointer ${
-                        selected
-                          ? 'bg-luxury-800 border-gold-500/70 shadow-[0_0_22px_-8px_rgba(212,175,55,0.5)]'
-                          : 'bg-luxury-950 border-luxury-800 hover:border-luxury-700'
-                      }`}
-                    >
-                      <Icon
-                        className={`w-5 h-5 mt-0.5 shrink-0 ${selected ? 'text-gold-400' : 'text-luxury-400'}`}
-                      />
-                      <span>
-                        <span className="block text-luxury-100 font-bold text-sm">{type.label}</span>
-                        <span className="block text-[10px] text-luxury-400 leading-relaxed">
-                          {type.desc}
-                        </span>
-                      </span>
-                      {selected && <Check className="w-4 h-4 text-gold-400 mr-auto shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1" htmlFor="brandingsettingsview-f4">
-                  <Phone className="w-3.5 h-3.5 text-gold-400" /> رقم الهاتف للتواصل
-                </label>
-                <input id="brandingsettingsview-f4"
-                  type="text"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl"
-                />
-              </div>
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1" htmlFor="brandingsettingsview-f5">
-                  <MapPin className="w-3.5 h-3.5 text-gold-400" /> العنوان والفرع
-                </label>
-                <input id="brandingsettingsview-f5"
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl"
-                  placeholder="مثال: شارع الإرسال، رام الله"
-                />
-              </div>
-            </div>
-
-            {/* Map Image (replaces the Google Maps link) */}
-            <div className="pt-2 border-t border-luxury-850 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1" htmlFor="brandingsettingsview-map">
-                  <MapPin className="w-3.5 h-3.5 text-gold-400" /> صورة الخريطة (موقع المطعم)
-                </label>
-                <span className="text-[10px] text-luxury-500">اختياري — تظهر للعملاء بدل الخريطة الخارجية</span>
-              </div>
-              <div className="h-36 rounded-xl overflow-hidden border border-luxury-700 bg-luxury-900 flex items-center justify-center">
-                {mapImage ? (
-                  <img src={mapImage} alt="خريطة الموقع" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-[10px] text-luxury-500">لا توجد صورة خريطة بعد</span>
-                )}
-              </div>
-              <div className="space-y-2">
-                <input
-                  ref={mapInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  onChange={(e) => handleUploadMap(e.target.files?.[0])}
-                />
-                <button
-                  type="button"
-                  onClick={() => mapInputRef.current?.click()}
-                  disabled={uploadingMap}
-                  className="w-full py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
-                >
-                  {uploadingMap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}
-                  {uploadingMap ? 'جاري رفع صورة الخريطة...' : mapImage ? 'استبدال صورة الخريطة' : 'رفع صورة خريطة من الجهاز'}
-                </button>
-                {mapImage && (
-                  <button
-                    type="button"
-                    onClick={() => setMapImage('')}
-                    className="w-full py-2 rounded-xl bg-luxury-900 hover:bg-luxury-800 border border-luxury-700 text-luxury-400 text-xs flex items-center justify-center gap-1.5"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    إزالة صورة الخريطة
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* ============ Customer transfer payment details ============ */}
-            {/* The venue's RECEIVING account: what the guest sees inside the
-                transfer modal when he pays by bank transfer or e-wallet. Saved
-                by the same button as the rest of this screen (PUT /branding).
-                Display-only settings — they never take part in payment
-                verification: the cashier still confirms the money against the
-                guest's receipt. Leave a field empty and the guest sees a safe
-                message instead of an empty card. */}
-            <div className="pt-4 border-t border-luxury-850 space-y-4">
-              <div>
-                <h4 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-gold-400" />
-                  إعدادات الدفع — تحويل العميل
-                </h4>
-                <p className="text-[10px] text-luxury-400 mt-1 leading-relaxed">
-                  تظهر هذه البيانات للعميل داخل نافذة «الدفع عبر حوالة بنكية أو محفظة» ليعرف إلى أين
-                  يحوّل المبلغ. املأ القناة التي تستقبل بها فعلاً — الحقل الفارغ لا يظهر للعميل، وتظهر
-                  بدلاً منه رسالة آمنة. لا تُستخدم هذه البيانات في التحقق من الدفع؛ الكاشير يؤكد
-                  الحوالة من صورة الإشعار التي يرسلها العميل.
-                </p>
+          {activeTab === 'theme' && (
+            <>
+              {/* Mode */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Sun className="w-4 h-4 text-gold-400" /> وضع الثيم</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'light', label: 'فاتح', icon: Sun },
+                    { id: 'dark', label: 'داكن', icon: Moon },
+                    { id: 'auto', label: 'تلقائي', icon: Monitor },
+                  ].map((m) => {
+                    const Icon = m.icon;
+                    const sel = (editConfig.mode || 'dark') === m.id;
+                    return (
+                      <button key={m.id} onClick={() => setEditConfig((p) => ({ ...p, mode: m.id as ThemeMode }))} className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>
+                        <Icon className="w-5 h-5" /> {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* BANK channel */}
-              <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
-                <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
-                  <Landmark className="w-3.5 h-3.5 text-gold-400" />
-                  حوالة بنكية
-                </span>
+              {/* Colors */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Palette className="w-4 h-4 text-gold-400" /> الألوان الأساسية والثانوية</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[
+                    { key: 'primary', label: 'أساسي' },
+                    { key: 'secondary', label: 'ثانوي' },
+                    { key: 'accent', label: 'مميز' },
+                    { key: 'background', label: 'خلفية' },
+                    { key: 'surface', label: 'سطح' },
+                    { key: 'textPrimary', label: 'نص أساسي' },
+                    { key: 'textSecondary', label: 'نص ثانوي' },
+                    { key: 'border', label: 'حدود' },
+                    { key: 'success', label: 'نجاح' },
+                    { key: 'warning', label: 'تحذير' },
+                    { key: 'error', label: 'خطأ' },
+                  ] .map((c) => {
+                    const val = (editConfig.colors as any)?.[c.key] || (DEFAULT_THEME_FALLBACK.colors as any)[c.key];
+                    return (
+                      <div key={c.key} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2.5 space-y-1.5">
+                        <span className="text-[11px] text-luxury-300 font-bold">{c.label}</span>
+                        <div className="flex items-center gap-2">
+                          <input type="color" value={val} onChange={(e) => setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [c.key]: e.target.value } as any }))} className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" />
+                          <span className="font-mono text-[10px] text-luxury-400" dir="ltr">{val}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Presets */}
+                <div className="pt-3 border-t border-luxury-800">
+                  <span className="text-xs font-bold text-luxury-200 flex items-center gap-1"><Wand2 className="w-3.5 h-3.5 text-gold-400" /> ثيمات جاهزة</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                    {THEME_PRESETS.map((preset) => (
+                      <button key={preset.id} onClick={() => applyPreset(preset.id)} className={`p-2.5 rounded-xl border text-right ${activePreset === preset.id ? 'border-gold-500 bg-gold-500/10' : 'border-luxury-800 bg-luxury-950'}`}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="w-5 h-5 rounded-lg" style={{ background: `linear-gradient(135deg, ${preset.primary}, ${preset.accent})` }} />
+                          <span className="text-[11px] font-bold text-luxury-100">{preset.label}</span>
+                        </div>
+                        <span className="text-[10px] text-luxury-500">{preset.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Typography & Radius & Shadows */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-5">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Type className="w-4 h-4 text-gold-400" /> الخطوط والزوايا والظلال</h3>
+
+                <div>
+                  <span className="text-xs font-bold text-luxury-300">الخط</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                    {FONT_OPTIONS.map((f) => {
+                      const sel = (editConfig.typography?.fontFamily || 'tajawal') === f.id;
+                      return (
+                        <button key={f.id} onClick={() => setEditConfig((p) => ({ ...p, typography: { ...(p.typography || DEFAULT_THEME_FALLBACK.typography!), fontFamily: f.id } }))} className={`p-2.5 rounded-xl border text-xs ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`} style={{ fontFamily: f.family }}>
+                          {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-name">
-                      اسم البنك
-                    </label>
-                    <input
-                      id="brandingsettingsview-transfer-bank-name"
-                      type="text"
-                      value={transferBankName}
-                      onChange={(e) => setTransferBankName(e.target.value)}
-                      maxLength={80}
-                      autoComplete="off"
-                      placeholder="مثال: بنك فلسطين"
-                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-holder">
-                      اسم صاحب الحساب
-                    </label>
-                    <input
-                      id="brandingsettingsview-transfer-bank-holder"
-                      type="text"
-                      value={transferBankAccountHolder}
-                      onChange={(e) => setTransferBankAccountHolder(e.target.value)}
-                      maxLength={80}
-                      autoComplete="off"
-                      placeholder="الاسم كما يظهر لدى البنك"
-                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-account">
-                    رقم الحساب / IBAN
-                  </label>
-                  <input
-                    id="brandingsettingsview-transfer-bank-account"
-                    type="text"
-                    value={transferBankAccount}
-                    onChange={(e) => setTransferBankAccount(e.target.value)}
-                    maxLength={40}
-                    autoComplete="off"
-                    spellCheck={false}
-                    dir="ltr"
-                    inputMode="text"
-                    placeholder="PS52 PALS 0453 1234 5678 9012 3456 7"
-                    className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono"
-                  />
-                  <span className="block text-[10px] text-luxury-500 mt-1">أرقام وحروف إنجليزية فقط — يُعرض للعميل كما تكتبه هنا.</span>
-                </div>
-              </div>
-
-              {/* WALLET channel */}
-              <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
-                <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
-                  <Wallet className="w-3.5 h-3.5 text-gold-400" />
-                  محفظة إلكترونية
-                </span>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-name">
-                      اسم المحفظة
-                    </label>
-                    <input
-                      id="brandingsettingsview-transfer-wallet-name"
-                      type="text"
-                      value={transferWalletName}
-                      onChange={(e) => setTransferWalletName(e.target.value)}
-                      maxLength={80}
-                      autoComplete="off"
-                      placeholder="مثال: محفظة جوال"
-                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-holder">
-                      اسم صاحب المحفظة
-                    </label>
-                    <input
-                      id="brandingsettingsview-transfer-wallet-holder"
-                      type="text"
-                      value={transferWalletAccountHolder}
-                      onChange={(e) => setTransferWalletAccountHolder(e.target.value)}
-                      maxLength={80}
-                      autoComplete="off"
-                      placeholder="الاسم المسجَّل على المحفظة"
-                      className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-number">
-                    رقم المحفظة (هاتف أو رقم حساب)
-                  </label>
-                  <input
-                    id="brandingsettingsview-transfer-wallet-number"
-                    type="text"
-                    value={transferWalletNumber}
-                    onChange={(e) => setTransferWalletNumber(e.target.value)}
-                    maxLength={40}
-                    autoComplete="off"
-                    spellCheck={false}
-                    dir="ltr"
-                    inputMode="tel"
-                    placeholder="0599123456"
-                    className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono"
-                  />
-                  <span className="block text-[10px] text-luxury-500 mt-1">أرقام فقط (يمكن البدء بـ +) — ليس بالضرورة رقم هاتف.</span>
-                </div>
-              </div>
-
-              {/* Shared, optional */}
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-instructions">
-                  تعليمات التحويل <span className="font-normal text-luxury-500">(اختياري — تظهر للقناتين)</span>
-                </label>
-                <textarea
-                  id="brandingsettingsview-transfer-instructions"
-                  value={transferInstructions}
-                  onChange={(e) => setTransferInstructions(e.target.value)}
-                  maxLength={500}
-                  rows={3}
-                  placeholder="مثال: اكتب رقم الطاولة في ملاحظة التحويل، وأرسل صورة الإشعار بعد التحويل مباشرة."
-                  className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 resize-y"
-                />
-              </div>
-            </div>
-          </form>
-
-          {/* ============ Contact channels & reservations ============ */}
-          <form
-            onSubmit={handleSave}
-            onInput={() => { isDirtyRef.current = true; }}
-            className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs"
-          >
-            <div>
-              <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
-                <Phone className="w-4 h-4 text-gold-400" />
-                التواصل والحجز
-              </h3>
-              <p className="text-[11px] text-luxury-400 mt-1 leading-relaxed">
-                رقم واتساب الخاص بمطعمك يشغّل زر <strong className="text-luxury-200">«احجز طاولتك»</strong> على شاشة العرض،
-                وصفحات التواصل تظهر للعميل في قسم «تابعنا» داخل المنيو.
-                كل الحقول اختيارية — ما لا تملأه لن يظهر للعميل إطلاقاً.
-              </p>
-            </div>
-
-            {/* WhatsApp — the reservation channel */}
-            <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
-              <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
-                <Smartphone className="w-3.5 h-3.5 text-gold-400" />
-                واتساب المطعم (قناة الحجز)
-              </span>
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-contact-whatsapp">
-                  رقم واتساب
-                </label>
-                <input
-                  id="brandingsettingsview-contact-whatsapp"
-                  type="tel"
-                  value={whatsappNumber}
-                  onChange={(e) => setWhatsappNumber(e.target.value)}
-                  maxLength={24}
-                  autoComplete="off"
-                  spellCheck={false}
-                  dir="ltr"
-                  inputMode="tel"
-                  placeholder="+970599123456"
-                  className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono"
-                />
-                <span className="block text-[10px] text-luxury-500 mt-1 leading-relaxed">
-                  أرقام فقط، ويفضَّل مع رمز الدولة (970+ / 972+). بدونه لا يظهر زر الحجز على شاشة العرض.
-                  الشاشة ترسل <strong>طلب</strong> حجز إلى واتساب — والتأكيد من موظفيك، فلا يوجد تأكيد تلقائي.
-                </span>
-              </div>
-            </div>
-
-            {/* Social profiles */}
-            <div className="space-y-4">
-              <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
-                <Star className="w-3.5 h-3.5 text-gold-400" />
-                صفحات التواصل الاجتماعي
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {SOCIAL_FIELDS.map((field) => {
-                  const Icon = field.icon;
-                  const value = socialValues[field.stateKey];
-                  const setValue = socialSetters[field.stateKey];
-                  const inputId = `brandingsettingsview-contact-${field.key}`;
-                  return (
-                    <div key={field.key}>
-                      <label className="flex items-center gap-1.5 font-bold text-luxury-200 mb-1" htmlFor={inputId}>
-                        <Icon className="w-3.5 h-3.5 text-luxury-500" />
-                        {field.label}
-                        <span className="font-normal text-luxury-500">(اختياري)</span>
-                      </label>
-                      <input
-                        id={inputId}
-                        type="url"
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                        maxLength={1000}
-                        autoComplete="off"
-                        spellCheck={false}
-                        dir="ltr"
-                        inputMode="url"
-                        placeholder={field.placeholder}
-                        className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono text-[11px]"
-                      />
-                      <span className="block text-[10px] text-luxury-500 mt-1">{field.hint}</span>
+                    <span className="text-xs font-bold text-luxury-300">نصف القطر (Radius)</span>
+                    <div className="grid grid-cols-2 gap-2 mt-2">
+                      {(['sm', 'md', 'lg', 'xl'] as const).map((k) => (
+                        <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
+                          <span className="text-[10px] text-luxury-400">{k}</span>
+                          <input type="text" value={(editConfig.radius as any)?.[k] || (DEFAULT_THEME_FALLBACK.radius as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, radius: { ...(p.radius || DEFAULT_THEME_FALLBACK.radius!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[11px] font-mono text-luxury-100 mt-1" />
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-luxury-500 leading-relaxed">
-                الروابط تُفتح للعميل في تبويب جديد. للحماية تُقبل روابط HTTPS فقط من نطاق المنصة نفسها —
-                أي رابط غير صالح سيُرفض عند الحفظ مع رسالة توضيحية.
-              </p>
-            </div>
-          </form>
-
-          {/* Logo & Cover upload */}
-          <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs">
-            <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
-              <ImageIcon className="w-4 h-4 text-gold-400" />
-              شعار المطعم وصورة الغلاف
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Logo */}
-              <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block font-bold text-luxury-200" htmlFor="brandingsettingsview-f9">شعار المطعم / الكافيه</label>
-                  <span className="text-[10px] text-luxury-500">يظهر أعلى منيو عملائك</span>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-luxury-300">الظلال</span>
+                    <div className="space-y-2 mt-2">
+                      {(['sm', 'md', 'lg'] as const).map((k) => (
+                        <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
+                          <span className="text-[10px] text-luxury-400">{k}</span>
+                          <input type="text" value={(editConfig.shadows as any)?.[k] || (DEFAULT_THEME_FALLBACK.shadows as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, shadows: { ...(p.shadows || DEFAULT_THEME_FALLBACK.shadows!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[10px] font-mono text-luxury-100 mt-1" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div
-                    className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 border border-luxury-700 text-2xl font-serif font-bold text-luxury-950"
-                    style={
-                      logoPreview
-                        ? { background: 'transparent' }
-                        : { background: `linear-gradient(135deg, ${primaryColor}, ${accentColor})` }
-                    }
-                  >
-                    {logoPreview ? (
-                      <img
-                        src={logoPreview}
-                        alt={name}
-                        className="w-full h-full"
-                        style={{ objectFit: logoFit, objectPosition: logoPosition }}
-                      />
-                    ) : (
-                      (nameEn.charAt(0) || 'م')
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-luxury-800">
+                  <div>
+                    <span className="text-xs font-bold text-luxury-300">الأزرار</span>
+                    <select value={editConfig.buttons?.variant || 'solid'} onChange={(e) => setEditConfig((p) => ({ ...p, buttons: { ...(p.buttons || DEFAULT_THEME_FALLBACK.buttons!), variant: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                      <option value="solid">ممتلئ</option>
+                      <option value="outline">إطار</option>
+                      <option value="ghost">شفاف</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-luxury-300">البطاقات</span>
+                    <select value={editConfig.cards?.shadow || 'md'} onChange={(e) => setEditConfig((p) => ({ ...p, cards: { ...(p.cards || DEFAULT_THEME_FALLBACK.cards!), shadow: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                      <option value="sm">ظل صغير</option>
+                      <option value="md">ظل متوسط</option>
+                      <option value="lg">ظل كبير</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-luxury-300">الشارات</span>
+                    <select value={editConfig.badges?.variant || 'soft'} onChange={(e) => setEditConfig((p) => ({ ...p, badges: { ...(p.badges || DEFAULT_THEME_FALLBACK.badges!), variant: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                      <option value="solid">ممتلئ</option>
+                      <option value="outline">إطار</option>
+                      <option value="soft">ناعم</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-xs font-bold text-luxury-300">نمط التصنيفات</span>
+                    <select value={editConfig.categories?.variant || 'pill'} onChange={(e) => setEditConfig((p) => ({ ...p, categories: { ...(p.categories || DEFAULT_THEME_FALLBACK.categories!), variant: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                      <option value="pill">حبوب</option>
+                      <option value="underline">خط سفلي</option>
+                      <option value="card">بطاقات</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'background' && (
+            <>
+              {/* Background Light */}
+              {(['light', 'dark'] as const).map((variant) => {
+                const cfg = variant === 'light' ? currentBgLight : currentBgDark;
+                return (
+                  <div key={variant} className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
+                    <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                      {variant === 'light' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-blue-400" />}
+                      خلفية {variant === 'light' ? 'الوضع الفاتح' : 'الداكن'}
+                    </h3>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {BG_TYPES.map((t) => {
+                        const sel = cfg.type === t.id;
+                        return (
+                          <button key={t.id}  onClick={() => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), type: t.id } as any } }))} className={`p-2.5 rounded-xl border text-xs font-bold ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {(cfg.type === 'solid' || cfg.type === 'image+overlay') && (
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-luxury-300">لون ثابت</span>
+                        <input type="color" value={cfg.color || '#0A0B0D'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), color: e.target.value } as any } }))} className="w-9 h-9 rounded bg-transparent border-0" />
+                        <input type="text" value={cfg.color || ''}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), color: e.target.value } as any } }))} className="flex-1 bg-luxury-950 border border-luxury-800 rounded-xl p-2 text-xs font-mono text-luxury-100" placeholder="#0A0B0D" />
+                      </div>
+                    )}
+
+                    {cfg.type === 'gradient' && (
+                      <div>
+                        <span className="text-xs text-luxury-300">تدرج CSS</span>
+                        <input type="text" value={cfg.gradient || ''}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), gradient: e.target.value } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-xl p-2.5 text-xs font-mono text-luxury-100" placeholder="linear-gradient(135deg, #0A0B0D, #1E293B)" />
+                      </div>
+                    )}
+
+                    {(cfg.type === 'image' || cfg.type === 'image+overlay') && (
+                      <>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-luxury-300">صورة الخلفية</span>
+                            <span className="text-[10px] text-luxury-500">رفع / مكتبة المطعم / AI</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <input ref={variant === 'light' ? bgLightInputRef : bgDarkInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => handleBgUpload(variant, e.target.files?.[0])} />
+                            <button disabled={bgUploading === variant} onClick={() => (variant === 'light' ? bgLightInputRef.current?.click() : bgDarkInputRef.current?.click())} className="px-3 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-700 border border-luxury-700 text-luxury-100 text-xs flex items-center gap-1.5 disabled:opacity-60">
+                              {bgUploading === variant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} رفع صورة
+                            </button>
+                            <button  onClick={() => { if (coverImage) setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), image: { storagePath: coverImage } } as any } })); }} className="px-3 py-2 rounded-xl bg-luxury-950 border border-luxury-800 text-luxury-300 text-xs">من مكتبة المطعم</button>
+                            <span className="px-3 py-2 rounded-xl bg-luxury-950 border border-dashed border-luxury-700 text-luxury-500 text-xs flex items-center gap-1"><Sparkles className="w-3 h-3" /> AI قريباً</span>
+                          </div>
+                          {cfg.image && <span className="text-[10px] text-luxury-400 font-mono truncate block">{cfg.image.storagePath}</span>}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="text-[11px] text-luxury-400">الموضع</span>
+                            <select value={cfg.position || 'center'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), position: e.target.value as any } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                              <option value="center">وسط</option><option value="top">أعلى</option><option value="bottom">أسفل</option><option value="left">يسار</option><option value="right">يمين</option>
+                            </select>
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-luxury-400">الحجم</span>
+                            <select value={cfg.size || 'cover'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), size: e.target.value as any } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                              <option value="cover">تغطية</option><option value="contain">احتواء</option><option value="auto">تلقائي</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {cfg.type === 'image+overlay' && (
+                          <>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <span className="text-[11px] text-luxury-400">لون Overlay</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <input type="color" value={cfg.overlayColor?.startsWith('#') ? cfg.overlayColor : '#000000'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: e.target.value } as any } }))} className="w-8 h-8 rounded bg-transparent border-0" />
+                                  <input type="text" value={cfg.overlayColor || ''}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: e.target.value } as any } }))} className="flex-1 bg-luxury-950 border border-luxury-800 rounded-lg p-1.5 text-xs font-mono text-luxury-100" placeholder="rgba(0,0,0,0.6)" />
+                                </div>
+                              </div>
+                              <div>
+                                <span className="text-[11px] text-luxury-400">شفافية Overlay: {cfg.overlayOpacity ?? 0.85}</span>
+                                <input type="range" min={0} max={1} step={0.05} value={cfg.overlayOpacity ?? 0.85}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayOpacity: parseFloat(e.target.value) } as any } }))} className="w-full mt-1" />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <span className="text-[11px] text-luxury-400">Blur: {cfg.blur || 0}px</span>
+                                <input type="range" min={0} max={20} step={1} value={cfg.blur || 0}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), blur: parseInt(e.target.value) } as any } }))} className="w-full mt-1" />
+                              </div>
+                              <label className="flex items-center gap-2 text-xs text-luxury-300 mt-6">
+                                <input type="checkbox" checked={!!cfg.readabilityBoost}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), readabilityBoost: e.target.checked } as any } }))} />
+                                تحسين قابلية القراءة
+                              </label>
+                            </div>
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
-                  <div className="space-y-2 flex-1">
-                    <input
-                      ref={logoInputRef}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(e) => handleUpload('logo', e.target.files?.[0])}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => logoInputRef.current?.click()}
-                      disabled={uploading !== null}
-                      className="w-full py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
-                    >
-                      {uploading === 'logo' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}
-                      {uploading === 'logo' ? 'جاري رفع الشعار...' : 'رفع شعار من الجهاز'}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-luxury-400 mb-1">أو رابط مباشر للشعار</label>
-                  <input id="brandingsettingsview-f9"
-                    type="url"
-                    dir="ltr"
-                    value={logo}
-                    onChange={(e) => setLogo(e.target.value)}
-                    placeholder="https://…"
-                    className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2 rounded-lg focus:border-gold-500/60 text-left"
-                  />
-                </div>
-
-                {/* Logo framing controls — make the logo appear regularly */}
-                {logoPreview && (
-                  <div className="pt-3 border-t border-luxury-800 space-y-3">
-                    <div>
-                      <span className="block text-luxury-300 font-bold mb-1.5">طريقة إظهار الشعار داخل الصندوق</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setLogoFit('cover')}
-                          className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition-colors cursor-pointer ${
-                            logoFit === 'cover'
-                              ? 'bg-gold-500/15 border-gold-500/60 text-gold-300'
-                              : 'bg-luxury-900 border-luxury-800 text-luxury-400 hover:text-luxury-200'
-                          }`}
-                        >
-                          تغطية الصندوق (قصّ)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLogoFit('contain')}
-                          className={`px-3 py-2 rounded-xl border text-[11px] font-bold transition-colors cursor-pointer ${
-                            logoFit === 'contain'
-                              ? 'bg-gold-500/15 border-gold-500/60 text-gold-300'
-                              : 'bg-luxury-900 border-luxury-800 text-luxury-400 hover:text-luxury-200'
-                          }`}
-                        >
-                          إظهار الشعار كاملاً
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <span className="block text-luxury-300 font-bold mb-1.5">موضع الشعار (اتجاه القصّ أو التمركز)</span>
-                      <div className="grid grid-cols-3 gap-1.5 w-full max-w-[150px]">
-                        {LOGO_POSITION_GRID.map((cell) => {
-                          const active = logoPosition === cell.value;
-                          return (
-                            <button
-                              key={cell.value}
-                              type="button"
-                              title={cell.label}
-                              aria-label={cell.label}
-                              onClick={() => setLogoPosition(cell.value)}
-                              className={`h-9 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
-                                active
-                                  ? 'bg-gold-500/20 border-gold-500/70'
-                                  : 'bg-luxury-900 border-luxury-800 hover:border-luxury-600'
-                              }`}
-                            >
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-gold-400' : 'bg-luxury-600'}`}
-                              />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Cover */}
-              <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block font-bold text-luxury-200">صورة الغلاف (Hero)</label>
-                  <span className="text-[10px] text-luxury-500">تظهر في مقدمة المنيو</span>
-                </div>
-                <div className="h-24 rounded-xl overflow-hidden border border-luxury-700 bg-luxury-900 flex items-center justify-center">
-                  {coverImage ? (
-                    <img src={coverImage} alt="غلاف" className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-[10px] text-luxury-500">لا توجد صورة غلاف بعد</span>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <input
-                    ref={coverInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => handleUpload('cover', e.target.files?.[0])}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => coverInputRef.current?.click()}
-                    disabled={uploading !== null}
-                    className="w-full py-2 rounded-xl bg-luxury-850 hover:bg-luxury-800 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  >
-                    {uploading === 'cover' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}
-                    {uploading === 'cover' ? 'جاري رفع الغلاف...' : 'رفع غلاف من الجهاز'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* PROMO VIDEO & INTERIOR HALL GALLERY */}
-          <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs">
-            <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
-              <Video className="w-4 h-4 text-gold-400" />
-              فيديو ترويجي ومعرض صور أجواء صالة المطعم
-            </h3>
-
-            {/* Video Input */}
-            <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="block font-bold text-luxury-200">رابط الفيديو الترويجي لصالة المطعم</label>
-                <span className="text-[10px] text-luxury-500">رابط فيديو (MP4) أو فيديو YouTube</span>
-              </div>
-              <input
-                type="url"
-                dir="ltr"
-                value={promoVideoUrl}
-                onChange={(e) => setPromoVideoUrl(e.target.value)}
-                placeholder="https://... or https://youtube.com/watch?v=..."
-                className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 font-mono text-[11px]"
-              />
-              {promoVideoUrl && (
-                <div className="p-2.5 rounded-xl bg-luxury-900 border border-gold-500/30 flex items-center justify-between text-gold-300">
-                  <span className="flex items-center gap-1.5 text-[11px]">
-                    <Film className="w-4 h-4 text-gold-400" />
-                    سيظهر زر تشغيل فيديو الأجواء التفاعلي في المنيو لعملائك
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPromoVideoUrl('')}
-                    className="text-red-400 hover:text-red-300 text-[11px]"
-                  >
-                    إزالة الفيديو
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Gallery Uploader & List */}
-            <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <label className="block font-bold text-luxury-200">صور صالة المطعم والأجواء ({galleryImages.length})</label>
-                  <p className="text-[10px] text-luxury-400 mt-0.5">ارفع لقطات صالة الطعام والديكورات لعرضها في منيو الزبون عند مسح QR</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    ref={galleryInputRef}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => handleUploadGalleryFile(e.target.files?.[0])}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => galleryInputRef.current?.click()}
-                    disabled={uploadingGallery}
-                    className="px-3 py-1.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-gold-glow disabled:opacity-60 cursor-pointer"
-                  >
-                    {uploadingGallery ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                    <span>رفع صورة للصالة</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Paste URL inline */}
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  dir="ltr"
-                  value={newGalleryUrl}
-                  onChange={(e) => setNewGalleryUrl(e.target.value)}
-                  placeholder="أو ألصق رابط صورة مباشر https://..."
-                  className="flex-1 bg-luxury-900 border border-luxury-800 text-luxury-100 p-2 rounded-xl text-xs font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddGalleryImage}
-                  className="px-3 py-2 bg-luxury-850 hover:bg-luxury-800 text-luxury-200 font-bold rounded-xl text-xs"
-                >
-                  إضافة رابط
-                </button>
-              </div>
-
-              {/* Gallery Grid items */}
-              {galleryImages.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                  {galleryImages.map((url, i) => (
-                    <div key={i} className="relative group rounded-xl overflow-hidden border border-luxury-800 h-24 bg-luxury-900">
-                      <img src={url} alt={`صالة ${i + 1}`} className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveGalleryImage(i)}
-                        className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/70 text-red-400 hover:bg-red-500 hover:text-white transition-colors"
-                        title="حذف الصورة"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Theme presets */}
-          <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-4 text-xs">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
-                <Wand2 className="w-4 h-4 text-gold-400" />
-                اقتراحات شكل الموقع — اختر الطابع الذي يعبر عن مطعمك
-              </h3>
-              <button
-                type="button"
-                onClick={() => setActivePreset(null)}
-                className="flex items-center gap-1 text-luxury-400 hover:text-luxury-200 transition-colors"
-              >
-                <RefreshCcw className="w-3 h-3" />
-                تخصيص يدوي
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-              {THEME_PRESETS.map((preset) => {
-                const isActive = activePreset === preset.id;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => applyPreset(preset.id)}
-                    className={`p-3 rounded-xl border text-right transition-all group ${
-                      isActive
-                        ? 'border-gold-500 bg-gold-500/10 shadow-gold-glow'
-                        : 'border-luxury-750 bg-luxury-950 hover:border-luxury-600'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <span
-                        className="w-7 h-7 rounded-lg border border-luxury-600 flex items-center justify-center text-white"
-                        style={{ background: `linear-gradient(135deg, ${preset.primary}, ${preset.accent})` }}
-                      >
-                        {isActive && <Check className="w-3.5 h-3.5 text-white" />}
-                      </span>
-                      <span className="w-4 h-4 rounded-full border border-luxury-600" style={{ background: preset.accent }} />
-                    </div>
-                    <div className="text-luxury-100 font-bold">{preset.label}</div>
-                    <div className="text-[10px] text-luxury-400">{preset.desc}</div>
-                  </button>
                 );
               })}
-            </div>
+            </>
+          )}
 
-            {/* Custom colors */}
-            <div className="pt-3 border-t border-luxury-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1.5">لون التمييز الأساسي (أزرار/شارات)</label>
-                <div className="flex items-center gap-3 bg-luxury-950 p-2.5 rounded-xl border border-luxury-800">
-                  <input
-                    type="color"
-                    value={primaryColor}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setPrimaryColor(next);
-                      setActivePreset(null);
-                      applyBrandTheme(next, accentColor);
-                    }}
-                    className="w-9 h-9 rounded cursor-pointer bg-transparent border-0"
-                  />
-                  <span className="font-mono text-gold-400 font-bold" dir="ltr">{primaryColor}</span>
-                  <span className="flex-1 h-2 rounded-full" style={{ background: `linear-gradient(to left, ${primaryColor}, ${accentColor})` }} />
+          {activeTab === 'branding' && (
+            <>
+              <form onSubmit={handleSave} onInput={() => { isDirtyRef.current = true; }} className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><UtensilsCrossed className="w-4 h-4 text-gold-400" /> بيانات المطعم الأساسية</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div><label className="block font-bold text-luxury-200 mb-1">اسم المطعم (بالعربية)</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl" /></div>
+                  <div><label className="block font-bold text-luxury-200 mb-1">الاسم بالإنجليزية</label><input type="text" value={nameEn} onChange={(e) => setNameEn(e.target.value)} className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl" /></div>
+                </div>
+                <div><label className="block font-bold text-luxury-200 mb-1">الوصف</label><textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl resize-none" /></div>
+                <div><span className="block font-bold text-luxury-200 mb-1.5">نوع النشاط</span><div role="radiogroup" className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">{BUSINESS_TYPES.map((type) => { const Icon = type.icon; const selected = businessType === type.id; return (<button key={type.id} type="button" role="radio" aria-checked={selected} onClick={() => setBusinessType(type.id)} className={`p-3 rounded-xl border text-right transition-all flex items-start gap-2.5 cursor-pointer ${selected ? 'bg-luxury-800 border-gold-500/70' : 'bg-luxury-950 border-luxury-800'}`}><Icon className={`w-5 h-5 mt-0.5 shrink-0 ${selected ? 'text-gold-400' : 'text-luxury-400'}`} /><span><span className="block text-luxury-100 font-bold text-sm">{type.label}</span><span className="block text-[10px] text-luxury-400">{type.desc}</span></span>{selected && <Check className="w-4 h-4 text-gold-400 mr-auto" />}</button>); })}</div></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div><label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-gold-400" /> رقم الهاتف</label><input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl" /></div>
+                  <div><label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-gold-400" /> العنوان</label><input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl" placeholder="مثال: شارع الإرسال، رام الله" /></div>
+                </div>
+                <div className="pt-2 border-t border-luxury-850 space-y-3">
+                  <div className="flex items-center justify-between"><label className="block font-bold text-luxury-200 mb-1 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-gold-400" /> صورة الخريطة</label><span className="text-[10px] text-luxury-500">اختياري</span></div>
+                  <div className="h-36 rounded-xl overflow-hidden border border-luxury-700 bg-luxury-900 flex items-center justify-center">{mapImage ? <img src={mapImage} alt="خريطة" className="w-full h-full object-cover" /> : <span className="text-[10px] text-luxury-500">لا توجد صورة خريطة</span>}</div>
+                  <div className="space-y-2"><input ref={mapInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => handleUploadMap(e.target.files?.[0])} /><button type="button" onClick={() => mapInputRef.current?.click()} disabled={uploadingMap} className="w-full py-2 rounded-xl bg-luxury-850 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">{uploadingMap ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}{uploadingMap ? 'جاري رفع الخريطة...' : mapImage ? 'استبدال الخريطة' : 'رفع خريطة'}</button>{mapImage && <button type="button" onClick={() => setMapImage('')} className="w-full py-2 rounded-xl bg-luxury-900 border border-luxury-700 text-luxury-400 text-xs flex items-center justify-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> إزالة الخريطة</button>}</div>
+                </div>
+              </form>
+
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 shadow-luxury space-y-5 text-xs">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><ImageIcon className="w-4 h-4 text-gold-400" /> شعار المطعم وصورة الغلاف</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+                    <div className="flex items-center justify-between"><label className="block font-bold text-luxury-200">شعار المطعم</label><span className="text-[10px] text-luxury-500">يظهر أعلى المنيو</span></div>
+                    <div className="flex items-center gap-4"><div className="w-20 h-20 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 border border-luxury-700 text-2xl font-serif font-bold text-luxury-950" style={logoPreview ? { background: 'transparent' } : { background: `linear-gradient(135deg, ${primaryColor}, ${accentColor})` }}>{logoPreview ? <img src={logoPreview} alt={name} className="w-full h-full" style={{ objectFit: logoFit, objectPosition: logoPosition }} /> : (nameEn.charAt(0) || 'م')}</div><div className="space-y-2 flex-1"><input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => handleUpload('logo', e.target.files?.[0])} /><button type="button" onClick={() => logoInputRef.current?.click()} disabled={uploading !== null} className="w-full py-2 rounded-xl bg-luxury-850 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">{uploading === 'logo' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}{uploading === 'logo' ? 'جاري رفع الشعار...' : 'رفع شعار'}</button></div></div>
+                    <div><label className="block text-luxury-400 mb-1">أو رابط مباشر</label><input type="url" dir="ltr" value={logo} onChange={(e) => setLogo(e.target.value)} placeholder="https://…" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2 rounded-lg text-left" /></div>
+                    {logoPreview && <div className="pt-3 border-t border-luxury-800 space-y-3"><div><span className="block text-luxury-300 font-bold mb-1.5">طريقة الإظهار</span><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setLogoFit('cover')} className={`px-3 py-2 rounded-xl border text-[11px] font-bold ${logoFit === 'cover' ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-900 border-luxury-800 text-luxury-400'}`}>تغطية (قصّ)</button><button type="button" onClick={() => setLogoFit('contain')} className={`px-3 py-2 rounded-xl border text-[11px] font-bold ${logoFit === 'contain' ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-900 border-luxury-800 text-luxury-400'}`}>كامل</button></div></div><div><span className="block text-luxury-300 font-bold mb-1.5">الموضع</span><div className="grid grid-cols-3 gap-1.5 w-full max-w-[150px]">{LOGO_POSITION_GRID.map((cell) => { const active = logoPosition === cell.value; return <button key={cell.value} type="button" title={cell.label} onClick={() => setLogoPosition(cell.value)} className={`h-9 rounded-lg border flex items-center justify-center ${active ? 'bg-gold-500/20 border-gold-500/70' : 'bg-luxury-900 border-luxury-800'}`}><span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-gold-400' : 'bg-luxury-600'}`} /></button>; })}</div></div></div>}
+                  </div>
+                  <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+                    <div className="flex items-center justify-between"><label className="block font-bold text-luxury-200">صورة الغلاف</label><span className="text-[10px] text-luxury-500">Hero</span></div>
+                    <div className="h-24 rounded-xl overflow-hidden border border-luxury-700 bg-luxury-900 flex items-center justify-center">{coverImage ? <img src={coverImage} alt="غلاف" className="w-full h-full object-cover" /> : <span className="text-[10px] text-luxury-500">لا توجد صورة غلاف</span>}</div>
+                    <div className="space-y-2"><input ref={coverInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => handleUpload('cover', e.target.files?.[0])} /><button type="button" onClick={() => coverInputRef.current?.click()} disabled={uploading !== null} className="w-full py-2 rounded-xl bg-luxury-850 border border-luxury-700 text-luxury-100 font-bold text-xs flex items-center justify-center gap-1.5 disabled:opacity-60">{uploading === 'cover' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 text-gold-400" />}{uploading === 'cover' ? 'جاري رفع الغلاف...' : 'رفع غلاف'}</button></div>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="block font-bold text-luxury-200 mb-1.5">اللون الثانوي (تدرجات/تفاصيل)</label>
-                <div className="flex items-center gap-3 bg-luxury-950 p-2.5 rounded-xl border border-luxury-800">
-                  <input
-                    type="color"
-                    value={accentColor}
-                    onChange={(e) => {
-                      const next = e.target.value;
-                      setAccentColor(next);
-                      setActivePreset(null);
-                      applyBrandTheme(primaryColor, next);
-                    }}
-                    className="w-9 h-9 rounded cursor-pointer bg-transparent border-0"
-                  />
-                  <span className="font-mono text-gold-400 font-bold" dir="ltr">{accentColor}</span>
-                  <span className="flex-1 h-2 rounded-full" style={{ background: `linear-gradient(to left, ${accentColor}, ${primaryColor})` }} />
+
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 space-y-5 text-xs">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Video className="w-4 h-4 text-gold-400" /> فيديو ومعرض الصالة</h3>
+                <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3"><label className="block font-bold text-luxury-200">رابط الفيديو الترويجي</label><input type="url" dir="ltr" value={promoVideoUrl} onChange={(e) => setPromoVideoUrl(e.target.value)} placeholder="https://... or youtube" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl font-mono text-[11px]" />{promoVideoUrl && <div className="p-2.5 rounded-xl bg-luxury-900 border border-gold-500/30 flex items-center justify-between text-gold-300"><span className="flex items-center gap-1.5 text-[11px]"><Film className="w-4 h-4 text-gold-400" /> سيظهر زر فيديو الأجواء في المنيو</span><button type="button" onClick={() => setPromoVideoUrl('')} className="text-red-400 text-[11px]">إزالة</button></div>}</div>
+                <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-4"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><label className="block font-bold text-luxury-200">صور الصالة ({galleryImages.length})</label><p className="text-[10px] text-luxury-400">لقطات الصالة والديكورات</p></div><div className="flex items-center gap-2"><input ref={galleryInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => handleUploadGalleryFile(e.target.files?.[0])} /><button type="button" onClick={() => galleryInputRef.current?.click()} disabled={uploadingGallery} className="px-3 py-1.5 rounded-xl bg-gold-500 text-luxury-950 font-bold text-xs flex items-center gap-1.5 disabled:opacity-60"><Plus className="w-3.5 h-3.5" /> رفع صورة</button></div></div><div className="flex gap-2"><input type="url" dir="ltr" value={newGalleryUrl} onChange={(e) => setNewGalleryUrl(e.target.value)} placeholder="أو رابط صورة https://..." className="flex-1 bg-luxury-900 border border-luxury-800 text-luxury-100 p-2 rounded-xl text-xs font-mono" /><button type="button" onClick={handleAddGalleryImage} className="px-3 py-2 bg-luxury-850 text-luxury-200 font-bold rounded-xl text-xs">إضافة</button></div>{galleryImages.length > 0 && <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">{galleryImages.map((url, i) => <div key={i} className="relative group rounded-xl overflow-hidden border border-luxury-800 h-24 bg-luxury-900"><img src={url} alt={`صالة ${i + 1}`} className="w-full h-full object-cover" /><button type="button" onClick={() => handleRemoveGalleryImage(i)} className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/70 text-red-400"><Trash2 className="w-3.5 h-3.5" /></button></div>)}</div>}</div>
+              </div>
+
+              <div className="pt-4 border-t border-luxury-850 space-y-4">
+                <div>
+                  <h4 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-gold-400" />
+                    إعدادات الدفع — تحويل العميل
+                  </h4>
+                  <p className="text-[10px] text-luxury-400 mt-1 leading-relaxed">
+                    تظهر هذه البيانات للعميل داخل نافذة «الدفع عبر حوالة بنكية أو محفظة» ليعرف إلى أين يحوّل المبلغ. املأ القناة التي تستقبل بها فعلاً — الحقل الفارغ لا يظهر للعميل، وتظهر بدلاً منه رسالة آمنة. لا تُستخدم هذه البيانات في التحقق من الدفع؛ الكاشير يؤكد الحوالة من صورة الإشعار التي يرسلها العميل.
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+                  <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
+                    <Landmark className="w-3.5 h-3.5 text-gold-400" />
+                    حوالة بنكية
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-name">اسم البنك</label>
+                      <input id="brandingsettingsview-transfer-bank-name" type="text" value={transferBankName} onChange={(e) => setTransferBankName(e.target.value)} maxLength={80} autoComplete="off" placeholder="مثال: بنك فلسطين" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60" />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-holder">اسم صاحب الحساب</label>
+                      <input id="brandingsettingsview-transfer-bank-holder" type="text" value={transferBankAccountHolder} onChange={(e) => setTransferBankAccountHolder(e.target.value)} maxLength={80} autoComplete="off" placeholder="الاسم كما يظهر لدى البنك" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-bank-account">رقم الحساب / IBAN</label>
+                    <input id="brandingsettingsview-transfer-bank-account" type="text" value={transferBankAccount} onChange={(e) => setTransferBankAccount(e.target.value)} maxLength={40} autoComplete="off" spellCheck={false} dir="ltr" inputMode="text" placeholder="PS52 PALS 0453 1234 5678 9012 3456 7" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono" />
+                  </div>
+                </div>
+                <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-3">
+                  <span className="flex items-center gap-1.5 font-bold text-luxury-100 text-xs">
+                    <Wallet className="w-3.5 h-3.5 text-gold-400" />
+                    محفظة إلكترونية
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-name">اسم المحفظة</label>
+                      <input id="brandingsettingsview-transfer-wallet-name" type="text" value={transferWalletName} onChange={(e) => setTransferWalletName(e.target.value)} maxLength={80} autoComplete="off" placeholder="مثال: محفظة جوال" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60" />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-holder">اسم صاحب المحفظة</label>
+                      <input id="brandingsettingsview-transfer-wallet-holder" type="text" value={transferWalletAccountHolder} onChange={(e) => setTransferWalletAccountHolder(e.target.value)} maxLength={80} autoComplete="off" placeholder="الاسم المسجَّل على المحفظة" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-wallet-number">رقم المحفظة (هاتف أو رقم حساب)</label>
+                    <input id="brandingsettingsview-transfer-wallet-number" type="text" value={transferWalletNumber} onChange={(e) => setTransferWalletNumber(e.target.value)} maxLength={40} autoComplete="off" spellCheck={false} dir="ltr" inputMode="tel" placeholder="0599123456" className="w-full bg-luxury-900 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 text-left font-mono" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-transfer-instructions">تعليمات التحويل <span className="font-normal text-luxury-500">(اختياري — تظهر للقناتين)</span></label>
+                  <textarea id="brandingsettingsview-transfer-instructions" value={transferInstructions} onChange={(e) => setTransferInstructions(e.target.value)} maxLength={500} rows={3} placeholder="مثال: اكتب رقم الطاولة في ملاحظة التحويل، وأرسل صورة الإشعار بعد التحويل مباشرة." className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl focus:border-gold-500/60 resize-y" />
                 </div>
               </div>
-            </div>
-          </div>
+
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-6 space-y-4 text-xs">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><CreditCard className="w-4 h-4 text-gold-400" /> الدفع والتواصل</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div><label className="block font-bold text-luxury-200 mb-1" htmlFor="brandingsettingsview-contact-whatsapp">واتساب الحجز</label><input id="brandingsettingsview-contact-whatsapp" type="tel" dir="ltr" value={whatsappNumber} onChange={(e) => setWhatsappNumber(e.target.value)} maxLength={24} className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl font-mono text-left" placeholder="+970599123456" /></div>
+                  {SOCIAL_FIELDS.map((field) => { const Icon = field.icon; const value = socialValues[field.stateKey]; const setValue = socialSetters[field.stateKey]; const inputId = `brandingsettingsview-contact-${field.key}`; return <div key={field.key}><label className="flex items-center gap-1.5 font-bold text-luxury-200 mb-1" htmlFor={inputId}><Icon className="w-3.5 h-3.5 text-luxury-500" /> {field.label} <span className="font-normal text-luxury-500">(اختياري)</span></label><input id={inputId} type="url" dir="ltr" value={value} onChange={(e) => setValue(e.target.value)} maxLength={1000} className="w-full bg-luxury-950 border border-luxury-800 text-luxury-100 p-2.5 rounded-xl font-mono text-[11px] text-left" placeholder={field.placeholder} /></div>; })}
+                </div>
+              </div>
+
+              <button onClick={() => handleSave()} disabled={isSaving || uploading !== null} className="w-full px-5 py-3 rounded-xl bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-60">
+                {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} حفظ الهوية البصرية
+              </button>
+            </>
+          )}
+
+          {activeTab === 'advanced' && (
+            <>
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Layers className="w-4 h-4 text-gold-400" /> وراثة الثيم والنسخ</h3>
+                <p className="text-[11px] text-luxury-400">النظام يطبق الوراثة: Platform → Restaurant → Branch. إذا لم يوجد ثيم للفرع، يأخذ ثيم المطعم، وإذا لم يوجد يأخذ ثيم المنصة، وإلا الافتراضي.</p>
+
+                <div className="p-4 rounded-xl bg-luxury-950 border border-luxury-800 space-y-2 text-xs">
+                  <div className="flex items-center justify-between"><span className="text-luxury-400">المصدر الحالي:</span><span className="text-luxury-100 font-bold">{effectiveTheme?.source || 'fallback'}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-luxury-400">الفرع المحدد:</span><span className="text-luxury-100">{selectedBranchId ? (branches || []).find(b => b.id === selectedBranchId)?.name || selectedBranchId : 'المطعم (كل الفروع)'}</span></div>
+                  <div className="flex items-center justify-between"><span className="text-luxury-400">هل يوجد ثيم مخزن؟</span><span className={storedTheme ? 'text-emerald-400' : 'text-luxury-500'}>{storedTheme ? 'نعم' : 'لا — يرث من المستوى الأعلى'}</span></div>
+                                  </div>
+
+                                <div className="space-y-2">
+                    <span className="text-xs font-bold text-luxury-200">إعادة تعيين</span>
+                    <p className="text-[11px] text-luxury-400">حذف ثيم {selectedBranchId ? 'الفرع' : 'المطعم'} والرجوع للوراثة من المستوى الأعلى.</p>
+                    <button onClick={handleResetTheme} disabled={themeSaving} className="w-full px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs flex items-center justify-center gap-1.5">
+                      <RotateCcw className="w-4 h-4" /> إعادة تعيين وحذف الثيم
+                    </button>
+                  </div>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* ============ Live preview (shape of the subscriber's site) ============ */}
+        {/* Right: Live Preview */}
         <div className="lg:col-span-2 lg:sticky lg:top-24 space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-gold-400" />
-              معاينة حية — هكذا سيظهر موقعك لعميلك
-            </h3>
-            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> تحديث فوري
-            </span>
+            <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Eye className="w-4 h-4 text-gold-400" /> معاينة حية</h3>
+            <div className="flex items-center gap-1 p-1 bg-luxury-900 border border-luxury-800 rounded-xl">
+              {[
+                { id: 'mobile', icon: Smartphone, label: 'جوال' },
+                { id: 'tablet', icon: Monitor, label: 'تابلت' },
+                { id: 'desktop', icon: Monitor, label: 'سطح مكتب' },
+              ].map((d) => {
+                const Icon = d.icon;
+                const sel = previewDevice === d.id;
+                return <button key={d.id} onClick={() => setPreviewDevice(d.id as any)} className={`p-1.5 rounded-lg ${sel ? 'bg-gold-500 text-luxury-950' : 'text-luxury-500 hover:text-luxury-200'}`} title={d.label}><Icon className="w-4 h-4" /></button>;
+              })}
+            </div>
           </div>
 
-          {/* Phone frame */}
-          <div className="mx-auto w-[290px] rounded-[2.2rem] border-[6px] border-luxury-800 bg-[#0B0C0F] shadow-2xl overflow-hidden">
+          <div className={`mx-auto rounded-[2rem] border-[6px] border-luxury-800 bg-[#0B0C0F] shadow-2xl overflow-hidden relative ${previewDevice === 'mobile' ? 'w-[320px]' : previewDevice === 'tablet' ? 'w-[480px]' : 'w-full'}`} style={previewVars as any}>
+            {/* Background layer preview */}
+            {(editConfig.background?.dark || effectiveTheme?.background.dark) && (
+              <div className="absolute inset-0 -z-10 pointer-events-none">
+                {/* Simplified background preview */}
+                <div className="w-full h-full" style={{
+                  backgroundColor: (editConfig.background?.dark?.color || effectiveTheme?.background.dark.color || effectiveTheme?.colors.background) as any,
+                  backgroundImage: editConfig.background?.dark?.gradient || effectiveTheme?.background.dark.gradient || undefined,
+                }} />
+              </div>
+            )}
+
             <div className="relative">
-              {/* Cover */}
               <div className="h-40 w-full relative">
-                {coverImage ? (
-                  <img src={coverImage} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full" style={{ background: `linear-gradient(135deg, ${accentColor}33, ${primaryColor}55)` }} />
-                )}
+                {coverImage ? <img src={coverImage} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.secondary || accentColor}33, ${editConfig.colors?.primary || primaryColor}55)` }} />}
                 <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(7,8,10,0.95), rgba(7,8,10,0.15))' }} />
-
-                {/* Status bar */}
-                <div className="absolute top-2 inset-x-3 flex items-center justify-between text-[11px] text-luxury-200/90 font-mono">
-                  <span>9:41</span>
-                  <span className="w-16 h-3.5 rounded-full bg-black/60 border border-luxury-700" />
-                </div>
-
-                {/* Brand row */}
+                <div className="absolute top-2 inset-x-3 flex items-center justify-between text-[11px] text-luxury-200/90 font-mono"><span>9:41</span><span className="w-16 h-3.5 rounded-full bg-black/60 border border-luxury-700" /></div>
                 <div className="absolute bottom-3 inset-x-4 flex items-end gap-3">
-                  <div
-                    className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center border-2 shadow-lg shrink-0 text-lg font-serif font-bold text-white"
-                    style={{
-                      background: logoPreview ? 'transparent' : `linear-gradient(135deg, ${primaryColor}, ${accentColor})`,
-                      borderColor: `${primaryColor}99`,
-                    }}
-                  >
-                    {logoPreview ? (
-                      <img
-                        src={logoPreview}
-                        alt=""
-                        className="w-full h-full"
-                        style={{ objectFit: logoFit, objectPosition: logoPosition }}
-                      />
-                    ) : (
-                      (nameEn.charAt(0) || 'م')
-                    )}
+                  <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center border-2 shadow-lg shrink-0 text-lg font-serif font-bold text-white" style={{ background: logoPreview ? 'transparent' : `linear-gradient(135deg, ${editConfig.colors?.primary || primaryColor}, ${editConfig.colors?.accent || accentColor})`, borderColor: `${editConfig.colors?.primary || primaryColor}99` }}>
+                    {logoPreview ? <img src={logoPreview} alt="" className="w-full h-full" style={{ objectFit: logoFit, objectPosition: logoPosition }} /> : (nameEn.charAt(0) || 'م')}
                   </div>
-                  <div className="min-w-0 pb-0.5">
-                    <div className="text-sm font-serif font-bold text-white truncate">{name || 'اسم المطعم'}</div>
-                    <div className="text-[11px] text-luxury-300 truncate">{nameEn || 'Restaurant Name'}</div>
-                  </div>
+                  <div className="min-w-0 pb-0.5"><div className="text-sm font-serif font-bold text-white truncate" style={{ fontFamily: 'var(--font-family)' }}>{name || 'اسم المطعم'}</div><div className="text-[11px] text-luxury-300 truncate">{nameEn || 'Restaurant Name'}</div></div>
                 </div>
               </div>
 
-              {/* Gallery Preview Bar */}
-              {galleryImages.length > 0 && (
-                <div className="px-3 pt-2">
-                  <div className="flex gap-1.5 overflow-hidden rounded-lg p-1 bg-luxury-900 border border-luxury-800">
-                    {galleryImages.slice(0, 3).map((g, idx) => (
-                      <img key={idx} src={g} alt="" className="w-10 h-8 rounded object-cover" />
-                    ))}
-                    {galleryImages.length > 3 && (
-                      <span className="text-[11px] text-gold-400 self-center font-mono">+{galleryImages.length - 3}</span>
-                    )}
-                  </div>
-                </div>
-              )}
+              {galleryImages.length > 0 && <div className="px-3 pt-2"><div className="flex gap-1.5 overflow-hidden rounded-lg p-1 bg-luxury-900 border border-luxury-800">{galleryImages.slice(0, 3).map((g, idx) => <img key={idx} src={g} alt="" className="w-10 h-8 rounded object-cover" />)}{galleryImages.length > 3 && <span className="text-[11px] text-gold-400 self-center font-mono">+{galleryImages.length - 3}</span>}</div></div>}
 
-              {/* Menu body */}
               <div className="p-3.5 space-y-2.5">
-                {/* category chips */}
                 <div className="flex gap-1.5 overflow-hidden">
                   {['الأطباق الرئيسية', 'مشاوي', 'مقبلات'].map((c) => (
-                    <span
-                      key={c}
-                      className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap text-white"
-                      style={{ background: `${primaryColor}22`, color: primaryColor, border: `1px solid ${primaryColor}55` }}
-                    >
-                      {c}
-                    </span>
+                    <span key={c} className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap text-white" style={{ background: `${editConfig.colors?.primary || primaryColor}22`, color: editConfig.colors?.primary || primaryColor, border: `1px solid ${editConfig.colors?.primary || primaryColor}55`, borderRadius: editConfig.badges?.radius || '9999px' }}>{c}</span>
                   ))}
                 </div>
-
-                {[
-                  { n: 'تندرلوين مشوي مع صوص الترافل', p: 135 },
-                  { n: 'مقبلات البحر المتوسط الملكية', p: 85 },
-                ].map((dish, i) => (
-                  <div key={i} className="flex items-center gap-2.5 bg-luxury-900/90 border border-luxury-800 rounded-xl p-2">
-                    <div
-                      className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center text-white/90 text-lg"
-                      style={{ background: `linear-gradient(135deg, ${accentColor}55, ${primaryColor}88)` }}
-                    >
-                      <UtensilsCrossed className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-bold text-luxury-100 truncate">{dish.n}</div>
-                      <div className="text-[11px] text-luxury-400 flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5" /> 15-20 دقيقة
-                      </div>
-                      <div className="text-[10px] font-bold mt-0.5" style={{ color: primaryColor }}>
-                        {currency} {dish.p}
-                      </div>
-                    </div>
-                    <button
-                      className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold shrink-0"
-                      style={{ background: `linear-gradient(135deg, ${primaryColor}, ${accentColor})` }}
-                    >
-                      <Plus className="w-3 h-3" />
-                    </button>
+                {[{ n: 'تندرلوين مشوي مع صوص الترافل', p: 135 }, { n: 'مقبلات البحر المتوسط الملكية', p: 85 }].map((dish, i) => (
+                  <div key={i} className="flex items-center gap-2.5 bg-luxury-900/90 border border-luxury-800 rounded-xl p-2" style={{ borderRadius: editConfig.cards?.radius || '16px', boxShadow: editConfig.cards?.shadow === 'lg' ? '0 12px 32px rgba(0,0,0,0.4)' : editConfig.cards?.shadow === 'sm' ? '0 1px 2px rgba(0,0,0,0.2)' : '0 4px 12px rgba(0,0,0,0.3)' }}>
+                    <div className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center text-white/90 text-lg" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.secondary || accentColor}55, ${editConfig.colors?.primary || primaryColor}88)` }}><UtensilsCrossed className="w-4 h-4" /></div>
+                    <div className="flex-1 min-w-0"><div className="text-[10px] font-bold text-luxury-100 truncate" style={{ fontFamily: 'var(--font-family)' }}>{dish.n}</div><div className="text-[11px] text-luxury-400 flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> 15-20 دقيقة</div><div className="text-[10px] font-bold mt-0.5" style={{ color: editConfig.colors?.primary || primaryColor }}>{currency} {dish.p}</div></div>
+                    <button className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold shrink-0" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.primary || primaryColor}, ${editConfig.colors?.accent || accentColor})`, borderRadius: editConfig.buttons?.radius || '12px' }}><Plus className="w-3 h-3" /></button>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <p className="text-[10px] text-luxury-500 text-center px-4 leading-relaxed">
-            المعاينة تُظهر الألوان والشعار ومعرض الصالة والفيديو التي سيراها العميل فور مسح كود QR —
-            اضغط «حفظ ونشر الهوية الجديدة» لتطبيقها على منيو موقعك الحقيقي.
-          </p>
+          <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-4 space-y-2 text-xs">
+            <div className="flex items-center justify-between"><span className="text-luxury-400">الوضع</span><span className="text-luxury-100 font-bold">{editConfig.mode || 'dark'}</span></div>
+            <div className="flex items-center justify-between"><span className="text-luxury-400">المصدر</span><span className="text-luxury-100">{effectiveTheme?.source}</span></div>
+            <div className="flex items-center justify-between"><span className="text-luxury-400">الخط</span><span className="text-luxury-100" style={{ fontFamily: FONT_OPTIONS.find(f => f.id === (editConfig.typography?.fontFamily || 'tajawal'))?.family }}>{FONT_OPTIONS.find(f => f.id === (editConfig.typography?.fontFamily || 'tajawal'))?.label}</span></div>
+            <div className="flex items-center justify-between"><span className="text-luxury-400">خلفية فاتح</span><span className="text-luxury-100">{editConfig.background?.light?.type}</span></div>
+            <div className="flex items-center justify-between"><span className="text-luxury-400">خلفية داكن</span><span className="text-luxury-100">{editConfig.background?.dark?.type}</span></div>
+          </div>
+
+          <p className="text-[10px] text-luxury-500 text-center px-4 leading-relaxed">المعاينة تطبق الثيم الحالي مع دعم Mobile/Tablet/Desktop — احفظ الثيم ليظهر لعملائك في القائمة العامة.</p>
         </div>
       </div>
     </div>

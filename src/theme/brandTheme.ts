@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import type { EffectiveTheme, ResolvedBackground } from '../types/restaurant';
 
 /**
  * Brand Theme Engine
@@ -96,6 +97,44 @@ export const BRAND_VAR_NAMES = [
   '--brand-line-strong',
   '--brand-glow',
   '--brand-muted',
+] as const;
+
+export const THEME_VAR_NAMES = [
+  '--theme-primary',
+  '--theme-secondary',
+  '--theme-accent',
+  '--theme-bg',
+  '--theme-surface',
+  '--theme-text-primary',
+  '--theme-text-secondary',
+  '--theme-border',
+  '--theme-success',
+  '--theme-warning',
+  '--theme-error',
+  '--radius-sm',
+  '--radius-md',
+  '--radius-lg',
+  '--radius-xl',
+  '--radius-full',
+  '--shadow-sm',
+  '--shadow-md',
+  '--shadow-lg',
+  '--font-family',
+  '--font-heading-weight',
+  '--font-body-weight',
+  '--button-radius',
+  '--card-radius',
+  '--card-shadow',
+  '--badge-radius',
+  '--bg-type',
+  '--bg-color',
+  '--bg-gradient',
+  '--bg-image',
+  '--bg-overlay',
+  '--bg-overlay-opacity',
+  '--bg-blur',
+  '--bg-position',
+  '--bg-size',
 ] as const;
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -456,6 +495,168 @@ export function useBrandTheme(
   }, [resolvedPrimary, resolvedAccent, options?.presetId, options?.restaurantId, options?.slug, hasServerTheme]);
 
   return tokens;
+}
+
+/**
+ * Central Theme — EffectiveTheme -> CSS variables
+ * =================================================
+ * Maps the server-resolved EffectiveTheme (Platform→Restaurant→Branch) onto
+ * CSS custom properties consumed by CustomerLayout and manager preview.
+ * White-label preserved: no Mureeh branding injected.
+ */
+
+const FONT_FAMILY_MAP: Record<string, string> = {
+  auto: 'Tajawal, Cairo, system-ui, -apple-system, sans-serif',
+  tajawal: '"Tajawal", system-ui, sans-serif',
+  cairo: '"Cairo", system-ui, sans-serif',
+  amiri: '"Amiri", serif',
+  cormorant: '"Cormorant Garamond", serif',
+  inter: '"Inter", system-ui, sans-serif',
+  poppins: '"Poppins", system-ui, sans-serif',
+};
+
+export function resolveCurrentBackground(
+  theme: EffectiveTheme,
+  prefersDark: boolean
+): ResolvedBackground {
+  if (theme.mode === 'light') return theme.background.light;
+  if (theme.mode === 'dark') return theme.background.dark;
+  return prefersDark ? theme.background.dark : theme.background.light;
+}
+
+export function backgroundToCssVars(bg: ResolvedBackground): Record<string, string> {
+  const vars: Record<string, string> = {
+    '--bg-type': bg.type,
+    '--bg-color': bg.color || '',
+    '--bg-gradient': bg.gradient || '',
+    '--bg-image': bg.url ? `url("${bg.url}")` : '',
+    '--bg-image-url': bg.url || '',
+    '--bg-overlay': bg.overlayColor || '',
+    '--bg-overlay-opacity': String(bg.overlayOpacity ?? 0.5),
+    '--bg-blur': `${bg.blur ?? 0}px`,
+    '--bg-position': bg.position || 'center',
+    '--bg-size': bg.size || 'cover',
+  };
+  // Convenience composite for background layer
+  if (bg.type === 'solid' && bg.color) {
+    vars['--bg-current'] = bg.color;
+  } else if (bg.type === 'gradient' && bg.gradient) {
+    vars['--bg-current'] = bg.gradient;
+  } else if ((bg.type === 'image' || bg.type === 'image+overlay') && bg.url) {
+    const overlay =
+      bg.type === 'image+overlay' && bg.overlayColor
+        ? `linear-gradient(${bg.overlayColor}, ${bg.overlayColor}), `
+        : '';
+    vars['--bg-current'] = `${overlay}url("${bg.url}")`;
+  } else {
+    vars['--bg-current'] = bg.color || bg.gradient || 'transparent';
+  }
+  return vars;
+}
+
+export function buildEffectiveThemeVars(
+  theme: EffectiveTheme,
+  prefersDark = false
+): Record<string, string> {
+  const currentBg = resolveCurrentBackground(theme, prefersDark);
+  const bgVars = backgroundToCssVars(currentBg);
+
+  return {
+    // Colors
+    '--theme-primary': theme.colors.primary,
+    '--theme-secondary': theme.colors.secondary,
+    '--theme-accent': theme.colors.accent,
+    '--theme-bg': theme.colors.background,
+    '--theme-surface': theme.colors.surface,
+    '--theme-text-primary': theme.colors.textPrimary,
+    '--theme-text-secondary': theme.colors.textSecondary,
+    '--theme-border': theme.colors.border,
+    '--theme-success': theme.colors.success,
+    '--theme-warning': theme.colors.warning,
+    '--theme-error': theme.colors.error,
+    // Radius
+    '--radius-sm': theme.radius.sm,
+    '--radius-md': theme.radius.md,
+    '--radius-lg': theme.radius.lg,
+    '--radius-xl': theme.radius.xl,
+    '--radius-full': theme.radius.full,
+    '--button-radius': theme.buttons.radius,
+    '--card-radius': theme.cards.radius,
+    '--badge-radius': theme.badges.radius,
+    // Shadows
+    '--shadow-sm': theme.shadows.sm,
+    '--shadow-md': theme.shadows.md,
+    '--shadow-lg': theme.shadows.lg,
+    '--card-shadow': theme.cards.shadow,
+    // Typography
+    '--font-family': FONT_FAMILY_MAP[theme.typography.fontFamily] || FONT_FAMILY_MAP.auto,
+    '--font-heading-weight': theme.typography.headingWeight,
+    '--font-body-weight': theme.typography.bodyWeight,
+    // Background (current resolved)
+    ...bgVars,
+    // Light/Dark variants for preview switching
+    '--bg-light-type': theme.background.light.type,
+    '--bg-light-color': theme.background.light.color || '',
+    '--bg-light-gradient': theme.background.light.gradient || '',
+    '--bg-light-image': theme.background.light.url ? `url("${theme.background.light.url}")` : '',
+    '--bg-dark-type': theme.background.dark.type,
+    '--bg-dark-color': theme.background.dark.color || '',
+    '--bg-dark-gradient': theme.background.dark.gradient || '',
+    '--bg-dark-image': theme.background.dark.url ? `url("${theme.background.dark.url}")` : '',
+  };
+}
+
+export function applyEffectiveTheme(
+  theme: EffectiveTheme | null | undefined,
+  styleTarget?: { setProperty(name: string, value: string): void } | null,
+  options?: { prefersDark?: boolean }
+): void {
+  if (!theme) return;
+  const target =
+    styleTarget ?? (typeof document !== 'undefined' ? document.documentElement.style : null);
+  if (!target || typeof (target as any).setProperty !== 'function') return;
+
+  const prefersDark =
+    options?.prefersDark ??
+    (typeof window !== 'undefined' && window.matchMedia
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+      : false);
+
+  const vars = buildEffectiveThemeVars(theme, prefersDark);
+  for (const [k, v] of Object.entries(vars)) {
+    (target as any).setProperty(k, v);
+  }
+
+  // Also apply legacy brand tokens for backward compat
+  const brandTokens = buildBrandTokens(theme.colors.primary, theme.colors.accent);
+  const brandVars = tokensToCssVars(brandTokens);
+  for (const [k, v] of Object.entries(brandVars)) {
+    (target as any).setProperty(k, v);
+  }
+
+  // Set data-theme attribute for CSS selectors
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', theme.mode);
+    document.documentElement.setAttribute('data-theme-source', theme.source);
+    document.documentElement.style.setProperty('--theme-mode', theme.mode);
+  }
+}
+
+export function useEffectiveTheme(
+  theme: EffectiveTheme | null | undefined
+): void {
+  useEffect(() => {
+    if (!theme) return;
+    applyEffectiveTheme(theme);
+
+    // Re-apply on system theme change when mode is auto
+    if (theme.mode === 'auto' && typeof window !== 'undefined' && window.matchMedia) {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = () => applyEffectiveTheme(theme, null, { prefersDark: mq.matches });
+      mq.addEventListener?.('change', handler);
+      return () => mq.removeEventListener?.('change', handler);
+    }
+  }, [theme]);
 }
 
 // Eager initialization: apply the previously-persisted server theme

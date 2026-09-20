@@ -11,7 +11,8 @@ import {
   assetUrlResolverFor,
   resolveRestaurantAssets,
 } from '../services/storage';
-import { validateBody, tenantStatusSchema, onboardSchema, trialActivationSchema } from '../validation/schemas';
+import { validateBody, tenantStatusSchema, onboardSchema, trialActivationSchema, platformThemeUpsertSchema } from '../validation/schemas';
+import { getStoredTheme, DEFAULT_PLATFORM_CONFIG, resolveEffectiveTheme, type ThemeConfig } from '../services/themeResolver';
 import {
   FREE_TRIAL_DAYS,
   FREE_TRIAL_PLAN_ID,
@@ -545,6 +546,74 @@ router.get('/storage-status', async (_req: Request, res: Response) => {
     },
     statusCode: 200,
   });
+});
+
+// ============================================================
+// Platform Default Theme — Admin only
+// ============================================================
+
+// GET /api/admin/platform-theme
+router.get('/platform-theme', async (_req: Request, res: Response) => {
+  try {
+    const stored = await getStoredTheme({ restaurantId: null, branchId: null });
+    const effective = stored?.config || DEFAULT_PLATFORM_CONFIG;
+    return res.json({
+      success: true,
+      data: {
+        theme: stored ? { id: stored.id, config: stored.config, createdAt: stored.createdAt, updatedAt: stored.updatedAt } : null,
+        effective,
+        default: DEFAULT_PLATFORM_CONFIG,
+      },
+      statusCode: 200,
+    });
+  } catch (err) {
+    console.error('Get platform theme error:', err);
+    return res.status(500).json({ success: false, error: 'تعذر استرجاع ثيم المنصة', statusCode: 500 });
+  }
+});
+
+// PUT /api/admin/platform-theme — upsert platform default
+// Scope: only core ThemeConfig (mode/colors/radius/shadows/typography/background)
+router.put('/platform-theme', validateBody(platformThemeUpsertSchema), async (req: Request, res: Response) => {
+  try {
+    const { config: incomingConfig } = req.body as { config: ThemeConfig };
+
+    const existingPlatform = await prisma.theme.findFirst({
+      where: { restaurantId: null, branchId: null },
+    });
+    const theme = existingPlatform
+      ? await prisma.theme.update({
+          where: { id: existingPlatform.id },
+          data: { config: incomingConfig as any },
+        })
+      : await prisma.theme.create({
+          data: {
+            restaurantId: null,
+            branchId: null,
+            config: incomingConfig as any,
+          },
+        });
+
+    await logAuditEvent({
+      restaurantId: null,
+      userId: req.user!.id,
+      actor: req.user!.name,
+      actorRole: req.user!.role,
+      action: 'PLATFORM_THEME_UPDATED',
+      entity: 'Theme',
+      entityId: theme.id,
+      details: `تم تحديث الثيم الافتراضي للمنصة`,
+    });
+
+    return res.json({
+      success: true,
+      data: { theme: { id: theme.id, config: theme.config } },
+      statusCode: 200,
+    });
+  } catch (err) {
+    console.error('Upsert platform theme error:', err);
+    return res.status(500).json({ success: false, error: 'تعذر حفظ ثيم المنصة', statusCode: 500 });
+  }
 });
 
 export default router;

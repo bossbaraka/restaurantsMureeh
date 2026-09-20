@@ -23,6 +23,9 @@ import {
   TransferChannel,
   Branch,
   EntitlementKey,
+  EffectiveTheme,
+  ThemeConfig,
+  ThemeRow,
 } from '../types/restaurant';
 
 export interface ApiResponse<T> {
@@ -242,16 +245,14 @@ function mapDisplaySettings(raw: any): RestaurantDisplaySettings | undefined {
 }
 
 export function mapRestaurantRow(raw: any): Restaurant {
+  // Theme may come from public endpoint: raw.theme or raw.effectiveTheme
+  const themeRaw = raw.theme || raw.effectiveTheme || null;
   return {
     id: raw.id,
     name: raw.name,
     nameEn: raw.nameEn || raw.name,
     slug: raw.slug,
     logo: absoluteAssetUrl(raw.logoUrl || raw.logo || ''),
-    // The persistence pair: the stable path PostgreSQL holds (additive —
-    // absent on legacy payloads). Never rendered directly; present so the
-    // client can tell a resolved URL from a raw row and round-trips stay
-    // byte-identical to what the server stores.
     logoStoragePath: typeof raw.logoStoragePath === 'string' && raw.logoStoragePath ? raw.logoStoragePath : undefined,
     logoFit: raw.logoFit === 'contain' ? 'contain' : 'cover',
     logoPosition: typeof raw.logoPosition === 'string' && raw.logoPosition.trim() ? raw.logoPosition : '50% 50%',
@@ -260,8 +261,6 @@ export function mapRestaurantRow(raw: any): Restaurant {
     description: raw.description || '',
     phone: raw.phone || '',
     address: raw.address || '',
-    // Keep geo fields undefined when unset so the map can fall back to the
-    // venue's address instead of silently pinning a platform default.
     latitude: raw.latitude != null ? Number(raw.latitude) : undefined,
     longitude: raw.longitude != null ? Number(raw.longitude) : undefined,
     mapUrl: raw.mapUrl || undefined,
@@ -271,8 +270,6 @@ export function mapRestaurantRow(raw: any): Restaurant {
     language: (raw.language || 'ar') === 'en' ? 'en' : 'ar',
     timezone: raw.timezone || 'Asia/Jerusalem',
     status: raw.status,
-    // Older cached rows predate the column; fall back to the venue default
-    // rather than leaving the guest experience without a defined kind.
     businessType:
       raw.businessType === 'CAFE' || raw.businessType === 'BAKERY'
         ? raw.businessType
@@ -281,27 +278,19 @@ export function mapRestaurantRow(raw: any): Restaurant {
     accentColor: raw.accentColor || '#C5A880',
     promoVideoUrl: raw.promoVideoUrl || undefined,
     galleryImages: Array.isArray(raw.galleryImages) ? raw.galleryImages.map(absoluteAssetUrl) : [],
-    // Stable paths for the gallery images (same order as galleryImages).
     galleryStoragePaths: Array.isArray(raw.galleryStoragePaths)
       ? raw.galleryStoragePaths.filter((p: unknown) => typeof p === 'string' && p)
       : undefined,
     planId: raw.planId || '',
     customDomain: raw.customDomain || undefined,
-    // Customer transfer payment details (bank / wallet receiving account).
-    // Additive: `undefined` when the venue configured nothing or on a legacy
-    // payload, so the guest modal renders its safe fallback.
     transfer: mapTransferDetails(raw),
-    // Public contact channels (guest menu «تواصل معنا») and the WhatsApp number
-    // behind the Live Menu's reservation request. Additive: `undefined` when
-    // the venue published nothing or on a legacy payload.
     socials: mapSocials(raw),
     whatsappNumber:
       typeof raw.whatsappNumber === 'string' && raw.whatsappNumber.trim()
         ? raw.whatsappNumber.trim()
         : undefined,
-    // Display screen (شاشة العرض) settings — additive, `undefined` for a venue
-    // that configured nothing.
     display: mapDisplaySettings(raw),
+    theme: mapEffectiveTheme(themeRaw) || undefined,
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
   };
@@ -605,6 +594,87 @@ export function mapAuditLogRow(raw: any): AuditLog {
   };
 }
 
+function mapEffectiveTheme(raw: any): EffectiveTheme | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const fallbackColors = { primary: '#D4AF37', secondary: '#94A3B8', accent: '#C5A880', background: '#0A0B0D', surface: '#121416', textPrimary: '#F8FAFC', textSecondary: '#94A3B8', border: '#1E293B', success: '#10B981', warning: '#F59E0B', error: '#EF4444' };
+  const rawColors = raw.colors || {};
+  const colors = {
+    primary: rawColors.primary || fallbackColors.primary,
+    secondary: rawColors.secondary || fallbackColors.secondary,
+    accent: rawColors.accent || fallbackColors.accent,
+    background: rawColors.background || fallbackColors.background,
+    surface: rawColors.surface || fallbackColors.surface,
+    textPrimary: rawColors.textPrimary || fallbackColors.textPrimary,
+    textSecondary: rawColors.textSecondary || fallbackColors.textSecondary,
+    border: rawColors.border || fallbackColors.border,
+    success: rawColors.success || fallbackColors.success,
+    warning: rawColors.warning || fallbackColors.warning,
+    error: rawColors.error || fallbackColors.error,
+  };
+  const mapBg = (bg: any): any => {
+    if (!bg) return { type: 'solid', color: colors.background, readabilityBoost: false } as any;
+    return {
+      type: bg.type || 'solid',
+      color: bg.color,
+      gradient: bg.gradient,
+      url: bg.url || (bg.image?.storagePath ? undefined : bg.imageUrl) || null,
+      storagePath: bg.storagePath || bg.image?.storagePath || null,
+      aiGenerated: bg.aiGenerated || bg.image?.aiGenerated || false,
+      overlayColor: bg.overlayColor || bg.overlay || undefined,
+      overlayOpacity: bg.overlayOpacity ?? bg.overlayOpacity ?? 0.85,
+      blur: bg.blur ?? 0,
+      position: bg.position || 'center',
+      size: bg.size || 'cover',
+      readabilityBoost: bg.readabilityBoost ?? bg.readability?.scrimOpacity ? true : !!bg.readabilityBoost,
+    };
+  };
+  const background = raw.background
+    ? { light: mapBg(raw.background.light), dark: mapBg(raw.background.dark) }
+    : { light: mapBg(null), dark: mapBg(null) };
+
+  const radius = raw.radius || { sm: '6px', md: '10px', lg: '16px', xl: '24px', full: '9999px' };
+  const shadows = raw.shadows || { sm: '0 1px 2px rgba(0,0,0,0.2)', md: '0 4px 12px rgba(0,0,0,0.3)', lg: '0 12px 32px rgba(0,0,0,0.4)' };
+  const typography = raw.typography || { fontFamily: 'tajawal', headingWeight: '700', bodyWeight: '400' };
+
+  // Server stores button/card/badge/category inside colors or separate; frontend expects separate
+  const buttons = raw.buttons || raw.rawConfig?.buttons || { variant: 'solid', radius: radius.md || '12px' };
+  const cards = raw.cards || raw.rawConfig?.cards || { radius: radius.lg || '16px', shadow: 'md', border: true };
+  const badges = raw.badges || raw.rawConfig?.badges || { variant: 'soft', radius: radius.full || '9999px' };
+  const categories = raw.categories || raw.rawConfig?.categories || { variant: 'pill' };
+
+  return {
+    mode: raw.mode || 'dark',
+    colors,
+    radius,
+    shadows,
+    typography: {
+      fontFamily: typography.fontFamily || 'tajawal',
+      headingWeight: String(typography.headingWeight || '700'),
+      bodyWeight: String(typography.bodyWeight || '400'),
+    },
+    buttons,
+    cards,
+    badges,
+    categories,
+    background,
+    // lockedFields removed — no longer part of ThemeConfig (revised scope)
+    source: raw.source || 'fallback',
+    rawConfig: raw.rawConfig || raw,
+  } as EffectiveTheme;
+}
+
+function mapThemeRow(raw: any): ThemeRow | null {
+  if (!raw) return null;
+  return {
+    id: raw.id,
+    restaurantId: raw.restaurantId ?? null,
+    branchId: raw.branchId ?? null,
+    config: raw.config || {},
+    createdAt: raw.createdAt ? toISO(raw.createdAt) : undefined,
+    updatedAt: raw.updatedAt ? toISO(raw.updatedAt) : undefined,
+  };
+}
+
 function mapSessionRow(raw: any, restaurantId: string, tableId: string): TableSession {
   return {
     id: raw.sessionId || raw.id,
@@ -864,15 +934,24 @@ class RestaurantApiService {
     return res as ApiResponse<never>;
   }
 
-  public async getPublicRestaurantBySlug(slug: string, qrToken?: string): Promise<ApiResponse<{
+  public async getPublicRestaurantBySlug(
+    slug: string,
+    qrToken?: string,
+    opts?: { branchId?: string; tableId?: string }
+  ): Promise<ApiResponse<{
     restaurant: Restaurant;
     categories: Category[];
     products: Product[];
     offers: Offer[];
     tables?: RestaurantTable[];
+    theme?: EffectiveTheme | null;
   }>> {
-    const cleanQr = (qrToken && qrToken.toLowerCase() !== 'default') ? qrToken : '';
-    const query = cleanQr ? `?qrToken=${encodeURIComponent(cleanQr)}` : '';
+    const params = new URLSearchParams();
+    const cleanQr = qrToken && qrToken.toLowerCase() !== 'default' ? qrToken : '';
+    if (cleanQr) params.set('qrToken', cleanQr);
+    if (opts?.branchId) params.set('branchId', opts.branchId);
+    if (opts?.tableId) params.set('tableId', opts.tableId);
+    const query = params.toString() ? `?${params.toString()}` : '';
     const res = await this.request<any>(
       'GET',
       `/public/restaurants/${encodeURIComponent(slug)}${query}`,
@@ -882,11 +961,15 @@ class RestaurantApiService {
       return {
         success: true,
         data: {
-          restaurant: mapRestaurantRow(res.data.restaurant),
+          restaurant: mapRestaurantRow({
+            ...res.data.restaurant,
+            theme: res.data.theme,
+          }),
           categories: (res.data.categories || []).map(mapCategoryRow),
           products: (res.data.products || []).map(mapProductRow),
           offers: (res.data.offers || []).map(mapOfferRow),
           tables: (res.data.tables || []).map(mapTableRow),
+          theme: mapEffectiveTheme(res.data.theme),
         },
         statusCode: 200,
       };
@@ -1978,6 +2061,120 @@ class RestaurantApiService {
     const plan = res.data.plans.find((p) => p.id === sub.planId);
     if (!plan) return false;
     return plan.entitlements.includes(entitlement);
+  }
+
+  // =========================================================================
+  // THEME MANAGEMENT — Restaurant / Branch scope
+  // =========================================================================
+
+  public async getTheme(
+    restaurantId: string,
+    branchId?: string | null
+  ): Promise<
+    ApiResponse<{
+      effective: EffectiveTheme;
+      stored: ThemeRow | null;
+      restaurantTheme: ThemeRow | null;
+      branchTheme: ThemeRow | null;
+      platformTheme: ThemeRow | null;
+      fallback: ThemeConfig;
+    }>
+  > {
+    const query = new URLSearchParams({ restaurantId });
+    if (branchId) query.set('branchId', branchId);
+    const res = await this.request<any>('GET', `/manager/theme?${query.toString()}`);
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          effective: mapEffectiveTheme(res.data.effective) as EffectiveTheme,
+          stored: mapThemeRow(res.data.stored),
+          restaurantTheme: mapThemeRow(res.data.restaurantTheme),
+          branchTheme: mapThemeRow(res.data.branchTheme),
+          platformTheme: mapThemeRow(res.data.platformTheme),
+          fallback: res.data.fallback,
+        },
+        statusCode: 200,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  public async upsertTheme(
+    restaurantId: string,
+    config: ThemeConfig,
+    branchId?: string | null
+  ): Promise<ApiResponse<{ theme: ThemeRow; effective: EffectiveTheme }>> {
+    const res = await this.request<any>('PUT', '/manager/theme', {
+      body: { restaurantId, branchId: branchId || null, config },
+    });
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          theme: mapThemeRow(res.data.theme) as ThemeRow,
+          effective: mapEffectiveTheme(res.data.effective) as EffectiveTheme,
+        },
+        statusCode: 200,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  public async deleteTheme(
+    restaurantId: string,
+    branchId?: string | null
+  ): Promise<ApiResponse<{ effective: EffectiveTheme; message?: string }>> {
+    const query = new URLSearchParams({ restaurantId });
+    if (branchId) query.set('branchId', branchId);
+    const res = await this.request<any>('DELETE', `/manager/theme?${query.toString()}`, {
+      body: { restaurantId, branchId: branchId || null },
+    });
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          effective: mapEffectiveTheme(res.data.effective) as EffectiveTheme,
+          message: res.data.message,
+        },
+        statusCode: 200,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  public async getPlatformTheme(): Promise<
+    ApiResponse<{ theme: ThemeRow | null; effective: ThemeConfig; default: ThemeConfig }>
+  > {
+    const res = await this.request<any>('GET', '/admin/platform-theme');
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          theme: mapThemeRow(res.data.theme),
+          effective: res.data.effective,
+          default: res.data.default,
+        },
+        statusCode: 200,
+      };
+    }
+    return res as ApiResponse<never>;
+  }
+
+  public async upsertPlatformTheme(
+    config: ThemeConfig
+  ): Promise<ApiResponse<{ theme: ThemeRow }>> {
+    const res = await this.request<any>('PUT', '/admin/platform-theme', {
+      body: { config },
+    });
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: { theme: mapThemeRow(res.data.theme) as ThemeRow },
+        statusCode: 200,
+      };
+    }
+    return res as ApiResponse<never>;
   }
 
   // =========================================================================

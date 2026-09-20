@@ -84,6 +84,145 @@ export interface RestaurantSocials {
 }
 
 // ============================================
+// Central Theme Management — Branding & Menu Appearance
+// ============================================
+export type ThemeMode = 'light' | 'dark' | 'auto';
+export type BackgroundType = 'solid' | 'gradient' | 'image' | 'image+overlay';
+export type BackgroundSize = 'cover' | 'contain' | 'auto';
+export type BackgroundPosition = 'center' | 'top' | 'bottom' | 'left' | 'right';
+export type ThemeFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'inter' | 'poppins';
+
+export interface BackgroundImageRef {
+  storagePath: string;
+  aiGenerated?: boolean;
+}
+
+export interface BackgroundConfig {
+  type: BackgroundType;
+  color?: string;
+  gradient?: string;
+  image?: BackgroundImageRef;
+  overlayColor?: string;
+  overlayOpacity?: number;
+  blur?: number;
+  position?: BackgroundPosition;
+  size?: BackgroundSize;
+  readabilityBoost?: boolean;
+}
+
+export interface ThemeColors {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  textPrimary: string;
+  textSecondary: string;
+  border: string;
+  success: string;
+  warning: string;
+  error: string;
+}
+
+export interface ThemeRadius {
+  sm: string;
+  md: string;
+  lg: string;
+  xl: string;
+  full: string;
+}
+
+export interface ThemeShadows {
+  sm: string;
+  md: string;
+  lg: string;
+}
+
+export interface ThemeTypography {
+  fontFamily: ThemeFontKey;
+  headingWeight: string;
+  bodyWeight: string;
+}
+
+export interface ThemeButtonStyle {
+  variant: 'solid' | 'outline' | 'ghost';
+  radius: string;
+}
+
+export interface ThemeCardStyle {
+  radius: string;
+  shadow: string;
+  border: boolean;
+}
+
+export interface ThemeBadgeStyle {
+  variant: 'solid' | 'outline' | 'soft';
+  radius: string;
+}
+
+export interface ThemeCategoryStyle {
+  variant: 'pill' | 'underline' | 'card';
+}
+
+export interface ThemeConfig {
+  mode?: ThemeMode;
+  colors?: ThemeColors;
+  radius?: ThemeRadius;
+  shadows?: ThemeShadows;
+  typography?: ThemeTypography;
+  buttons?: ThemeButtonStyle;
+  cards?: ThemeCardStyle;
+  badges?: ThemeBadgeStyle;
+  categories?: ThemeCategoryStyle;
+  background?: {
+    light?: BackgroundConfig;
+    dark?: BackgroundConfig;
+  };
+}
+
+export interface ResolvedBackground {
+  type: BackgroundType;
+  color?: string;
+  gradient?: string;
+  url?: string | null;
+  storagePath?: string | null;
+  aiGenerated?: boolean;
+  overlayColor?: string;
+  overlayOpacity?: number;
+  blur?: number;
+  position?: BackgroundPosition;
+  size?: BackgroundSize;
+  readabilityBoost?: boolean;
+}
+
+export interface EffectiveTheme {
+  mode: ThemeMode;
+  colors: ThemeColors;
+  radius: ThemeRadius;
+  shadows: ThemeShadows;
+  typography: ThemeTypography;
+  buttons: ThemeButtonStyle;
+  cards: ThemeCardStyle;
+  badges: ThemeBadgeStyle;
+  categories: ThemeCategoryStyle;
+  background: {
+    light: ResolvedBackground;
+    dark: ResolvedBackground;
+  };
+  source: 'branch' | 'restaurant' | 'platform' | 'fallback';
+  rawConfig: ThemeConfig;
+}
+
+export interface ThemeRow {
+  id: string;
+  restaurantId?: string | null;
+  branchId?: string | null;
+  config: ThemeConfig;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ============================================
 // Display screen (شاشة العرض — read-only signage board)
 // ============================================
 /**
@@ -191,6 +330,7 @@ export interface Restaurant {
    * existed (themed brand canvas + derived identity font).
    */
   display?: RestaurantDisplaySettings;
+  theme?: EffectiveTheme;
   planId: string;
   customDomain?: string;
   createdAt: string;

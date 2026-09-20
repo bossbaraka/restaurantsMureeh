@@ -219,6 +219,7 @@ model Restaurant {
   auditLogs       AuditLog[]
   branches        Branch[]
   payments        Payment[]
+  themes          Theme[]
 
   @@index([slug])
   @@index([status])
@@ -668,8 +669,34 @@ model Branch {
   updatedAt    DateTime    @updatedAt
 
   tables       Table[]
+  themes       Theme[]
 
   @@index([restaurantId])
+}
+
+// ============================================
+// Central Theme Management (Platform → Restaurant → Branch)
+// ============================================
+// Single table serves all scopes:
+//   restaurantId=null, branchId=null => Platform Default (single row enforced by partial unique index)
+//   restaurantId=X, branchId=null    => Restaurant Theme
+//   restaurantId=X, branchId=Y       => Branch Override (optional, only on demand)
+// config stores ONLY storagePath + metadata (aiGenerated), never renderable URL.
+// URL is resolved on read through the same storage contract as logo/cover.
+// Theme is source of truth ONLY when a row exists; otherwise legacy branding + fallback is used.
+model Theme {
+  id           String      @id @default(uuid())
+  restaurantId String?
+  restaurant   Restaurant? @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  branchId     String?
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  config       Json
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([restaurantId, branchId])
+  @@index([restaurantId])
+  @@index([branchId])
 }
 
 // ============================================

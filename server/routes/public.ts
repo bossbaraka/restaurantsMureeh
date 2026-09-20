@@ -60,6 +60,7 @@ import {
   qrSessionSchema,
   paymentProofSchema,
 } from '../validation/schemas';
+import { resolveEffectiveTheme } from '../services/themeResolver';
 
 const router = Router();
 
@@ -370,6 +371,55 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
       });
     }
 
+    // Branch context for theme inheritance: ?branchId= or ?tableId= (table's branch)
+    let themeBranchId: string | null = (req.query.branchId as string) || null;
+    const tableIdHint = (req.query.tableId as string) || null;
+    if (!themeBranchId && tableIdHint) {
+      try {
+        const table = await prisma.table.findUnique({
+          where: { id: tableIdHint },
+          select: { branchId: true, restaurantId: true },
+        });
+        if (table && table.restaurantId === restaurant.id) {
+          themeBranchId = table.branchId || null;
+        }
+      } catch {
+        // Best-effort: ignore branch resolution failure, fall back to restaurant theme
+      }
+    }
+
+    let effectiveTheme: Awaited<ReturnType<typeof resolveEffectiveTheme>> | null = null;
+    let publicTheme: any = null;
+    try {
+      effectiveTheme = await resolveEffectiveTheme({
+        restaurantId: restaurant.id,
+        branchId: themeBranchId,
+      });
+      if (effectiveTheme) {
+        // Public API: expose URL only, never raw storagePath (tenant isolation + no leak)
+        const sanitizeBg = (bg: any) => {
+          if (!bg) return bg;
+          const { storagePath: _sp, ...rest } = bg;
+          return rest;
+        };
+        publicTheme = {
+          ...effectiveTheme,
+          background: {
+            light: sanitizeBg((effectiveTheme as any).background?.light),
+            dark: sanitizeBg((effectiveTheme as any).background?.dark),
+          },
+          // rawConfig may contain storagePath internally — strip for public
+          rawConfig: undefined,
+        };
+        // Keep colors/mode/etc, but remove rawConfig storagePath references
+        // Client uses theme.background.light.url / dark.url
+      }
+    } catch {
+      // Theme resolution failure must never break menu serving — fallback will be used client-side
+      effectiveTheme = null;
+      publicTheme = null;
+    }
+
     // Format products for frontend compatibility
     const formattedProducts = restaurant.products.map((p) => ({
       id: p.id,
@@ -553,6 +603,7 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           zone: t.zone,
           status: t.status,
         })),
+        theme: publicTheme || effectiveTheme,
       },
       statusCode: 200,
     });

@@ -233,8 +233,11 @@ describe('schema + migration', () => {
       // mode/font (defaulted) + backdrop reference (nullable) on Restaurant.
       // No Order change, no index, no data backfill.
       '20260920120000_add_restaurant_display_settings',
+      // Central theme management: Theme model with Platform→Restaurant→Branch inheritance
+      // Additive table + indexes, no Order change.
+      '20260920130000_add_central_theme',
     ]);
-    expect(sorted[sorted.length - 1]).toBe('20260920120000_add_restaurant_display_settings');
+    expect(sorted[sorted.length - 1]).toBe('20260920130000_add_central_theme');
   });
 });
 
