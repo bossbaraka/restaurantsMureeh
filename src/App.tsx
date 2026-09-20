@@ -18,11 +18,22 @@ const AppContent: React.FC = () => {
   const { viewMode, isOnboardingOpen, setIsOnboardingOpen, currentRestaurant } = useRestaurant();
   const { canAccessView, isLoginModalOpen } = useAuth();
 
-  // Keep brand theme active across the entire application (including Manager, KDS, Modals, Customer)
-  useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor, {
-    restaurantId: currentRestaurant?.id,
-    slug: currentRestaurant?.slug,
-  });
+  // Keep brand theme active across the entire application (including Manager, KDS, Modals, Customer).
+  // Single source of values: the effective theme's colors when the tenant
+  // carries one (Platform→Restaurant→Branch), with the legacy
+  // primaryColor/accentColor columns as the fallback. Feeding useBrandTheme
+  // from this priority keeps the app-level writer in agreement with the
+  // customer menu's effective theme — it can no longer repaint an available
+  // effective theme with the legacy columns.
+  const effectiveThemeColors = currentRestaurant?.theme?.colors;
+  useBrandTheme(
+    effectiveThemeColors?.primary || currentRestaurant?.primaryColor,
+    effectiveThemeColors?.accent || currentRestaurant?.accentColor,
+    {
+      restaurantId: currentRestaurant?.id,
+      slug: currentRestaurant?.slug,
+    }
+  );
 
   const safeViewMode = canAccessView(viewMode) || viewMode === 'SAAS_LANDING' ? viewMode : 'CUSTOMER';
 

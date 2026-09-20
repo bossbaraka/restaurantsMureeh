@@ -616,15 +616,25 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser?.id, currentManagerRestaurant, viewMode, currentTableSession]);
 
-  // Keep brand theme synchronized and persistently cached when current restaurant changes
+  // Keep brand theme synchronized and persistently cached when the current
+  // restaurant changes.
+  // Single source of values: the effective theme's colors when the tenant
+  // carries one, with the legacy primaryColor/accentColor columns as the
+  // fallback. Because the derived values (not the raw columns) are the effect
+  // inputs, a restaurant/session/tenant/catalog reload can never repaint the
+  // legacy columns over an available effective theme — the moment a theme
+  // arrives or changes, this effect re-runs with the theme-derived values.
+  const effectiveThemeColors = currentRestaurant?.theme?.colors;
+  const brandThemePrimary = effectiveThemeColors?.primary || currentRestaurant?.primaryColor;
+  const brandThemeAccent = effectiveThemeColors?.accent || currentRestaurant?.accentColor;
   useEffect(() => {
-    if (currentRestaurant?.primaryColor || currentRestaurant?.accentColor) {
-      applyBrandTheme(currentRestaurant.primaryColor, currentRestaurant.accentColor, null, {
-        restaurantId: currentRestaurant.id,
-        slug: currentRestaurant.slug,
+    if (brandThemePrimary || brandThemeAccent) {
+      applyBrandTheme(brandThemePrimary, brandThemeAccent, null, {
+        restaurantId: currentRestaurant?.id,
+        slug: currentRestaurant?.slug,
       });
     }
-  }, [currentRestaurant?.primaryColor, currentRestaurant?.accentColor, currentRestaurant?.id, currentRestaurant?.slug]);
+  }, [brandThemePrimary, brandThemeAccent, currentRestaurant?.id, currentRestaurant?.slug]);
 
   // 10-second background polling with in-flight lock — mitigates DoS/vector (M-04).
   // Previous 1.5s × 8 endpoints = 320 req/min per tab exceeded global rate-limit
