@@ -193,6 +193,12 @@ export interface RestaurantAssetRow {
   coverImageUrl: string | null;
   mapImageUrl: string | null;
   galleryImages: string[];
+  /**
+   * The display screen's backdrop (شاشة العرض). Optional: routes whose row
+   * does not carry the column simply omit both the URL and the storage path
+   * from their payload instead of advertising an empty image.
+   */
+  displayBackgroundImageUrl?: string | null;
 }
 
 /**
@@ -220,6 +226,8 @@ export function resolveRestaurantAssets<T extends RestaurantAssetRow>(
   coverStoragePath: string | null;
   mapStoragePath: string | null;
   galleryStoragePaths: string[];
+  displayBackgroundImageUrl?: string | null;
+  displayBackgroundStoragePath?: string | null;
 } {
   const logo = resolveAssetReference(row.logoUrl, n, toUrl);
   const cover = resolveAssetReference(row.coverImageUrl, n, toUrl);
@@ -227,6 +235,13 @@ export function resolveRestaurantAssets<T extends RestaurantAssetRow>(
   const gallery = (row.galleryImages || []).map((u) =>
     resolveAssetReference(u, n, toUrl)
   );
+  // The display-screen backdrop follows the same { url, storagePath } pair,
+  // but only for rows that actually carry the column (a row that omits it —
+  // e.g. a narrow select in an unrelated route — must not gain an empty field).
+  const displayBackground =
+    row.displayBackgroundImageUrl !== undefined
+      ? resolveAssetReference(row.displayBackgroundImageUrl, n, toUrl)
+      : null;
   return {
     ...row,
     logoUrl: logo.url ?? '',
@@ -237,5 +252,11 @@ export function resolveRestaurantAssets<T extends RestaurantAssetRow>(
     coverStoragePath: cover.reference ?? null,
     mapStoragePath: map.reference ?? null,
     galleryStoragePaths: gallery.map((g) => g.reference ?? ''),
+    ...(displayBackground
+      ? {
+          displayBackgroundImageUrl: displayBackground.url,
+          displayBackgroundStoragePath: displayBackground.reference,
+        }
+      : {}),
   };
 }

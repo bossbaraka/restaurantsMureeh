@@ -570,6 +570,9 @@ describe('GET /api/public/restaurants/:slug — transfer details (real router)',
       // Contact channels & reservations — additive nullable TEXT columns,
       // same shape and same guarantees as the transfer migration above.
       '20260919180000_add_restaurant_contact_channels',
+      // Display screen settings (شاشة العرض) — two defaulted TEXT columns and
+      // one nullable TEXT column on Restaurant, same additive guarantees.
+      '20260920120000_add_restaurant_display_settings',
     ]);
   });
 });

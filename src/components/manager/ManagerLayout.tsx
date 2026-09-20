@@ -8,6 +8,7 @@ import { OrderManagement } from './OrderManagement';
 import { TableManagement } from './TableManagement';
 import { QRManagement } from './QRManagement';
 import { MenuManagement } from './MenuManagement';
+import { DisplayScreenSettingsView } from './DisplayScreenSettingsView';
 import { OffersManagement } from './OffersManagement';
 import { WaiterRequestsList } from './WaiterRequestsList';
 import { AnalyticsView } from './AnalyticsView';
@@ -20,6 +21,7 @@ import {
   LayoutDashboard,
   ChefHat,
   MapPin,
+  MonitorPlay,
   QrCode,
   Utensils,
   Flame,
@@ -48,6 +50,7 @@ export type ManagerTab =
   | 'TABLES'
   | 'QR'
   | 'MENU'
+  | 'DISPLAY'
   | 'OFFERS'
   | 'WAITERS'
   | 'STAFF'
@@ -148,6 +151,7 @@ export const ManagerLayout: React.FC = () => {
     },
     { id: 'QR', label: 'إدارة وطباعة QR', icon: <QrCode className="w-4 h-4" />, section: 'RESTAURANT' },
     { id: 'MENU', label: 'قائمة الأطباق والتسعير', icon: <Utensils className="w-4 h-4" />, section: 'RESTAURANT' },
+    { id: 'DISPLAY', label: 'شاشة العرض (للقراءة فقط)', icon: <MonitorPlay className="w-4 h-4" />, section: 'RESTAURANT' },
     { id: 'OFFERS', label: 'العروض والكومبو', icon: <Flame className="w-4 h-4" />, section: 'RESTAURANT' },
     { id: 'BRANCHES', label: 'الفروع المتعددة', icon: <Building2 className="w-4 h-4" />, section: 'RESTAURANT' },
     { id: 'STAFF', label: 'العمال وطاقم الخدمة', icon: <Users className="w-4 h-4" />, section: 'TEAM' },
@@ -430,6 +434,7 @@ export const ManagerLayout: React.FC = () => {
         {activeTab === 'TABLES' && <TableManagement />}
         {activeTab === 'QR' && <QRManagement />}
         {activeTab === 'MENU' && <MenuManagement />}
+        {activeTab === 'DISPLAY' && <DisplayScreenSettingsView />}
         {activeTab === 'OFFERS' && <OffersManagement />}
         {activeTab === 'WAITERS' && <WaiterRequestsList />}
         {activeTab === 'STAFF' && <StaffManagement />}

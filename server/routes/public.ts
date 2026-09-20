@@ -509,6 +509,14 @@ router.get('/restaurants/:slug', async (req: Request, res: Response) => {
           // request dials. Absent when the venue published nothing.
           socials: hasSocials ? socials : undefined,
           whatsappNumber,
+          // Display screen (شاشة العرض — read-only board) settings: what sits
+          // behind the menu and which display face it uses. Additive: a venue
+          // that configured nothing reports the defaults, so the board keeps
+          // its existing look.
+          displayBackgroundMode: restaurant.displayBackgroundMode,
+          displayBackgroundImageUrl: catalogRestaurant.displayBackgroundImageUrl,
+          displayBackgroundStoragePath: catalogRestaurant.displayBackgroundStoragePath,
+          displayFont: restaurant.displayFont,
         },
         categories: restaurant.categories.map((c) => ({
           id: c.id,

@@ -71,7 +71,10 @@ describe('staff role → manager tab matrix', () => {
       expect(tabs).toContain('OVERVIEW');
       expect(tabs).toContain('ANALYTICS');
       expect(tabs).toContain('STAFF');
-      expect(tabs.length).toBe(13);
+      // «شاشة العرض» (display screen settings) is a venue-identity screen, so
+      // it rides with the manager's own settings rather than a shift role.
+      expect(tabs).toContain('DISPLAY');
+      expect(tabs.length).toBe(14);
     }
   });
 });

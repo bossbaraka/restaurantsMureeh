@@ -42,9 +42,12 @@ const ROLE_VIEW_ACCESS: Record<string, string[]> = {
 //   KITCHEN : order preparation status only (plus the KDS screen itself).
 //   STAFF   : orders, tables and waiter calls. No POS, no menu edits.
 const ROLE_MANAGER_TAB_ACCESS: Record<string, string[]> = {
-  PLATFORM_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
-  SUPER_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
-  RESTAURANT_MANAGER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
+  // «شاشة العرض» is a venue-identity screen (background + font of the read-only
+  // board), so it rides with the manager's own settings — never with a shift
+  // role: a cashier or waiter can open the board but never restyle it.
+  PLATFORM_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'DISPLAY', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
+  SUPER_ADMIN: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'DISPLAY', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
+  RESTAURANT_MANAGER: ['OVERVIEW', 'POS', 'ORDERS', 'TABLES', 'QR', 'MENU', 'DISPLAY', 'OFFERS', 'WAITERS', 'STAFF', 'ANALYTICS', 'BRANDING', 'SUBSCRIPTION', 'BRANCHES'],
   CASHIER: ['POS', 'ORDERS', 'TABLES'],
   WAITER: ['ORDERS', 'TABLES', 'WAITERS'],
   KITCHEN: ['ORDERS'],

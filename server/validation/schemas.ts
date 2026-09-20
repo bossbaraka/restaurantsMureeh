@@ -980,6 +980,33 @@ export const CONTACT_CHANNEL_FIELDS = [
   ['websiteUrl', SOCIAL_PLATFORM_LABELS.website],
 ] as const satisfies readonly [keyof typeof contactChannelsShape, string][];
 
+// ---------------------------------------------------------------------------
+// Display screen (شاشة العرض — the read-only signage board).
+//
+// The venue's own board settings: what sits behind the menu (its brand canvas
+// or an uploaded photograph) and which display face it uses. Same write
+// contract as every other branding field:
+//   field omitted → UNCHANGED (Prisma `undefined`)
+//   ''            → EXPLICIT clear (the route writes NULL)
+//   value         → validated here, normalized by the route
+//
+// Deliberately a closed list of fonts: the board may only pick a family the
+// product actually ships (see the Google Fonts link in index.html), so a tenant
+// can never point the screen at an arbitrary — or unavailable — typeface.
+// NOT part of any paid entitlement: the read-only board is the venue's window.
+// ---------------------------------------------------------------------------
+
+/** Font keys the board may use. Kept in sync with the client's picker. */
+export const DISPLAY_FONT_KEYS = [
+  'auto',
+  'tajawal',
+  'cairo',
+  'amiri',
+  'cormorant',
+] as const;
+
+export const DISPLAY_BACKGROUND_MODES = ['theme', 'image'] as const;
+
 export const brandingSchema = z
   .object({
     restaurantId: idSchema.optional(),
@@ -1052,6 +1079,13 @@ export const brandingSchema = z
     // Contact channels & reservations (WhatsApp number + social profiles).
     // Same write contract, same "outside the paid entitlement" reasoning.
     ...contactChannelsShape,
+    // Display screen (شاشة العرض — the read-only board). Declared here because
+    // `.strict()` would otherwise 400 the whole branding save. `''` is the
+    // explicit clear of the backdrop (writes NULL, the board falls back to its
+    // themed canvas); the font is one of the families the product ships.
+    displayBackgroundMode: z.enum(DISPLAY_BACKGROUND_MODES).optional(),
+    displayBackgroundImage: assetReference('رابط خلفية شاشة العرض'),
+    displayFont: z.enum(DISPLAY_FONT_KEYS).optional(),
   })
   .strict();
 

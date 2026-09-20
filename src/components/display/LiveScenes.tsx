@@ -30,18 +30,34 @@ export interface SceneChrome {
   currency: string;
 }
 
-/** A dish row on a priced board. */
-const DishRow: React.FC<{
+/**
+ * A dish row on a priced board. Shared with the static (phone/tablet) menu, so
+ * both reads are literally the same row: a name, its note, its badges and a
+ * tabular price — never a control.
+ */
+export const DishRow: React.FC<{
   item: Product;
   index: number;
   currency: string;
   /** Dotted leaders only when there is no image column competing for space. */
   leader?: boolean;
-}> = ({ item, index, currency, leader = true }) => (
+  /**
+   * The dish's photo as a thumbnail. Used by the static menu (a hand-held
+   * screen is read up close, so the photography helps identify a dish); the
+   * film passes nothing and shows images in its own hero panels instead.
+   */
+  image?: string;
+}> = ({ item, index, currency, leader = true, image }) => (
   <li
     className="display-menu__item"
+    data-thumb={image ? 'true' : undefined}
     style={{ animationDelay: `calc(var(--lm-stagger) * ${index})` }}
   >
+    {image && (
+      <span className="display-menu__thumb" aria-hidden="true">
+        <img src={optimizeImageUrl(image, 240, 66)} alt="" loading="lazy" />
+      </span>
+    )}
     <div className="display-menu__body">
       <div className="display-menu__name-row">
         <h3 className="display-menu__dish">{item.name}</h3>

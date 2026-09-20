@@ -181,6 +181,27 @@ model Restaurant {
   tiktokUrl       String?
   youtubeUrl      String?
   websiteUrl      String?
+  // ------------------------------------------------------------------
+  // DISPLAY SCREEN (شاشة العرض — the read-only signage board)
+  // ------------------------------------------------------------------
+  // Edited once in the manager's «شاشة العرض» section and applied on every
+  // screen that opens `/r/{slug}?view=display`:
+  //   displayBackgroundMode     → 'theme' (the venue's own brand canvas, the
+  //                               default) or 'image' (a photograph behind the
+  //                               menu). A mode of 'image' without a stored
+  //                               image falls back to the themed canvas.
+  //   displayBackgroundImageUrl → the SAME stable-reference contract as every
+  //                               other image column above (key or external
+  //                               https URL; resolved to a renderable URL on
+  //                               read through resolveRestaurantAssets).
+  //   displayFont               → the display face: 'auto' keeps the identity
+  //                               derived by resolveLiveProfile(), otherwise one
+  //                               of the fonts published in DISPLAY_FONT_KEYS
+  //                               (validated by `brandingSchema`).
+  // Purely presentational and NOT part of any paid entitlement.
+  displayBackgroundMode     String  @default("theme")
+  displayBackgroundImageUrl String?
+  displayFont               String  @default("auto")
   customDomain    String?
   planId          String?
   createdAt       DateTime          @default(now())
