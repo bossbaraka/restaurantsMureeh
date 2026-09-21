@@ -256,15 +256,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             </div>
           )}
 
-          {/* REMOVABLE INGREDIENTS */}
-          {((product.removableIngredients && product.removableIngredients.length > 0) ||
-            (product.ingredients && product.ingredients.length > 0)) && (
+          {/* REMOVABLE INGREDIENTS — the guest may leave these out. Descriptive
+              `ingredients` are deliberately NOT a fallback source: they are
+              composition metadata, not customization options. */}
+          {product.removableIngredients && product.removableIngredients.length > 0 && (
             <div role="group" aria-label="استبعاد مكونات حسب تفضيلك">
               <p className="block text-xs font-bold text-luxury-200 mb-2">
                 استبعاد مكونات (حسب تفضيلك)
               </p>
               <div className="flex flex-wrap gap-2">
-                {(product.removableIngredients || product.ingredients || []).map((ing) => {
+                {product.removableIngredients.map((ing) => {
                   const isRemoved = removedIngredients.includes(ing);
                   return (
                     <button

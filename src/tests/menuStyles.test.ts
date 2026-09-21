@@ -119,6 +119,56 @@ describe('menu grid layout cannot overlap itself', () => {
   });
 });
 
+describe('product card click model — one card-wide target, never a dead zone', () => {
+  /** Resolved z-index of a selector (absent = 0, i.e. the auto/static layer). */
+  const zIndexOf = (selector: string): number => {
+    const raw = value(selector, 'z-index').trim().split(/\s+/).filter(Boolean).pop() || '';
+    return raw === '' ? 0 : Number(raw);
+  };
+
+  it('keeps the card-wide hit area above every decorative layer', () => {
+    const hit = zIndexOf('.menu-card__hit');
+    expect(hit).toBeGreaterThan(0);
+    // The badge overlay shipped with `z-index: 2` — above the hit — so a tap on
+    // «طبق الشيف» / «حساسية» / «غير متوفر» hit an element with no handler and
+    // the card did nothing at all. Nothing decorative may outrank the hit.
+    const decorative = [
+      '.menu-media',
+      '.menu-media__scrim',
+      '.menu-media__badges',
+      '.menu-badge',
+      '.menu-img',
+      '.menu-img__skeleton',
+      '.menu-img__fallback',
+      '.menu-card__body',
+      '.menu-card__title',
+      '.menu-card__title-en',
+      '.menu-card__desc',
+      '.menu-card__meta',
+      '.menu-meta',
+      '.menu-card__footer',
+      '.menu-price',
+    ];
+    for (const selector of decorative) {
+      expect(zIndexOf(selector), `${selector} must not sit above .menu-card__hit`).toBeLessThanOrEqual(hit);
+    }
+  });
+
+  it('keeps the badges visible without lifting them above the hit area', () => {
+    // The scrim (a gradient only) must not swallow pointer events…
+    expect(value('.menu-media__scrim', 'pointer-events')).toContain('none');
+    // …and the badges are emitted AFTER it, so plain DOM order already paints
+    // them on top of the scrim — no z-index is required for the visual layer.
+    expect(has('.menu-media__badges', 'z-index')).toBe(false);
+    expect(zIndexOf('.menu-media__badges')).toBe(0);
+  });
+
+  it('keeps the action controls above the hit area', () => {
+    const hit = zIndexOf('.menu-card__hit');
+    expect(zIndexOf('.menu-actions')).toBeGreaterThan(hit);
+  });
+});
+
 describe('customer menu consumes the Effective Theme tokens', () => {
   // Phase 4 — Theme Property → CSS Token → UI Consumer. Each assertion pins
   // one consumer to the token that must drive it (with a visual fallback).
