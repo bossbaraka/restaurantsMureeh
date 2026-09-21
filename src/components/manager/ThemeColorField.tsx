@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, RotateCcw, X } from 'lucide-react';
-import { hslToRgb, parseColor, rgbToHex, rgbToHsl, type Hsl, type Rgb } from '../../theme/brandTheme';
+import { extractAlpha, formatColorOutput, hslToRgb, parseColor, rgbaCss, rgbToHex, rgbToHsl, type Hsl, type Rgb } from '../../theme/brandTheme';
 
 /**
  * ThemeColorField — the color editing control of the theme editor.
@@ -25,6 +25,13 @@ interface ThemeColorFieldProps {
   hint?: string;
   /** Compact variant for dense grids (no hint, smaller paddings). */
   compact?: boolean;
+  /**
+   * Overlay-special: the stored value may carry an alpha channel
+   * (`rgba()`/`#RRGGBBAA`). When on, the field reads and preserves that
+   * alpha (slider in the popover) and emits `rgba(r, g, b, a)` while
+   * alpha < 1 — plain fields keep the HEX6-only contract.
+   */
+  allowAlpha?: boolean;
 }
 
 const HUE_RANGE_BACKGROUND =
@@ -48,15 +55,28 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
   defaultValue,
   hint,
   compact = false,
+  allowAlpha = false,
 }) => {
   const resolved = toHexOrNull(value) || toHexOrNull(defaultValue) || '#000000';
   const hsl = useMemo<Hsl>(() => rgbToHsl(parseColor(resolved) as Rgb), [resolved]);
+  const alphaEnabled = allowAlpha === true;
 
   const [open, setOpen] = useState(false);
   const [hexDraft, setHexDraft] = useState(resolved);
   const [copied, setCopied] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const svRef = useRef<HTMLDivElement | null>(null);
+
+  // Alpha of the RAW stored value (rgba()/hex8). Only tracked when enabled;
+  // opaque stored colors resolve to 1 and keep emitting HEX6.
+  const [alpha, setAlpha] = useState(() => (alphaEnabled ? extractAlpha(value) ?? 1 : 1));
+  // Keep the alpha in sync with EXTERNAL value changes (preset clicks, theme
+  // load) — same render-phase pattern as the hex draft above.
+  const [lastAlphaSource, setLastAlphaSource] = useState(value);
+  if (alphaEnabled && lastAlphaSource !== value) {
+    setLastAlphaSource(value);
+    setAlpha(extractAlpha(value) ?? 1);
+  }
 
   // Keep the text draft in sync with EXTERNAL value changes (preset clicks)
   // by adjusting state during render — the React-recommended pattern here;
@@ -86,18 +106,43 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
 
   const emit = useCallback(
     (next: Hsl) => {
-      onChange(rgbToHex(hslToRgb({ h: ((next.h % 360) + 360) % 360, s: clamp01(next.s), l: clamp01(next.l) })));
+      const rgb = hslToRgb({ h: ((next.h % 360) + 360) % 360, s: clamp01(next.s), l: clamp01(next.l) });
+      // Alpha-enabled fields carry the stored/chosen translucency through;
+      // plain fields emit the exact legacy HEX6.
+      onChange(alphaEnabled ? formatColorOutput(rgb, alpha) : rgbToHex(rgb));
     },
-    [onChange]
+    [onChange, alphaEnabled, alpha]
+  );
+
+  const emitAlpha = useCallback(
+    (nextAlpha: number) => {
+      setAlpha(nextAlpha);
+      onChange(formatColorOutput(hslToRgb(hsl), nextAlpha));
+    },
+    [onChange, hsl]
   );
 
   const commitHex = useCallback(
     (raw: string) => {
-      const parsed = toHexOrNull(raw);
-      if (parsed) onChange(parsed);
-      else setHexDraft(resolved); // invalid input snaps back to the current color
+      const trimmed = raw.trim();
+      const parsed = toHexOrNull(trimmed);
+      if (!parsed) {
+        setHexDraft(resolved); // invalid input snaps back to the current color
+        return;
+      }
+      if (alphaEnabled) {
+        // A typed value with its own alpha channel (rgba(...)/#RRGGBBAA)
+        // commits verbatim-in-color with that alpha; a plain opaque input
+        // commits as HEX6 and returns the field to fully opaque.
+        const typedAlpha = extractAlpha(trimmed);
+        const typedRgb = parseColor(trimmed) as Rgb;
+        setAlpha(typedAlpha ?? 1);
+        onChange(formatColorOutput(typedRgb, typedAlpha ?? 1));
+        return;
+      }
+      onChange(parsed);
     },
-    [onChange, resolved]
+    [onChange, resolved, alphaEnabled]
   );
 
   const handleCopy = useCallback(async () => {
@@ -133,6 +178,10 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
 
   const resetTarget = toHexOrNull(defaultValue);
 
+  // Alpha-aware paint: while an alpha is active the swatch/cursor must show
+  // the TRANSLUCENT result, not the opaque resolved hex underneath it.
+  const displayColor = alphaEnabled && alpha < 1 ? rgbaCss(parseColor(resolved) as Rgb, alpha) : resolved;
+
   return (
     <div ref={rootRef} className="relative">
       <div className="flex items-center justify-between gap-2 mb-1">
@@ -156,7 +205,7 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
           type="button"
           onClick={() => setOpen((prev) => !prev)}
           className={`relative shrink-0 rounded-lg border border-luxury-700 overflow-hidden transition-shadow cursor-pointer ${open ? 'ring-2 ring-gold-500/60' : ''}`}
-          style={{ background: resolved }}
+          style={{ background: displayColor }}
           title={`${label} — ${resolved}`}
           aria-label={`${label}: فتح منتقي الألوان`}
           aria-expanded={open}
@@ -178,7 +227,7 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
             }
           }}
           spellCheck={false}
-          maxLength={7}
+          maxLength={alphaEnabled ? 40 : 7}
           className="flex-1 min-w-0 bg-luxury-950 border border-luxury-800 rounded-lg px-2 py-1.5 font-mono text-[11px] text-luxury-100 text-left focus:border-gold-500/60"
           placeholder="#AABBCC"
           aria-label={`قيمة اللون ${label} بصيغة HEX`}
@@ -210,7 +259,7 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
               style={{
                 left: `${hsl.s * 100}%`,
                 top: `${(1 - hsl.l) * 100}%`,
-                background: resolved,
+                background: displayColor,
               }}
             />
           </div>
@@ -231,11 +280,29 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
             <span className="w-9 text-center font-mono text-[10px] text-luxury-400">{Math.round(hsl.h)}°</span>
           </div>
 
+          {/* Alpha — only for fields whose stored value carries translucency (overlay). */}
+          {alphaEnabled && (
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(alpha * 100)}
+                onChange={(e) => emitAlpha(Number(e.target.value) / 100)}
+                className="flex-1 h-2.5 appearance-none rounded-full cursor-pointer accent-gold-500"
+                style={{ background: `linear-gradient(to right, transparent, ${resolved})` }}
+                aria-label="شفافية اللون (Alpha)"
+              />
+              <span className="w-9 text-center font-mono text-[10px] text-luxury-400">{Math.round(alpha * 100)}%</span>
+            </div>
+          )}
+
           {/* HEX + copy */}
           <div className="flex items-center gap-2">
             <span
               className="w-8 h-8 rounded-lg border border-luxury-700 shrink-0"
-              style={{ background: resolved }}
+              style={{ background: displayColor }}
               aria-hidden="true"
             />
             <input
@@ -251,7 +318,7 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
                 }
               }}
               spellCheck={false}
-              maxLength={7}
+              maxLength={alphaEnabled ? 40 : 7}
               className="flex-1 min-w-0 bg-luxury-950 border border-luxury-800 rounded-lg px-2 py-1.5 font-mono text-xs text-luxury-100 text-left focus:border-gold-500/60"
               aria-label="قيمة HEX"
             />

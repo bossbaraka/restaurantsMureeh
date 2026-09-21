@@ -364,6 +364,42 @@ export function rgbaCss({ r, g, b }: Rgb, alpha: number): string {
   return `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${clamp(alpha, 0, 1)})`;
 }
 
+/**
+ * Alpha channel (0–1) carried by a RAW stored color value — `parseColor`
+ * intentionally keeps RGB only, so the alpha is read here from the same
+ * token shapes it already accepts: the 4th `rgba()` component (or its `%`
+ * form) and `#RRGGBBAA`. Opaque formats (HEX6, `rgb()`) have no alpha
+ * channel and return null (= fully opaque).
+ */
+export function extractAlpha(value: string | undefined): number | null {
+  if (!value) return null;
+  const v = value.trim();
+  const fn = v.match(/^rgba?\(([^)]+)\)$/i);
+  if (fn) {
+    const parts = fn[1].split(/[\s,/]+/).filter(Boolean);
+    if (parts.length < 4) return null;
+    const raw = parts[3];
+    const n = Number(raw.endsWith('%') ? raw.slice(0, -1) : raw);
+    if (!Number.isFinite(n)) return null;
+    return clamp(raw.endsWith('%') ? n / 100 : n, 0, 1);
+  }
+  if (/^#[0-9a-fA-F]{8}$/.test(v)) {
+    return clamp(parseInt(v.slice(7, 9), 16) / 255, 0, 1);
+  }
+  return null;
+}
+
+/**
+ * The string a theme-editor color change is emitted as. Fields without an
+ * alpha channel (and any opaque color) keep the HEX6 contract; once
+ * alpha < 1 the value is emitted as `rgba(r, g, b, a)` so translucency is
+ * never lost — the exact shape the server `overlayColor` schema and the CSS
+ * `--bg-overlay` consumer already accept.
+ */
+export function formatColorOutput(rgb: Rgb, alpha: number): string {
+  return alpha < 1 ? rgbaCss(rgb, alpha) : rgbToHex(rgb);
+}
+
 // ---------------------------------------------------------------------------
 // Token generation
 // ---------------------------------------------------------------------------

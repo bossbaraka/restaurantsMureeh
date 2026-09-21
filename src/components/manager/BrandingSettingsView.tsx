@@ -695,8 +695,10 @@ export const BrandingSettingsView: React.FC = () => {
       logoFit,
       logoPosition,
       coverImage: coverImage.trim(),
-      primaryColor,
-      accentColor,
+      // primaryColor/accentColor are DELIBERATELY NOT sent here: the theme
+      // editor owns brand colors (Theme.config → derived legacy sync on the
+      // server). This form only hydrates them for display; re-sending its
+      // stale snapshot could clobber a freshly-synced theme save.
       businessType,
       promoVideoUrl: promoVideoUrl.trim(),
       galleryImages,
@@ -1203,8 +1205,12 @@ export const BrandingSettingsView: React.FC = () => {
                                 <div className="flex items-center gap-2 mt-1">
                                   <ThemeColorField
                                     compact
+                                    allowAlpha
                                     label="لون الطبقة"
-                                    value={cfg.overlayColor?.startsWith('#') ? cfg.overlayColor : ''}
+                                    /* Pass the stored value AS-IS: the schema keeps
+                                       rgba()/hsla() overlays and the picker must
+                                       read + preserve their alpha, not flatten it. */
+                                    value={cfg.overlayColor || ''}
                                     defaultValue="#000000"
                                     onChange={(hex) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: hex } as any } }))}
                                   />
