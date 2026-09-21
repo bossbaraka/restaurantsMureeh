@@ -73,6 +73,43 @@ describe('menu grid layout cannot overlap itself', () => {
     expect(value('.menu-rail', 'position')).toContain('sticky');
   });
 
+  it('sticks the rail below the MEASURED header stack, never a guessed pixel offset', () => {
+    // The old `top: 118px` assumed a header height that stopped being true the
+    // moment safe-area padding, wrapping or text scaling changed it — the
+    // header (z-30) then painted over the rail (z-20) on phones.
+    const top = value('.menu-rail', 'top');
+    expect(top).toContain('calc(');
+    expect(top).toContain('var(--shell-toolbar-h');
+    expect(top).toContain('var(--customer-header-h');
+    expect(top).not.toMatch(/118px/);
+    // The measured variable is published by CustomerHeader with a sane fallback.
+    const rootVars = declarations(':root');
+    expect((rootVars.get('--customer-header-h') || []).join(' ')).toMatch(/\d+px/);
+    expect((rootVars.get('--shell-toolbar-h') || []).join(' ')).toMatch(/\d+px/);
+  });
+
+  it('declares a resolved light appearance keyed on data-theme (never "auto")', () => {
+    const lightBlock = root.nodes.find(
+      (node) =>
+        node.type === 'rule' &&
+        (node as { selectors?: string[] }).selectors?.some((s) => s.trim() === ":root[data-theme='light']")
+    );
+    expect(lightBlock).toBeTruthy();
+    const vars = declarations(":root[data-theme='light']");
+    expect((vars.get('--menu-surface') || []).join(' ')).toContain('color-mix');
+    expect((vars.get('--menu-text-base') || []).join(' ')).toBeTruthy();
+  });
+
+  it('renders the theme background through ONE token-consuming layer', () => {
+    // One writer (backgroundToCssVars) → one reader (.customer-bg-layer).
+    // The previous inline React duplicate of the same background math drifted
+    // from the engine and ignored prefers-color-scheme changes.
+    const layer = declarations('.customer-bg-layer');
+    expect((layer.get('background') || []).join(' ')).toContain('var(--bg-current');
+    expect((layer.get('opacity') || []).join(' ')).toContain('var(--bg-layer-opacity');
+    expect(declarations('.customer-bg-layer::after').get('background')?.join(' ')).toContain('var(--bg-scrim');
+  });
+
   it('builds the rail surface from opaque brand tokens', () => {
     const rootVars = declarations(':root');
     const surface = (rootVars.get('--menu-surface') || []).join(' ');

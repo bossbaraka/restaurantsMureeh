@@ -65,7 +65,15 @@ export const ViewSwitcher: React.FC = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-40 bg-luxury-950/95 backdrop-blur-md border-b border-luxury-800 text-luxury-100 text-xs select-none shadow-md">
+    <header
+      className="sticky top-0 z-40 bg-luxury-950/95 backdrop-blur-md border-b border-luxury-800 text-luxury-100 text-xs select-none shadow-md"
+      /* The SINGLE safe-area compensation point of the shell: this topmost
+         sticky bar absorbs env(safe-area-inset-top) into its own padding, so
+         its background covers the notch and every consumer of
+         --shell-toolbar-h (customer header, category rail) parks below the
+         notch exactly once. Browsers without env() drop this declaration. */
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         {/* Brand & Multi-Tenant Selector */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">

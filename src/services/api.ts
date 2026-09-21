@@ -740,7 +740,14 @@ export function mapEffectiveTheme(raw: any): EffectiveTheme | null {
       blur: bg.blur ?? 0,
       position: bg.position || 'center',
       size: bg.size || 'cover',
-      readabilityBoost: bg.readabilityBoost ?? bg.readability?.scrimOpacity ? true : !!bg.readabilityBoost,
+      // Server contract: `readability: { scrimOpacity }`. UI contract:
+      // `readabilityBoost`. An explicit UI value wins; a server scrim object
+      // maps to true. (Previously a mixed ??/ternary chain that only produced
+      // the right answer by operator-precedence accident.)
+      readabilityBoost:
+        bg.readabilityBoost !== undefined
+          ? !!bg.readabilityBoost
+          : !!(bg.readability?.scrimOpacity || bg.readability?.textShadow),
     };
   };
   const background = raw.background

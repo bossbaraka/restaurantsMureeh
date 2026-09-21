@@ -99,6 +99,26 @@ export const BRAND_VAR_NAMES = [
   '--brand-muted',
 ] as const;
 
+/**
+ * The surface the brand palette is painted on. Brand IDENTITY (primary /
+ * accent) never changes with it — only the contrast-adapted foreground roles
+ * (`*-strong`) and the derived surface/hairline/muted tokens do, so a gold
+ * brand reads gold-on-dark at night and deep-gold-on-white by day.
+ */
+export type SurfaceMode = 'light' | 'dark';
+
+/**
+ * Resolves the EFFECTIVE surface mode. `auto` follows the guest's device;
+ * explicit `light`/`dark` win. This — not the raw configured mode — is what
+ * `data-theme` and every mode-aware token must be keyed on (a `data-theme`
+ * of "auto" can never be selected against in CSS).
+ */
+export function resolveThemeMode(mode: string | undefined | null, prefersDark: boolean): SurfaceMode {
+  if (mode === 'light') return 'light';
+  if (mode === 'dark') return 'dark';
+  return prefersDark ? 'dark' : 'light';
+}
+
 export const THEME_VAR_NAMES = [
   '--theme-primary',
   '--theme-secondary',
@@ -301,10 +321,26 @@ export function liftForDark(color: Rgb, minLightness = 0.62, minSaturation = 0.3
   return rgbToHex(hslToRgb({ h: hsl.h, s, l }));
 }
 
-/** Keeps a color inside a lightness window (used for solid CTA fills). */
+/**
+ * Keeps a color inside a lightness window (used for solid CTA fills).
+ */
 export function clampLightness(color: Rgb, min: number, max: number): string {
   const hsl = rgbToHsl(color);
   return rgbToHex(hslToRgb({ ...hsl, l: clamp(hsl.l, min, max) }));
+}
+
+/**
+ * Light-mode counterpart of `liftForDark`: keeps the tenant hue but DARKENS
+ * it into a foreground-safe range, so brand-colored text/icons/borders stay
+ * readable on white surfaces (gold on white fails contrast; deep gold works).
+ * Achromatic picks are darkened without inventing a hue.
+ */
+export function deepenForLight(color: Rgb, maxLightness = 0.42, minSaturation = 0.3): string {
+  const hsl = rgbToHsl(color);
+  const achromatic = hsl.s < 0.06;
+  const l = Math.min(hsl.l, maxLightness);
+  const s = achromatic ? hsl.s : Math.max(hsl.s, minSaturation);
+  return rgbToHex(hslToRgb({ h: hsl.h, s, l }));
 }
 
 /** Linear mix of two colors, `t = 0` -> a, `t = 1` -> b. */
@@ -328,18 +364,62 @@ export function rgbaCss({ r, g, b }: Rgb, alpha: number): string {
   return `rgba(${channel(r)}, ${channel(g)}, ${channel(b)}, ${clamp(alpha, 0, 1)})`;
 }
 
+/**
+ * Alpha channel (0–1) carried by a RAW stored color value — `parseColor`
+ * intentionally keeps RGB only, so the alpha is read here from the same
+ * token shapes it already accepts: the 4th `rgba()` component (or its `%`
+ * form) and `#RRGGBBAA`. Opaque formats (HEX6, `rgb()`) have no alpha
+ * channel and return null (= fully opaque).
+ */
+export function extractAlpha(value: string | undefined): number | null {
+  if (!value) return null;
+  const v = value.trim();
+  const fn = v.match(/^rgba?\(([^)]+)\)$/i);
+  if (fn) {
+    const parts = fn[1].split(/[\s,/]+/).filter(Boolean);
+    if (parts.length < 4) return null;
+    const raw = parts[3];
+    const n = Number(raw.endsWith('%') ? raw.slice(0, -1) : raw);
+    if (!Number.isFinite(n)) return null;
+    return clamp(raw.endsWith('%') ? n / 100 : n, 0, 1);
+  }
+  if (/^#[0-9a-fA-F]{8}$/.test(v)) {
+    return clamp(parseInt(v.slice(7, 9), 16) / 255, 0, 1);
+  }
+  return null;
+}
+
+/**
+ * The string a theme-editor color change is emitted as. Fields without an
+ * alpha channel (and any opaque color) keep the HEX6 contract; once
+ * alpha < 1 the value is emitted as `rgba(r, g, b, a)` so translucency is
+ * never lost — the exact shape the server `overlayColor` schema and the CSS
+ * `--bg-overlay` consumer already accept.
+ */
+export function formatColorOutput(rgb: Rgb, alpha: number): string {
+  return alpha < 1 ? rgbaCss(rgb, alpha) : rgbToHex(rgb);
+}
+
 // ---------------------------------------------------------------------------
 // Token generation
 // ---------------------------------------------------------------------------
 
-export function buildBrandTokens(primary?: string | null, accent?: string | null): BrandTokens {
+export function buildBrandTokens(
+  primary?: string | null,
+  accent?: string | null,
+  surfaceMode: SurfaceMode = 'dark'
+): BrandTokens {
   const primaryRgb = parseColor(primary) ?? (parseColor(BRAND_FALLBACK.primary) as Rgb);
   const accentRgb = parseColor(accent) ?? mixColors(primaryRgb, { r: 255, g: 255, b: 255 }, 0.25);
 
   const primaryHex = rgbToHex(primaryRgb);
   const accentHex = rgbToHex(accentRgb);
-  const primaryStrong = liftForDark(primaryRgb);
-  const accentStrong = liftForDark(accentRgb, 0.68, 0.28);
+  // Foreground roles: lifted on the dark canvas, deepened on the light one —
+  // identity hue preserved either way, contrast guaranteed by construction.
+  const primaryStrong =
+    surfaceMode === 'light' ? deepenForLight(primaryRgb, 0.4, 0.32) : liftForDark(primaryRgb);
+  const accentStrong =
+    surfaceMode === 'light' ? deepenForLight(accentRgb, 0.44, 0.26) : liftForDark(accentRgb, 0.68, 0.28);
 
   const fillStart = clampLightness(primaryRgb, 0.4, 0.68);
   const fillEnd = clampLightness(accentRgb, 0.4, 0.72);
@@ -348,6 +428,10 @@ export function buildBrandTokens(primary?: string | null, accent?: string | null
   const primaryHsl = rgbToHsl(primaryRgb);
   const accentHsl = rgbToHsl(accentRgb);
 
+  // Derived surfaces. Dark canvas: brand-tinted near-black. Light canvas:
+  // brand-tinted near-white (the *-soft inputs themselves flip below through
+  // the same tokens, and index.css re-derives --menu-* from them per mode).
+  const light = surfaceMode === 'light';
   return {
     primary: primaryHex,
     accent: accentHex,
@@ -358,13 +442,98 @@ export function buildBrandTokens(primary?: string | null, accent?: string | null
     primaryStrongRgb: toRgbTuple(parseColor(primaryStrong) as Rgb),
     ink,
     fill: `linear-gradient(135deg, ${fillStart} 0%, ${fillEnd} 100%)`,
-    // Dark, brand-tinted surfaces (the menu canvas is dark luxury).
-    soft: hslToCss(primaryHsl.h, clamp(primaryHsl.s, 0.18, 0.42), 0.09),
-    softStrong: hslToCss(primaryHsl.h, clamp(primaryHsl.s, 0.2, 0.46), 0.14),
+    soft: light
+      ? hslToCss(primaryHsl.h, clamp(primaryHsl.s, 0.14, 0.4), 0.965)
+      : hslToCss(primaryHsl.h, clamp(primaryHsl.s, 0.18, 0.42), 0.09),
+    softStrong: light
+      ? hslToCss(primaryHsl.h, clamp(primaryHsl.s, 0.16, 0.42), 0.935)
+      : hslToCss(primaryHsl.h, clamp(primaryHsl.s, 0.2, 0.46), 0.14),
     line: `rgb(${toRgbTuple(parseColor(primaryStrong) as Rgb)} / 0.22)`,
     lineStrong: `rgb(${toRgbTuple(parseColor(primaryStrong) as Rgb)} / 0.45)`,
     glow: `rgb(${toRgbTuple(parseColor(primaryStrong) as Rgb)} / 0.28)`,
-    muted: hslToCss(accentHsl.h, clamp(accentHsl.s, 0.14, 0.4), 0.66),
+    muted: light
+      ? hslToCss(accentHsl.h, clamp(accentHsl.s, 0.12, 0.34), 0.32)
+      : hslToCss(accentHsl.h, clamp(accentHsl.s, 0.14, 0.4), 0.66),
+  };
+}
+
+/**
+ * The PLATFORM DARK palette — the exact values the server fills into every
+ * theme that does not override them (themeResolver FALLBACK_THEME). In LIGHT
+ * mode these same values mean "unset", not "the tenant wants near-white text
+ * on a white menu": any field still carrying them is substituted with its
+ * light counterpart. Values the tenant actually chose (≠ these exact strings)
+ * are always respected verbatim — this is a fallback remap, never a re-brand.
+ */
+const PLATFORM_DARK_DEFAULT_COLORS: Record<string, string[]> = {
+  background: ['#0A0B0D'],
+  surface: ['#15171A', '#121416'],
+  textPrimary: ['#F5F5F0', '#F8FAFC'],
+  textSecondary: ['#A0A0A0', '#94A3B8'],
+  border: ['#2A2D32', '#1E293B'],
+};
+
+const PLATFORM_LIGHT_DEFAULT_COLORS: Record<string, string> = {
+  background: '#FFFFFF',
+  surface: '#F6F7F9',
+  textPrimary: '#171B22',
+  textSecondary: '#5B6472',
+  border: '#E3E7EE',
+};
+
+/**
+ * Mode-aware color resolution (PART 6 — Theme Resolution): light mode must
+ * never render the dark fallback palette. `null`/undefined input colors fall
+ * back to per-mode defaults; exact platform-dark default values flip to their
+ * light equivalents; everything else passes through untouched.
+ */
+export function resolveModeAwareColors(
+  colors: Record<string, string | undefined> | null | undefined,
+  surfaceMode: SurfaceMode
+): Record<string, string> {
+  const source = colors && typeof colors === 'object' ? colors : {};
+  const out: Record<string, string> = {};
+  for (const key of Object.keys(source)) {
+    const value = typeof source[key] === 'string' ? String(source[key]).trim() : '';
+    if (surfaceMode === 'light') {
+      if (!value) {
+        const lightDefault = PLATFORM_LIGHT_DEFAULT_COLORS[key];
+        out[key] = lightDefault || value;
+        continue;
+      }
+      // Brand hues are mode-independent — only surface/content roles flip.
+      const darkDefaults = PLATFORM_DARK_DEFAULT_COLORS[key];
+      if (darkDefaults && darkDefaults.some((d) => d.toUpperCase() === value.toUpperCase())) {
+        out[key] = PLATFORM_LIGHT_DEFAULT_COLORS[key] || value;
+        continue;
+      }
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Single source of the tenant brand identity used by every surface: the
+ * effective theme's colors when the tenant carries one, with the legacy
+ * `primaryColor`/`accentColor` columns as the fallback. Components must read
+ * identity through this (or the `--brand-*` tokens it paints) — never straight
+ * off the legacy columns, which silently diverge once a Theme row exists.
+ */
+export function resolveBrandIdentity(
+  restaurant:
+    | {
+        theme?: { colors?: { primary?: string; accent?: string } | null } | null;
+        primaryColor?: string | null;
+        accentColor?: string | null;
+      }
+    | null
+    | undefined
+): { primary?: string; accent?: string } {
+  const fromTheme = restaurant?.theme?.colors;
+  return {
+    primary: fromTheme?.primary || restaurant?.primaryColor || undefined,
+    accent: fromTheme?.accent || restaurant?.accentColor || undefined,
   };
 }
 
@@ -436,6 +605,8 @@ export function applyBrandTheme(
     presetId?: string;
     restaurantId?: string;
     slug?: string;
+    /** Surface the tokens are contrast-adapted to (defaults to the dark canvas). */
+    surfaceMode?: SurfaceMode;
     /**
      * Set false for TRANSIENT paints (no server theme loaded yet): the CSS
      * variables are applied for immediate styling, but nothing is written to
@@ -449,7 +620,7 @@ export function applyBrandTheme(
   const effectivePrimary = primary || (primary === undefined && cached?.primary) || BRAND_FALLBACK.primary;
   const effectiveAccent = accent || (accent === undefined && cached?.accent) || BRAND_FALLBACK.accent;
 
-  const tokens = buildBrandTokens(effectivePrimary, effectiveAccent);
+  const tokens = buildBrandTokens(effectivePrimary, effectiveAccent, options?.surfaceMode ?? 'dark');
   const target =
     styleTarget ?? (typeof document !== 'undefined' ? document.documentElement.style : null);
   if (target && typeof target.setProperty === 'function') {
@@ -483,15 +654,15 @@ export function applyBrandTheme(
 export function useBrandTheme(
   primary?: string | null,
   accent?: string | null,
-  options?: { presetId?: string; restaurantId?: string; slug?: string }
+  options?: { presetId?: string; restaurantId?: string; slug?: string; surfaceMode?: SurfaceMode }
 ): BrandTokens {
   const cached = useMemo(() => getCachedBrandTheme(), []);
   const resolvedPrimary = primary || (primary === undefined && cached?.primary) || BRAND_FALLBACK.primary;
   const resolvedAccent = accent || (accent === undefined && cached?.accent) || BRAND_FALLBACK.accent;
 
   const tokens = useMemo(
-    () => buildBrandTokens(resolvedPrimary, resolvedAccent),
-    [resolvedPrimary, resolvedAccent]
+    () => buildBrandTokens(resolvedPrimary, resolvedAccent, options?.surfaceMode ?? 'dark'),
+    [resolvedPrimary, resolvedAccent, options?.surfaceMode]
   );
 
   // LOADING-STATE RULE: while the server theme has not loaded (both props
@@ -504,7 +675,7 @@ export function useBrandTheme(
       ...options,
       persist: hasServerTheme,
     });
-  }, [resolvedPrimary, resolvedAccent, options?.presetId, options?.restaurantId, options?.slug, hasServerTheme]);
+  }, [resolvedPrimary, resolvedAccent, options?.presetId, options?.restaurantId, options?.slug, options?.surfaceMode, hasServerTheme]);
 
   return tokens;
 }
@@ -576,7 +747,20 @@ export function resolveCurrentBackground(
   return prefersDark ? theme.background.dark : theme.background.light;
 }
 
-export function backgroundToCssVars(bg: ResolvedBackground): Record<string, string> {
+/**
+ * Readability scrim (the UI's «تحسين قابلية القراءة» checkbox) resolved to a
+ * real CSS paint for the current surface mode — light scrim on light canvases,
+ * dark scrim on dark ones. `transparent` when the boost is off.
+ */
+function readabilityScrim(bg: ResolvedBackground, surfaceMode: SurfaceMode): string {
+  const enabled =
+    bg.readabilityBoost === true ||
+    !!(bg as { readability?: { scrimOpacity?: number } }).readability?.scrimOpacity;
+  if (!enabled) return 'transparent';
+  return surfaceMode === 'light' ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.55)';
+}
+
+export function backgroundToCssVars(bg: ResolvedBackground, surfaceMode: SurfaceMode = 'dark'): Record<string, string> {
   const vars: Record<string, string> = {
     '--bg-type': bg.type,
     '--bg-color': bg.color || '',
@@ -588,6 +772,12 @@ export function backgroundToCssVars(bg: ResolvedBackground): Record<string, stri
     '--bg-blur': `${bg.blur ?? 0}px`,
     '--bg-position': bg.position || 'center',
     '--bg-size': bg.size || 'cover',
+    // Opacity of the whole backdrop layer (image+overlay dims the photo) and
+    // the readability scrim painted by the layer's ::after — both consumed by
+    // the single `.customer-bg-layer` rule (one background writer, no inline
+    // duplicate in CustomerLayout).
+    '--bg-layer-opacity': String(bg.type === 'image+overlay' ? bg.overlayOpacity ?? 0.85 : 1),
+    '--bg-scrim': readabilityScrim(bg, surfaceMode),
   };
   // Convenience composite for background layer
   if (bg.type === 'solid' && bg.color) {
@@ -611,18 +801,24 @@ export function buildEffectiveThemeVars(
   prefersDark = false
 ): Record<string, string> {
   const currentBg = resolveCurrentBackground(theme, prefersDark);
-  const bgVars = backgroundToCssVars(currentBg);
+  const bgVars = backgroundToCssVars(currentBg, resolveThemeMode(theme.mode, prefersDark));
+  // Mode-aware scalar colors: light mode must never render the platform's
+  // DARK fallback palette. Explicit tenant values pass through untouched.
+  const modeColors = resolveModeAwareColors(
+    theme.colors as unknown as Record<string, string | undefined>,
+    resolveThemeMode(theme.mode, prefersDark)
+  );
 
   return {
     // Colors
-    '--theme-primary': theme.colors.primary,
-    '--theme-secondary': theme.colors.secondary,
-    '--theme-accent': theme.colors.accent,
-    '--theme-bg': theme.colors.background,
-    '--theme-surface': theme.colors.surface,
-    '--theme-text-primary': theme.colors.textPrimary,
-    '--theme-text-secondary': theme.colors.textSecondary,
-    '--theme-border': theme.colors.border,
+    '--theme-primary': modeColors.primary || theme.colors.primary,
+    '--theme-secondary': modeColors.secondary || theme.colors.secondary,
+    '--theme-accent': modeColors.accent || theme.colors.accent,
+    '--theme-bg': modeColors.background || theme.colors.background,
+    '--theme-surface': modeColors.surface || theme.colors.surface,
+    '--theme-text-primary': modeColors.textPrimary || theme.colors.textPrimary,
+    '--theme-text-secondary': modeColors.textSecondary || theme.colors.textSecondary,
+    '--theme-border': modeColors.border || theme.colors.border,
     '--theme-success': theme.colors.success,
     '--theme-warning': theme.colors.warning,
     '--theme-error': theme.colors.error,
@@ -643,6 +839,10 @@ export function buildEffectiveThemeVars(
     '--category-text': theme.colors.category?.text || '',
     '--category-active-bg': theme.colors.category?.activeBg || '',
     '--category-active-text': theme.colors.category?.activeText || '',
+    // An explicit activeBg color must paint OVER the brand gradient, so when
+    // it exists we emit `none` for the image layer (else removed → the CSS
+    // fallback keeps the brand fill).
+    '--category-active-image': theme.colors.category?.activeBg ? 'none' : '',
     // Radius — the scale is the source of truth; `colors.card.radius` is the
     // only per-component radius override in the server contract.
     '--radius-sm': theme.radius.sm,
@@ -692,23 +892,32 @@ export function applyEffectiveTheme(
       ? window.matchMedia('(prefers-color-scheme: dark)').matches
       : false);
 
+  // The RESOLVED surface mode ('auto' collapses to the device preference).
+  // data-theme must never hold the literal value "auto": no CSS selector can
+  // key on it, which silently disabled every mode-aware token.
+  const surfaceMode = resolveThemeMode(theme.mode, prefersDark);
+
   const vars = buildEffectiveThemeVars(theme, prefersDark);
   for (const [k, v] of Object.entries(vars)) {
     (target as any).setProperty(k, v);
   }
 
-  // Also apply legacy brand tokens for backward compat
-  const brandTokens = buildBrandTokens(theme.colors.primary, theme.colors.accent);
+  // Also apply legacy brand tokens for backward compat — contrast-adapted to
+  // the resolved surface, not always to the dark canvas.
+  const brandTokens = buildBrandTokens(theme.colors.primary, theme.colors.accent, surfaceMode);
   const brandVars = tokensToCssVars(brandTokens);
   for (const [k, v] of Object.entries(brandVars)) {
     (target as any).setProperty(k, v);
   }
 
-  // Set data-theme attribute for CSS selectors
+  // Set data-theme attribute for CSS selectors (RESOLVED mode, plus the raw
+  // configured mode for introspection/debugging).
   if (typeof document !== 'undefined') {
-    document.documentElement.setAttribute('data-theme', theme.mode);
+    document.documentElement.setAttribute('data-theme', surfaceMode);
+    document.documentElement.setAttribute('data-theme-config', theme.mode);
     document.documentElement.setAttribute('data-theme-source', theme.source);
-    document.documentElement.style.setProperty('--theme-mode', theme.mode);
+    document.documentElement.style.setProperty('--theme-mode', surfaceMode);
+    document.documentElement.style.setProperty('--theme-mode-config', theme.mode);
   }
 }
 

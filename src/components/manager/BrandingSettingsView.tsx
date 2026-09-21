@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api, isEmbeddedImage, uiThemeConfigFromServer } from '../../services/api';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { applyBrandTheme, getCachedBrandTheme, buildEffectiveThemeVars, parseColor, rgbToHex, resolveThemeShadow, themeShadowKey } from '../../theme/brandTheme';
+import { applyBrandTheme, buildEffectiveThemeVars, getCachedBrandTheme, parseColor, rgbToHex, resolveThemeShadow, themeShadowKey } from '../../theme/brandTheme';
+import { ThemeColorField } from './ThemeColorField';
 import {
   AlertTriangle,
   Palette,
@@ -489,6 +490,10 @@ export const BrandingSettingsView: React.FC = () => {
   const [editConfig, setEditConfig] = useState<ThemeConfig>(DEFAULT_THEME_FALLBACK);
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   const [bgUploading, setBgUploading] = useState<'light' | 'dark' | null>(null);
+  // Which surface the LIVE PREVIEW renders. Independent of the saved mode:
+  // the manager must be able to inspect the light AND the dark look of the
+  // same theme before saving (auto follows this toggle for preview purposes).
+  const [previewSurface, setPreviewSurface] = useState<'light' | 'dark'>('dark');
   const bgLightInputRef = useRef<HTMLInputElement>(null);
   const bgDarkInputRef = useRef<HTMLInputElement>(null);
 
@@ -579,11 +584,13 @@ export const BrandingSettingsView: React.FC = () => {
   const applyPreset = (presetId: string) => {
     const preset = THEME_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
-    setPrimaryColor(preset.primary);
-    setAccentColor(preset.accent);
     setActivePreset(presetId);
-    applyBrandTheme(preset.primary, preset.accent, null, { presetId, restaurantId: currentRestaurant?.id, slug: currentRestaurant?.slug });
-    // Also update theme config
+    // SINGLE WRITE PATH: presets edit the THEME model only. They used to also
+    // seed the legacy primaryColor/accentColor branding state (persisted by a
+    // DIFFERENT save button) and to paint <html> immediately — pre-save state
+    // that could persist a palette the manager never saved. The live preview
+    // below renders the edit model directly; the server keeps the legacy
+    // columns in sync when the theme is saved.
     setEditConfig((prev) => ({
       ...prev,
       colors: { ...(prev.colors || DEFAULT_THEME_FALLBACK.colors!), primary: preset.primary, secondary: prev.colors?.secondary || '#94A3B8', accent: preset.accent, background: prev.colors?.background || '#0A0B0D', surface: prev.colors?.surface || '#121416', textPrimary: prev.colors?.textPrimary || '#F8FAFC', textSecondary: prev.colors?.textSecondary || '#94A3B8', border: prev.colors?.border || '#1E293B', success: prev.colors?.success || '#10B981', warning: prev.colors?.warning || '#F59E0B', error: prev.colors?.error || '#EF4444' },
@@ -688,8 +695,10 @@ export const BrandingSettingsView: React.FC = () => {
       logoFit,
       logoPosition,
       coverImage: coverImage.trim(),
-      primaryColor,
-      accentColor,
+      // primaryColor/accentColor are DELIBERATELY NOT sent here: the theme
+      // editor owns brand colors (Theme.config → derived legacy sync on the
+      // server). This form only hydrates them for display; re-sending its
+      // stale snapshot could clobber a freshly-synced theme save.
       businessType,
       promoVideoUrl: promoVideoUrl.trim(),
       galleryImages,
@@ -814,7 +823,9 @@ export const BrandingSettingsView: React.FC = () => {
     }
   };
 
-  // Live preview vars
+  // Live preview vars — built from the EDIT model over the effective theme,
+  // resolved for the previewed surface (light/dark toggle). Local state only:
+  // no API request is made while editing (save persists).
   const previewVars = useMemo(() => {
     if (!effectiveTheme) return {};
     // Build vars from editConfig merged with effective for preview
@@ -833,13 +844,12 @@ export const BrandingSettingsView: React.FC = () => {
         } as any,
       },
     } as any;
-    // Simplified: use buildEffectiveThemeVars if available, else manual
     try {
-      return buildEffectiveThemeVars(tempEffective as any);
+      return buildEffectiveThemeVars(tempEffective as any, previewSurface === 'dark');
     } catch {
       return {};
     }
-  }, [effectiveTheme, editConfig]);
+  }, [effectiveTheme, editConfig, previewSurface]);
 
   const currency = currentRestaurant?.currency || '₪';
   const logoPreview = logo || currentRestaurant?.logo || '';
@@ -958,35 +968,76 @@ export const BrandingSettingsView: React.FC = () => {
                 <p className="text-[11px] text-luxury-400 leading-relaxed">الوضع يحدد خلفية القائمة (فاتح/داكن) — «تلقائي» يتبع إعداد الجهاز. ألوان الهوية تُطبق كما هي في كلتا الحالتين.</p>
               </div>
 
-              {/* Colors */}
-              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
-                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Palette className="w-4 h-4 text-gold-400" /> الألوان الأساسية والثانوية</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {[
-                    { key: 'primary', label: 'أساسي' },
-                    { key: 'secondary', label: 'ثانوي' },
-                    { key: 'accent', label: 'مميز' },
-                    { key: 'background', label: 'خلفية' },
-                    { key: 'surface', label: 'سطح' },
-                    { key: 'textPrimary', label: 'نص أساسي' },
-                    { key: 'textSecondary', label: 'نص ثانوي' },
-                    { key: 'border', label: 'حدود' },
-                    { key: 'success', label: 'نجاح' },
-                    { key: 'warning', label: 'تحذير' },
-                    { key: 'error', label: 'خطأ' },
-                  ] .map((c) => {
-                    const val = (editConfig.colors as any)?.[c.key] || (DEFAULT_THEME_FALLBACK.colors as any)[c.key];
-                    return (
-                      <div key={c.key} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2.5 space-y-1.5">
-                        <span className="text-[11px] text-luxury-300 font-bold">{c.label}</span>
-                        <div className="flex items-center gap-2">
-                          <input type="color" value={val} onChange={(e) => setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [c.key]: e.target.value } as any }))} className="w-8 h-8 rounded cursor-pointer bg-transparent border-0" />
-                          <span className="font-mono text-[10px] text-luxury-400" dir="ltr">{val}</span>
+              {/* Colors — semantic groups. Every field keeps its exact server
+                  contract key; ThemeColorField edits local state only and the
+                  live preview re-renders instantly (no API while dragging). */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-5">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Palette className="w-4 h-4 text-gold-400" /> ألوان الثيم</h3>
+                {(() => {
+                  const colorValue = (key: string): string =>
+                    (editConfig.colors as any)?.[key] || (DEFAULT_THEME_FALLBACK.colors as any)[key];
+                  const setColor = (key: string) => (hex: string) =>
+                    setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
+                  const groups: Array<{ title: string; desc?: string; fields: Array<{ key: string; label: string; hint?: string }> }> = [
+                    {
+                      title: 'هوية العلامة',
+                      desc: 'اللون الأساسي للهوية ولون التأكيد للإجراءات والعناصر التفاعلية — يظلان كما هما في الوضعين الفاتح والداكن مع تكييف التباين تلقائياً.',
+                      fields: [
+                        { key: 'primary', label: 'اللون الأساسي (Brand)', hint: 'يظهر في الأزرار الرئيسية والعناوين والهوية' },
+                        { key: 'accent', label: 'لون التأكيد (Accent)', hint: 'للإجراءات والعناصر التفاعلية المميزة' },
+                        { key: 'secondary', label: 'لون ثانوي', hint: 'للتدرجات واللمسات الثانوية' },
+                      ],
+                    },
+                    {
+                      title: 'الأسطح والخلفيات',
+                      desc: 'ألوان الخلفيات والبطاقات والحدود في وضع القائمة الداكن.',
+                      fields: [
+                        { key: 'background', label: 'خلفية القائمة (داكن)', hint: 'في الوضع الفاتح تُشتق خلفية فاتحة تلقائياً ما لم تخصصها' },
+                        { key: 'surface', label: 'سطح البطاقات', hint: 'خلفية بطاقات الأطباق والألواح' },
+                        { key: 'border', label: 'لون الحدود', hint: 'خطوط الفصل والإطارات' },
+                      ],
+                    },
+                    {
+                      title: 'النصوص',
+                      fields: [
+                        { key: 'textPrimary', label: 'النص الأساسي' },
+                        { key: 'textSecondary', label: 'النص الثانوي', hint: 'الأوصاف والتفاصيل الهادئة' },
+                      ],
+                    },
+                    {
+                      title: 'ألوان الحالة',
+                      fields: [
+                        { key: 'success', label: 'نجاح' },
+                        { key: 'warning', label: 'تحذير' },
+                        { key: 'error', label: 'خطأ' },
+                      ],
+                    },
+                  ];
+                  return (
+                    <div className="space-y-4">
+                      {groups.map((group) => (
+                        <div key={group.title} className="bg-luxury-950 border border-luxury-800 rounded-xl p-3.5 space-y-3">
+                          <div>
+                            <span className="text-xs font-bold text-luxury-200">{group.title}</span>
+                            {group.desc && <p className="text-[10px] text-luxury-500 mt-0.5 leading-relaxed">{group.desc}</p>}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            {group.fields.map((f) => (
+                              <ThemeColorField
+                                key={f.key}
+                                label={f.label}
+                                hint={f.hint}
+                                value={colorValue(f.key)}
+                                defaultValue={(DEFAULT_THEME_FALLBACK.colors as any)[f.key]}
+                                onChange={setColor(f.key)}
+                              />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {/* Presets */}
                 <div className="pt-3 border-t border-luxury-800">
@@ -1096,10 +1147,13 @@ export const BrandingSettingsView: React.FC = () => {
                     </div>
 
                     {(cfg.type === 'solid' || cfg.type === 'image+overlay') && (
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs text-luxury-300">لون ثابت</span>
-                        <input type="color" value={cfg.color || '#0A0B0D'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), color: e.target.value } as any } }))} className="w-9 h-9 rounded bg-transparent border-0" />
-                        <input type="text" value={cfg.color || ''}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), color: e.target.value } as any } }))} className="flex-1 bg-luxury-950 border border-luxury-800 rounded-xl p-2 text-xs font-mono text-luxury-100" placeholder="#0A0B0D" />
+                      <div className="max-w-[260px]">
+                        <ThemeColorField
+                          label="لون الخلفية"
+                          value={cfg.color || ''}
+                          defaultValue={variant === 'light' ? '#FFFFFF' : '#0A0B0D'}
+                          onChange={(hex) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), color: hex } as any } }))}
+                        />
                       </div>
                     )}
 
@@ -1149,8 +1203,17 @@ export const BrandingSettingsView: React.FC = () => {
                               <div>
                                 <span className="text-[11px] text-luxury-400">لون Overlay</span>
                                 <div className="flex items-center gap-2 mt-1">
-                                  <input type="color" value={cfg.overlayColor?.startsWith('#') ? cfg.overlayColor : '#000000'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: e.target.value } as any } }))} className="w-8 h-8 rounded bg-transparent border-0" />
-                                  <input type="text" value={cfg.overlayColor || ''}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: e.target.value } as any } }))} className="flex-1 bg-luxury-950 border border-luxury-800 rounded-lg p-1.5 text-xs font-mono text-luxury-100" placeholder="rgba(0,0,0,0.6)" />
+                                  <ThemeColorField
+                                    compact
+                                    allowAlpha
+                                    label="لون الطبقة"
+                                    /* Pass the stored value AS-IS: the schema keeps
+                                       rgba()/hsla() overlays and the picker must
+                                       read + preserve their alpha, not flatten it. */
+                                    value={cfg.overlayColor || ''}
+                                    defaultValue="#000000"
+                                    onChange={(hex) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: hex } as any } }))}
+                                  />
                                 </div>
                               </div>
                               <div>
@@ -1320,6 +1383,12 @@ export const BrandingSettingsView: React.FC = () => {
         <div className="lg:col-span-2 lg:sticky lg:top-24 space-y-3">
           <div className="flex items-center justify-between px-1">
             <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Eye className="w-4 h-4 text-gold-400" /> معاينة حية</h3>
+            <div className="flex items-center gap-1">
+            {/* Surface toggle: inspect the light AND dark look of the same theme. */}
+            <div className="flex items-center gap-1 p-1 bg-luxury-900 border border-luxury-800 rounded-xl ml-2" role="group" aria-label="وضع المعاينة">
+              <button onClick={() => setPreviewSurface('light')} className={`p-1.5 rounded-lg ${previewSurface === 'light' ? 'bg-amber-400/90 text-luxury-950' : 'text-luxury-500 hover:text-luxury-200'}`} title="معاينة الوضع الفاتح" aria-pressed={previewSurface === 'light'}><Sun className="w-4 h-4" /></button>
+              <button onClick={() => setPreviewSurface('dark')} className={`p-1.5 rounded-lg ${previewSurface === 'dark' ? 'bg-luxury-600 text-luxury-50' : 'text-luxury-500 hover:text-luxury-200'}`} title="معاينة الوضع الداكن" aria-pressed={previewSurface === 'dark'}><Moon className="w-4 h-4" /></button>
+            </div>
             <div className="flex items-center gap-1 p-1 bg-luxury-900 border border-luxury-800 rounded-xl">
               {[
                 { id: 'mobile', icon: Smartphone, label: 'جوال' },
@@ -1331,16 +1400,21 @@ export const BrandingSettingsView: React.FC = () => {
                 return <button key={d.id} onClick={() => setPreviewDevice(d.id as any)} className={`p-1.5 rounded-lg ${sel ? 'bg-gold-500 text-luxury-950' : 'text-luxury-500 hover:text-luxury-200'}`} title={d.label}><Icon className="w-4 h-4" /></button>;
               })}
             </div>
+            </div>
           </div>
 
           <div className={`mx-auto rounded-[2rem] border-[6px] border-luxury-800 bg-[#0B0C0F] shadow-2xl overflow-hidden relative ${previewDevice === 'mobile' ? 'w-[320px]' : previewDevice === 'tablet' ? 'w-[480px]' : 'w-full'}`} style={previewVars as any}>
-            {/* Background layer preview */}
-            {(editConfig.background?.dark || effectiveTheme?.background.dark) && (
+            {/* Background layer preview — renders the variant of the previewed
+                surface so the manager sees the light AND dark canvas. */}
+            {(editConfig.background || effectiveTheme?.background) && (
               <div className="absolute inset-0 -z-10 pointer-events-none">
-                {/* Simplified background preview */}
                 <div className="w-full h-full" style={{
-                  backgroundColor: (editConfig.background?.dark?.color || effectiveTheme?.background.dark.color || effectiveTheme?.colors.background) as any,
-                  backgroundImage: editConfig.background?.dark?.gradient || effectiveTheme?.background.dark.gradient || undefined,
+                  backgroundColor: (previewSurface === 'light'
+                    ? editConfig.background?.light?.color || effectiveTheme?.background.light.color || '#FFFFFF'
+                    : editConfig.background?.dark?.color || effectiveTheme?.background.dark.color || effectiveTheme?.colors.background) as any,
+                  backgroundImage: (previewSurface === 'light'
+                    ? editConfig.background?.light?.gradient || effectiveTheme?.background.light.gradient
+                    : editConfig.background?.dark?.gradient || effectiveTheme?.background.dark.gradient) || undefined,
                 }} />
               </div>
             )}

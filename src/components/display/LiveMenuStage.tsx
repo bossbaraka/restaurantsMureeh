@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Category, Product, Restaurant } from '../../types/restaurant';
-import { useBrandTheme } from '../../theme/brandTheme';
+import { resolveBrandIdentity, useBrandTheme } from '../../theme/brandTheme';
 import { normalizeWhatsappNumber } from '../../utils/whatsapp';
 import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
 import {
@@ -165,7 +165,12 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
 
   // Same tenant palette the ordering menu uses — the display never diverges.
   // (Also keeps the `--brand-*` variables on <html> for the export canvas.)
-  useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
+  // Theme-first identity: the effective theme's colors when the tenant has
+  // one, legacy columns as fallback — never the columns alone.
+  const brandIdentity = resolveBrandIdentity(currentRestaurant);
+  // DELIBERATE 'dark' surface: the TV display paints a fixed dark canvas by
+  // design; the legacy --brand-* tokens it emits are dark-canvas contrasted.
+  useBrandTheme(brandIdentity.primary, brandIdentity.accent, { surfaceMode: 'dark' });
 
   const [settings, setSettings] = useState<DisplaySettings>(DISPLAY_FALLBACK);
   // Phones and tablets never autoplay: they get the static menu instead.
@@ -194,7 +199,7 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
 
   const display = currentRestaurant?.display;
   const displayKey = `${display?.backgroundMode || 'theme'}|${display?.font || 'auto'}`;
-  const profileKey = `${currentRestaurant?.primaryColor || ''}|${currentRestaurant?.accentColor || ''}|${currentRestaurant?.businessType || ''}|${displayKey}`;
+  const profileKey = `${brandIdentity.primary || ''}|${brandIdentity.accent || ''}|${currentRestaurant?.businessType || ''}|${displayKey}`;
   const profile = useMemo(
     () => resolveLiveProfile(currentRestaurant, sections, display),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -321,12 +326,14 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
     (sectionIndex: number, progress = 1): PosterInput | null => {
       const target = sections[sectionIndex];
       if (!target) return null;
+      // Theme-first identity resolved from the listed dep (currentRestaurant).
+      const identity = resolveBrandIdentity(currentRestaurant);
       return {
         restaurantName,
         restaurantNameEn: currentRestaurant?.nameEn,
         tagline: currentRestaurant?.description,
-        primaryColor: currentRestaurant?.primaryColor,
-        accentColor: currentRestaurant?.accentColor,
+        primaryColor: identity.primary,
+        accentColor: identity.accent,
         currency,
         section: {
           name: target.category.name,

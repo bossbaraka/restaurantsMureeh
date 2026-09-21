@@ -11,6 +11,7 @@ import {
   parseColor,
   rgbToHsl,
   type Rgb,
+  resolveBrandIdentity,
 } from '../../theme/brandTheme';
 
 /**
@@ -300,7 +301,10 @@ export function resolveLiveProfile(
    */
   display?: RestaurantDisplaySettings | null
 ): LiveVisualProfile {
-  const tokens = buildBrandTokens(restaurant?.primaryColor, restaurant?.accentColor);
+  // Theme-first identity: a tenant with an effective theme must derive the
+  // live profile from the theme's colors, not from stale legacy columns.
+  const identity = resolveBrandIdentity(restaurant);
+  const tokens = buildBrandTokens(identity.primary, identity.accent);
   const primary = (parseColor(tokens.primary) as Rgb) || { r: 212, g: 175, b: 55 };
   const accent = (parseColor(tokens.accentStrong) as Rgb) || primary;
   const primaryHsl = rgbToHsl(primary);

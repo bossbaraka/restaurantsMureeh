@@ -111,7 +111,6 @@ export const CustomerHero: React.FC = () => {
   const heroImage = currentRestaurant?.coverImage || 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1600&q=85';
   const restName = currentRestaurant?.name || '';
   const restDesc = currentRestaurant?.description || 'مأكولات استثنائية محضرة بأيدي نخبة الطهاة بأرقى المكونات المعتقة.';
-  const primaryCol = currentRestaurant?.primaryColor || '#D4AF37';
   const promoVideo = currentRestaurant?.promoVideoUrl || '';
 
   const latestOrder = activeTableOrders.length > 0 ? activeTableOrders[0] : null;
@@ -215,7 +214,12 @@ export const CustomerHero: React.FC = () => {
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <div
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-luxury-900/90 border backdrop-blur-md text-xs font-bold shadow-lg"
-                  style={{ borderColor: `${primaryCol}50`, color: primaryCol }}
+                  style={{
+                    // Brand identity via the resolved --brand-* tokens
+                    // (theme-first), not the legacy color columns.
+                    borderColor: 'rgb(var(--brand-primary-strong-rgb) / 0.5)',
+                    color: 'var(--brand-primary-strong)',
+                  }}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>قائمة الطعام الرقمية — {restName}</span>

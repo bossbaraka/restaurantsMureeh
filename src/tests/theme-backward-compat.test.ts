@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mergeThemeConfigs, DEFAULT_PLATFORM_CONFIG, FALLBACK_THEME, type ThemeConfig } from '../../server/services/themeResolver';
+import { mergeThemeConfigs, DEFAULT_PLATFORM_CONFIG, FALLBACK_THEME, extractLegacyBrandColors, type ThemeConfig } from '../../server/services/themeResolver';
 
 // Mock storage and config before importing resolver
 vi.mock('../../server/config', () => ({
@@ -204,5 +204,30 @@ describe('backward compatibility — legacy primary/accent as fallback layer', (
     expect(mockFindFirst).toHaveBeenCalled();
     expect(mockRestaurantFindFirst).toHaveBeenCalled();
     expect(effective.colors.primary).toBe('#FF0000');
+  });
+});
+
+// ============================================================================
+// Legacy-sync contract — PUT /manager/theme (restaurant scope) is the SINGLE
+// write path for brand colors: it keeps Restaurant.primaryColor/accentColor in
+// sync with the saved theme so the resolver's Theme-over-legacy precedence can
+// never leave two diverging copies of the same brand.
+// ============================================================================
+describe('extractLegacyBrandColors — theme save → legacy column sync', () => {
+  it('extracts the identity pair from a full theme config', () => {
+    expect(
+      extractLegacyBrandColors({ colors: { primary: '#123456', secondary: '#654321', accent: '#654321', background: '#0A0B0D', surface: '#15171A', textPrimary: '#F5F5F0', textSecondary: '#A0A0A0', border: '#2A2D32', success: '#10B981', warning: '#F59E0B', error: '#EF4444' } })
+    ).toEqual({ primaryColor: '#123456', accentColor: '#654321' });
+  });
+
+  it('returns null when either color is missing (nothing to sync)', () => {
+    expect(extractLegacyBrandColors({ colors: { primary: '#123456' } as any })).toBeNull();
+    expect(extractLegacyBrandColors({ colors: undefined })).toBeNull();
+    expect(extractLegacyBrandColors(null)).toBeNull();
+    expect(extractLegacyBrandColors({})).toBeNull();
+  });
+
+  it('ignores blank/whitespace values instead of persisting them', () => {
+    expect(extractLegacyBrandColors({ colors: { primary: '   ', accent: '#654321' } as any })).toBeNull();
   });
 });
