@@ -130,6 +130,71 @@ describe('ProductCard', () => {
   });
 });
 
+/**
+ * The customization decision has ONE definition:
+ *
+ *   sizes.length > 0 || addOns.length > 0 || removableIngredients.length > 0
+ *
+ * `ingredients` is the dish's descriptive composition (metadata): it is NOT a
+ * customization option and must never be used as a fallback source for
+ * `removableIngredients`. The previous `removableIngredients ?? ingredients`
+ * fallback turned every dish that carried only a composition list — including
+ * every dish saved before the manager form stopped writing the same array into
+ * both columns — into a «تخصيص» card.
+ */
+describe('ProductCard — customization semantics', () => {
+  /** The label of the single action button the card renders. */
+  const cta = (html: string): string => {
+    const found = html.match(/<span>(تخصيص|إضافة)<\/span>/);
+    return found ? found[1] : 'NONE';
+  };
+
+  const withFields = (fields: Partial<Product>): Product => ({ ...baseProduct, ...fields });
+
+  const size = { id: 's1', name: 'كبير', priceModifier: 5 };
+  const addOn = { id: 'a1', name: 'جبنة إضافية', price: 3 };
+
+  const cases: Array<[string, Partial<Product>, string]> = [
+    ['ingredients only', { ingredients: ['لحم', 'بصل'] }, 'إضافة'],
+    ['ingredients + removableIngredients=[]', { ingredients: ['لحم'], removableIngredients: [] }, 'إضافة'],
+    ['ingredients + removableIngredients undefined', { ingredients: ['لحم'] }, 'إضافة'],
+    ['ingredients + removableIngredients null', { ingredients: ['لحم'], removableIngredients: null as never }, 'إضافة'],
+    ['removableIngredients only', { removableIngredients: ['بصل'] }, 'تخصيص'],
+    ['sizes only', { sizes: [size] }, 'تخصيص'],
+    ['addOns only', { addOns: [addOn] }, 'تخصيص'],
+    ['sizes + addOns', { sizes: [size], addOns: [addOn] }, 'تخصيص'],
+    ['ingredients + sizes', { ingredients: ['لحم'], sizes: [size] }, 'تخصيص'],
+    [
+      'all three customization sources',
+      { ingredients: ['لحم'], removableIngredients: ['بصل'], sizes: [size], addOns: [addOn] },
+      'تخصيص',
+    ],
+    ['everything empty', { ingredients: [], removableIngredients: [], sizes: [], addOns: [] }, 'إضافة'],
+  ];
+
+  it.each(cases)('%s → %s', (_label, fields, expected) => {
+    const html = render(<ProductCard {...cardProps} product={withFields(fields)} />);
+    expect(cta(html)).toBe(expected);
+    // The CTA class travels with the label — never a customize button on a
+    // plain «إضافة» dish, nor the reverse.
+    expect(html.includes('menu-add--customize')).toBe(expected === 'تخصيص');
+  });
+
+  it('does not count descriptive ingredients in the options chip', () => {
+    const plain = render(
+      <ProductCard {...cardProps} product={withFields({ ingredients: ['لحم', 'بصل', 'طماطم'] })} />
+    );
+    // No meta chip at all: nothing customizable to advertise.
+    expect(plain).not.toContain('خيارات');
+    expect(plain).not.toContain('مقاسات');
+
+    const removable = render(
+      <ProductCard {...cardProps} product={withFields({ removableIngredients: ['بصل', 'طماطم'] })} />
+    );
+    expect(removable).toContain('2 خيارات');
+  });
+});
+
 describe('MenuToolbar', () => {
   const toolbarProps = {
     shownCount: 12,

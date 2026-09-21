@@ -31,7 +31,10 @@ const MemoProductCard: React.FC<ProductCardProps> = ({
   const available = product.isAvailable !== false;
   const sizes = product.sizes ?? [];
   const addOns = product.addOns ?? [];
-  const removable = product.removableIngredients ?? product.ingredients ?? [];
+  // Customization = sizes, add-ons, or ingredients the guest may remove.
+  // `ingredients` alone is the dish's descriptive composition and never makes
+  // a dish customizable, so it is NOT a fallback source here.
+  const removable = Array.isArray(product.removableIngredients) ? product.removableIngredients : [];
   const optionCount = sizes.length + addOns.length + removable.length;
   const hasOptions = optionCount > 0;
   const inCart = available && cartQuantity > 0;

@@ -1089,7 +1089,12 @@
   position: absolute;
   inset-block-start: 0.4rem;
   inset-inline-start: 0.4rem;
-  z-index: 2;
+  /* No z-index on purpose: the badges are decorative (nothing to activate) and
+     their only visual duty is to sit above .menu-media__scrim, which DOM order
+     already guarantees (the scrim is emitted before them and the badges paint
+     later). Any positive z-index would lift them above .menu-card__hit
+     (z-index: 1) and carve a dead click zone out of the card — a tap on
+     «طبق الشيف» / «حساسية» / «غير متوفر» then hit no handler at all. */
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;

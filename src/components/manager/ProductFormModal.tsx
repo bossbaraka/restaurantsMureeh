@@ -72,9 +72,17 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     }
   };
 
-  // Removable ingredients
-  const [removableIngredients, setRemovableIngredients] = useState<string[]>([]);
+  // Ingredients — TWO independent lists, two independent decisions:
+  //   ingredients          = the dish's descriptive composition (metadata only,
+  //                          never a customization option for the guest)
+  //   removableIngredients = the ones the guest is allowed to leave out
+  //                          (the only list that makes a dish customizable)
+  // They are separate state, hydrated separately and submitted separately: one
+  // is never an alias of the other.
+  const [ingredients, setIngredients] = useState<string[]>([]);
   const [newIngredient, setNewIngredient] = useState('');
+  const [removableIngredients, setRemovableIngredients] = useState<string[]>([]);
+  const [newRemovableIngredient, setNewRemovableIngredient] = useState('');
 
   // Sizes & AddOns
   const [sizes, setSizes] = useState<ProductSize[]>([]);
@@ -102,7 +110,10 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setCalories(product.calories || '');
       setIsAvailable(product.isAvailable);
       setIsFeatured(product.isFeatured || false);
-      setRemovableIngredients(product.removableIngredients || product.ingredients || []);
+      // Independent hydration: the descriptive list is NOT a source for the
+      // removable list (nor the other way round).
+      setIngredients(product.ingredients || []);
+      setRemovableIngredients(product.removableIngredients || []);
       setSizes(product.sizes || []);
       setAddOns(product.addOns || []);
     } else {
@@ -118,6 +129,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       setCalories(450);
       setIsAvailable(true);
       setIsFeatured(false);
+      setIngredients([]);
       setRemovableIngredients([]);
       setSizes([]);
       setAddOns([]);
@@ -170,16 +182,31 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
     setAddOns((prev) => prev.filter((a) => a.id !== id));
   };
 
+  /** Descriptive composition — metadata only, no effect on the guest CTA. */
   const handleAddIngredient = () => {
     setHasUnsavedChanges(true);
     if (!newIngredient.trim()) return;
-    if (!removableIngredients.includes(newIngredient.trim())) {
-      setRemovableIngredients((prev) => [...prev, newIngredient.trim()]);
+    if (!ingredients.includes(newIngredient.trim())) {
+      setIngredients((prev) => [...prev, newIngredient.trim()]);
     }
     setNewIngredient('');
   };
 
   const handleRemoveIngredient = (ing: string) => {
+    setIngredients((prev) => prev.filter((i) => i !== ing));
+  };
+
+  /** Ingredients the guest may leave out — this list enables «تخصيص». */
+  const handleAddRemovableIngredient = () => {
+    setHasUnsavedChanges(true);
+    if (!newRemovableIngredient.trim()) return;
+    if (!removableIngredients.includes(newRemovableIngredient.trim())) {
+      setRemovableIngredients((prev) => [...prev, newRemovableIngredient.trim()]);
+    }
+    setNewRemovableIngredient('');
+  };
+
+  const handleRemoveRemovableIngredient = (ing: string) => {
     setRemovableIngredients((prev) => prev.filter((i) => i !== ing));
   };
 
@@ -212,8 +239,11 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
       isFeatured,
       sizes: sizes.length > 0 ? sizes : undefined,
       addOns: addOns.length > 0 ? addOns : undefined,
+      // Each list travels under its own key — no cross-assignment. (Emptiness
+      // keeps the form's existing convention, shared with sizes/addOns: an
+      // empty list is omitted, i.e. "leave this untouched" on update.)
+      ingredients: ingredients.length > 0 ? ingredients : undefined,
       removableIngredients: removableIngredients.length > 0 ? removableIngredients : undefined,
-      ingredients: removableIngredients.length > 0 ? removableIngredients : undefined,
     };
 
     setIsSaving(true);
@@ -525,20 +555,58 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
             )}
           </div>
 
-          {/* REMOVABLE INGREDIENTS */}
+          {/* INGREDIENTS — descriptive composition (metadata, not a guest option) */}
           <div className="p-4 rounded-xl bg-luxury-950/60 border border-luxury-800 space-y-3">
-            <label className="block font-bold text-luxury-200">مكونات يمكن للعميل استبعادها</label>
+            <label className="block font-bold text-luxury-200">مكونات الطبق</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={newIngredient}
                 onChange={(e) => setNewIngredient(e.target.value)}
-                placeholder="مكون (مثل: البصل، الفلفل الحار، المكسرات)"
+                placeholder="مكون (مثل: الأرز، لحم الضأن، اللوز)"
+                aria-label="اسم مكون الطبق"
                 className="flex-1 bg-luxury-900 border border-luxury-800 p-2 rounded-xl text-xs text-luxury-100"
               />
               <button
                 type="button"
                 onClick={handleAddIngredient}
+                className="px-3 py-2 bg-luxury-800 hover:bg-luxury-700 text-luxury-200 font-bold rounded-xl"
+              >
+                + إضافة مكون
+              </button>
+            </div>
+            {ingredients.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {ingredients.map((ing) => (
+                  <span
+                    key={ing}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-luxury-850 border border-luxury-800 text-[11px]"
+                  >
+                    <span>{ing}</span>
+                    <button type="button" onClick={() => handleRemoveIngredient(ing)} className="text-red-400">
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* REMOVABLE INGREDIENTS — the only ingredient list the guest can act on */}
+          <div className="p-4 rounded-xl bg-luxury-950/60 border border-luxury-800 space-y-3">
+            <label className="block font-bold text-luxury-200">مكونات يمكن للعميل استبعادها</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newRemovableIngredient}
+                onChange={(e) => setNewRemovableIngredient(e.target.value)}
+                placeholder="مكون (مثل: البصل، الفلفل الحار، المكسرات)"
+                aria-label="اسم مكون قابل للاستبعاد"
+                className="flex-1 bg-luxury-900 border border-luxury-800 p-2 rounded-xl text-xs text-luxury-100"
+              />
+              <button
+                type="button"
+                onClick={handleAddRemovableIngredient}
                 className="px-3 py-2 bg-luxury-800 hover:bg-luxury-700 text-luxury-200 font-bold rounded-xl"
               >
                 + إضافة مكون
@@ -552,7 +620,7 @@ export const ProductFormModal: React.FC<ProductFormModalProps> = ({
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-luxury-850 border border-luxury-800 text-[11px]"
                   >
                     <span>{ing}</span>
-                    <button type="button" onClick={() => handleRemoveIngredient(ing)} className="text-red-400">
+                    <button type="button" onClick={() => handleRemoveRemovableIngredient(ing)} className="text-red-400">
                       ×
                     </button>
                   </span>

@@ -1922,8 +1922,13 @@ router.post(
           available: isAvailable !== false,
           isFeatured: isFeatured || false,
           allergens: allergens || [],
+          // The two ingredient lists are INDEPENDENT fields (see the customer
+          // card's customization decision): `ingredients` is the dish's
+          // descriptive composition, `removableIngredients` is what the guest
+          // is allowed to leave out. An omitted list means "the venue declared
+          // none" — never a copy of the other field.
           ingredients: ingredients || [],
-          removableIngredients: removableIngredients || ingredients || [],
+          removableIngredients: removableIngredients || [],
           options: {
             create: (sizes || []).map((s) => ({
               name: s.name,
@@ -2084,14 +2089,12 @@ router.put(
           calories: data.calories !== undefined ? data.calories : undefined,
           allergens: data.allergens !== undefined ? data.allergens : undefined,
           ingredients: data.ingredients !== undefined ? data.ingredients : undefined,
-          // Same fallback as create: a client that only sends `ingredients`
-          // (the manager form does) still gets its removable ingredients.
+          // Independent field, partial-update semantics preserved: an ABSENT
+          // key leaves the stored list untouched, a present list (even [])
+          // replaces it. `ingredients` is descriptive only and can never
+          // become removable ingredients.
           removableIngredients:
-            data.removableIngredients !== undefined
-              ? data.removableIngredients
-              : data.ingredients !== undefined
-                ? data.ingredients
-                : undefined,
+            data.removableIngredients !== undefined ? data.removableIngredients : undefined,
           options: sizes
             ? {
                 deleteMany: {},
