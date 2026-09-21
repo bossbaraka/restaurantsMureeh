@@ -84,6 +84,45 @@
   --menu-surface: color-mix(in srgb, var(--brand-soft) 55%, #0e1014);
   --menu-surface-raised: color-mix(in srgb, var(--brand-soft-strong) 45%, #14161c);
   --menu-hairline: color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  /* Content ink for the menu chrome (chips, toolbar, media placeholders).
+     Flipped by the light-appearance block below via [data-theme='light']. */
+  --menu-text-base: #cfd6e2;
+  --menu-text-strong: #f3f5f9;
+  --menu-media-end: #0b0d11;
+
+  /* -------------------------------------------------------------------------
+     Sticky header stack offsets (customer menu).
+     The platform toolbar (ViewSwitcher) is h-14 + 1px border = 57px and is the
+     ONE constant height in the stack. The venue header below it varies with
+     its content and env(safe-area-inset-top), so its real height is MEASURED
+     at runtime (CustomerHeader writes --customer-header-h via a
+     ResizeObserver). The category rail sticks to the sum — never to a guessed
+     pixel value, which is what let the header overlap the rail on phones.
+     The toolbar itself absorbs env(safe-area-inset-top) as its padding (the
+     single notch compensation point), so this height is inset-composed and
+     the stack below it needs no env() math of its own.
+     ------------------------------------------------------------------------- */
+  --shell-toolbar-h: calc(57px + env(safe-area-inset-top, 0px));
+  --customer-header-h: 69px; /* fallback until the first measurement lands */
+}
+
+/* ==========================================================================
+   LIGHT APPEARANCE — resolved-mode surface layer
+   --------------------------------------------------------------------------
+   applyEffectiveTheme() sets data-theme to the RESOLVED mode ('light' |
+   'dark', never 'auto'). Brand identity tokens (--brand-primary/-accent and
+   their contrast-adapted -strong roles) are re-derived per mode by the theme
+   engine in JS; this block re-derives only the SURFACE and chrome-ink tokens
+   so the same components read correctly on both canvases.
+   ========================================================================== */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --menu-surface: color-mix(in srgb, var(--brand-soft) 62%, #ffffff);
+  --menu-surface-raised: color-mix(in srgb, var(--brand-soft-strong) 55%, #ffffff);
+  --menu-hairline: color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  --menu-text-base: #3c4352;
+  --menu-text-strong: #10141b;
+  --menu-media-end: #e6e9ef;
 }
 
 /* Shared brand primitives used across the customer experience */
@@ -669,7 +708,10 @@
 /* Sticky filter/category rail ------------------------------------------------ */
 .menu-rail {
   position: sticky;
-  top: 118px;
+  /* Directly below the real bottom edge of the sticky header stack:
+     platform toolbar (constant) + measured venue header (varies with content
+     and safe-area insets). Never a hardcoded pixel guess. */
+  top: calc(var(--shell-toolbar-h, 57px) + var(--customer-header-h, 69px));
   z-index: 20;
   margin-inline: -1rem;
   padding: 0.5rem 1rem 0.6rem;
@@ -742,21 +784,26 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  color: color-mix(in srgb, var(--brand-muted) 70%, #cfd6e2);
-  background: var(--menu-surface-raised);
+  /* colors.category.text/bg → --category-text/--category-bg (optional overrides). */
+  color: var(--category-text, color-mix(in srgb, var(--brand-muted) 70%, var(--menu-text-base)));
+  background: var(--category-bg, var(--menu-surface-raised));
   border: 1px solid var(--menu-hairline);
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 .menu-chip:hover {
-  color: #f3f5f9;
+  color: var(--menu-text-strong);
   border-color: var(--brand-line);
 }
 .menu-chip:active {
   transform: scale(0.97);
 }
 .menu-chip[data-active='true'] {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  /* colors.category.activeBg/activeText → the selected chip. When an explicit
+     activeBg color is provided the engine also emits --category-active-image:
+     none, so the color — not the brand gradient — paints. */
+  color: var(--category-active-text, var(--brand-ink));
+  background-color: var(--category-active-bg, transparent);
+  background-image: var(--category-active-image, var(--brand-fill));
   border-color: transparent;
   font-weight: 800;
   box-shadow: 0 6px 20px -10px var(--brand-glow);
@@ -800,7 +847,7 @@
   border-radius: var(--radius-md, 10px);
   font-size: 11px;
   font-weight: 700;
-  color: #e6e9f0;
+  color: var(--menu-text-strong, #e6e9f0);
   background-color: var(--menu-surface-raised);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='3' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
   background-repeat: no-repeat;
@@ -907,8 +954,9 @@
      The inset highlight is a fixed material of this card, not themeable. */
   border-radius: var(--card-radius, 20px);
   text-align: start;
-  background: linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%);
-  border: 1px solid var(--menu-hairline);
+  /* colors.card.bg/border → --card-bg/--card-border (optional overrides). */
+  background: var(--card-bg, linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%));
+  border: 1px solid var(--card-border, var(--menu-hairline));
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.035),
     var(--card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
@@ -976,7 +1024,7 @@
   min-height: 100px;
   border-radius: 15px;
   overflow: hidden;
-  background: linear-gradient(140deg, var(--brand-soft-strong), #0b0d11);
+  background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
   border: 1px solid rgb(255 255 255 / 0.05);
 }
 @media (min-width: 640px) {
@@ -1011,7 +1059,7 @@
   inset: 0;
   background:
     linear-gradient(110deg, transparent 20%, rgb(255 255 255 / 0.07) 42%, transparent 62%),
-    linear-gradient(140deg, var(--brand-soft-strong), #0b0d11);
+    linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
   background-size: 220% 100%, 100% 100%;
   animation: menu-shimmer 1.4s ease-in-out infinite;
 }
@@ -1029,7 +1077,7 @@
   display: grid;
   place-items: center;
   color: rgb(var(--brand-primary-strong-rgb) / 0.55);
-  background: linear-gradient(140deg, var(--brand-soft-strong), #0b0d11);
+  background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
 }
 .menu-media__scrim {
   position: absolute;
@@ -1067,8 +1115,9 @@
   background-image: var(--brand-fill);
 }
 .menu-badge--dark {
-  color: #e7ebf2;
-  background: rgb(8 9 12 / 0.72);
+  /* colors.badge.text/bg → --badge-text/--badge-bg (optional overrides). */
+  color: var(--badge-text, #e7ebf2);
+  background: var(--badge-bg, rgb(8 9 12 / 0.72));
   border: 1px solid var(--theme-border, rgb(255 255 255 / 0.12));
 }
 .menu-badge--danger {
@@ -1099,7 +1148,7 @@
   -webkit-box-orient: vertical;
 }
 .menu-card:hover .menu-card__title {
-  color: #fff;
+  color: var(--menu-text-strong, #fff);
 }
 .menu-card__title-en {
   margin-top: 1px;
@@ -1202,8 +1251,10 @@
   border-radius: var(--button-radius, 12px);
   font-size: 11.5px;
   font-weight: 800;
-  color: var(--brand-primary-strong);
-  background: rgb(var(--brand-primary-strong-rgb) / 0.12);
+  /* colors.button.secondaryText/secondaryBg → the resting add-button role;
+     its hover stays the brand-fill CTA so the label contrast stays guaranteed. */
+  color: var(--button-secondary-text, var(--brand-primary-strong));
+  background: var(--button-secondary-bg, rgb(var(--brand-primary-strong-rgb) / 0.12));
   border: 1px solid rgb(var(--brand-primary-strong-rgb) / 0.34);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
@@ -1222,7 +1273,7 @@
   outline-offset: 2px;
 }
 .menu-add--customize {
-  color: #eef1f6;
+  color: var(--menu-text-strong, #eef1f6);
   background: rgb(255 255 255 / 0.05);
   border-color: rgb(255 255 255 / 0.1);
 }
@@ -2998,6 +3049,33 @@ input[type='range'].saas-range::-moz-range-thumb {
   width: 100%;
   max-width: 100vw;
   overflow-x: clip;
+}
+
+/* --------------------------------------------------------------------------
+   Central theme background layer — the SINGLE consumer of the --bg-* tokens
+   the theme engine writes (solid / gradient / image / image+overlay / scrim).
+   One writer (applyEffectiveTheme → backgroundToCssVars), one reader (this
+   rule): mode switches and prefers-color-scheme changes repaint with no
+   React re-render and no duplicated inline background math in components.
+   -------------------------------------------------------------------------- */
+.customer-bg-layer {
+  position: absolute;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  overflow: hidden;
+  background: var(--bg-current, transparent);
+  background-position: var(--bg-position, center);
+  background-size: var(--bg-size, cover);
+  background-repeat: no-repeat;
+  filter: blur(var(--bg-blur, 0px));
+  opacity: var(--bg-layer-opacity, 1);
+}
+.customer-bg-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg-scrim, transparent);
 }
 @media (max-width: 640px) {
   .customer-shell {

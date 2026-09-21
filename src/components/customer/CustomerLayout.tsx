@@ -389,58 +389,24 @@ export const CustomerLayout: React.FC = () => {
   }
 
   const theme = currentRestaurant?.theme;
-  const bg = theme?.background
-    ? (theme.mode === 'dark' || (theme.mode === 'auto' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        ? theme.background.dark
-        : theme.background.light)
-    : null;
 
   return (
     <div
       className={`customer-shell ${menuReveal ? 'customer-shell--reveal' : ''} min-h-screen text-luxury-50 flex flex-col pb-24 touch-manipulation relative`}
       dir="rtl"
       style={{
-        backgroundColor: theme?.colors.background || '#0A0B0D',
-        color: theme?.colors.textPrimary || undefined,
+        // Tokens written by the theme engine (applyEffectiveTheme) — already
+        // mode-aware, so light/dark flip with no re-render path here.
+        backgroundColor: 'var(--theme-bg, #0A0B0D)',
+        color: 'var(--theme-text-primary, #F8FAFC)',
         fontFamily: 'var(--font-family)',
       }}
     >
-      {/* Central Theme Background Layer — professional menu background */}
-      {bg && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
-          style={{
-            backgroundColor: bg.type === 'solid' ? bg.color || theme?.colors.background : undefined,
-            backgroundImage:
-              bg.type === 'gradient'
-                ? bg.gradient || undefined
-                : bg.type === 'image' && bg.url
-                  ? `url("${bg.url}")`
-                  : bg.type === 'image+overlay' && bg.url
-                    ? `${bg.overlayColor ? `linear-gradient(${bg.overlayColor}, ${bg.overlayColor}), ` : ''}url("${bg.url}")`
-                    : undefined,
-            backgroundPosition: bg.position || 'center',
-            backgroundSize: bg.size || 'cover',
-            backgroundRepeat: 'no-repeat',
-            filter: bg.blur ? `blur(${bg.blur}px)` : undefined,
-            opacity: bg.type === 'image+overlay' ? bg.overlayOpacity ?? 0.85 : 1,
-          }}
-        >
-          {/* Readability boost overlay */}
-          {bg.readabilityBoost && (
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  theme?.mode === 'light' || theme?.colors.background === '#FFFFFF'
-                    ? 'rgba(255,255,255,0.65)'
-                    : 'rgba(0,0,0,0.55)',
-              }}
-            />
-          )}
-        </div>
-      )}
+      {/* Central Theme Background Layer — the single consumer of the --bg-*
+          tokens (solid / gradient / image / overlay / scrim). The engine
+          resolves light vs dark and re-applies on prefers-color-scheme
+          changes, so no duplicated matchMedia math lives here. */}
+      {theme && <div aria-hidden="true" className="customer-bg-layer" />}
       {/* Entry experience shown right after a QR scan. Dismissing it hands the
           guest straight to the menu below, unchanged. */}
       {showWelcome && <RestaurantEntryExperience onEnter={handleDismissWelcome} />}
@@ -520,7 +486,13 @@ export const CustomerLayout: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedCategoryId('all')}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[var(--brand-primary)] text-luxury-950 hover:brightness-110 transition-all shadow-md cursor-pointer"
+                className="px-4 py-2 rounded-xl text-xs font-bold hover:brightness-110 transition-all shadow-md cursor-pointer"
+                style={{
+                  // colors.button.primaryBg/primaryText → the primary action
+                  // role; falls back to the brand identity fill.
+                  background: 'var(--button-bg, var(--brand-primary))',
+                  color: 'var(--button-text, var(--brand-ink))',
+                }}
               >
                 تصفح كامل القائمة
               </button>

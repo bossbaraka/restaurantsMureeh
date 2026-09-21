@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, formatTableNumber } from '../../utils/formatting';
 import { ShoppingBag, Bell, Store, Menu, X, ChefHat, MessageCircle, User, MapPin, HelpCircle } from 'lucide-react';
@@ -30,6 +30,32 @@ export const CustomerHeader: React.FC = () => {
   // Mobile options sheet: Escape-to-close, scroll lock, focus management.
   useDialog({ isOpen: isMobileMenuOpen, onClose: () => setIsMobileMenuOpen(false) });
 
+  // -------------------------------------------------------------------------
+  // Sticky-stack offset measurement (mobile header fix).
+  // This header is sticky UNDER the platform toolbar, and the category rail
+  // (.menu-rail) is sticky under THIS header. Its real height varies with
+  // content, text scale and env(safe-area-inset-top) — a hardcoded rail
+  // offset is what let the header overlap the category chips on phones.
+  // The header publishes its measured height as --customer-header-h on <html>;
+  // index.css sticks the rail to toolbar + this value, so notch phones,
+  // rotation, zoom and wrapping all stay correct without further JS.
+  // -------------------------------------------------------------------------
+  const headerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const publish = () => {
+      const height = Math.round(el.getBoundingClientRect().height);
+      if (height > 0) {
+        document.documentElement.style.setProperty('--customer-header-h', `${height}px`);
+      }
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const tableNumberStr =
     activeTableNumber != null
       ? String(activeTableNumber)
@@ -49,8 +75,15 @@ export const CustomerHeader: React.FC = () => {
   return (
     <>
       <header
-        className="sticky top-14 z-30 bg-luxury-950/95 backdrop-blur-md border-b border-luxury-850 px-4 sm:px-6 py-3.5 transition-all"
-        style={{ paddingTop: 'max(0.875rem, env(safe-area-inset-top))' }}
+        ref={headerRef}
+        className="sticky z-30 bg-luxury-950/95 backdrop-blur-md border-b border-luxury-850 px-4 sm:px-6 py-3.5 transition-all"
+        style={{
+          // Park directly below the platform toolbar — one shared constant
+          // (--shell-toolbar-h in index.css), not a second magic number. The
+          // toolbar already absorbed env(safe-area-inset-top), so this header
+          // must NOT add it again (that double-count was the old notch gap).
+          top: 'var(--shell-toolbar-h, 3.5rem)',
+        }}
       >
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
           {/* Restaurant Identity & Table Badge */}
@@ -58,9 +91,10 @@ export const CustomerHeader: React.FC = () => {
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-xl shadow-[0_0_22px_-6px_var(--brand-glow)] shrink-0 border border-luxury-700/60"
               style={{
-                background: currentRestaurant?.logo
-                  ? 'transparent'
-                  : `linear-gradient(135deg, ${currentRestaurant?.primaryColor || '#D4AF37'}, ${currentRestaurant?.accentColor || '#C5A880'})`,
+                // Identity comes from the resolved theme (theme-first, legacy
+                // fallback) via the --brand-* tokens — never the legacy
+                // columns directly, which drift once a Theme row exists.
+                background: currentRestaurant?.logo ? 'transparent' : 'var(--brand-fill)',
               }}
             >
               {currentRestaurant?.logo ? (

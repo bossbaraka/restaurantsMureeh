@@ -19,6 +19,7 @@ import type { Category, Product } from '../../types/restaurant';
 import {
   buildSplashPalette,
   rgbaCss,
+  resolveBrandIdentity,
   useBrandTheme,
   type SplashPalette,
 } from '../../theme/brandTheme';
@@ -829,7 +830,9 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
 
   // Tenant palette -> the same `--brand-*` custom properties the menu consumes,
   // so the splash and the menu behind it can never drift apart.
-  const theme = useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
+  // Theme-first identity (effective theme, legacy columns as fallback).
+  const brandIdentity = resolveBrandIdentity(currentRestaurant);
+  const theme = useBrandTheme(brandIdentity.primary, brandIdentity.accent);
   const palette = useMemo(() => buildSplashPalette(theme), [theme]);
 
   // Extract clean table number

@@ -9,9 +9,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { resolveBrandIdentity, useBrandTheme } from '../../theme/brandTheme';
 import { soundFX } from '../../utils/audio';
 import { optimizeImageUrl } from './ProductImage';
-import { useBrandTheme } from '../../theme/brandTheme';
 
 /**
  * Restaurant Entry Experience — the layer a guest lands on right after
@@ -205,7 +205,13 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
 
   // Tenant palette -> the same `--brand-*` custom properties the menu consumes,
   // so the hand-off into the menu has no colour jump.
-  useBrandTheme(currentRestaurant?.primaryColor, currentRestaurant?.accentColor);
+  // Theme-first identity (effective theme, legacy columns as fallback).
+  const brandIdentity = resolveBrandIdentity(currentRestaurant);
+  // DELIBERATE 'dark' surface: this welcome overlay paints its own fixed
+  // dark-canvas luxury gradient. When the tenant has a Theme row, the parent
+  // CustomerLayout's useEffectiveTheme (parent effects run after children)
+  // overrides these tokens with the mode-aware effective set.
+  useBrandTheme(brandIdentity.primary, brandIdentity.accent, { surfaceMode: 'dark' });
 
   const [reducedMotion, setReducedMotion] = useState<boolean>(prefersReducedMotion);
   const [stage, setStage] = useState<EntryStage>('COVER');

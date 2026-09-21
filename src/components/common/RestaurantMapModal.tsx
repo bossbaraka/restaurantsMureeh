@@ -2,6 +2,7 @@ import React from 'react';
 import { Restaurant } from '../../types/restaurant';
 import { MapPin, Phone, ExternalLink, X, Navigation, Compass } from 'lucide-react';
 import { useDialog } from '../../hooks/useDialog';
+import { resolveBrandIdentity } from '../../theme/brandTheme';
 
 interface RestaurantMapModalProps {
   restaurant: Restaurant | null;
@@ -54,7 +55,8 @@ export const RestaurantMapModal: React.FC<RestaurantMapModalProps> = ({
   if (!isOpen || !restaurant) return null;
 
   const { lat, lng, hasCoords, mapImage, embedUrl, openUrl } = resolveMapSources(restaurant);
-  const primaryColor = restaurant.primaryColor || '#D4AF37';
+  // Theme-first identity (effective theme, legacy columns as fallback).
+  const primaryColor = resolveBrandIdentity(restaurant).primary || '#D4AF37';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">

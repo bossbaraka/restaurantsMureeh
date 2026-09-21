@@ -476,6 +476,29 @@ export async function resolveEffectiveTheme(params: {
   return resolved;
 }
 
+/**
+ * Extracts the BRAND IDENTITY pair (primary/accent) from a theme config so a
+ * restaurant-scope theme save can keep the legacy `Restaurant.primaryColor`
+ * / `accentColor` columns in sync. This closes the split-brain that made
+ * branding edits stop reflecting on the menu: the resolver gives Theme rows
+ * precedence over the legacy columns, so whenever both stores existed they
+ * could disagree, and consumers still reading the columns (old payloads,
+ * cached clients) showed the stale brand.
+ *
+ * Returns null when the config carries no usable color pair (nothing to sync).
+ */
+export function extractLegacyBrandColors(config: ThemeConfig | null | undefined): {
+  primaryColor: string;
+  accentColor: string;
+} | null {
+  const colors = config?.colors;
+  if (!colors) return null;
+  const primary = typeof colors.primary === 'string' ? colors.primary.trim() : '';
+  const accent = typeof colors.accent === 'string' ? colors.accent.trim() : '';
+  if (!primary || !accent) return null;
+  return { primaryColor: primary, accentColor: accent };
+}
+
 // For manager/admin: get raw stored theme (no merge)
 export async function getStoredTheme(params: {
   restaurantId?: string | null;

@@ -116,6 +116,7 @@ import {
   resolveEffectiveTheme,
   getStoredTheme,
   FALLBACK_THEME,
+  extractLegacyBrandColors,
   type ThemeConfig,
 } from '../services/themeResolver';
 import { isStorageKey as isStorageKeyTheme } from '../services/storage/resolve';
@@ -5032,6 +5033,24 @@ router.put(
             },
           });
 
+      // SINGLE WRITE PATH for brand colors (restaurant scope only): keep the
+      // legacy primaryColor/accentColor columns in sync with the saved theme.
+      // The resolver gives Theme rows precedence over the legacy columns, so
+      // unsynced columns silently diverged — branding edits stopped
+      // reflecting on every surface that still reads the columns (cached
+      // clients, old payloads). Branch-scope saves never touch the columns.
+      let legacySynced = false;
+      if (!branchId) {
+        const legacy = extractLegacyBrandColors(incomingConfig);
+        if (legacy) {
+          await prisma.restaurant.update({
+            where: { id: restaurantId },
+            data: { primaryColor: legacy.primaryColor, accentColor: legacy.accentColor },
+          });
+          legacySynced = true;
+        }
+      }
+
       await logAuditEvent({
         restaurantId,
         userId: req.user!.id,
@@ -5040,7 +5059,9 @@ router.put(
         action: branchId ? 'BRANCH_THEME_UPDATED' : 'RESTAURANT_THEME_UPDATED',
         entity: 'Theme',
         entityId: theme.id,
-        details: branchId ? `تم تحديث ثيم فرع ${branchId}` : `تم تحديث ثيم المطعم ${restaurantId}`,
+        details: branchId
+          ? `تم تحديث ثيم فرع ${branchId}`
+          : `تم تحديث ثيم المطعم ${restaurantId}${legacySynced ? ' مع مزامنة ألوان الهوية' : ''}`,
       });
 
       const effective = await resolveEffectiveTheme({ restaurantId, branchId });
