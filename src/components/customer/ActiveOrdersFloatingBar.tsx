@@ -19,7 +19,8 @@ export const ActiveOrdersFloatingBar: React.FC = () => {
     >
       <button
         onClick={() => setIsOrderTrackingOpen(true)}
-        className="w-full bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] backdrop-blur-md rounded-2xl p-3.5 shadow-luxury flex items-center justify-between text-right group hover:border-[rgb(var(--brand-primary-strong-rgb)/0.7)] transition-all active:scale-[0.99]"
+        className="w-full border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] backdrop-blur-md rounded-2xl p-3.5 flex items-center justify-between text-right group hover:border-[rgb(var(--brand-primary-strong-rgb)/0.7)] transition-all active:scale-[0.99]"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--theme-surface, #111317) 95%, transparent)', boxShadow: 'var(--shadow-lg, 0 10px 30px -10px rgba(0, 0, 0, 0.7))' }}
       >
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)] shrink-0">

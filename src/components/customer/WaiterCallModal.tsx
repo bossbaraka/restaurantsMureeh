@@ -105,7 +105,8 @@ export const WaiterCallModal: React.FC = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="waiter-call-title"
-        className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700/70 sm:rounded-3xl rounded-t-3xl p-6 z-10 shadow-2xl space-y-5 animate-fade-in text-right"
+        className="relative w-full max-w-lg border border-luxury-700/70 sm:rounded-3xl rounded-t-3xl p-6 z-10 space-y-5 animate-fade-in text-right"
+        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
         dir="rtl"
       >
         {/* Header */}
@@ -144,7 +145,13 @@ export const WaiterCallModal: React.FC = () => {
             <p className="text-xs text-luxury-400">حالة الطلب: بانتظار استلام أحد أفراد الطاقم. لا حاجة لإعادة الإرسال.</p>
           </div>
         ) : activeRequest && cooldownSeconds === 0 ? (
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+          <div
+            className="p-4 rounded-2xl border space-y-2"
+            style={{
+              backgroundColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 10%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 30%, transparent)',
+            }}
+          >
             <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
               <Clock className="w-4 h-4 animate-spin" />
               <span>{activeRequest.status === 'ACKNOWLEDGED' ? 'تم استلام طلبك والطاقم في الطريق' : 'طلبك بانتظار استلام طاقم الضيافة'}</span>

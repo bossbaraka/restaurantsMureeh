@@ -90,7 +90,13 @@ export type ThemeMode = 'light' | 'dark' | 'auto';
 export type BackgroundType = 'solid' | 'gradient' | 'image' | 'image+overlay';
 export type BackgroundSize = 'cover' | 'contain' | 'auto';
 export type BackgroundPosition = 'center' | 'top' | 'bottom' | 'left' | 'right';
-export type ThemeFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'inter' | 'poppins';
+/**
+ * Exactly the faces the server contract persists (`THEME_FONT_KEYS`). The
+ * picker must not offer anything outside this set: the fonts are only ever
+ * loaded for these five families, and an unsupported key would be rejected by
+ * the strict `themeConfigSchema` on save.
+ */
+export type ThemeFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
 
 export interface BackgroundImageRef {
   storagePath: string;
@@ -110,6 +116,38 @@ export interface BackgroundConfig {
   readabilityBoost?: boolean;
 }
 
+/**
+ * Per-component colour groups — the optional `colors.button/card/badge/category`
+ * sub-objects of the server contract (validated by `themeColorsSchema`). They
+ * are explicit overrides layered on top of the derived `--brand-*` palette and
+ * must survive the API → frontend mapping untouched.
+ */
+export interface ThemeButtonColors {
+  primaryBg?: string;
+  primaryText?: string;
+  secondaryBg?: string;
+  secondaryText?: string;
+}
+
+export interface ThemeCardColors {
+  bg?: string;
+  border?: string;
+  shadow?: string;
+  radius?: string;
+}
+
+export interface ThemeBadgeColors {
+  bg?: string;
+  text?: string;
+}
+
+export interface ThemeCategoryColors {
+  bg?: string;
+  text?: string;
+  activeBg?: string;
+  activeText?: string;
+}
+
 export interface ThemeColors {
   primary: string;
   secondary: string;
@@ -122,6 +160,10 @@ export interface ThemeColors {
   success: string;
   warning: string;
   error: string;
+  button?: ThemeButtonColors;
+  card?: ThemeCardColors;
+  badge?: ThemeBadgeColors;
+  category?: ThemeCategoryColors;
 }
 
 export interface ThemeRadius {
@@ -144,24 +186,16 @@ export interface ThemeTypography {
   bodyWeight: string;
 }
 
-export interface ThemeButtonStyle {
-  variant: 'solid' | 'outline' | 'ghost';
-  radius: string;
-}
-
+/**
+ * Card-specific overrides (server: `colors.card.radius` / `colors.card.shadow`).
+ * Both fields are OPTIONAL — when absent the runtime derives the card radius
+ * from `radius.lg` and the card shadow from `shadows.md`. `shadow` accepts a
+ * shadow-scale key (`sm` | `md` | `lg`) or a raw CSS shadow string; it is
+ * always resolved to a real CSS value before it reaches `--card-shadow`.
+ */
 export interface ThemeCardStyle {
-  radius: string;
-  shadow: string;
-  border: boolean;
-}
-
-export interface ThemeBadgeStyle {
-  variant: 'solid' | 'outline' | 'soft';
-  radius: string;
-}
-
-export interface ThemeCategoryStyle {
-  variant: 'pill' | 'underline' | 'card';
+  radius?: string;
+  shadow?: string;
 }
 
 export interface ThemeConfig {
@@ -170,10 +204,7 @@ export interface ThemeConfig {
   radius?: ThemeRadius;
   shadows?: ThemeShadows;
   typography?: ThemeTypography;
-  buttons?: ThemeButtonStyle;
   cards?: ThemeCardStyle;
-  badges?: ThemeBadgeStyle;
-  categories?: ThemeCategoryStyle;
   background?: {
     light?: BackgroundConfig;
     dark?: BackgroundConfig;
@@ -201,10 +232,7 @@ export interface EffectiveTheme {
   radius: ThemeRadius;
   shadows: ThemeShadows;
   typography: ThemeTypography;
-  buttons: ThemeButtonStyle;
   cards: ThemeCardStyle;
-  badges: ThemeBadgeStyle;
-  categories: ThemeCategoryStyle;
   background: {
     light: ResolvedBackground;
     dark: ResolvedBackground;

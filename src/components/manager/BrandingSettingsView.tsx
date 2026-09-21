@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { api, isEmbeddedImage } from '../../services/api';
+import { api, isEmbeddedImage, uiThemeConfigFromServer } from '../../services/api';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { applyBrandTheme, getCachedBrandTheme, buildEffectiveThemeVars, backgroundToCssVars, parseColor, rgbToHex } from '../../theme/brandTheme';
+import { applyBrandTheme, getCachedBrandTheme, buildEffectiveThemeVars, parseColor, rgbToHex, resolveThemeShadow, themeShadowKey } from '../../theme/brandTheme';
 import {
   AlertTriangle,
   Palette,
@@ -39,7 +39,7 @@ import {
   Sparkles,
   Eye,
 } from 'lucide-react';
-import type { BusinessType, ThemeConfig, EffectiveTheme, ThemeRow, BackgroundConfig, ThemeMode, BackgroundType, ThemeFontKey, ResolvedBackground } from '../../types/restaurant';
+import type { BusinessType, ThemeConfig, EffectiveTheme, ThemeRow, BackgroundConfig, ThemeMode, BackgroundType, ThemeFontKey, ThemeColors, ResolvedBackground } from '../../types/restaurant';
 
 const BUSINESS_TYPES: Array<{
   id: BusinessType;
@@ -77,14 +77,16 @@ const THEME_PRESETS: Array<{ id: string; label: string; desc: string; primary: s
   { id: 'silver', label: 'فضي معدني', desc: 'حديث بسيط نظيف', primary: '#94A3B8', accent: '#3E4A5B' },
 ];
 
+// Exactly the five faces the server contract persists (THEME_FONT_KEYS) and
+// the five the document actually loads — a picker option outside this set
+// could never survive a save (strict schema) and would render as a fallback
+// stack anyway, so it must not be offered.
 const FONT_OPTIONS: Array<{ id: ThemeFontKey; label: string; family: string }> = [
   { id: 'auto', label: 'تلقائي', family: 'system-ui' },
   { id: 'tajawal', label: 'Tajawal', family: 'Tajawal' },
   { id: 'cairo', label: 'Cairo', family: 'Cairo' },
   { id: 'amiri', label: 'Amiri', family: 'Amiri' },
   { id: 'cormorant', label: 'Cormorant', family: 'Cormorant Garamond' },
-  { id: 'inter', label: 'Inter', family: 'Inter' },
-  { id: 'poppins', label: 'Poppins', family: 'Poppins' },
 ];
 
 const BG_TYPES: Array<{ id: BackgroundType; label: string }> = [
@@ -107,7 +109,7 @@ const LOGO_POSITION_GRID: Array<{ label: string; value: string }> = [
 ];
 
 const DEFAULT_THEME_FALLBACK: ThemeConfig = {
-  mode: 'dark',
+  mode: 'auto',
   colors: {
     primary: '#D4AF37',
     secondary: '#94A3B8',
@@ -124,10 +126,6 @@ const DEFAULT_THEME_FALLBACK: ThemeConfig = {
   radius: { sm: '6px', md: '10px', lg: '16px', xl: '24px', full: '9999px' },
   shadows: { sm: '0 1px 2px rgba(0,0,0,0.2)', md: '0 4px 12px rgba(0,0,0,0.3)', lg: '0 12px 32px rgba(0,0,0,0.4)' },
   typography: { fontFamily: 'tajawal', headingWeight: '700', bodyWeight: '400' },
-  buttons: { variant: 'solid', radius: '12px' },
-  cards: { radius: '16px', shadow: 'md', border: true },
-  badges: { variant: 'soft', radius: '9999px' },
-  categories: { variant: 'pill' },
   background: {
     light: { type: 'solid', color: '#FFFFFF', readabilityBoost: true },
     dark: { type: 'solid', color: '#0A0B0D', readabilityBoost: false },
@@ -137,64 +135,23 @@ const DEFAULT_THEME_FALLBACK: ThemeConfig = {
 // ============================================================
 // Theme save adapter — UI Theme Model → Server Theme Contract
 // ============================================================
-// The manager UI edits the CLIENT theme shape: top-level `buttons/cards/
-// badges/categories`, `background.overlayColor`, `background.readabilityBoost`,
-// string font weights and two extra display faces (inter/poppins). The server's
-// `PUT /manager/theme` validates with the STRICT `themeConfigSchema`: style
-// groups live inside `colors.button/card/badge/category`, backgrounds use
-// `overlay` + `readability`, weights are numeric, and only five fonts exist.
+// The manager UI edits the CLIENT theme shape: `background.overlayColor`,
+// `background.readabilityBoost`, string font weights, and `cards.shadow` as a
+// shadow-scale key. The server's `PUT /manager/theme` validates with the
+// STRICT `themeConfigSchema`: backgrounds use `overlay` + `readability`,
+// weights are numeric, and `colors.card.shadow` is a raw CSS shadow resolved
+// from the scale at save time. The per-component colour groups
+// (`colors.button/card/badge/category`) are modelled identically on both
+// sides and pass through verbatim.
 // `toServerThemePayload` below is the SINGLE explicit conversion point between
-// the two models. It whitelists every key it emits, so the strict schema never
-// sees an unknown key, and every conversion is spelled out field-by-field —
-// no blind spreading of the UI object into the request.
+// the two models (the reverse lives in `uiThemeConfigFromServer` in
+// `services/api`). It whitelists every key it emits, so the strict schema
+// never sees an unknown key, and every conversion is spelled out
+// field-by-field — no blind spreading of the UI object into the request.
 
 type ServerThemeFontKey = 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'auto';
 type ServerBackgroundType = 'solid' | 'gradient' | 'image' | 'image+overlay' | 'none';
 type ServerBackgroundSize = 'cover' | 'contain' | 'auto';
-
-interface ServerThemeButtonColors {
-  primaryBg?: string;
-  primaryText?: string;
-  secondaryBg?: string;
-  secondaryText?: string;
-}
-
-interface ServerThemeCardColors {
-  bg?: string;
-  border?: string;
-  shadow?: string;
-  radius?: string;
-}
-
-interface ServerThemeBadgeColors {
-  bg?: string;
-  text?: string;
-}
-
-interface ServerThemeCategoryColors {
-  bg?: string;
-  text?: string;
-  activeBg?: string;
-  activeText?: string;
-}
-
-interface ServerThemeColors {
-  primary: string;
-  secondary: string;
-  accent: string;
-  background: string;
-  surface: string;
-  textPrimary: string;
-  textSecondary: string;
-  border: string;
-  success: string;
-  warning: string;
-  error: string;
-  button?: ServerThemeButtonColors;
-  card?: ServerThemeCardColors;
-  badge?: ServerThemeBadgeColors;
-  category?: ServerThemeCategoryColors;
-}
 
 interface ServerBackgroundPayload {
   type: ServerBackgroundType;
@@ -211,7 +168,7 @@ interface ServerBackgroundPayload {
 
 interface ServerThemePayload {
   mode?: ThemeMode;
-  colors: ServerThemeColors;
+  colors: ThemeColors;
   radius?: Partial<Record<'sm' | 'md' | 'lg' | 'xl' | 'full', string>>;
   shadows?: Partial<Record<'sm' | 'md' | 'lg', string>>;
   typography?: {
@@ -266,56 +223,45 @@ function isTenantThemeStoragePath(value: string): boolean {
 }
 
 /**
- * `buttons → colors.button`. The server group holds explicit fill/text COLORS;
- * the UI's buttons model only carries shape properties (`variant`, `radius`),
- * which have no place in the strict server contract — so nothing is emitted
- * for them today. Stated explicitly instead of spreading the UI object.
+ * Per-component colour groups (`colors.button/card/badge/category`) are
+ * modelled identically on both sides and pass through VERBATIM — every field
+ * is whitelisted here (hex-normalized where the schema expects a hex colour),
+ * so values set through the API or an earlier save are never dropped on
+ * re-save. Unparseable/overlong fields are omitted instead of sent.
  */
-function buttonsStyleToServerColors(buttons: ThemeConfig['buttons']): ServerThemeButtonColors | undefined {
-  if (!buttons) return undefined;
-  const out: ServerThemeButtonColors = {};
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
-/**
- * `cards → colors.card`. Mappable today: `radius` (string) and `shadow`
- * (string). The UI's boolean `border` flag has no server counterpart
- * (`colors.card.border` is a color string), so it is not sent.
- */
-function cardsStyleToServerColors(cards: ThemeConfig['cards']): ServerThemeCardColors | undefined {
-  if (!cards) return undefined;
-  const out: ServerThemeCardColors = {};
-  if (typeof cards.radius === 'string') {
-    const radius = cards.radius.trim();
-    if (radius && radius.length <= THEME_MAX_RADIUS_LENGTH) out.radius = radius;
+function copyGroupFields(
+  src: unknown,
+  hexFields: readonly string[],
+  freeFields: readonly (readonly [string, number])[] = []
+): Record<string, string> | undefined {
+  if (!src || typeof src !== 'object') return undefined;
+  const out: Record<string, string> = {};
+  for (const f of hexFields) {
+    const v = (src as Record<string, unknown>)[f];
+    if (typeof v === 'string' && v.trim()) {
+      const normalized = normalizeThemeHexColor(v, '');
+      if (normalized) out[f] = normalized;
+    }
   }
-  if (typeof cards.shadow === 'string') {
-    const shadow = cards.shadow.trim();
-    if (shadow && shadow.length <= THEME_MAX_SHADOW_LENGTH) out.shadow = shadow;
+  for (const [f, maxLen] of freeFields) {
+    const v = (src as Record<string, unknown>)[f];
+    if (typeof v === 'string' && v.trim() && v.trim().length <= maxLen) out[f] = v.trim();
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/**
- * `badges → colors.badge`. The server group holds bg/text colors; the UI's
- * badges model only carries `variant`/`radius` shape properties with no server
- * counterpart — nothing is emitted today (see `buttonsStyleToServerColors`).
- */
-function badgesStyleToServerColors(badges: ThemeConfig['badges']): ServerThemeBadgeColors | undefined {
-  if (!badges) return undefined;
-  const out: ServerThemeBadgeColors = {};
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
-/**
- * `categories → colors.category`. The server group holds bg/text colors; the
- * UI's categories model only carries a `variant` shape property with no server
- * counterpart — nothing is emitted today (see `buttonsStyleToServerColors`).
- */
-function categoriesStyleToServerColors(categories: ThemeConfig['categories']): ServerThemeCategoryColors | undefined {
-  if (!categories) return undefined;
-  const out: ServerThemeCategoryColors = {};
-  return Object.keys(out).length > 0 ? out : undefined;
+function colorGroupsToServer(uiColors: ThemeColors | undefined): Partial<Pick<ThemeColors, 'button' | 'card' | 'badge' | 'category'>> {
+  if (!uiColors) return {};
+  const out: Partial<Pick<ThemeColors, 'button' | 'card' | 'badge' | 'category'>> = {};
+  const button = copyGroupFields(uiColors.button, ['primaryBg', 'primaryText', 'secondaryBg', 'secondaryText']);
+  if (button) out.button = button;
+  const card = copyGroupFields(uiColors.card, ['bg', 'border'], [['radius', THEME_MAX_RADIUS_LENGTH], ['shadow', THEME_MAX_SHADOW_LENGTH]]);
+  if (card) out.card = card;
+  const badge = copyGroupFields(uiColors.badge, ['bg', 'text']);
+  if (badge) out.badge = badge;
+  const category = copyGroupFields(uiColors.category, ['bg', 'text', 'activeBg', 'activeText']);
+  if (category) out.category = category;
+  return out;
 }
 
 /** One background variant (light/dark): UI field names → server field names. */
@@ -390,7 +336,7 @@ export function toServerThemePayload(
   const fallbackColors = DEFAULT_THEME_FALLBACK.colors!;
   const uiColors: Partial<NonNullable<ThemeConfig['colors']>> = ui.colors || {};
 
-  const colors: ServerThemeColors = {
+  const colors: ThemeColors = {
     primary: normalizeThemeHexColor(uiColors.primary, normalizeThemeHexColor(legacy.primaryColor, fallbackColors.primary)),
     secondary: normalizeThemeHexColor(uiColors.secondary, fallbackColors.secondary),
     accent: normalizeThemeHexColor(uiColors.accent, normalizeThemeHexColor(legacy.accentColor, fallbackColors.accent)),
@@ -404,14 +350,29 @@ export function toServerThemePayload(
     error: normalizeThemeHexColor(uiColors.error, fallbackColors.error),
   };
 
-  const button = buttonsStyleToServerColors(ui.buttons);
-  if (button) colors.button = button;
-  const card = cardsStyleToServerColors(ui.cards);
-  if (card) colors.card = card;
-  const badge = badgesStyleToServerColors(ui.badges);
-  if (badge) colors.badge = badge;
-  const category = categoriesStyleToServerColors(ui.categories);
-  if (category) colors.category = category;
+  // Per-component colour groups pass through verbatim (API-set values included).
+  const groups = colorGroupsToServer(ui.colors);
+  if (groups.button) colors.button = groups.button;
+  if (groups.badge) colors.badge = groups.badge;
+  if (groups.category) colors.category = groups.category;
+  if (groups.card) colors.card = { ...groups.card };
+
+  // Card radius/shadow overrides (the `cards` edit fields) win over the raw
+  // group copy above: `cards.shadow` holds a shadows-scale key (or a raw CSS
+  // shadow) and is resolved to the real CSS value here — the server slot
+  // `colors.card.shadow` is a CSS shadow, never a bare key.
+  if (ui.cards?.radius && typeof ui.cards.radius === 'string') {
+    const radius = ui.cards.radius.trim();
+    if (radius && radius.length <= THEME_MAX_RADIUS_LENGTH) {
+      colors.card = { ...(colors.card || {}), radius };
+    }
+  }
+  if (ui.cards?.shadow && typeof ui.cards.shadow === 'string') {
+    const shadow = resolveThemeShadow(ui.cards.shadow, ui.shadows).trim();
+    if (shadow && shadow.length <= THEME_MAX_SHADOW_LENGTH) {
+      colors.card = { ...(colors.card || {}), shadow };
+    }
+  }
 
   const payload: ServerThemePayload = { colors };
 
@@ -594,8 +555,14 @@ export const BrandingSettingsView: React.FC = () => {
       if (res.success && res.data) {
         setEffectiveTheme(res.data.effective);
         setStoredTheme(res.data.stored);
-        // Merge stored config over fallback for editing
-        setEditConfig(res.data.effective.rawConfig || res.data.stored?.config || DEFAULT_THEME_FALLBACK);
+        // Hydrate the edit model from the resolved raw config (already in the
+        // UI shape via mapEffectiveTheme). A raw stored row is converted
+        // through the reverse adapter first — it lives in the server contract.
+        setEditConfig(
+          res.data.effective.rawConfig ||
+            (res.data.stored?.config ? uiThemeConfigFromServer(res.data.stored.config) : undefined) ||
+            DEFAULT_THEME_FALLBACK
+        );
       }
     } catch {
       // ignore
@@ -967,7 +934,10 @@ export const BrandingSettingsView: React.FC = () => {
 
           {activeTab === 'theme' && (
             <>
-              {/* Mode */}
+              {/* Mode — selects which background configuration (light/dark)
+                  paints the menu; `auto` follows the guest's device setting.
+                  The palette itself is single-valued (no dark re-mapping), so
+                  the copy below states exactly that. */}
               <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
                 <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Sun className="w-4 h-4 text-gold-400" /> وضع الثيم</h3>
                 <div className="grid grid-cols-3 gap-2">
@@ -977,7 +947,7 @@ export const BrandingSettingsView: React.FC = () => {
                     { id: 'auto', label: 'تلقائي', icon: Monitor },
                   ].map((m) => {
                     const Icon = m.icon;
-                    const sel = (editConfig.mode || 'dark') === m.id;
+                    const sel = (editConfig.mode || 'auto') === m.id;
                     return (
                       <button key={m.id} onClick={() => setEditConfig((p) => ({ ...p, mode: m.id as ThemeMode }))} className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>
                         <Icon className="w-5 h-5" /> {m.label}
@@ -985,6 +955,7 @@ export const BrandingSettingsView: React.FC = () => {
                     );
                   })}
                 </div>
+                <p className="text-[11px] text-luxury-400 leading-relaxed">الوضع يحدد خلفية القائمة (فاتح/داكن) — «تلقائي» يتبع إعداد الجهاز. ألوان الهوية تُطبق كما هي في كلتا الحالتين.</p>
               </div>
 
               {/* Colors */}
@@ -1077,41 +1048,24 @@ export const BrandingSettingsView: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-luxury-800">
+                {/* Card shadow — persisted as `colors.card.shadow` (resolved
+                    from the shadows scale at save time). Controls whose state
+                    has no persistence model (button/badge/category visual
+                    variants) were removed so the editor only offers what the
+                    Theme system can actually store. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-luxury-800">
                   <div>
-                    <span className="text-xs font-bold text-luxury-300">الأزرار</span>
-                    <select value={editConfig.buttons?.variant || 'solid'} onChange={(e) => setEditConfig((p) => ({ ...p, buttons: { ...(p.buttons || DEFAULT_THEME_FALLBACK.buttons!), variant: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
-                      <option value="solid">ممتلئ</option>
-                      <option value="outline">إطار</option>
-                      <option value="ghost">شفاف</option>
-                    </select>
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-luxury-300">البطاقات</span>
-                    <select value={editConfig.cards?.shadow || 'md'} onChange={(e) => setEditConfig((p) => ({ ...p, cards: { ...(p.cards || DEFAULT_THEME_FALLBACK.cards!), shadow: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                    <span className="text-xs font-bold text-luxury-300">ظل البطاقات</span>
+                    <select
+                      value={themeShadowKey(editConfig.cards?.shadow, editConfig.shadows) || 'md'}
+                      onChange={(e) => setEditConfig((p) => ({ ...p, cards: { ...(p.cards || {}), shadow: e.target.value as 'sm' | 'md' | 'lg' } }))}
+                      className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100"
+                    >
                       <option value="sm">ظل صغير</option>
                       <option value="md">ظل متوسط</option>
                       <option value="lg">ظل كبير</option>
                     </select>
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-luxury-300">الشارات</span>
-                    <select value={editConfig.badges?.variant || 'soft'} onChange={(e) => setEditConfig((p) => ({ ...p, badges: { ...(p.badges || DEFAULT_THEME_FALLBACK.badges!), variant: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
-                      <option value="solid">ممتلئ</option>
-                      <option value="outline">إطار</option>
-                      <option value="soft">ناعم</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <span className="text-xs font-bold text-luxury-300">نمط التصنيفات</span>
-                    <select value={editConfig.categories?.variant || 'pill'} onChange={(e) => setEditConfig((p) => ({ ...p, categories: { ...(p.categories || DEFAULT_THEME_FALLBACK.categories!), variant: e.target.value as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
-                      <option value="pill">حبوب</option>
-                      <option value="underline">خط سفلي</option>
-                      <option value="card">بطاقات</option>
-                    </select>
+                    <p className="mt-1.5 text-[10px] text-luxury-500">يعتمد على سلّم الظلال أعلاه — يُحفظ كقيمة CSS فعلية.</p>
                   </div>
                 </div>
               </div>
@@ -1409,14 +1363,14 @@ export const BrandingSettingsView: React.FC = () => {
               <div className="p-3.5 space-y-2.5">
                 <div className="flex gap-1.5 overflow-hidden">
                   {['الأطباق الرئيسية', 'مشاوي', 'مقبلات'].map((c) => (
-                    <span key={c} className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap text-white" style={{ background: `${editConfig.colors?.primary || primaryColor}22`, color: editConfig.colors?.primary || primaryColor, border: `1px solid ${editConfig.colors?.primary || primaryColor}55`, borderRadius: editConfig.badges?.radius || '9999px' }}>{c}</span>
+                    <span key={c} className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap text-white" style={{ background: `${editConfig.colors?.primary || primaryColor}22`, color: editConfig.colors?.primary || primaryColor, border: `1px solid ${editConfig.colors?.primary || primaryColor}55`, borderRadius: editConfig.radius?.full || '9999px' }}>{c}</span>
                   ))}
                 </div>
                 {[{ n: 'تندرلوين مشوي مع صوص الترافل', p: 135 }, { n: 'مقبلات البحر المتوسط الملكية', p: 85 }].map((dish, i) => (
-                  <div key={i} className="flex items-center gap-2.5 bg-luxury-900/90 border border-luxury-800 rounded-xl p-2" style={{ borderRadius: editConfig.cards?.radius || '16px', boxShadow: editConfig.cards?.shadow === 'lg' ? '0 12px 32px rgba(0,0,0,0.4)' : editConfig.cards?.shadow === 'sm' ? '0 1px 2px rgba(0,0,0,0.2)' : '0 4px 12px rgba(0,0,0,0.3)' }}>
+                  <div key={i} className="flex items-center gap-2.5 bg-luxury-900/90 border border-luxury-800 rounded-xl p-2" style={{ borderRadius: editConfig.cards?.radius || editConfig.radius?.lg || '16px', boxShadow: resolveThemeShadow(editConfig.cards?.shadow, editConfig.shadows) || '0 4px 12px rgba(0,0,0,0.3)' }}>
                     <div className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center text-white/90 text-lg" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.secondary || accentColor}55, ${editConfig.colors?.primary || primaryColor}88)` }}><UtensilsCrossed className="w-4 h-4" /></div>
                     <div className="flex-1 min-w-0"><div className="text-[10px] font-bold text-luxury-100 truncate" style={{ fontFamily: 'var(--font-family)' }}>{dish.n}</div><div className="text-[11px] text-luxury-400 flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> 15-20 دقيقة</div><div className="text-[10px] font-bold mt-0.5" style={{ color: editConfig.colors?.primary || primaryColor }}>{currency} {dish.p}</div></div>
-                    <button className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold shrink-0" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.primary || primaryColor}, ${editConfig.colors?.accent || accentColor})`, borderRadius: editConfig.buttons?.radius || '12px' }}><Plus className="w-3 h-3" /></button>
+                    <button className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold shrink-0" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.primary || primaryColor}, ${editConfig.colors?.accent || accentColor})`, borderRadius: editConfig.radius?.md || '10px' }}><Plus className="w-3 h-3" /></button>
                   </div>
                 ))}
               </div>

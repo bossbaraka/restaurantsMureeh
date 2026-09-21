@@ -259,7 +259,8 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="transfer-payment-title"
-        className="relative w-full max-w-lg my-auto bg-luxury-900 border border-luxury-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 z-10 shadow-2xl animate-fade-in text-right max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col"
+        className="relative w-full max-w-lg my-auto border border-luxury-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 z-10 animate-fade-in text-right max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col"
+        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
         dir="rtl"
       >
         <div className="flex items-center justify-between border-b border-luxury-800 pb-3 sm:pb-4 shrink-0">
