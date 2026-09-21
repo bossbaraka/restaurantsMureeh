@@ -85,7 +85,8 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-detail-title"
-        className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700/80 rounded-3xl overflow-hidden shadow-2xl z-10 animate-fade-in text-right max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-lg border border-luxury-700/80 rounded-3xl overflow-hidden z-10 animate-fade-in text-right max-h-[90vh] flex flex-col"
+        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
         dir="rtl"
       >
         {/* Sticky Header with Close Button & Image */}
@@ -154,9 +155,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               )}
             </div>
 
-            {/* Allergens Warning if any */}
+            {/* Allergens Warning if any — warning surface from the Theme
+                (`--theme-warning`, amber-500 at the platform default). */}
             {product.allergens && product.allergens.length > 0 && (
-              <div className="mt-2.5 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300/90 flex items-center gap-2">
+              <div
+                className="mt-2.5 p-2.5 rounded-xl border text-[11px] text-amber-300/90 flex items-center gap-2"
+                style={{
+                  backgroundColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 10%, transparent)',
+                  borderColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 20%, transparent)',
+                }}
+              >
                 <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>مسببات الحساسية: {product.allergens.join('، ')}</span>
               </div>

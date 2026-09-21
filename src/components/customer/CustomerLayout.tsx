@@ -549,19 +549,20 @@ export const CustomerLayout: React.FC = () => {
         <CustomerSocialSection />
       </main>
 
-      {/* Customer Footer — White-label: only venue identity */}
+      {/* Customer Footer — White-label: only venue identity. Colours come from
+          the Effective Theme CSS tokens (set on <html> by useEffectiveTheme). */}
       <footer
         className="mt-16 border-t py-8 px-4 text-center text-xs bg-transparent"
         style={{
-          borderColor: theme?.colors.border || 'rgba(255,255,255,0.08)',
-          color: theme?.colors.textSecondary || undefined,
+          borderColor: 'var(--theme-border, rgba(255,255,255,0.08))',
+          color: 'var(--theme-text-secondary, rgba(255,255,255,0.45))',
         }}
       >
         <div className="max-w-md mx-auto space-y-3">
-          <div className="font-serif text-sm font-bold tracking-widest uppercase" style={{ color: theme?.colors.textPrimary }}>
+          <div className="font-serif text-sm font-bold tracking-widest uppercase" style={{ color: 'var(--theme-text-primary, #f8fafc)' }}>
             {currentRestaurant?.name} {currentRestaurant?.nameEn ? `· ${currentRestaurant?.nameEn}` : ''}
           </div>
-          <p className="text-[11px]" style={{ color: theme?.colors.textSecondary }}>
+          <p className="text-[11px]" style={{ color: 'var(--theme-text-secondary, rgba(255,255,255,0.45))' }}>
             جميع الأسعار تشمل ضريبة القيمة المضافة · المحاسبة عند الكاشير
           </p>
         </div>

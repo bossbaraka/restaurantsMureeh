@@ -111,6 +111,18 @@ export const THEME_VAR_NAMES = [
   '--theme-success',
   '--theme-warning',
   '--theme-error',
+  '--button-bg',
+  '--button-text',
+  '--button-secondary-bg',
+  '--button-secondary-text',
+  '--card-bg',
+  '--card-border',
+  '--badge-bg',
+  '--badge-text',
+  '--category-bg',
+  '--category-text',
+  '--category-active-bg',
+  '--category-active-text',
   '--radius-sm',
   '--radius-md',
   '--radius-lg',
@@ -511,9 +523,49 @@ const FONT_FAMILY_MAP: Record<string, string> = {
   cairo: '"Cairo", system-ui, sans-serif',
   amiri: '"Amiri", serif',
   cormorant: '"Cormorant Garamond", serif',
+  // Not part of the persistable server contract (THEME_FONT_KEYS) — kept only
+  // so legacy raw rows that predate the strict schema still resolve a stack.
   inter: '"Inter", system-ui, sans-serif',
   poppins: '"Poppins", system-ui, sans-serif',
 };
+
+export type ThemeShadowKey = 'sm' | 'md' | 'lg';
+
+const THEME_SHADOW_KEYS: readonly ThemeShadowKey[] = ['sm', 'md', 'lg'];
+
+/**
+ * Resolves `colors.card.shadow` to a real CSS shadow. The value is either a
+ * key into the `shadows` scale (`sm` | `md` | `lg` — what the manager select
+ * stores) or a raw CSS shadow string (what the server contract holds). Keys
+ * resolve against the scale; anything else passes through untouched.
+ */
+export function resolveThemeShadow(
+  value: string | undefined | null,
+  shadows: Partial<Record<ThemeShadowKey, string>> | undefined
+): string {
+  const v = (value || '').trim();
+  if ((THEME_SHADOW_KEYS as readonly string[]).includes(v)) {
+    return shadows?.[v as ThemeShadowKey] || shadows?.md || '';
+  }
+  return v;
+}
+
+/**
+ * Inverse of `resolveThemeShadow`: returns the scale key when the stored CSS
+ * shadow matches one of the scale entries (so the manager select round-trips),
+ * or `null` for a custom CSS shadow.
+ */
+export function themeShadowKey(
+  value: string | undefined | null,
+  shadows: Partial<Record<ThemeShadowKey, string>> | undefined
+): ThemeShadowKey | null {
+  const v = (value || '').trim();
+  if ((THEME_SHADOW_KEYS as readonly string[]).includes(v)) return v as ThemeShadowKey;
+  for (const key of THEME_SHADOW_KEYS) {
+    if (v && shadows?.[key] === v) return key;
+  }
+  return null;
+}
 
 export function resolveCurrentBackground(
   theme: EffectiveTheme,
@@ -574,20 +626,38 @@ export function buildEffectiveThemeVars(
     '--theme-success': theme.colors.success,
     '--theme-warning': theme.colors.warning,
     '--theme-error': theme.colors.error,
-    // Radius
+    // Per-component colour groups (colors.button/card/badge/category). These
+    // are OPTIONAL overrides: an absent group emits an empty value, which
+    // `setProperty` treats as a removal — so the CSS consumers keep their
+    // `var(--token, <current visual>)` fallbacks (the derived --brand-*
+    // palette) until a theme explicitly sets the group.
+    '--button-bg': theme.colors.button?.primaryBg || '',
+    '--button-text': theme.colors.button?.primaryText || '',
+    '--button-secondary-bg': theme.colors.button?.secondaryBg || '',
+    '--button-secondary-text': theme.colors.button?.secondaryText || '',
+    '--card-bg': theme.colors.card?.bg || '',
+    '--card-border': theme.colors.card?.border || '',
+    '--badge-bg': theme.colors.badge?.bg || '',
+    '--badge-text': theme.colors.badge?.text || '',
+    '--category-bg': theme.colors.category?.bg || '',
+    '--category-text': theme.colors.category?.text || '',
+    '--category-active-bg': theme.colors.category?.activeBg || '',
+    '--category-active-text': theme.colors.category?.activeText || '',
+    // Radius — the scale is the source of truth; `colors.card.radius` is the
+    // only per-component radius override in the server contract.
     '--radius-sm': theme.radius.sm,
     '--radius-md': theme.radius.md,
     '--radius-lg': theme.radius.lg,
     '--radius-xl': theme.radius.xl,
     '--radius-full': theme.radius.full,
-    '--button-radius': theme.buttons.radius,
-    '--card-radius': theme.cards.radius,
-    '--badge-radius': theme.badges.radius,
-    // Shadows
+    '--button-radius': theme.radius.md,
+    '--card-radius': theme.cards?.radius || theme.radius.lg,
+    '--badge-radius': theme.radius.full,
+    // Shadows — same precedence: `colors.card.shadow` override, else the scale.
     '--shadow-sm': theme.shadows.sm,
     '--shadow-md': theme.shadows.md,
     '--shadow-lg': theme.shadows.lg,
-    '--card-shadow': theme.cards.shadow,
+    '--card-shadow': resolveThemeShadow(theme.cards?.shadow, theme.shadows) || theme.shadows.md,
     // Typography
     '--font-family': FONT_FAMILY_MAP[theme.typography.fontFamily] || FONT_FAMILY_MAP.auto,
     '--font-heading-weight': theme.typography.headingWeight,

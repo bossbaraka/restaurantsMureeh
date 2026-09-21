@@ -100,7 +100,8 @@ export const OrderTrackingDrawer: React.FC = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-tracking-title"
-        className="relative w-full max-w-lg bg-luxury-900 border-r border-luxury-800 text-luxury-50 h-full flex flex-col shadow-2xl z-10 animate-in slide-in-from-right duration-300"
+        className="relative w-full max-w-lg border-r border-luxury-800 text-luxury-50 h-full flex flex-col z-10 animate-in slide-in-from-right duration-300"
+        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
         dir="rtl"
       >
         {/* Header */}

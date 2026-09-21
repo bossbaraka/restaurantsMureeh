@@ -56,7 +56,7 @@ export const CartDrawer: React.FC = () => {
       />
 
       <div className="fixed inset-y-0 left-0 max-w-full flex">
-        <div role="dialog" aria-modal="true" aria-labelledby="cart-title" className="w-screen max-w-md bg-luxury-900 border-r border-luxury-750 shadow-2xl flex flex-col text-right">
+        <div role="dialog" aria-modal="true" aria-labelledby="cart-title" className="w-screen max-w-md border-r border-luxury-750 flex flex-col text-right" style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}>
           {/* Header */}
           <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-950" data-guide="cart-panel">
             <div className="flex items-center gap-3">
@@ -85,7 +85,7 @@ export const CartDrawer: React.FC = () => {
             <span className="text-luxury-400">طاولة الطلب:</span>
             {activeTableId ? (
               <span className="font-bold text-[var(--brand-primary-strong)] font-mono flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--theme-success, #34d399)' }} />
                 طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? (formatTableNumber(activeTableId) || '—')}
               </span>
             ) : (

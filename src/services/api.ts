@@ -26,7 +26,11 @@ import {
   EffectiveTheme,
   ThemeConfig,
   ThemeRow,
+  ThemeColors,
+  ThemeCardStyle,
+  BackgroundConfig,
 } from '../types/restaurant';
+import { themeShadowKey } from '../theme/brandTheme';
 
 export interface ApiResponse<T> {
   success: boolean;
@@ -594,10 +598,119 @@ export function mapAuditLogRow(raw: any): AuditLog {
   };
 }
 
-function mapEffectiveTheme(raw: any): EffectiveTheme | null {
+/** Optional per-component colour groups (server: colors.button/card/badge/category). */
+function pickGroupFields<T>(src: any, fields: readonly string[]): T | undefined {
+  if (!src || typeof src !== 'object') return undefined;
+  const out: Record<string, string> = {};
+  for (const f of fields) {
+    const v = src[f];
+    if (typeof v === 'string' && v.trim()) out[f] = v.trim();
+  }
+  return Object.keys(out).length > 0 ? (out as T) : undefined;
+}
+
+function mapColorGroups(src: any) {
+  return {
+    button: pickGroupFields<ThemeColors['button']>(src?.button, ['primaryBg', 'primaryText', 'secondaryBg', 'secondaryText']),
+    card: pickGroupFields<ThemeColors['card']>(src?.card, ['bg', 'border', 'shadow', 'radius']),
+    badge: pickGroupFields<ThemeColors['badge']>(src?.badge, ['bg', 'text']),
+    category: pickGroupFields<ThemeColors['category']>(src?.category, ['bg', 'text', 'activeBg', 'activeText']),
+  };
+}
+
+/** One background variant, SERVER naming → UI naming (shared by both directions). */
+function uiBackgroundConfigFromServer(bg: any): BackgroundConfig {
+  const imageSrc = bg?.image || (bg?.storagePath ? { storagePath: bg.storagePath, aiGenerated: bg.aiGenerated } : undefined);
+  return {
+    type: bg?.type || 'solid',
+    color: bg?.color,
+    gradient: bg?.gradient,
+    image: imageSrc?.storagePath
+      ? { storagePath: imageSrc.storagePath, aiGenerated: imageSrc.aiGenerated }
+      : undefined,
+    overlayColor: bg?.overlayColor || bg?.overlay,
+    overlayOpacity: bg?.overlayOpacity,
+    blur: bg?.blur,
+    position: bg?.position,
+    size: bg?.size,
+    readabilityBoost:
+      bg?.readabilityBoost !== undefined
+        ? !!bg.readabilityBoost
+        : !!(bg?.readability?.scrimOpacity || bg?.readability?.textShadow),
+  };
+}
+
+/**
+ * SERVER ThemeConfig (themeConfigSchema shape: `colors.card.radius`, background
+ * `overlay`/`readability`, numeric weights) → the UI edit model this app
+ * edits in BrandingSettingsView (background `overlayColor`/`readabilityBoost`,
+ * string weights, `cards` overrides). Every supported property survives the
+ * conversion — the two models differ in naming/typing only. `cards.shadow` is
+ * normalized to its `shadows` scale KEY when it matches the scale, so the
+ * manager select round-trips; a custom CSS shadow keeps its raw value.
+ */
+export function uiThemeConfigFromServer(raw: any): ThemeConfig {
+  if (!raw || typeof raw !== 'object') return {};
+  const colorsRaw = raw.colors || {};
+  const groups = mapColorGroups(colorsRaw);
+  const shadows = { sm: '0 1px 2px rgba(0,0,0,0.2)', md: '0 4px 12px rgba(0,0,0,0.3)', lg: '0 12px 32px rgba(0,0,0,0.4)', ...(raw.shadows || {}) };
+
+  const config: ThemeConfig = {};
+  if (raw.mode === 'light' || raw.mode === 'dark' || raw.mode === 'auto') config.mode = raw.mode;
+
+  if (raw.colors && typeof raw.colors === 'object') {
+    config.colors = {
+      primary: colorsRaw.primary || '#D4AF37',
+      secondary: colorsRaw.secondary || '#94A3B8',
+      accent: colorsRaw.accent || '#C5A880',
+      background: colorsRaw.background || '#0A0B0D',
+      surface: colorsRaw.surface || '#121416',
+      textPrimary: colorsRaw.textPrimary || '#F8FAFC',
+      textSecondary: colorsRaw.textSecondary || '#94A3B8',
+      border: colorsRaw.border || '#1E293B',
+      success: colorsRaw.success || '#10B981',
+      warning: colorsRaw.warning || '#F59E0B',
+      error: colorsRaw.error || '#EF4444',
+      ...groups,
+    };
+  }
+
+  if (raw.radius && typeof raw.radius === 'object') config.radius = { ...raw.radius } as ThemeConfig['radius'];
+  if (raw.shadows && typeof raw.shadows === 'object') config.shadows = { ...raw.shadows } as ThemeConfig['shadows'];
+
+  if (raw.typography && typeof raw.typography === 'object') {
+    config.typography = {
+      fontFamily: raw.typography.fontFamily || 'auto',
+      headingWeight: String(raw.typography.headingWeight || '700'),
+      bodyWeight: String(raw.typography.bodyWeight || '400'),
+    } as ThemeConfig['typography'];
+  }
+
+  // Card radius/shadow overrides (server: colors.card.radius / colors.card.shadow)
+  const cardRadius = groups.card?.radius;
+  const cardShadowRaw = groups.card?.shadow;
+  if (cardRadius || cardShadowRaw) {
+    config.cards = {
+      radius: cardRadius,
+      shadow: themeShadowKey(cardShadowRaw, shadows) ?? cardShadowRaw,
+    };
+  }
+
+  if (raw.background && typeof raw.background === 'object') {
+    config.background = {
+      light: raw.background.light ? uiBackgroundConfigFromServer(raw.background.light) : undefined,
+      dark: raw.background.dark ? uiBackgroundConfigFromServer(raw.background.dark) : undefined,
+    };
+  }
+
+  return config;
+}
+
+export function mapEffectiveTheme(raw: any): EffectiveTheme | null {
   if (!raw || typeof raw !== 'object') return null;
   const fallbackColors = { primary: '#D4AF37', secondary: '#94A3B8', accent: '#C5A880', background: '#0A0B0D', surface: '#121416', textPrimary: '#F8FAFC', textSecondary: '#94A3B8', border: '#1E293B', success: '#10B981', warning: '#F59E0B', error: '#EF4444' };
   const rawColors = raw.colors || {};
+  const groups = mapColorGroups(rawColors);
   const colors = {
     primary: rawColors.primary || fallbackColors.primary,
     secondary: rawColors.secondary || fallbackColors.secondary,
@@ -610,6 +723,8 @@ function mapEffectiveTheme(raw: any): EffectiveTheme | null {
     success: rawColors.success || fallbackColors.success,
     warning: rawColors.warning || fallbackColors.warning,
     error: rawColors.error || fallbackColors.error,
+    // Per-component colour groups — preserved verbatim (API → frontend contract).
+    ...groups,
   };
   const mapBg = (bg: any): any => {
     if (!bg) return { type: 'solid', color: colors.background, readabilityBoost: false } as any;
@@ -632,18 +747,25 @@ function mapEffectiveTheme(raw: any): EffectiveTheme | null {
     ? { light: mapBg(raw.background.light), dark: mapBg(raw.background.dark) }
     : { light: mapBg(null), dark: mapBg(null) };
 
-  const radius = raw.radius || { sm: '6px', md: '10px', lg: '16px', xl: '24px', full: '9999px' };
-  const shadows = raw.shadows || { sm: '0 1px 2px rgba(0,0,0,0.2)', md: '0 4px 12px rgba(0,0,0,0.3)', lg: '0 12px 32px rgba(0,0,0,0.4)' };
+  const radius = { sm: '6px', md: '10px', lg: '16px', xl: '24px', full: '9999px', ...(raw.radius || {}) };
+  const shadows = {
+    sm: '0 1px 2px rgba(0,0,0,0.2)',
+    md: '0 4px 12px rgba(0,0,0,0.3)',
+    lg: '0 12px 32px rgba(0,0,0,0.4)',
+    ...(raw.shadows || {}),
+  };
   const typography = raw.typography || { fontFamily: 'tajawal', headingWeight: '700', bodyWeight: '400' };
 
-  // Server stores button/card/badge/category inside colors or separate; frontend expects separate
-  const buttons = raw.buttons || raw.rawConfig?.buttons || { variant: 'solid', radius: radius.md || '12px' };
-  const cards = raw.cards || raw.rawConfig?.cards || { radius: radius.lg || '16px', shadow: 'md', border: true };
-  const badges = raw.badges || raw.rawConfig?.badges || { variant: 'soft', radius: radius.full || '9999px' };
-  const categories = raw.categories || raw.rawConfig?.categories || { variant: 'pill' };
+  // Card overrides come ONLY from colors.card (the persisted slot). When
+  // absent the runtime derives radius from `radius.lg` and shadow from
+  // `shadows.md` — see buildEffectiveThemeVars.
+  const cards: ThemeCardStyle = {
+    radius: groups.card?.radius,
+    shadow: groups.card?.shadow,
+  };
 
   return {
-    mode: raw.mode || 'dark',
+    mode: raw.mode === 'light' || raw.mode === 'dark' ? raw.mode : 'auto',
     colors,
     radius,
     shadows,
@@ -652,14 +774,10 @@ function mapEffectiveTheme(raw: any): EffectiveTheme | null {
       headingWeight: String(typography.headingWeight || '700'),
       bodyWeight: String(typography.bodyWeight || '400'),
     },
-    buttons,
     cards,
-    badges,
-    categories,
     background,
-    // lockedFields removed — no longer part of ThemeConfig (revised scope)
     source: raw.source || 'fallback',
-    rawConfig: raw.rawConfig || raw,
+    rawConfig: uiThemeConfigFromServer(raw.rawConfig || raw),
   } as EffectiveTheme;
 }
 

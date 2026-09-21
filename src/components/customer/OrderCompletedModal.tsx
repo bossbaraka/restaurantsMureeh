@@ -52,7 +52,8 @@ export const OrderCompletedModal: React.FC = () => {
         role="status"
         aria-live="assertive"
         aria-atomic="true"
-        className="pointer-events-auto bg-luxury-900/95 border border-emerald-500/50 backdrop-blur-md rounded-2xl p-3.5 shadow-2xl flex items-center gap-3 text-right animate-in slide-in-from-top duration-300"
+        className="pointer-events-auto border border-emerald-500/50 backdrop-blur-md rounded-2xl p-3.5 flex items-center gap-3 text-right animate-in slide-in-from-top duration-300"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--theme-surface, #111317) 95%, transparent)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
       >
         <span className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0" aria-hidden="true">
           <ChefHat className="w-5 h-5" />
