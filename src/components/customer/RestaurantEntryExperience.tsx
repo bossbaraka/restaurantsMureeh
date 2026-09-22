@@ -9,7 +9,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { resolveBrandIdentity, useBrandTheme } from '../../theme/brandTheme';
 import { soundFX } from '../../utils/audio';
 import { optimizeImageUrl } from './ProductImage';
 
@@ -203,15 +202,20 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
 }) => {
   const { currentRestaurant, activeTableNumber, products, categories } = useRestaurant();
 
-  // Tenant palette -> the same `--brand-*` custom properties the menu consumes,
-  // so the hand-off into the menu has no colour jump.
-  // Theme-first identity (effective theme, legacy columns as fallback).
-  const brandIdentity = resolveBrandIdentity(currentRestaurant);
-  // DELIBERATE 'dark' surface: this welcome overlay paints its own fixed
-  // dark-canvas luxury gradient. When the tenant has a Theme row, the parent
-  // CustomerLayout's useEffectiveTheme (parent effects run after children)
-  // overrides these tokens with the mode-aware effective set.
-  useBrandTheme(brandIdentity.primary, brandIdentity.accent, { surfaceMode: 'dark' });
+  // COMPETING THEME WRITER REMOVED (theme single-writer foundation).
+  //
+  // This overlay used to call useBrandTheme(..., { surfaceMode: 'dark' }),
+  // writing the tenant palette onto <html> a second time. Because it forced
+  // the DARK surface, mounting the entry overlay replaced the mode-aware
+  // tokens of a light-mode menu with dark-adapted ones — and the old comment
+  // here relied on React effect ordering ("parent effects run after children")
+  // to undo it, which is exactly the kind of order-dependent correctness the
+  // single-writer rule removes.
+  //
+  // This component renders INSIDE CustomerThemeProvider's scope and simply
+  // inherits its tokens. Its own fixed dark-canvas gradient is unchanged; the
+  // deliberate dark surface for the entry stage is expressed in the scope, not
+  // by a second writer.
 
   const [reducedMotion, setReducedMotion] = useState<boolean>(prefersReducedMotion);
   const [stage, setStage] = useState<EntryStage>('COVER');
@@ -785,14 +789,17 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
                 >
                   <defs>
                     <linearGradient id="entry-arrow-face" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="rgb(255 255 255 / 0.92)" />
-                      <stop offset="45%" stopColor="var(--brand-primary-strong)" />
-                      <stop offset="100%" stopColor="var(--brand-accent-strong)" />
+{/* Specular white sheen over the artwork below — decorative, not
+                          restaurant theming, and SVG gradient stops cannot
+                          reliably take a CSS custom property here. */}
+                      <stop offset="0%" stopColor="rgb(255 255 255 / 0.92)" /> {/* THEME-EXEMPT (illustration): white sheen */}
+                      <stop offset="45%" stopColor="var(--m-brand-on-surface)" />
+                      <stop offset="100%" stopColor="var(--m-brand-accent-on-surface)" />
                     </linearGradient>
                     <linearGradient id="entry-arrow-sheen" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="rgb(255 255 255 / 0.85)" />
-                      <stop offset="55%" stopColor="rgb(255 255 255 / 0.08)" />
-                      <stop offset="100%" stopColor="rgb(255 255 255 / 0)" />
+                      <stop offset="0%" stopColor="rgb(255 255 255 / 0.85)" /> {/* THEME-EXEMPT (illustration): white sheen */}
+                      <stop offset="55%" stopColor="rgb(255 255 255 / 0.08)" /> {/* THEME-EXEMPT (illustration): white sheen */}
+                      <stop offset="100%" stopColor="rgb(255 255 255 / 0)" /> {/* THEME-EXEMPT (illustration): white sheen */}
                     </linearGradient>
                   </defs>
 

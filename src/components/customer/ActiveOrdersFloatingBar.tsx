@@ -19,21 +19,21 @@ export const ActiveOrdersFloatingBar: React.FC = () => {
     >
       <button
         onClick={() => setIsOrderTrackingOpen(true)}
-        className="w-full border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] backdrop-blur-md rounded-2xl p-3.5 flex items-center justify-between text-right group hover:border-[rgb(var(--brand-primary-strong-rgb)/0.7)] transition-all active:scale-[0.99]"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--theme-surface, #111317) 95%, transparent)', boxShadow: 'var(--shadow-lg, 0 10px 30px -10px rgba(0, 0, 0, 0.7))' }}
+        className="w-full border border-[rgb(var(--m-brand-on-surface-rgb)/0.4)] backdrop-blur-md rounded-2xl p-3.5 flex items-center justify-between text-right group hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.7)] transition-all active:scale-[0.99]"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--m-surface) 95%, transparent)', boxShadow: 'var(--m-shadow-lg)' }}
       >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)] shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)] shrink-0">
             <ChefHat className="w-5 h-5" />
           </div>
 
           <div className="text-right">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-luxury-50">
+              <span className="text-xs font-bold text-m-text">
                 طلب {latestOrder.id}
               </span>
               {activeTableOrders.length > 1 && (
-                <span className="text-[10px] bg-luxury-800 text-[var(--brand-primary-strong)] px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] bg-m-surface-raised text-[var(--m-brand-on-surface)] px-1.5 py-0.5 rounded-full">
                   +{activeTableOrders.length - 1} طلبات أخرى
                 </span>
               )}
@@ -41,15 +41,15 @@ export const ActiveOrdersFloatingBar: React.FC = () => {
 
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className={`w-1.5 h-1.5 rounded-full ${statusCfg.dotColor}`} />
-              <span className="text-xs text-[var(--brand-primary-strong)] font-medium">{statusCfg.label}</span>
-              <span className="text-[11px] text-luxury-400 mr-1.5">
+              <span className="text-xs text-[var(--m-brand-on-surface)] font-medium">{statusCfg.label}</span>
+              <span className="text-[11px] text-m-text-muted mr-1.5">
                 ({formatPrice(latestOrder.total, currency)})
               </span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 text-xs font-bold text-[var(--brand-primary-strong)] group-hover:translate-x-[-2px] transition-transform">
+        <div className="flex items-center gap-1 text-xs font-bold text-[var(--m-brand-on-surface)] group-hover:translate-x-[-2px] transition-transform">
           <span>👨‍🍳 المطبخ الحي</span>
           <ArrowLeft className="w-4 h-4" />
         </div>

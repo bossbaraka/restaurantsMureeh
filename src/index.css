@@ -3,9 +3,57 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
+  /* color-scheme is owned by PlatformAppearanceProvider, which sets it on
+     <html> from the resolved platform mode. It is NOT hardcoded here: a
+     static `dark` made light mode impossible for native form controls,
+     scrollbars and the browser UI. */
   --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   --font-serif: 'Amiri', 'Playfair Display', Georgia, serif;
+}
+
+/* ==========================================================================
+   PLATFORM TOKENS (--mureeh-*) — the Mureeh product's own appearance.
+   --------------------------------------------------------------------------
+   STRICTLY SEPARATE from the restaurant tokens (--m-*), which are applied by
+   CustomerThemeProvider to the customer scope. These describe the PRODUCT
+   (shell, toolbar, dashboard chrome); those describe a TENANT's menu.
+
+   Note the naming trap this resolves: Tailwind's `brand-*` ramp is the Mureeh
+   platform blue, while the CSS `--brand-*` variables are tenant colors. The
+   `--mureeh-*` prefix makes platform ownership unambiguous.
+
+   DEFAULT = DARK. The values below are exactly the current product colors, so
+   nothing changes appearance until a user opts into light.
+   ========================================================================== */
+:root,
+:root.dark {
+  /* PAGE canvas — the document background behind everything. Exactly the
+     previous body color (#0A0B0D); the QR splash hands off onto it, so
+     --welcome-canvas must stay equal to this value. */
+  --mureeh-canvas: #0A0B0D;
+  /* APP SHELL surface — the product frame drawn on top of the page canvas.
+     Exactly the previous shell color (#040D1A). These are two DISTINCT
+     surfaces and must not be collapsed into one token. */
+  --mureeh-bg: #040D1A;
+  --mureeh-surface: #081B33;
+  --mureeh-surface-raised: #0B2545;
+  --mureeh-text: #F0F3F8;
+  --mureeh-text-muted: #8590A5;
+  --mureeh-border: #0B3C63;
+  --mureeh-primary: #0072BC;
+}
+
+/* Platform LIGHT appearance. Applied when PlatformAppearanceProvider resolves
+   'light' and therefore removes the `dark` class from <html>. */
+:root:not(.dark) {
+  --mureeh-canvas: #FFFFFF;
+  --mureeh-bg: #F6F8FB;
+  --mureeh-surface: #FFFFFF;
+  --mureeh-surface-raised: #EEF3F9;
+  --mureeh-text: #0E1726;
+  --mureeh-text-muted: #55637A;
+  --mureeh-border: #D8E1EC;
+  --mureeh-primary: #0072BC;
 }
 
 @layer base {
@@ -15,7 +63,11 @@
   }
   
   body {
-    @apply bg-[#0A0B0D] text-[#F8FAFC] antialiased selection:bg-gold-500/20 selection:text-gold-300;
+    /* Platform-token driven, so the product shell follows platform
+       appearance. Previously hardcoded to the dark palette. */
+    @apply antialiased selection:bg-gold-500/20 selection:text-gold-300;
+    background-color: var(--mureeh-canvas);
+    color: var(--mureeh-text);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
@@ -91,19 +143,28 @@
   --menu-media-end: #0b0d11;
 
   /* -------------------------------------------------------------------------
-     Sticky header stack offsets (customer menu).
-     The platform toolbar (ViewSwitcher) is h-14 + 1px border = 57px and is the
-     ONE constant height in the stack. The venue header below it varies with
-     its content and env(safe-area-inset-top), so its real height is MEASURED
-     at runtime (CustomerHeader writes --customer-header-h via a
-     ResizeObserver). The category rail sticks to the sum — never to a guessed
-     pixel value, which is what let the header overlap the rail on phones.
-     The toolbar itself absorbs env(safe-area-inset-top) as its padding (the
-     single notch compensation point), so this height is inset-composed and
-     the stack below it needs no env() math of its own.
+     CUSTOMER LAYOUT GUTTER — one source of truth for horizontal geometry.
+
+     The rail is full-bleed: it cancels the page gutter with a negative inline
+     margin. Previously `main` used padding 0.75rem below 640px while the rail
+     cancelled 1rem, so the rail was 2 x (16 - 12) = 8px WIDER than the
+     viewport. That overflow was invisible only because `.customer-shell` sets
+     `overflow-x: clip` — the layout was not width-safe, it was merely clipped.
+
+     Deriving both from --m-gutter makes the mismatch unrepresentable.
      ------------------------------------------------------------------------- */
-  --shell-toolbar-h: calc(57px + env(safe-area-inset-top, 0px));
-  --customer-header-h: 69px; /* fallback until the first measurement lands */
+  --m-gutter: 1rem;
+
+  /* -------------------------------------------------------------------------
+     STICKY STACK.
+     --m-stack-h and --m-stack-above-header are published at runtime by
+     StickyStack onto the customer scope, from MEASURED band heights. The 0px
+     here is the pre-measurement fallback only — deliberately zero, so a band
+     that is not rendered can never contribute a phantom offset. There is no
+     hardcoded 57px/69px/118px anywhere in the stack any more.
+     ------------------------------------------------------------------------- */
+  --m-stack-h: 0px;
+  --m-stack-above-header: 0px;
 }
 
 /* ==========================================================================
@@ -115,14 +176,43 @@
    engine in JS; this block re-derives only the SURFACE and chrome-ink tokens
    so the same components read correctly on both canvases.
    ========================================================================== */
-:root[data-theme='light'] {
-  color-scheme: light;
+:root[data-theme='light'],
+.customer-theme-scope[data-appearance='light'] {
+  /* NOTE: no `color-scheme` here. That property is PLATFORM state, owned by
+     PlatformAppearanceProvider on <html>. A restaurant choosing a light menu
+     must not restyle the browser chrome of the whole product — that was part
+     of the platform/customer coupling.
+
+     The `:root[data-theme='light']` selector is retained only as a
+     COMPATIBILITY alias for the legacy attribute; the scope selector is the
+     canonical one. */
   --menu-surface: color-mix(in srgb, var(--brand-soft) 62%, #ffffff);
   --menu-surface-raised: color-mix(in srgb, var(--brand-soft-strong) 55%, #ffffff);
   --menu-hairline: color-mix(in srgb, var(--brand-primary) 22%, transparent);
   --menu-text-base: #3c4352;
   --menu-text-strong: #10141b;
   --menu-media-end: #e6e9ef;
+}
+
+/* ==========================================================================
+   CUSTOMER THEME SCOPE
+   --------------------------------------------------------------------------
+   The single element CustomerThemeProvider applies tenant tokens to. It
+   carries the canonical `--m-*` semantic tokens plus the temporary legacy
+   aliases (`--brand-*`, `--theme-*`, `--menu-*`), and `data-appearance` with
+   the RESOLVED surface mode ('light' | 'dark' — never 'auto').
+
+   `display: contents` is deliberate: the scope must introduce NO box of its
+   own. It generates no layout, so the existing sticky stack, flex/grid
+   relationships and `min-height` chains inside the menu are untouched — while
+   CSS custom properties still inherit normally to every descendant, because
+   inheritance follows the DOM tree regardless of `display`.
+
+   This is what makes the restaurant theme scopable to a subtree instead of
+   being a document-level global on <html>.
+   ========================================================================== */
+.customer-theme-scope {
+  display: contents;
 }
 
 /* Shared brand primitives used across the customer experience */
@@ -708,13 +798,15 @@
 /* Sticky filter/category rail ------------------------------------------------ */
 .menu-rail {
   position: sticky;
-  /* Directly below the real bottom edge of the sticky header stack:
-     platform toolbar (constant) + measured venue header (varies with content
-     and safe-area insets). Never a hardcoded pixel guess. */
-  top: calc(var(--shell-toolbar-h, 57px) + var(--customer-header-h, 69px));
+  /* ONE canonical variable. Composed by StickyStack from the measured heights
+     of the bands that are actually present, so there is no second formula
+     reconstructing the stack and no phantom offset when the platform toolbar
+     is absent (public /r/ routes, landing view). */
+  top: var(--m-stack-h);
   z-index: 20;
-  margin-inline: -1rem;
-  padding: 0.5rem 1rem 0.6rem;
+  /* Full bleed derived from the SAME gutter `main` pads with. */
+  margin-inline: calc(-1 * var(--m-gutter));
+  padding: 0.5rem var(--m-gutter) 0.6rem;
   /* Fully opaque: dishes scrolling underneath must never bleed through the
      rail, otherwise the sticky bar reads as cards stacked on top of cards. */
   background-color: var(--menu-surface);
@@ -732,6 +824,12 @@
 .menu-cats {
   position: relative;
   isolation: isolate;
+  /* A scroll container only shrinks below its content width if its ancestors
+     allow it. Without this, `.menu-cats__track` is sized by its widest
+     content (long Arabic category names, many chips) and pushes the rail
+     wider than the viewport instead of scrolling internally. This is the
+     structural requirement for "horizontal scrolling stays INSIDE the rail". */
+  min-width: 0;
 }
 .menu-cats::before,
 .menu-cats::after {
@@ -744,11 +842,11 @@
   pointer-events: none;
 }
 .menu-cats::before {
-  inset-inline-start: -1rem;
+  inset-inline-start: calc(-1 * var(--m-gutter));
   background: linear-gradient(to right, color-mix(in srgb, var(--menu-surface) 95%, transparent), transparent);
 }
 .menu-cats::after {
-  inset-inline-end: -1rem;
+  inset-inline-end: calc(-1 * var(--m-gutter));
   background: linear-gradient(to left, color-mix(in srgb, var(--menu-surface) 95%, transparent), transparent);
 }
 @media (min-width: 640px) {
@@ -763,6 +861,9 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* Same reason as `.menu-cats` above: the flex container must be allowed to
+     be narrower than its content for overflow-x to engage. */
+  min-width: 0;
   overflow-x: auto;
   overscroll-behavior-x: contain;
   scroll-behavior: smooth;
@@ -829,19 +930,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.5rem 0.75rem;
   margin-top: 0.55rem;
   font-size: 11px;
   color: var(--brand-muted);
+  /* WRAPPING IS EXPLICIT AND BOUNDED.
+     The toolbar has two groups: a count label and the controls. If they
+     cannot share a line, the controls drop to a second line — a predictable
+     two-line maximum, never per-control reflow. The rail is the last band in
+     the sticky stack and nothing sticks below it, so a taller rail cannot
+     desynchronise any other offset. */
+  flex-wrap: wrap;
 }
 .menu-toolbar__group {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  /* Groups may shrink before the toolbar wraps. */
+  min-width: 0;
 }
 .menu-select {
   appearance: none;
   -webkit-appearance: none;
+  /* The widest control in the toolbar. Allowing it to shrink (with a floor
+     that keeps the current option readable) avoids wrapping on 320-375px. */
+  min-width: 0;
+  max-width: 100%;
   padding: 0.4rem 1.6rem 0.4rem 0.7rem;
   /* radius.md → inputs (same scale slot as buttons). */
   border-radius: var(--radius-md, 10px);
@@ -3088,7 +3202,10 @@ input[type='range'].saas-range::-moz-range-thumb {
   }
   .customer-shell main {
     max-width: 100%;
-    padding-inline: 0.75rem;
+    /* Narrow-screen gutter. `main`'s padding and the rail's negative margin
+       both read this, so they cannot drift apart. */
+    --m-gutter: 0.75rem;
+    padding-inline: var(--m-gutter);
   }
   .menu-grid,
   .menu-rail,

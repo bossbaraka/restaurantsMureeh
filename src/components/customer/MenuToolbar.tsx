@@ -41,9 +41,9 @@ export const MenuToolbar: React.FC<MenuToolbarProps> = ({
   return (
     <div className="menu-toolbar">
       <div className="menu-toolbar__group">
-        <span className="font-semibold text-luxury-300">
+        <span className="font-semibold text-m-text-muted">
           {shownCount}
-          {shownCount !== totalCount && <span className="text-luxury-500"> / {totalCount}</span>}
+          {shownCount !== totalCount && <span className="text-m-text-subtle"> / {totalCount}</span>}
         </span>
         <span>طبق</span>
       </div>
@@ -63,7 +63,7 @@ export const MenuToolbar: React.FC<MenuToolbarProps> = ({
 
         <label className="relative inline-flex items-center">
           <ArrowDownWideNarrow
-            className="w-3.5 h-3.5 absolute right-2 pointer-events-none text-luxury-500"
+            className="w-3.5 h-3.5 absolute right-2 pointer-events-none text-m-text-subtle"
             aria-hidden="true"
           />
           <span className="sr-only">ترتيب الأطباق</span>

@@ -73,19 +73,35 @@ describe('menu grid layout cannot overlap itself', () => {
     expect(value('.menu-rail', 'position')).toContain('sticky');
   });
 
-  it('sticks the rail below the MEASURED header stack, never a guessed pixel offset', () => {
-    // The old `top: 118px` assumed a header height that stopped being true the
-    // moment safe-area padding, wrapping or text scaling changed it — the
-    // header (z-30) then painted over the rail (z-20) on phones.
+  it('sticks the rail to ONE canonical measured stack variable', () => {
+    // Phase 3: the offset was `calc(var(--shell-toolbar-h, 57px) +
+    // var(--customer-header-h, 69px))` — a formula assembled from two
+    // independently owned numbers, one of them a hardcoded guess about
+    // ViewSwitcher's height, and it reserved that height even when the
+    // toolbar was not rendered. It is now a single variable composed by
+    // StickyStack from MEASURED heights of the bands actually present.
     const top = value('.menu-rail', 'top');
-    expect(top).toContain('calc(');
-    expect(top).toContain('var(--shell-toolbar-h');
-    expect(top).toContain('var(--customer-header-h');
-    expect(top).not.toMatch(/118px/);
-    // The measured variable is published by CustomerHeader with a sane fallback.
+    expect(top).toBe('var(--m-stack-h)');
+    expect(top).not.toContain('calc(');
+    expect(top).not.toMatch(/\d+px/);
+  });
+
+  it('contains no hardcoded sticky offsets anywhere in the stack', () => {
+    const css = fs.readFileSync(cssPath, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    // The three magic numbers this phase removes.
+    expect(css).not.toContain('--shell-toolbar-h');
+    expect(css).not.toContain('--customer-header-h');
+    expect(css).not.toMatch(/top:\s*calc\([^)]*57px/);
+    expect(css).not.toMatch(/top:\s*118px/);
+  });
+
+  it('defaults the stack to zero so an absent band adds no phantom offset', () => {
+    // ViewSwitcher is conditionally rendered (hidden on the SaaS landing
+    // view and absent in embedded/public contexts). The pre-measurement
+    // fallback must therefore be 0, never a reserved toolbar height.
     const rootVars = declarations(':root');
-    expect((rootVars.get('--customer-header-h') || []).join(' ')).toMatch(/\d+px/);
-    expect((rootVars.get('--shell-toolbar-h') || []).join(' ')).toMatch(/\d+px/);
+    expect((rootVars.get('--m-stack-h') || []).join(' ')).toBe('0px');
+    expect((rootVars.get('--m-stack-above-header') || []).join(' ')).toBe('0px');
   });
 
   it('declares a resolved light appearance keyed on data-theme (never "auto")', () => {

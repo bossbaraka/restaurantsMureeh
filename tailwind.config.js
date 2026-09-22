@@ -7,7 +7,51 @@ export default {
   ],
   theme: {
     extend: {
+      /**
+       * `xs` — the narrow-phone breakpoint.
+       *
+       * Components already authored `hidden xs:inline` / `xs:flex` to drop
+       * secondary labels on small phones (MenuToolbar's "المتوفر فقط",
+       * CustomerHeader's English name, the welcome screen's table chip), but
+       * `xs` was never defined — so Tailwind emitted NO rule for those
+       * variants and the elements stayed `hidden` at EVERY width.
+       *
+       * Measured consequence in MenuToolbar: with the label permanently
+       * hidden the controls fit, but the authored progressive-disclosure
+       * behaviour never happened. Defining the breakpoint activates the
+       * intent that is already in the markup, at the width where the toolbar
+       * measurably has room for it.
+       */
+      screens: {
+        xs: '400px',
+      },
       colors: {
+        /**
+         * CUSTOMER SEMANTIC COLOURS.
+         *
+         * Backed by the `--m-*-rgb` channel tokens the CustomerThemeProvider
+         * writes onto the customer scope, in the `<alpha-value>` form Tailwind
+         * substitutes. This is what allows an opacity-modified customer class
+         * (`bg-m-surface/80`) to keep its transparency while sourcing its
+         * colour from the tenant theme — previously only the fixed `luxury-*`
+         * ramp could do that, which is precisely why the customer UI was
+         * locked to a dark palette.
+         *
+         * These are CUSTOMER tokens. Platform/admin surfaces keep using
+         * `luxury-*`/`gold-*`, which remain untouched.
+         */
+        m: {
+          bg: 'rgb(var(--m-bg-rgb) / <alpha-value>)',
+          surface: 'rgb(var(--m-surface-rgb) / <alpha-value>)',
+          'surface-raised': 'rgb(var(--m-surface-raised-rgb) / <alpha-value>)',
+          text: 'rgb(var(--m-text-rgb) / <alpha-value>)',
+          'text-muted': 'rgb(var(--m-text-muted-rgb) / <alpha-value>)',
+          'text-subtle': 'rgb(var(--m-text-subtle-rgb) / <alpha-value>)',
+          hairline: 'rgb(var(--m-hairline-rgb) / <alpha-value>)',
+          brand: 'rgb(var(--m-brand-rgb) / <alpha-value>)',
+          'brand-accent': 'rgb(var(--m-brand-accent-rgb) / <alpha-value>)',
+          'brand-strong': 'rgb(var(--m-brand-on-surface-rgb) / <alpha-value>)',
+        },
         luxury: {
           950: '#0A0B0D',
           900: '#111317',

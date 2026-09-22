@@ -53,16 +53,16 @@ export const OrderCompletedModal: React.FC = () => {
         aria-live="assertive"
         aria-atomic="true"
         className="pointer-events-auto border border-emerald-500/50 backdrop-blur-md rounded-2xl p-3.5 flex items-center gap-3 text-right animate-in slide-in-from-top duration-300"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--theme-surface, #111317) 95%, transparent)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
+        style={{ backgroundColor: 'color-mix(in srgb, var(--m-surface) 95%, transparent)', boxShadow: 'var(--m-shadow-lg)' }}
       >
         <span className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0" aria-hidden="true">
           <ChefHat className="w-5 h-5" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-luxury-50">
+          <p className="text-sm font-bold text-m-text">
             طلبك {latestOrder.id} · طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? '—'} جاهز للتقديم
           </p>
-          <p className="text-[11px] text-luxury-300 mt-0.5">
+          <p className="text-[11px] text-m-text-muted mt-0.5">
             {readyOrders.length > 1
               ? `${readyOrders.length} طلبات جاهزة الآن. تابع تفاصيلها في حالة الطلب.`
               : 'أكمل تصفحك أو افتح حالة الطلب لمتابعة التقديم.'}
@@ -81,7 +81,7 @@ export const OrderCompletedModal: React.FC = () => {
         <button
           type="button"
           onClick={dismissReadyOrders}
-          className="self-start p-2 rounded-xl text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800"
+          className="self-start p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised"
           aria-label="إخفاء إشعار الطلب الجاهز"
         >
           <X className="w-4 h-4" />

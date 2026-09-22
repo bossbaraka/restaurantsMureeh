@@ -35,7 +35,6 @@ import {
 } from '../services/customerEntry';
 import { useAuth } from './AuthContext';
 import { soundFX } from '../utils/audio';
-import { applyBrandTheme } from '../theme/brandTheme';
 import { resolveTableDisplayNumber } from '../utils/formatting';
 import { openEventSourceWithBackoff } from '../utils/sse';
 import { isOrderOperational } from '../utils/orderLifecycle';
@@ -616,25 +615,21 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [currentUser?.id, currentManagerRestaurant, viewMode, currentTableSession]);
 
-  // Keep brand theme synchronized and persistently cached when the current
-  // restaurant changes.
-  // Single source of values: the effective theme's colors when the tenant
-  // carries one, with the legacy primaryColor/accentColor columns as the
-  // fallback. Because the derived values (not the raw columns) are the effect
-  // inputs, a restaurant/session/tenant/catalog reload can never repaint the
-  // legacy columns over an available effective theme — the moment a theme
-  // arrives or changes, this effect re-runs with the theme-derived values.
-  const effectiveThemeColors = currentRestaurant?.theme?.colors;
-  const brandThemePrimary = effectiveThemeColors?.primary || currentRestaurant?.primaryColor;
-  const brandThemeAccent = effectiveThemeColors?.accent || currentRestaurant?.accentColor;
-  useEffect(() => {
-    if (brandThemePrimary || brandThemeAccent) {
-      applyBrandTheme(brandThemePrimary, brandThemeAccent, null, {
-        restaurantId: currentRestaurant?.id,
-        slug: currentRestaurant?.slug,
-      });
-    }
-  }, [brandThemePrimary, brandThemeAccent, currentRestaurant?.id, currentRestaurant?.slug]);
+  // POLLING-COUPLED CUSTOMER THEME WRITER REMOVED (theme single-writer
+  // foundation).
+  //
+  // This effect used to call applyBrandTheme(...) whenever the current
+  // restaurant object changed. Because `currentRestaurant` is replaced by
+  // reference on every 10-second background refresh (see refreshTenantData
+  // below), the effect re-fired continuously — and applyBrandTheme defaults to
+  // the DARK surface mode. The practical consequence: a light-mode menu was
+  // periodically repainted with dark-adapted brand tokens, which is why
+  // light/dark behaviour looked non-deterministic.
+  //
+  // Theme application now belongs exclusively to CustomerThemeProvider, which
+  // resolves the surface mode before applying tokens and scopes them to the
+  // customer subtree. Data loading (this context's actual responsibility) is
+  // unchanged.
 
   // 10-second background polling with in-flight lock — mitigates DoS/vector (M-04).
   // Previous 1.5s × 8 endpoints = 320 req/min per tab exceeded global rate-limit

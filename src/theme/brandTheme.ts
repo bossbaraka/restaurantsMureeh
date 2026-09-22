@@ -177,6 +177,25 @@ const clamp = (value: number, min: number, max: number): number =>
 // ---------------------------------------------------------------------------
 
 /** Parses `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()` into RGB 0-255. */
+/** Splits a comma list at depth 0 so nested functions stay intact. */
+function splitTopLevel(input: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of input) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) {
+      out.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) out.push(current);
+  return out.map((s) => s.trim());
+}
+
 export function parseColor(input?: string | null): Rgb | null {
   if (!input) return null;
   const value = String(input).trim();
@@ -196,6 +215,41 @@ export function parseColor(input?: string | null): Rgb | null {
       g: parseInt(hex.slice(2, 4), 16),
       b: parseInt(hex.slice(4, 6), 16),
     };
+  }
+
+  // hsl()/hsla() — buildBrandTokens emits `soft`/`softStrong`/`muted` in this
+  // form via hslToCss, so the surface ladder cannot be resolved to channels
+  // without it.
+  const hslMatch = value.match(/^hsla?\(([^)]+)\)$/i);
+  if (hslMatch) {
+    const parts = hslMatch[1]
+      .split(/[\s,/]+/)
+      .filter(Boolean)
+      .map((p) => Number(p.replace('%', '')));
+    if (parts.length >= 3 && parts.slice(0, 3).every((n) => Number.isFinite(n))) {
+      return hslToRgb({ h: parts[0], s: clamp(parts[1] / 100, 0, 1), l: clamp(parts[2] / 100, 0, 1) });
+    }
+  }
+
+  // color-mix(in srgb, <color> <pct>%, <color>) — the surface tokens are
+  // authored as mixes. Resolving them here keeps a single derivation of each
+  // surface colour instead of duplicating the mix formula elsewhere.
+  const mixMatch = value.match(/^color-mix\(\s*in\s+srgb\s*,\s*(.+)\)$/i);
+  if (mixMatch) {
+    const [rawA, rawB] = splitTopLevel(mixMatch[1]);
+    if (rawA && rawB) {
+      const pctA = rawA.match(/\s([\d.]+)%\s*$/);
+      const pctB = rawB.match(/\s([\d.]+)%\s*$/);
+      const colorA = parseColor(rawA.replace(/\s[\d.]+%\s*$/, '').trim());
+      const bStr = rawB.replace(/\s[\d.]+%\s*$/, '').trim();
+      // `transparent` contributes no colour, only alpha; for an opaque channel
+      // approximation the remaining colour is the other operand.
+      const colorB = bStr === 'transparent' ? colorA : parseColor(bStr);
+      if (colorA && colorB) {
+        const wA = pctA ? Number(pctA[1]) / 100 : pctB ? 1 - Number(pctB[1]) / 100 : 0.5;
+        return mixColors(colorB, colorA, clamp(wA, 0, 1));
+      }
+    }
   }
 
   const match = value.match(/^rgba?\(([^)]+)\)$/i);
@@ -876,6 +930,20 @@ export function buildEffectiveThemeVars(
   };
 }
 
+/**
+ * @deprecated LEGACY ENGINE — no production caller remains (Phase 1/2).
+ *
+ * Retained only so the pre-existing test suite can keep asserting the legacy
+ * behaviour that new code is verified against for semantic equivalence.
+ *
+ * DO NOT CALL FROM APPLICATION CODE. It writes customer theme tokens AND
+ * `data-theme` onto <html>, which violates both ownership rules: the customer
+ * theme is scoped to the customer subtree (CustomerThemeProvider), and <html>
+ * appearance belongs to the platform (PlatformAppearanceProvider).
+ *
+ * Removed together with the compatibility aliases once every customer
+ * component has migrated to the --m-* tokens.
+ */
 export function applyEffectiveTheme(
   theme: EffectiveTheme | null | undefined,
   styleTarget?: { setProperty(name: string, value: string): void } | null,
@@ -938,15 +1006,21 @@ export function useEffectiveTheme(
   }, [theme]);
 }
 
-// Eager initialization: apply the previously-persisted server theme
-// immediately on script evaluation (fast first paint, colors only).
-// persist: false — the values are already in localStorage; rewriting them
-// here would also blur the "only real themes persist" rule.
-if (typeof window !== 'undefined') {
-  try {
-    const cached = getCachedBrandTheme();
-    if (cached?.primary && cached?.accent) {
-      applyBrandTheme(cached.primary, cached.accent, null, { ...cached, persist: false });
-    }
-  } catch {}
-}
+/**
+ * MODULE-LOAD SIDE EFFECT REMOVED (theme single-writer foundation).
+ *
+ * This module used to paint the cached brand palette onto <html> at IMPORT
+ * TIME. That made a pure color-math module a DOM writer: merely importing a
+ * helper (e.g. `parseColor` in a manager form, or `buildBrandTokens` in the
+ * social-export utility) repainted the tenant palette — always contrast-
+ * adapted to the DARK canvas, because the eager call could not know the
+ * resolved mode. In a light-mode menu it therefore installed dark-surface
+ * tokens before any mode-aware code had run, and it fired in tests and on the
+ * platform shell where no tenant theme applies at all.
+ *
+ * First paint is now owned by `CustomerThemeProvider`, which resolves the mode
+ * first and applies tokens to the customer scope only. The cache helpers
+ * (`getCachedBrandTheme` / `setCachedBrandTheme`) remain exported for that
+ * provider and for backward compatibility; they are data accessors, not
+ * writers.
+ */

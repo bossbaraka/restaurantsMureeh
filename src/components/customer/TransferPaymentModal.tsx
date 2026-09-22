@@ -259,20 +259,20 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="transfer-payment-title"
-        className="relative w-full max-w-lg my-auto border border-luxury-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 z-10 animate-fade-in text-right max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col"
-        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
+        className="relative w-full max-w-lg my-auto border border-m-hairline rounded-2xl sm:rounded-3xl p-4 sm:p-6 z-10 animate-fade-in text-right max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col"
+        style={{ backgroundColor: 'var(--m-surface)', boxShadow: 'var(--m-shadow-lg)' }}
         dir="rtl"
       >
-        <div className="flex items-center justify-between border-b border-luxury-800 pb-3 sm:pb-4 shrink-0">
+        <div className="flex items-center justify-between border-b border-m-hairline pb-3 sm:pb-4 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
+            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
               <CreditCard className="w-5 h-5" />
             </div>
             <div>
-              <h3 id="transfer-payment-title" className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="transfer-payment-title" className="text-base font-bold text-m-text font-serif">
                 الدفع عبر حوالة بنكية أو محفظة
               </h3>
-              <p className="text-xs text-luxury-400">
+              <p className="text-xs text-m-text-muted">
                 الطلب {order.id} · {formatPrice(order.total, currency)}
               </p>
             </div>
@@ -280,7 +280,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
           <button
             onClick={onClose}
             aria-label="إغلاق"
-            className="p-2 rounded-xl text-luxury-400 hover:text-luxury-200 hover:bg-luxury-800 transition-colors"
+            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -291,16 +291,16 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
             <div className="w-16 h-16 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-8 h-8" />
             </div>
-            <h4 className="text-base font-bold text-luxury-100">
+            <h4 className="text-base font-bold text-m-text">
               تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.
             </h4>
-            <p className="text-xs text-luxury-400 leading-relaxed max-w-sm mx-auto">
+            <p className="text-xs text-m-text-muted leading-relaxed max-w-sm mx-auto">
               ظهر إشعارك فوراً على شاشة الكاشير مع تفاصيل الطلب. بعد تأكيد الكاشير للعملية
               ينتقل طلبك إلى المطبخ مباشرة بحالة «جاهز للبدء». تابع الحالة من شاشة تتبع الطلبات.
             </p>
             <button
               onClick={onClose}
-              className="w-full py-3 rounded-xl brand-cta font-bold text-sm shadow-[0_0_22px_-6px_var(--brand-glow)] transition-all cursor-pointer"
+              className="w-full py-3 rounded-xl brand-cta font-bold text-sm shadow-[0_0_22px_-6px_var(--m-brand-glow)] transition-all cursor-pointer"
             >
               حسناً
             </button>
@@ -309,18 +309,18 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
           <>
             <div className="flex-1 overflow-y-auto space-y-4 sm:space-y-5 pr-0.5 custom-scrollbar py-1">
               {/* Step 1 — amount (read-only, from the order itself) */}
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-2">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-m-bg border border-m-hairline space-y-2">
                 <div className="flex justify-between items-center text-sm font-bold">
-                  <span className="text-luxury-200">المبلغ المطلوب تحويله</span>
-                  <span className="text-[var(--brand-primary-strong)] font-mono text-base">
+                  <span className="text-m-text">المبلغ المطلوب تحويله</span>
+                  <span className="text-[var(--m-brand-on-surface)] font-mono text-base">
                     {formatPrice(order.total, currency)}
                   </span>
                 </div>
-                <p className="text-[11px] text-luxury-400 leading-relaxed">
+                <p className="text-[11px] text-m-text-muted leading-relaxed">
                   حوّل المبلغ إلى حساب المطعم أو محفظته، ثم أرسل إشعار التحويل مع اسمك ورقم هاتفك
                   ليؤكده الكاشير — يمكنك أيضاً الدفع نقداً عند الكاشير.
                 </p>
-                <p className="text-[11px] font-bold text-luxury-200 leading-relaxed">
+                <p className="text-[11px] font-bold text-m-text leading-relaxed">
                   لا يبدأ المطبخ بتحضير الطلب قبل تأكيد الدفع
                 </p>
               </div>
@@ -332,32 +332,32 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                   verifies the money against the receipt below. A channel the
                   venue did not configure renders the safe fallback — never an
                   empty card, "undefined" or an invented number. */}
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-2.5">
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-m-bg border border-m-hairline space-y-2.5">
                 {hasActiveDetails ? (
                   <>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="flex items-center gap-1.5 text-xs font-bold text-luxury-200">
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-m-text">
                         {channel === 'WALLET' ? (
-                          <Wallet className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
+                          <Wallet className="w-3.5 h-3.5 text-[var(--m-brand-on-surface)]" />
                         ) : (
-                          <Landmark className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
+                          <Landmark className="w-3.5 h-3.5 text-[var(--m-brand-on-surface)]" />
                         )}
                         {channel === 'WALLET' ? 'حوّل إلى محفظة المطعم' : 'حوّل إلى حساب المطعم البنكي'}
                       </span>
                       {activeView.providerName && (
-                        <span className="text-[11px] font-bold text-[var(--brand-primary-strong)] truncate">
+                        <span className="text-[11px] font-bold text-[var(--m-brand-on-surface)] truncate">
                           {activeView.providerName}
                         </span>
                       )}
                     </div>
 
                     {activeView.accountValue && (
-                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-luxury-900 border border-luxury-800">
+                      <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-m-surface border border-m-hairline">
                         <div className="min-w-0">
-                          <span className="block text-[10px] text-luxury-500">{activeView.accountLabel}</span>
+                          <span className="block text-[10px] text-m-text-subtle">{activeView.accountLabel}</span>
                           <span
                             dir="ltr"
-                            className="block text-xs font-mono font-bold text-luxury-50 break-all select-all"
+                            className="block text-xs font-mono font-bold text-m-text break-all select-all"
                           >
                             {activeView.accountValue}
                           </span>
@@ -366,7 +366,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                           type="button"
                           onClick={() => handleCopyValue('account', activeView.accountValue || '')}
                           aria-label={`نسخ ${activeView.accountLabel}`}
-                          className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-lg bg-luxury-850 hover:bg-luxury-800 border border-luxury-700 text-[10px] font-bold text-luxury-200 transition-colors cursor-pointer"
+                          className="shrink-0 flex items-center gap-1 px-2.5 py-2 rounded-lg bg-m-surface-raised hover:bg-m-surface-raised border border-m-hairline text-[10px] font-bold text-m-text transition-colors cursor-pointer"
                         >
                           {copiedField === 'account' ? (
                             <Check className="w-3.5 h-3.5 text-emerald-400" />
@@ -382,40 +382,40 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                       <dl className="space-y-1.5">
                         {activeView.providerName && (
                           <div className="flex justify-between items-start gap-3 text-[11px]">
-                            <dt className="text-luxury-500 shrink-0">
+                            <dt className="text-m-text-subtle shrink-0">
                               {channel === 'WALLET' ? 'اسم المحفظة' : 'اسم البنك'}
                             </dt>
-                            <dd className="font-bold text-luxury-100">{activeView.providerName}</dd>
+                            <dd className="font-bold text-m-text">{activeView.providerName}</dd>
                           </div>
                         )}
                         {activeView.holderName && (
                           <div className="flex justify-between items-start gap-3 text-[11px]">
-                            <dt className="text-luxury-500 shrink-0">{activeView.holderLabel}</dt>
-                            <dd className="font-bold text-luxury-100">{activeView.holderName}</dd>
+                            <dt className="text-m-text-subtle shrink-0">{activeView.holderLabel}</dt>
+                            <dd className="font-bold text-m-text">{activeView.holderName}</dd>
                           </div>
                         )}
                       </dl>
                     )}
 
                     {transfer?.instructions && (
-                      <p className="text-[11px] text-luxury-300 leading-relaxed whitespace-pre-line border-t border-luxury-800 pt-2">
+                      <p className="text-[11px] text-m-text-muted leading-relaxed whitespace-pre-line border-t border-m-hairline pt-2">
                         {transfer.instructions}
                       </p>
                     )}
                   </>
                 ) : (
                   <div className="space-y-1.5">
-                    <p className="text-[11px] font-bold text-luxury-200 flex items-center gap-1.5">
-                      <AlertCircle className="w-3.5 h-3.5 text-luxury-500 shrink-0" />
+                    <p className="text-[11px] font-bold text-m-text flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-m-text-subtle shrink-0" />
                       {channel === 'WALLET'
                         ? 'لم يعلن المطعم بيانات محفظته الإلكترونية بعد'
                         : 'لم يعلن المطعم بيانات حسابه البنكي بعد'}
                     </p>
-                    <p className="text-[11px] text-luxury-400 leading-relaxed">
+                    <p className="text-[11px] text-m-text-muted leading-relaxed">
                       {venuePhone ? (
                         <>
                           تواصل مع المطعم على{' '}
-                          <span dir="ltr" className="font-mono font-bold text-luxury-200">
+                          <span dir="ltr" className="font-mono font-bold text-m-text">
                             {venuePhone}
                           </span>{' '}
                           للحصول على بيانات التحويل، أو ادفع نقداً عند الكاشير.
@@ -425,7 +425,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                       )}
                     </p>
                     {otherChannelAvailable && (
-                      <p className="text-[11px] text-luxury-500 leading-relaxed">
+                      <p className="text-[11px] text-m-text-subtle leading-relaxed">
                         {channel === 'WALLET'
                           ? 'يستقبل المطعم التحويل البنكي — اختر «حوالة بنكية» أدناه لتظهر بيانات الحساب.'
                           : 'يستقبل المطعم التحويل بالمحفظة — اختر «محفظة إلكترونية» أدناه لتظهر بيانات المحفظة.'}
@@ -437,7 +437,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
 
               {/* Step 2 — how the money was sent (display hint for the cashier) */}
               <div>
-                <label className="block text-xs font-bold text-luxury-300 mb-1.5">طريقة التحويل</label>
+                <label className="block text-xs font-bold text-m-text-muted mb-1.5">طريقة التحويل</label>
                 <div className="grid grid-cols-1 min-[420px]:grid-cols-2 gap-2" role="radiogroup" aria-label="طريقة التحويل">
                   {CHANNELS.map((option) => {
                     const active = channel === option.id;
@@ -450,15 +450,15 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                         onClick={() => setChannel(option.id)}
                         className={`p-2.5 rounded-2xl border text-right transition-colors cursor-pointer ${
                           active
-                            ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border-[rgb(var(--brand-primary-strong-rgb)/0.6)]'
-                            : 'bg-luxury-950 border-luxury-800 hover:border-luxury-700'
+                            ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]'
+                            : 'bg-m-bg border-m-hairline hover:border-m-hairline'
                         }`}
                       >
-                        <span className="flex items-center gap-1.5 text-xs font-bold text-luxury-100">
+                        <span className="flex items-center gap-1.5 text-xs font-bold text-m-text">
                           {option.icon}
                           {option.label}
                         </span>
-                        <span className="block text-[10px] text-luxury-500 mt-1 leading-relaxed">
+                        <span className="block text-[10px] text-m-text-subtle mt-1 leading-relaxed">
                           {option.hint}
                         </span>
                       </button>
@@ -470,11 +470,11 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
               {/* Step 3 — guest identity (required) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                 <div>
-                  <label htmlFor="transfer-name" className="block text-xs font-bold text-luxury-300 mb-1.5">
+                  <label htmlFor="transfer-name" className="block text-xs font-bold text-m-text-muted mb-1.5">
                     اسم العميل <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
-                    <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-luxury-500" />
+                    <User className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-m-text-subtle" />
                     <input
                       id="transfer-name"
                       type="text"
@@ -483,17 +483,17 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                       maxLength={60}
                       autoComplete="name"
                       placeholder="الاسم كما هو على إشعار التحويل"
-                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl pr-10 pl-3 py-2.5 text-sm text-luxury-100 placeholder-luxury-600 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
+                      className="w-full bg-m-bg border border-m-hairline rounded-xl pr-10 pl-3 py-2.5 text-sm text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label htmlFor="transfer-phone" className="block text-xs font-bold text-luxury-300 mb-1.5">
+                  <label htmlFor="transfer-phone" className="block text-xs font-bold text-m-text-muted mb-1.5">
                     رقم الهاتف المحمول <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
-                    <Smartphone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-luxury-500" />
+                    <Smartphone className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-m-text-subtle" />
                     <input
                       id="transfer-phone"
                       type="tel"
@@ -505,22 +505,22 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                       maxLength={24}
                       autoComplete="tel"
                       placeholder="0599123456"
-                      className="w-full bg-luxury-950 border border-luxury-800 rounded-xl pr-10 pl-3 py-2.5 text-sm text-luxury-100 placeholder-luxury-600 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] text-left font-mono"
+                      className="w-full bg-m-bg border border-m-hairline rounded-xl pr-10 pl-3 py-2.5 text-sm text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)] text-left font-mono"
                     />
                   </div>
                 </div>
               </div>
-              <p className="text-[11px] text-luxury-500 -mt-2">
+              <p className="text-[11px] text-m-text-subtle -mt-2">
                 يُستخدم الاسم ورقم الهاتف لمطابقة التحويل مع الطلب والتواصل عند الحاجة فقط.
               </p>
 
               {/* Step 4 — receipt image */}
               <div>
-                <label className="block text-xs font-bold text-luxury-300 mb-1.5">صورة إشعار التحويل</label>
+                <label className="block text-xs font-bold text-m-text-muted mb-1.5">صورة إشعار التحويل</label>
                 <div className="flex items-center gap-3">
                   <label
                     htmlFor="transfer-proof-file"
-                    className="flex-1 cursor-pointer rounded-2xl border border-dashed border-luxury-700 hover:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] bg-luxury-950 px-4 py-3 flex items-center justify-center gap-2 text-xs font-bold text-luxury-300 transition-colors"
+                    className="flex-1 cursor-pointer rounded-2xl border border-dashed border-m-hairline hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)] bg-m-bg px-4 py-3 flex items-center justify-center gap-2 text-xs font-bold text-m-text-muted transition-colors"
                   >
                     <Upload className="w-4 h-4" />
                     <span>{file ? 'تغيير الصورة' : 'اختر صورة الإشعار'}</span>
@@ -536,11 +536,11 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                     <img
                       src={previewUrl}
                       alt="معاينة إشعار التحويل"
-                      className="w-16 h-16 rounded-xl object-cover border border-luxury-800"
+                      className="w-16 h-16 rounded-xl object-cover border border-m-hairline"
                     />
                   )}
                 </div>
-                <p className="text-[11px] text-luxury-500 mt-1.5">
+                <p className="text-[11px] text-m-text-subtle mt-1.5">
                   JPG أو PNG أو WEBP — حد أقصى 5 ميجابايت.
                 </p>
               </div>
@@ -548,15 +548,15 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
               {/* Upload progress */}
               {phase === 'uploading' && (
                 <div className="space-y-2" role="status" aria-live="polite">
-                  <div className="flex justify-between text-[11px] text-luxury-300">
+                  <div className="flex justify-between text-[11px] text-m-text-muted">
                     <span className="flex items-center gap-1.5">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" /> جاري إرسال الإشعار للكاشير...
                     </span>
                     <span className="font-mono">{progress}%</span>
                   </div>
-                  <div className="h-1.5 w-full rounded-full bg-luxury-850 overflow-hidden">
+                  <div className="h-1.5 w-full rounded-full bg-m-surface-raised overflow-hidden">
                     <div
-                      className="h-full bg-[var(--brand-primary-strong)] transition-all"
+                      className="h-full bg-[var(--m-brand-on-surface)] transition-all"
                       style={{ width: `${Math.max(4, progress)}%` }}
                     />
                   </div>
@@ -574,17 +574,17 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                 </div>
               )}
 
-              <p className="text-[11px] text-luxury-500 leading-relaxed">
+              <p className="text-[11px] text-m-text-subtle leading-relaxed">
                 لم تحوّل المبلغ بعد؟ يمكنك إغلاق هذه النافذة والعودة إليها من «تتبع الطلب» — مع
                 العلم أن الطلب يبقى بانتظار الدفع ولا يظهر في المطبخ حتى يؤكده الكاشير.
               </p>
             </div>
 
-            <div className="flex gap-2.5 sm:gap-3 pt-3 border-t border-luxury-800/80 shrink-0">
+            <div className="flex gap-2.5 sm:gap-3 pt-3 border-t border-m-hairline/80 shrink-0">
               <button
                 type="button"
                 onClick={onClose}
-                className="w-1/3 py-2.5 sm:py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-300 font-bold text-xs transition-colors"
+                className="w-1/3 py-2.5 sm:py-3 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted font-bold text-xs transition-colors"
               >
                 لاحقاً
               </button>
@@ -592,7 +592,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                 type="button"
                 disabled={phase === 'uploading'}
                 onClick={handleSubmit}
-                className="flex-1 py-2.5 sm:py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                className="flex-1 py-2.5 sm:py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 {phase === 'error' ? <RefreshCw className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
                 <span>{phase === 'error' ? 'إعادة المحاولة' : 'إرسال إشعار التحويل'}</span>

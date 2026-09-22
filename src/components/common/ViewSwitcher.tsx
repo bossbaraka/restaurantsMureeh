@@ -19,8 +19,22 @@ import {
   User,
   Globe,
   Plus,
+  Sun,
+  Moon,
+  MonitorCog,
 } from 'lucide-react';
 import { formatTableNumber } from '../../utils/formatting';
+import { useStickyBand } from '../../theme/StickyStack';
+import {
+  usePlatformAppearance,
+  type PlatformAppearance,
+} from '../../theme/PlatformAppearanceProvider';
+
+const APPEARANCE_LABEL: Record<PlatformAppearance, string> = {
+  light: 'فاتح',
+  dark: 'داكن',
+  system: 'حسب النظام',
+};
 
 export const ViewSwitcher: React.FC = () => {
   const {
@@ -42,6 +56,12 @@ export const ViewSwitcher: React.FC = () => {
   } = useRestaurant();
 
   const { currentUser, isSuperAdmin, canAccessView, setIsLoginModalOpen, switchManagerRestaurant } = useAuth();
+  const platformAppearance = usePlatformAppearance();
+  // Register as the TOP sticky band. Its measured height (which already
+  // includes the env(safe-area-inset-top) padding below) feeds --m-stack-h.
+  // When this component is not rendered — e.g. the SaaS landing view — the
+  // ref detaches and the band leaves the stack, so no phantom offset remains.
+  const stickyBandRef = useStickyBand('toolbar');
 
   // Other restaurants may be browsed ONLY by platform managers. A restaurant's
   // customers/staff never see the shared-restaurants switcher.
@@ -66,13 +86,22 @@ export const ViewSwitcher: React.FC = () => {
 
   return (
     <header
-      className="sticky top-0 z-40 bg-luxury-950/95 backdrop-blur-md border-b border-luxury-800 text-luxury-100 text-xs select-none shadow-md"
+      ref={stickyBandRef}
+      className="sticky top-0 z-40 backdrop-blur-md border-b text-xs select-none shadow-md"
       /* The SINGLE safe-area compensation point of the shell: this topmost
          sticky bar absorbs env(safe-area-inset-top) into its own padding, so
          its background covers the notch and every consumer of
          --shell-toolbar-h (customer header, category rail) parks below the
          notch exactly once. Browsers without env() drop this declaration. */
-      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+      style={{
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        // PLATFORM tokens (--mureeh-*), not tenant colors: this toolbar is
+        // Mureeh product chrome and must follow PLATFORM appearance, never the
+        // restaurant's menu theme.
+        backgroundColor: 'var(--mureeh-surface)',
+        borderBottomColor: 'var(--mureeh-border)',
+        color: 'var(--mureeh-text)',
+      }}
     >
       <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
         {/* Brand & Multi-Tenant Selector */}
@@ -201,6 +230,35 @@ export const ViewSwitcher: React.FC = () => {
               {currentUser ? currentUser.name.split(' ')[0] : 'دخول الإدارة'}
             </span>
           </button>
+
+          {/* PLATFORM appearance switch (light → dark → system).
+              Affects ONLY the Mureeh product chrome. It never touches the
+              restaurant menu theme, which a venue controls separately. */}
+          {platformAppearance && (
+            <button
+              onClick={() => {
+                const order: PlatformAppearance[] = ['light', 'dark', 'system'];
+                const next = order[(order.indexOf(platformAppearance.appearance) + 1) % order.length];
+                platformAppearance.setAppearance(next);
+              }}
+              className="p-2 rounded-lg border transition-colors cursor-pointer"
+              style={{
+                backgroundColor: 'var(--mureeh-surface-raised)',
+                borderColor: 'var(--mureeh-border)',
+                color: 'var(--mureeh-text-muted)',
+              }}
+              title={`مظهر المنصة: ${APPEARANCE_LABEL[platformAppearance.appearance]} (اضغط للتبديل)`}
+              aria-label={`مظهر المنصة: ${APPEARANCE_LABEL[platformAppearance.appearance]}`}
+            >
+              {platformAppearance.appearance === 'light' ? (
+                <Sun className="w-3.5 h-3.5" />
+              ) : platformAppearance.appearance === 'dark' ? (
+                <Moon className="w-3.5 h-3.5" />
+              ) : (
+                <MonitorCog className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
 
           <button
             onClick={toggleSound}

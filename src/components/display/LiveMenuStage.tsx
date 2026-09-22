@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Category, Product, Restaurant } from '../../types/restaurant';
-import { resolveBrandIdentity, useBrandTheme } from '../../theme/brandTheme';
+import { resolveBrandIdentity } from '../../theme/brandTheme';
+import { CustomerThemeProvider } from '../../theme/CustomerThemeProvider';
 import { normalizeWhatsappNumber } from '../../utils/whatsapp';
 import { generateQrDataUrl } from '../../utils/qrCodeGenerator';
 import {
@@ -156,21 +157,28 @@ const useClock = (enabled: boolean): string => {
   return now.toLocaleTimeString('ar', { hour: '2-digit', minute: '2-digit' });
 };
 
-export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
+const LiveMenuStageContent: React.FC<LiveMenuStageProps> = ({
   restaurant: currentRestaurant,
   categories,
   products,
   onToast: showToast,
 }) => {
 
-  // Same tenant palette the ordering menu uses — the display never diverges.
-  // (Also keeps the `--brand-*` variables on <html> for the export canvas.)
-  // Theme-first identity: the effective theme's colors when the tenant has
-  // one, legacy columns as fallback — never the columns alone.
+  // INDEPENDENT THEME WRITER REMOVED (Phase 2, world isolation).
+  //
+  // The board used to call useBrandTheme(..., { surfaceMode: 'dark' }), a
+  // second engine writing tenant tokens straight onto <html>. It now renders
+  // inside a CustomerThemeProvider with an explicit `forceMode="dark"` (see
+  // the wrapper at the bottom of this file): the signage board is
+  // deliberately a fixed dark canvas, but that intent is now DECLARED through
+  // the shared pipeline rather than implemented by a separate writer.
+  //
+  // Same semantic tokens, same derivation, one owner.
+  //
+  // resolveBrandIdentity below is a PURE value read (no DOM): it feeds a memo
+  // key and the social-poster export, which rasterises to a <canvas> and
+  // therefore needs real color values rather than CSS variables.
   const brandIdentity = resolveBrandIdentity(currentRestaurant);
-  // DELIBERATE 'dark' surface: the TV display paints a fixed dark canvas by
-  // design; the legacy --brand-* tokens it emits are dark-canvas contrasted.
-  useBrandTheme(brandIdentity.primary, brandIdentity.accent, { surfaceMode: 'dark' });
 
   const [settings, setSettings] = useState<DisplaySettings>(DISPLAY_FALLBACK);
   // Phones and tablets never autoplay: they get the static menu instead.
@@ -934,5 +942,20 @@ export const LiveMenuStage: React.FC<LiveMenuStageProps> = ({
     </div>
   );
 };
+
+/**
+ * LiveMenuStage — the read-only signage board, wrapped in its theme scope.
+ *
+ * `forceMode="dark"` is an explicit contract, not a hidden default: the TV
+ * board is intentionally a fixed dark canvas regardless of the tenant's
+ * configured light/dark/auto mode or the device preference. It consumes the
+ * SAME normalization + semantic-token pipeline as the customer menu, so the
+ * board can never drift from the menu's palette.
+ */
+export const LiveMenuStage: React.FC<LiveMenuStageProps> = (props) => (
+  <CustomerThemeProvider restaurant={props.restaurant} forceMode="dark">
+    <LiveMenuStageContent {...props} />
+  </CustomerThemeProvider>
+);
 
 export default LiveMenuStage;

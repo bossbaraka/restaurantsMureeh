@@ -85,12 +85,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-detail-title"
-        className="relative w-full max-w-lg border border-luxury-700/80 rounded-3xl overflow-hidden z-10 animate-fade-in text-right max-h-[90vh] flex flex-col"
-        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
+        className="relative w-full max-w-lg border border-m-hairline/80 rounded-3xl overflow-hidden z-10 animate-fade-in text-right max-h-[90vh] flex flex-col"
+        style={{ backgroundColor: 'var(--m-surface)', boxShadow: 'var(--m-shadow-lg)' }}
         dir="rtl"
       >
         {/* Sticky Header with Close Button & Image */}
-        <div className="relative aspect-[16/9] w-full shrink-0 bg-luxury-950">
+        <div className="relative aspect-[16/9] w-full shrink-0 bg-m-bg">
           {product.image ? (
             <img
               src={optimizeImageUrl(product.image, 960, 75)}
@@ -100,20 +100,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               className="w-full h-full object-cover"
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-luxury-900 via-luxury-900/30 to-black/60" />
+          <div className="absolute inset-0 bg-gradient-to-t from-m-surface via-m-surface/30 to-black/60" />
 
           {/* Close button */}
           <button
             onClick={onClose}
             aria-label="إغلاق تفاصيل الصنف"
-            className="absolute top-4 left-4 w-9 h-9 rounded-full bg-luxury-950/80 text-luxury-300 hover:text-white flex items-center justify-center border border-luxury-700 transition-colors backdrop-blur-sm cursor-pointer z-20"
+            className="absolute top-4 left-4 w-9 h-9 rounded-full bg-m-bg/80 text-m-text-muted hover:text-white flex items-center justify-center border border-m-hairline transition-colors backdrop-blur-sm cursor-pointer z-20"
           >
             <X className="w-5 h-5" />
           </button>
 
           {/* Badge */}
           {product.badge && (
-            <div className="absolute top-4 right-4 px-3 py-1 rounded-full brand-fill font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center gap-1">
+            <div className="absolute top-4 right-4 px-3 py-1 rounded-full brand-fill font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
               <span>{product.badge}</span>
             </div>
@@ -121,11 +121,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* Product Title on Image Bottom */}
           <div className="absolute bottom-3 right-4 left-4">
-            <h2 id="product-detail-title" className="text-xl sm:text-2xl font-bold font-serif text-luxury-50 leading-tight">
+            <h2 id="product-detail-title" className="text-xl sm:text-2xl font-bold font-serif text-m-text leading-tight">
               {product.name}
             </h2>
             {product.nameEn && (
-              <p className="text-xs text-[var(--brand-primary-strong)] font-serif italic mt-0.5">
+              <p className="text-xs text-[var(--m-brand-on-surface)] font-serif italic mt-0.5">
                 {product.nameEn}
               </p>
             )}
@@ -136,14 +136,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
           {/* Description & Metadata Strip */}
           <div>
-            <p className="text-xs sm:text-sm text-luxury-300 leading-relaxed">
+            <p className="text-xs sm:text-sm text-m-text-muted leading-relaxed">
               {product.description}
             </p>
 
-            <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-luxury-800 text-xs text-luxury-400">
+            <div className="flex flex-wrap items-center gap-3 mt-3 pt-3 border-t border-m-hairline text-xs text-m-text-muted">
               {product.preparationTimeMinutes && (
                 <span className="flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
+                  <Clock className="w-3.5 h-3.5 text-[var(--m-brand-on-surface)]" />
                   <span>{product.preparationTimeMinutes} دقيقة تحضير</span>
                 </span>
               )}
@@ -156,13 +156,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             </div>
 
             {/* Allergens Warning if any — warning surface from the Theme
-                (`--theme-warning`, amber-500 at the platform default). */}
+                (`--m-warning`, amber-500 at the platform default). */}
             {product.allergens && product.allergens.length > 0 && (
               <div
                 className="mt-2.5 p-2.5 rounded-xl border text-[11px] text-amber-300/90 flex items-center gap-2"
                 style={{
-                  backgroundColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 10%, transparent)',
-                  borderColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 20%, transparent)',
+                  backgroundColor: 'color-mix(in srgb, var(--m-warning) 10%, transparent)',
+                  borderColor: 'color-mix(in srgb, var(--m-warning) 20%, transparent)',
                 }}
               >
                 <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
@@ -174,7 +174,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* SIZES SELECTOR */}
           {product.sizes && product.sizes.length > 0 && (
             <div role="radiogroup" aria-label="اختر الحجم">
-              <p className="block text-xs font-bold text-luxury-200 mb-2" id="product-size-label">
+              <p className="block text-xs font-bold text-m-text mb-2" id="product-size-label">
                 اختر الحجم
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -191,14 +191,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                       onClick={() => setSelectedSize(size)}
                       className={`p-3 rounded-xl border text-xs font-medium transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
                         isSelected
-                          ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border-[var(--brand-primary-strong)] text-[var(--brand-primary-strong)] ring-1 ring-[rgb(var(--brand-primary-strong-rgb)/0.3)] font-bold'
-                          : 'bg-luxury-850/60 border-luxury-800 text-luxury-300 hover:border-luxury-700'
+                          ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.15)] border-[var(--m-brand-on-surface)] text-[var(--m-brand-on-surface)] ring-1 ring-[rgb(var(--m-brand-on-surface-rgb)/0.3)] font-bold'
+                          : 'bg-m-surface-raised/60 border-m-hairline text-m-text-muted hover:border-m-hairline'
                       }`}
                     >
                       <div className="flex items-center gap-1.5">
                         <div
                           className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                            isSelected ? 'border-transparent brand-fill' : 'border-luxury-600'
+                            isSelected ? 'border-transparent brand-fill' : 'border-m-hairline'
                           }`}
                         >
                           {isSelected && <Check className="w-3 h-3" />}
@@ -206,7 +206,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                         <span>{size.name}</span>
                       </div>
                       {mod > 0 && (
-                        <span className="text-[var(--brand-primary-strong)] font-bold">+{formatPrice(mod, currency)}</span>
+                        <span className="text-[var(--m-brand-on-surface)] font-bold">+{formatPrice(mod, currency)}</span>
                       )}
                     </button>
                   );
@@ -218,7 +218,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* ADD-ONS SELECTOR */}
           {product.addOns && product.addOns.length > 0 && (
             <div role="group" aria-label="إضافات فاخرة اختيارية">
-              <p className="block text-xs font-bold text-luxury-200 mb-2">
+              <p className="block text-xs font-bold text-m-text mb-2">
                 إضافات فاخرة (اختياري)
               </p>
               <div className="space-y-2">
@@ -234,21 +234,21 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                       onClick={() => toggleAddOn(addOn)}
                       className={`w-full flex items-center justify-between p-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
                         isChecked
-                          ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border-[var(--brand-primary-strong)] text-[var(--brand-primary-strong)] font-bold'
-                          : 'bg-luxury-850/60 border-luxury-800 text-luxury-300 hover:border-luxury-700'
+                          ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border-[var(--m-brand-on-surface)] text-[var(--m-brand-on-surface)] font-bold'
+                          : 'bg-m-surface-raised/60 border-m-hairline text-m-text-muted hover:border-m-hairline'
                       }`}
                     >
                       <div className="flex items-center gap-2.5">
                         <div
                           className={`w-4 h-4 rounded-md border flex items-center justify-center ${
-                            isChecked ? 'border-transparent brand-fill' : 'border-luxury-600'
+                            isChecked ? 'border-transparent brand-fill' : 'border-m-hairline'
                           }`}
                         >
                           {isChecked && <Check className="w-3 h-3" />}
                         </div>
                         <span>{addOn.name}</span>
                       </div>
-                      <span className="text-[var(--brand-primary-strong)] font-bold">+{formatPrice(addOn.price, currency)}</span>
+                      <span className="text-[var(--m-brand-on-surface)] font-bold">+{formatPrice(addOn.price, currency)}</span>
                     </button>
                   );
                 })}
@@ -261,7 +261,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               composition metadata, not customization options. */}
           {product.removableIngredients && product.removableIngredients.length > 0 && (
             <div role="group" aria-label="استبعاد مكونات حسب تفضيلك">
-              <p className="block text-xs font-bold text-luxury-200 mb-2">
+              <p className="block text-xs font-bold text-m-text mb-2">
                 استبعاد مكونات (حسب تفضيلك)
               </p>
               <div className="flex flex-wrap gap-2">
@@ -278,7 +278,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                       className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
                         isRemoved
                           ? 'bg-red-500/20 border-red-500 text-red-400 line-through'
-                          : 'bg-luxury-850 border-luxury-800 text-luxury-300 hover:border-luxury-700'
+                          : 'bg-m-surface-raised border-m-hairline text-m-text-muted hover:border-m-hairline'
                       }`}
                     >
                       {ing}
@@ -291,7 +291,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* SPECIAL INSTRUCTIONS INPUT */}
           <div>
-            <label htmlFor="productdetailmodal-f1" className="block text-xs font-bold text-luxury-200 mb-1.5">
+            <label htmlFor="productdetailmodal-f1" className="block text-xs font-bold text-m-text mb-1.5">
               ملاحظات أو طلبات خاصة للشيف
             </label>
             <textarea id="productdetailmodal-f1"
@@ -299,24 +299,24 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               onChange={(e) => setSpecialInstructions(e.target.value)}
               placeholder="مثال: درجة الاستواء، بدون ملح إضافي، الصوص جانباً..."
               rows={2}
-              className="w-full bg-luxury-950 border border-luxury-800 rounded-xl p-3 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] resize-none"
+              className="w-full bg-m-bg border border-m-hairline rounded-xl p-3 text-xs text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)] resize-none"
             />
           </div>
         </div>
 
         {/* Fixed Footer with Quantity & Add to Cart Button */}
-        <div className="p-4 sm:p-5 bg-luxury-950 border-t border-luxury-800 flex items-center justify-between gap-4 shrink-0">
+        <div className="p-4 sm:p-5 bg-m-bg border-t border-m-hairline flex items-center justify-between gap-4 shrink-0">
           {/* Quantity Controls */}
-          <div className="flex items-center gap-2 bg-luxury-900 border border-luxury-800 rounded-xl p-1 shrink-0" role="group" aria-label="الكمية">
+          <div className="flex items-center gap-2 bg-m-surface border border-m-hairline rounded-xl p-1 shrink-0" role="group" aria-label="الكمية">
             <button
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               disabled={quantity <= 1}
               aria-label="إنقاص الكمية"
-              className="touch-target w-9 h-9 rounded-lg bg-luxury-800 hover:bg-luxury-750 disabled:opacity-40 text-luxury-200 flex items-center justify-center transition-colors cursor-pointer"
+              className="touch-target w-9 h-9 rounded-lg bg-m-surface-raised hover:bg-m-surface-raised disabled:opacity-40 text-m-text flex items-center justify-center transition-colors cursor-pointer"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
-            <span className="w-7 text-center font-bold text-sm font-mono text-luxury-100" aria-live="polite">
+            <span className="w-7 text-center font-bold text-sm font-mono text-m-text" aria-live="polite">
               {quantity}
             </span>
             <button
@@ -331,7 +331,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* Add to Cart CTA Button */}
           <button
             onClick={handleAddToCart}
-            className="flex-1 py-3.5 px-4 rounded-xl brand-cta font-bold text-xs sm:text-sm flex items-center justify-between shadow-[0_0_22px_-6px_var(--brand-glow)] transition-all cursor-pointer"
+            className="flex-1 py-3.5 px-4 rounded-xl brand-cta font-bold text-xs sm:text-sm flex items-center justify-between shadow-[0_0_22px_-6px_var(--m-brand-glow)] transition-all cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4" />
