@@ -130,18 +130,18 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
         aria-live="polite"
         aria-atomic="true"
         aria-label="تحديث حالة الطلب"
-        className="bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.5)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.8)] space-y-3.5 text-right text-luxury-50 relative overflow-hidden"
+        className="bg-m-surface/95 border border-[rgb(var(--m-brand-on-surface-rgb)/0.5)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_12px_40px_rgba(0,0,0,0.8)] space-y-3.5 text-right text-m-text relative overflow-hidden"
       >
         {/* Top glowing ambient line */}
         <div
-          className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[var(--brand-primary-strong)] to-transparent"
+          className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-[var(--m-brand-on-surface)] to-transparent"
         />
 
         {/* Header with close button */}
         <div className="flex items-center justify-between">
           <button
             onClick={() => setIsDismissed(true)}
-            className="touch-target p-1.5 rounded-lg text-luxury-400 hover:text-white hover:bg-luxury-800 transition-colors"
+            className="touch-target p-1.5 rounded-lg text-m-text-muted hover:text-white hover:bg-m-surface-raised transition-colors"
             title="إغلاق التنبيه"
             aria-label="إغلاق التنبيه"
           >
@@ -149,7 +149,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-luxury-400">{activeNotification.updatedAt}</span>
+            <span className="text-[10px] font-mono text-m-text-muted">{activeNotification.updatedAt}</span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
               تحديث حي
@@ -167,7 +167,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
                 ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
                 : activeNotification.status === 'SERVED'
                 ? 'bg-sky-500/15 border-sky-500/40 text-sky-400'
-                : 'bg-gold-500/15 border-gold-500/40 text-gold-400'
+                : 'bg-m-brand/15 border-m-brand/40 text-m-brand-strong'
             }`}
           >
             {activeNotification.status === 'PREPARING' ? (
@@ -183,15 +183,15 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-1">
-              <h4 className="text-sm font-bold text-luxury-50 flex items-center gap-1.5">
+              <h4 className="text-sm font-bold text-m-text flex items-center gap-1.5">
                 <span>{statusCfg.label}</span>
               </h4>
-              <span className="text-xs font-mono font-bold text-[var(--brand-primary-strong)]">
+              <span className="text-xs font-mono font-bold text-[var(--m-brand-on-surface)]">
                 طاولة {tableNum}
               </span>
             </div>
 
-            <p className="text-xs text-luxury-300 mt-0.5 leading-relaxed">
+            <p className="text-xs text-m-text-muted mt-0.5 leading-relaxed">
               {activeNotification.status === 'PREPARING' && '👨‍🍳 بدأ الشيف بتحضير طلبك بخصائصه الفاخرة.'}
               {activeNotification.status === 'READY' && '🎉 اكتمل تحضير أطباقك والنادل في طريقه لطاولتك!'}
               {activeNotification.status === 'SERVED' && '🍽️ تم تقديم الطلب على طاولتك. بالهناء والشفاء!'}
@@ -199,18 +199,18 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
               {activeNotification.status === 'CANCELLED' && '⚠️ تم التعديل على الطلب من قبل المطبخ.'}
             </p>
 
-            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-luxury-400">
+            <div className="flex items-center gap-2 mt-1.5 text-[11px] text-m-text-muted">
               <span>طلب #{activeNotification.orderNumber}</span>
               <span>•</span>
               <span>{activeNotification.itemCount} أصناف</span>
               <span>•</span>
-              <span className="text-luxury-200 font-bold">{formatPrice(activeNotification.total, currency)}</span>
+              <span className="text-m-text font-bold">{formatPrice(activeNotification.total, currency)}</span>
             </div>
           </div>
         </div>
 
         {/* 4-Step Visual Timeline Tracker */}
-        <div className="pt-2 border-t border-luxury-800/80">
+        <div className="pt-2 border-t border-m-hairline/80">
           <div className="grid grid-cols-4 gap-1 text-center">
             {[
               { label: 'المستلم', step: 1 },
@@ -226,14 +226,14 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
                     className={`h-1.5 rounded-full transition-all duration-500 ${
                       isActive
                         ? isCurrent
-                          ? 'bg-gradient-to-r from-gold-500 to-emerald-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]'
+                          ? 'bg-gradient-to-r from-m-brand to-[var(--m-success)] shadow-[0_0_8px_rgb(var(--m-success-rgb)/0.6)]'
                           : 'bg-emerald-500'
-                        : 'bg-luxury-800'
+                        : 'bg-m-surface-raised'
                     }`}
                   />
                   <span
                     className={`text-[11px] font-bold block transition-colors ${
-                      isActive ? 'text-emerald-300' : 'text-luxury-500'
+                      isActive ? 'text-emerald-300' : 'text-m-text-subtle'
                     }`}
                   >
                     {s.label}
@@ -251,7 +251,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
               setIsOrderTrackingOpen(true);
               setIsDismissed(true);
             }}
-            className="flex-1 py-2 rounded-xl brand-fill font-bold text-xs flex items-center justify-center gap-1.5 shadow-[0_0_18px_-4px_var(--brand-glow)] active:scale-95 transition-all cursor-pointer"
+            className="flex-1 py-2 rounded-xl brand-fill font-bold text-xs flex items-center justify-center gap-1.5 shadow-[0_0_18px_-4px_var(--m-brand-glow)] active:scale-95 transition-all cursor-pointer"
           >
             <span>👨‍🍳 تتبع المطبخ الحي</span>
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -259,10 +259,10 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
 
           <button
             onClick={() => setIsWaiterModalOpen(true)}
-            className="px-3 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-750 text-luxury-200 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+            className="px-3 py-2 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
             title="استدعاء النادل"
           >
-            <Bell className="w-3.5 h-3.5 text-gold-400" />
+            <Bell className="w-3.5 h-3.5 text-m-brand-strong" />
             <span>النادل</span>
           </button>
         </div>

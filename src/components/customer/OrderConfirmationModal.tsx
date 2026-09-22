@@ -55,27 +55,27 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-confirmation-title"
-        className="relative w-full max-w-lg bg-luxury-900 border border-luxury-700 rounded-3xl p-6 z-10 shadow-2xl space-y-5 animate-fade-in text-right"
+        className="relative w-full max-w-lg bg-m-surface border border-m-hairline rounded-3xl p-6 z-10 shadow-2xl space-y-5 animate-fade-in text-right"
         dir="rtl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-luxury-800 pb-4">
+        <div className="flex items-center justify-between border-b border-m-hairline pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
+            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
-              <h3 id="order-confirmation-title" className="text-base font-bold text-luxury-50 font-serif">
+              <h3 id="order-confirmation-title" className="text-base font-bold text-m-text font-serif">
                 تأكيد الطلب
               </h3>
-              <p className="text-xs text-luxury-400">
+              <p className="text-xs text-m-text-muted">
                 {currentRestaurant?.name} · طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? (activeTableId ? formatTableNumber(activeTableId) || '—' : '—')}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-luxury-400 hover:text-luxury-200 hover:bg-luxury-800 transition-colors"
+            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -83,29 +83,29 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
         {/* Order Items Preview */}
         <div className="space-y-3 max-h-56 overflow-y-auto p-1 custom-scrollbar">
-          <label className="block text-xs font-bold text-luxury-300 mb-1">ملخص الأصناف:</label>
+          <label className="block text-xs font-bold text-m-text-muted mb-1">ملخص الأصناف:</label>
           <div className="space-y-2">
             {cartItems.map((item) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between p-2.5 rounded-xl bg-luxury-950 border border-luxury-800/80 text-xs"
+                className="flex items-center justify-between p-2.5 rounded-xl bg-m-bg border border-m-hairline/80 text-xs"
               >
                 <div>
-                  <span className="font-bold text-luxury-100">
+                  <span className="font-bold text-m-text">
                     {item.quantity} × {item.product?.name || item.productName}
                   </span>
                   {item.options.size && (
-                    <span className="text-[rgb(var(--brand-primary-strong-rgb)/0.9)] text-[11px] block">
+                    <span className="text-[rgb(var(--m-brand-on-surface-rgb)/0.9)] text-[11px] block">
                       الحجم: {typeof item.options.size === 'object' ? item.options.size.name : item.options.size}
                     </span>
                   )}
                   {item.options.selectedAddOns && item.options.selectedAddOns.length > 0 && (
-                    <span className="text-luxury-400 text-[10px] block">
+                    <span className="text-m-text-muted text-[10px] block">
                       + {item.options.selectedAddOns.map((a: any) => typeof a === 'object' ? a.name : a).join(', ')}
                     </span>
                   )}
                 </div>
-                <span className="font-bold text-luxury-200 font-mono">
+                <span className="font-bold text-m-text font-mono">
                   {formatPrice(item.totalPrice || item.itemTotal || 0, currency)}
                 </span>
               </div>
@@ -115,20 +115,20 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
 
         {/* Notes if any */}
         {orderNotes && (
-          <div className="bg-luxury-950/50 p-3 rounded-xl border border-luxury-800 text-xs">
-            <span className="font-bold text-luxury-400 block mb-1">ملاحظاتك للشيف:</span>
-            <p className="text-luxury-200 italic">"{orderNotes}"</p>
+          <div className="bg-m-bg/50 p-3 rounded-xl border border-m-hairline text-xs">
+            <span className="font-bold text-m-text-muted block mb-1">ملاحظاتك للشيف:</span>
+            <p className="text-m-text italic">"{orderNotes}"</p>
           </div>
         )}
 
         {/* Total and Rules */}
-        <div className="p-4 rounded-2xl bg-luxury-950 border border-luxury-800 space-y-2">
+        <div className="p-4 rounded-2xl bg-m-bg border border-m-hairline space-y-2">
           <div className="flex justify-between items-center text-sm font-bold">
-            <span className="text-luxury-200">الإجمالي المستحق</span>
-            <span className="text-[var(--brand-primary-strong)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
+            <span className="text-m-text">الإجمالي المستحق</span>
+            <span className="text-[var(--m-brand-on-surface)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
           </div>
 
-          <div className="flex items-center gap-2 pt-2 border-t border-luxury-850 text-[11px] text-amber-300/90">
+          <div className="flex items-center gap-2 pt-2 border-t border-m-hairline text-[11px] text-amber-300/90">
             <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
             <span>يتم تأكيد الطلب وبدء التحضير فور الدفع نقداً أو بالبطاقة لدى الكاشير، أو عبر التحويل.</span>
           </div>
@@ -139,7 +139,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-1/3 py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-300 font-bold text-xs transition-colors"
+            className="w-1/3 py-3 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted font-bold text-xs transition-colors"
           >
             تعديل الطلب
           </button>
@@ -147,7 +147,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={handleConfirmOrder}
-            className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
             <span>{isSubmitting ? 'جاري التأكيد...' : 'تأكيد الطلب'}</span>

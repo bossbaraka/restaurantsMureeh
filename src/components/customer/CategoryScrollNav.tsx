@@ -38,7 +38,7 @@ export const CategoryScrollNav: React.FC = () => {
 
   if (searchQuery) {
     return (
-      <div className="mb-4 flex items-center gap-1.5 text-xs text-luxury-400 px-1">
+      <div className="mb-4 flex items-center gap-1.5 text-xs text-m-text-muted px-1">
         <Search className="w-3.5 h-3.5 brand-text" aria-hidden="true" />
         <span>
           نتائج البحث عن <span className="font-bold brand-text">“{searchQuery}”</span>

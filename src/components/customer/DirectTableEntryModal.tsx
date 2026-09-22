@@ -110,26 +110,26 @@ export const DirectTableEntryModal: React.FC = () => {
           role="dialog"
           aria-modal="true"
           aria-label="تحديد طاولة الضيف"
-          className="relative z-10 w-full max-w-md bg-luxury-900 border border-luxury-700/80 rounded-2xl shadow-luxury overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col"
+          className="relative z-10 w-full max-w-md bg-m-surface border border-m-hairline/80 rounded-2xl shadow-luxury overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col"
           dir="rtl"
         >
           {/* Header */}
-          <div className="p-5 bg-luxury-850/80 border-b border-luxury-800 flex items-center justify-between">
+          <div className="p-5 bg-m-surface-raised/80 border-b border-m-hairline flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
+              <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
                 <QrCode className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-luxury-50 font-serif">
+                <h3 className="text-base font-bold text-m-text font-serif">
                   {isBound ? 'أنت مرتبط بطاولتك' : 'الدخول عبر رمز QR فقط'}
                 </h3>
-                <p className="text-xs text-luxury-400">جلسة آمنة مرتبطة بطاولة واحدة</p>
+                <p className="text-xs text-m-text-muted">جلسة آمنة مرتبطة بطاولة واحدة</p>
               </div>
             </div>
 
             <button
               onClick={() => setIsTableSelectorOpen(false)}
-              className="p-1.5 rounded-lg text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800 transition-colors"
+              className="p-1.5 rounded-lg text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
               aria-label="إغلاق"
             >
               <X className="w-5 h-5" />
@@ -145,15 +145,15 @@ export const DirectTableEntryModal: React.FC = () => {
                     <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                       <Lock className="w-9 h-9" />
                     </div>
-                    <span className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-emerald-500 text-luxury-950 flex items-center justify-center">
+                    <span className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-full bg-emerald-500 text-m-bg flex items-center justify-center">
                       <Check className="w-4 h-4" />
                     </span>
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-luxury-50">
+                    <div className="text-sm font-bold text-m-text">
                       {formatTableLabel(activeTable, activeTableNumber, activeTableId)}
                     </div>
-                    <p className="text-xs text-luxury-400 mt-1 leading-relaxed max-w-xs">
+                    <p className="text-xs text-m-text-muted mt-1 leading-relaxed max-w-xs">
                       هذا الجهاز مرتبط بهذه الطاولة عبر رمز QR، ولا يمكن تغييرها من داخل الجلسة.
                     </p>
                   </div>
@@ -170,17 +170,17 @@ export const DirectTableEntryModal: React.FC = () => {
                 {/* QR scan guidance */}
                 <div className="flex flex-col items-center text-center gap-4">
                   <div className="relative w-28 h-28">
-                    <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-[rgb(var(--brand-primary-strong-rgb)/0.5)]" />
-                    <div className="absolute inset-3 rounded-xl bg-luxury-950 border border-luxury-750 flex items-center justify-center text-[var(--brand-primary-strong)] overflow-hidden">
+                    <div className="absolute inset-0 rounded-2xl border-2 border-dashed border-[rgb(var(--m-brand-on-surface-rgb)/0.5)]" />
+                    <div className="absolute inset-3 rounded-xl bg-m-bg border border-m-hairline flex items-center justify-center text-[var(--m-brand-on-surface)] overflow-hidden">
                       <QrCode className="w-12 h-12" />
                     </div>
-                    <div className="absolute inset-x-2 top-2 h-0.5 bg-[var(--brand-primary-strong)] shadow-[0_0_12px_2px_var(--brand-glow)] animate-qr-scan" />
-                    <ScanLine className="absolute -top-2 -left-2 w-5 h-5 text-[var(--brand-primary-strong)]" />
+                    <div className="absolute inset-x-2 top-2 h-0.5 bg-[var(--m-brand-on-surface)] shadow-[0_0_12px_2px_var(--m-brand-glow)] animate-qr-scan" />
+                    <ScanLine className="absolute -top-2 -left-2 w-5 h-5 text-[var(--m-brand-on-surface)]" />
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="text-sm font-bold text-luxury-50">افتح القائمة بمسح الرمز</h4>
-                    <p className="text-xs text-luxury-400 leading-relaxed max-w-sm">
+                    <h4 className="text-sm font-bold text-m-text">افتح القائمة بمسح الرمز</h4>
+                    <p className="text-xs text-m-text-muted leading-relaxed max-w-sm">
                       وجّه كاميرا هاتفك نحو رمز QR المطبوع على طاولتك. ستُفتح القائمة مباشرةً ومرتبطةً بطاولتك تلقائياً.
                     </p>
                   </div>
@@ -193,7 +193,7 @@ export const DirectTableEntryModal: React.FC = () => {
                     ].map((rule) => (
                       <li
                         key={rule}
-                        className="flex items-start gap-2 p-2.5 rounded-xl bg-luxury-950/70 border border-luxury-800 text-xs text-luxury-300"
+                        className="flex items-start gap-2 p-2.5 rounded-xl bg-m-bg/70 border border-m-hairline text-xs text-m-text-muted"
                       >
                         <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                         <span>{rule}</span>
@@ -204,7 +204,7 @@ export const DirectTableEntryModal: React.FC = () => {
 
                 <button
                   onClick={() => setIsTableSelectorOpen(false)}
-                  className="w-full py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-200 border border-luxury-750 font-bold text-sm transition-colors cursor-pointer"
+                  className="w-full py-3 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text border border-m-hairline font-bold text-sm transition-colors cursor-pointer"
                 >
                   حسناً، فهمت
                 </button>
@@ -230,18 +230,18 @@ export const DirectTableEntryModal: React.FC = () => {
         role="dialog"
         aria-modal="true"
         aria-label="معاينة تجربة الضيف حسب الطاولة"
-        className="relative z-10 w-full max-w-2xl bg-luxury-900 border border-luxury-700/80 rounded-2xl shadow-luxury overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col max-h-[90vh]"
+        className="relative z-10 w-full max-w-2xl bg-m-surface border border-m-hairline/80 rounded-2xl shadow-luxury overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200 text-right flex flex-col max-h-[90vh]"
         dir="rtl"
       >
         {/* Header */}
-        <div className="p-5 bg-luxury-850/80 border-b border-luxury-800 flex items-center justify-between">
+        <div className="p-5 bg-m-surface-raised/80 border-b border-m-hairline flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
+            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
               <User className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-luxury-50 font-serif">معاينة تجربة الزبون (للطاقم)</h3>
-              <p className="text-xs text-luxury-400">
+              <h3 className="text-base font-bold text-m-text font-serif">معاينة تجربة الزبون (للطاقم)</h3>
+              <p className="text-xs text-m-text-muted">
                 اختر طاولة لمعاينة منيوها وجلسة طلبها كما يراها العميل
               </p>
             </div>
@@ -249,7 +249,7 @@ export const DirectTableEntryModal: React.FC = () => {
 
           <button
             onClick={() => setIsTableSelectorOpen(false)}
-            className="p-1.5 rounded-lg text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800 transition-colors"
+            className="p-1.5 rounded-lg text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -258,8 +258,8 @@ export const DirectTableEntryModal: React.FC = () => {
         {/* Content Body */}
         <div className="p-5 space-y-5 overflow-y-auto flex-1">
           {/* Quick Direct Number Form */}
-          <form onSubmit={handleSubmit} className="p-4 rounded-xl bg-luxury-950/70 border border-luxury-800">
-            <label className="block text-xs font-bold text-luxury-200 mb-2">
+          <form onSubmit={handleSubmit} className="p-4 rounded-xl bg-m-bg/70 border border-m-hairline">
+            <label className="block text-xs font-bold text-m-text mb-2">
               إدخال رقم الطاولة مباشرة (1 - 50)
             </label>
             <div className="flex gap-2">
@@ -273,11 +273,11 @@ export const DirectTableEntryModal: React.FC = () => {
                   setErrorMsg('');
                 }}
                 placeholder="مثال: 12"
-                className="flex-1 bg-luxury-900 border border-luxury-750 text-luxury-100 placeholder-luxury-500 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)] font-mono"
+                className="flex-1 bg-m-surface border border-m-hairline text-m-text placeholder-m-text-subtle rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)] font-mono"
               />
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl brand-fill font-bold text-xs hover:bg-[var(--brand-primary-strong)] transition-colors shadow-[0_0_22px_-6px_var(--brand-glow)]"
+                className="px-5 py-2.5 rounded-xl brand-fill font-bold text-xs hover:bg-[var(--m-brand-on-surface)] transition-colors shadow-[0_0_22px_-6px_var(--m-brand-glow)]"
               >
                 تأكيد الطاولة
               </button>
@@ -288,8 +288,8 @@ export const DirectTableEntryModal: React.FC = () => {
           {/* Tables Visual Floor Grid */}
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-              <h4 className="text-xs font-bold text-luxury-200 flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
+              <h4 className="text-xs font-bold text-m-text flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-[var(--m-brand-on-surface)]" />
                 <span>أو اختر من خريطة طاولات المطعم (50 طاولة)</span>
               </h4>
 
@@ -308,8 +308,8 @@ export const DirectTableEntryModal: React.FC = () => {
                     onClick={() => setSelectedZoneFilter(z.id as any)}
                     className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all ${
                       selectedZoneFilter === z.id
-                        ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.2)] text-[var(--brand-primary-strong)] border border-[rgb(var(--brand-primary-strong-rgb)/0.4)]'
-                        : 'bg-luxury-850 text-luxury-400 hover:text-luxury-200'
+                        ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.2)] text-[var(--m-brand-on-surface)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.4)]'
+                        : 'bg-m-surface-raised text-m-text-muted hover:text-m-text'
                     }`}
                   >
                     {z.label}
@@ -331,10 +331,10 @@ export const DirectTableEntryModal: React.FC = () => {
                     onClick={() => handleSelectTable(table.tableNumber)}
                     className={`p-2 rounded-xl flex flex-col items-center justify-center border transition-all text-center relative group ${
                       isActiveCurrent
-                        ? 'bg-[var(--brand-primary-strong)] border-[var(--brand-primary-strong)] text-luxury-950 font-extrabold shadow-[0_0_22px_-6px_var(--brand-glow)] scale-105 z-10'
+                        ? 'bg-[var(--m-brand-on-surface)] border-[var(--m-brand-on-surface)] text-m-bg font-extrabold shadow-[0_0_22px_-6px_var(--m-brand-glow)] scale-105 z-10'
                         : isOccupied
-                        ? 'bg-luxury-850/90 border-amber-500/40 text-amber-300 hover:border-amber-400'
-                        : 'bg-luxury-850/50 border-luxury-800 text-luxury-300 hover:border-[rgb(var(--brand-primary-strong-rgb)/0.4)] hover:text-luxury-100'
+                        ? 'bg-m-surface-raised/90 border-amber-500/40 text-amber-300 hover:border-amber-400'
+                        : 'bg-m-surface-raised/50 border-m-hairline text-m-text-muted hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.4)] hover:text-m-text'
                     }`}
                   >
                     <span className="text-xs font-mono font-bold">
@@ -357,7 +357,7 @@ export const DirectTableEntryModal: React.FC = () => {
         </div>
 
         {/* Footer info */}
-        <div className="p-4 bg-luxury-950 border-t border-luxury-800 flex items-center justify-between text-xs text-luxury-400">
+        <div className="p-4 bg-m-bg border-t border-m-hairline flex items-center justify-between text-xs text-m-text-muted">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
             <span>شاغرة</span>

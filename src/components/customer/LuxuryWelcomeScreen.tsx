@@ -20,7 +20,7 @@ import {
   buildSplashPalette,
   rgbaCss,
   resolveBrandIdentity,
-  useBrandTheme,
+  buildBrandTokens,
   type SplashPalette,
 } from '../../theme/brandTheme';
 
@@ -30,7 +30,7 @@ import {
  * Theme contract
  * --------------
  * This screen is painted ONLY from the tenant brand tokens (`--brand-*`,
- * produced by `useBrandTheme`) plus the shared `luxury-*` dark canvas. It never
+ * produced by `useBrandTheme`) plus the shared dark canvas. It never
  * hardcodes a tenant colour: a restaurant that brands itself emerald, magenta
  * or near-black gets an emerald, magenta or silver splash. The canvas is also
  * the SAME `#0A0B0D` the menu behind it is drawn on (`--welcome-canvas`), so
@@ -675,18 +675,18 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
             {/* Screen content */}
             <span className="welcome-device__ui block">
               {/* Title bar */}
-              <span className="flex items-center gap-2 border-b border-[var(--brand-line)] px-3 py-2.5">
+              <span className="flex items-center gap-2 border-b border-[var(--m-hairline)] px-3 py-2.5">
                 <span className="welcome-device__logo flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg">
                   <span className="welcome-monogram font-serif text-sm font-black">
                     {monogram}
                   </span>
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[11px] font-bold text-luxury-50">
+                  <span className="block truncate text-[11px] font-bold text-m-text">
                     {lang === 'en' && restaurantNameEn ? restaurantNameEn : restaurantName}
                   </span>
                   {tableNumStr && (
-                    <span className="block text-[9px] font-mono text-[var(--brand-primary-strong)]">
+                    <span className="block text-[9px] font-mono text-[var(--m-brand-on-surface)]">
                       طاولة {tableNumStr}
                     </span>
                   )}
@@ -709,7 +709,7 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
                   }}
                   className={`shrink-0 rounded-md border px-1.5 py-0.5 font-mono text-[9px] font-bold transition-opacity ${
                     expanded ? 'opacity-100' : 'pointer-events-none opacity-40'
-                  } border-[var(--brand-line-strong)] text-[var(--brand-primary-strong)]`}
+                  } border-[var(--m-hairline-strong)] text-[var(--m-brand-on-surface)]`}
                 >
                   {lang === 'ar' ? 'EN' : 'ع'}
                 </span>
@@ -717,7 +717,7 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
 
               {/* Categories — only once expanded */}
               {expanded && categories.length > 0 && (
-                <span className="no-scrollbar flex gap-1.5 overflow-x-auto border-b border-[var(--brand-line)] px-3 py-2">
+                <span className="no-scrollbar flex gap-1.5 overflow-x-auto border-b border-[var(--m-hairline)] px-3 py-2">
                   {[{ id: 'all', name: 'الكل', nameEn: 'All' }, ...categories].map((c) => (
                     <span
                       key={c.id}
@@ -737,7 +737,7 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
                       className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold transition-colors ${
                         activeCat === c.id
                           ? 'brand-fill border-transparent'
-                          : 'border-[var(--brand-line)] text-luxury-300'
+                          : 'border-[var(--m-hairline)] text-m-text-muted'
                       }`}
                     >
                       {lang === 'en' ? c.nameEn || c.name : c.name}
@@ -749,7 +749,7 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
               {/* Dishes */}
               <span className="block space-y-1.5 px-3 py-2.5">
                 {shown.length === 0 && (
-                  <span className="block py-4 text-center text-[10px] text-luxury-400">
+                  <span className="block py-4 text-center text-[10px] text-m-text-muted">
                     لا توجد أصناف في هذا القسم بعد
                   </span>
                 )}
@@ -767,16 +767,16 @@ export const WelcomeMenuDevice: React.FC<MenuDeviceProps> = ({
                       </span>
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[11px] font-bold text-luxury-100">
+                      <span className="block truncate text-[11px] font-bold text-m-text">
                         {label(p)}
                       </span>
                       {p.isFeatured && (
-                        <span className="block text-[9px] font-semibold text-[var(--brand-primary-strong)]">
+                        <span className="block text-[9px] font-semibold text-[var(--m-brand-on-surface)]">
                           الأكثر طلباً
                         </span>
                       )}
                     </span>
-                    <span className="shrink-0 font-mono text-[11px] font-black text-[var(--brand-primary-strong)]" dir="ltr">
+                    <span className="shrink-0 font-mono text-[11px] font-black text-[var(--m-brand-on-surface)]" dir="ltr">
                       {formatPrice(p.price, currency)}
                     </span>
                   </span>
@@ -828,11 +828,22 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
   const convergingRef = useRef(false);
   const resumeReviewRotationRef = useRef<number | null>(null);
 
-  // Tenant palette -> the same `--brand-*` custom properties the menu consumes,
-  // so the splash and the menu behind it can never drift apart.
-  // Theme-first identity (effective theme, legacy columns as fallback).
+  // PURE DERIVATION — no DOM application (Phase 2, world isolation).
+  //
+  // This screen needs the tenant palette only as VALUES, to paint the splash
+  // particle field on a <canvas> (the canvas API cannot read CSS custom
+  // properties). It used to obtain them via useBrandTheme, which also WROTE
+  // the palette onto <html> as a side effect — making a presentational
+  // component an appearance writer.
+  //
+  // buildBrandTokens is the same derivation without the DOM write. Token
+  // application belongs exclusively to CustomerThemeProvider, inside whose
+  // scope this screen renders.
   const brandIdentity = resolveBrandIdentity(currentRestaurant);
-  const theme = useBrandTheme(brandIdentity.primary, brandIdentity.accent);
+  const theme = useMemo(
+    () => buildBrandTokens(brandIdentity.primary, brandIdentity.accent, 'dark'),
+    [brandIdentity.primary, brandIdentity.accent]
+  );
   const palette = useMemo(() => buildSplashPalette(theme), [theme]);
 
   // Extract clean table number
@@ -1177,7 +1188,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
     <div
       ref={shellRef}
       onScroll={handleScroll}
-      className={`welcome-shell fixed inset-0 z-50 flex flex-col text-luxury-100 select-none overflow-y-auto transition-opacity duration-300 ${
+      className={`welcome-shell fixed inset-0 z-50 flex flex-col text-m-text select-none overflow-y-auto transition-opacity duration-300 ${
         night ? 'welcome-shell--night' : ''
       } ${isDismissing ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
       style={{
@@ -1234,15 +1245,15 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
               <div className="animate-in fade-in space-y-6 duration-500">
                 {/* Scanning medallion */}
                 <div className="welcome-medallion mx-auto flex h-24 w-24 items-center justify-center rounded-3xl">
-                  <span className="absolute inset-0 animate-ping rounded-3xl border border-[rgb(var(--brand-primary-strong-rgb)/0.25)] [animation-duration:2.4s]" />
-                  <QrCode className="h-9 w-9 text-[var(--brand-primary-strong)]" />
+                  <span className="absolute inset-0 animate-ping rounded-3xl border border-[rgb(var(--m-brand-on-surface-rgb)/0.25)] [animation-duration:2.4s]" />
+                  <QrCode className="h-9 w-9 text-[var(--m-brand-on-surface)]" />
                 </div>
 
                 <div className="space-y-2.5">
-                  <h2 className="font-serif text-2xl font-bold tracking-wide text-luxury-50">
+                  <h2 className="font-serif text-2xl font-bold tracking-wide text-m-text">
                     أهلاً بك في {restName}
                   </h2>
-                  <p className="text-xs leading-relaxed text-luxury-300">
+                  <p className="text-xs leading-relaxed text-m-text-muted">
                     جارٍ إنشاء الاتصال الرقمي الآمن بطاولتك وتحميل القائمة
                   </p>
                   {tableNumStr && (
@@ -1258,7 +1269,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                   {[0, 1, 2, 3].map((i) => (
                     <span
                       key={i}
-                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--brand-primary-strong)] [animation-duration:1s]"
+                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--m-brand-on-surface)] [animation-duration:1s]"
                       style={{ animationDelay: `${i * 0.15}s` }}
                     />
                   ))}
@@ -1293,11 +1304,11 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                 </button>
 
                 <div className="space-y-1.5">
-                  <h2 className="font-serif text-3xl font-black tracking-tight text-luxury-50 sm:text-4xl">
+                  <h2 className="font-serif text-3xl font-black tracking-tight text-m-text sm:text-4xl">
                     {restName}
                   </h2>
                   {restNameEn && (
-                    <p className="text-[11px] font-serif font-semibold uppercase tracking-[0.28em] text-[var(--brand-primary-strong)]">
+                    <p className="text-[11px] font-serif font-semibold uppercase tracking-[0.28em] text-[var(--m-brand-on-surface)]">
                       {restNameEn}
                     </p>
                   )}
@@ -1325,7 +1336,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
           </div>
 
           {/* Platform watermark */}
-          <div className="relative z-10 text-center text-[10px] tracking-[0.2em] text-luxury-500">
+          <div className="relative z-10 text-center text-[10px] tracking-[0.2em] text-m-text-subtle">
             MUREEH · منصة الضيافة الرقمية
           </div>
         </div>
@@ -1350,7 +1361,7 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
             {tableNumStr ? (
               <div className="welcome-chip inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 shadow-md backdrop-blur-md">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                <span className="font-semibold text-luxury-100">طاولة</span>
+                <span className="font-semibold text-m-text">طاولة</span>
                 <span className="welcome-chip__value rounded-md bg-black/25 px-1.5 font-mono text-sm font-black">
                   {tableNumStr}
                 </span>
@@ -1364,8 +1375,8 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
             )}
 
             {currentRestaurant?.address && (
-              <div className="hidden max-w-[190px] truncate items-center gap-1 rounded-full border border-white/5 bg-black/25 px-2.5 py-1 text-[11px] text-luxury-300 backdrop-blur-md xs:flex">
-                <MapPin className="h-3 w-3 shrink-0 text-[var(--brand-primary-strong)]" />
+              <div className="hidden max-w-[190px] truncate items-center gap-1 rounded-full border border-white/5 bg-black/25 px-2.5 py-1 text-[11px] text-m-text-muted backdrop-blur-md xs:flex">
+                <MapPin className="h-3 w-3 shrink-0 text-[var(--m-brand-on-surface)]" />
                 <span className="truncate">{currentRestaurant.address}</span>
               </div>
             )}
@@ -1399,17 +1410,17 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
               </div>
 
               <div className="space-y-1">
-                <h2 className="font-serif text-2xl font-black leading-snug tracking-tight text-luxury-50 sm:text-3xl">
+                <h2 className="font-serif text-2xl font-black leading-snug tracking-tight text-m-text sm:text-3xl">
                   {restName}
                 </h2>
                 {restNameEn && (
-                  <p className="text-[11px] font-serif font-semibold uppercase tracking-[0.22em] text-[var(--brand-primary-strong)]">
+                  <p className="text-[11px] font-serif font-semibold uppercase tracking-[0.22em] text-[var(--m-brand-on-surface)]">
                     {restNameEn}
                   </p>
                 )}
               </div>
 
-              <p className="mx-auto max-w-md pt-1 text-xs leading-relaxed text-luxury-300 sm:text-sm">
+              <p className="mx-auto max-w-md pt-1 text-xs leading-relaxed text-m-text-muted sm:text-sm">
                 {currentRestaurant?.description ||
                   `أهلاً وسهلاً بكم في ${restName}، حيث نحرص على أن تكون كل زيارة تجربة طعام استثنائية تستحق أن تُتذكر.`}
               </p>
@@ -1482,10 +1493,10 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                     <span className="welcome-wordmark font-serif text-2xl font-black tracking-[0.18em]">
                       MUREEH
                     </span>
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.42em] text-[var(--brand-primary-strong)]">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.42em] text-[var(--m-brand-on-surface)]">
                       MENU
                     </span>
-                    <span className="pt-1 text-[10px] text-luxury-400">
+                    <span className="pt-1 text-[10px] text-m-text-muted">
                       رمز واحد يفتح تجربة كاملة
                     </span>
                   </div>
@@ -1514,19 +1525,19 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
               onFocusCapture={() => setReviewPaused(true)}
               onBlurCapture={() => setReviewPaused(false)}
             >
-              <div className="flex items-center justify-between border-b border-[var(--brand-line)] pb-2.5">
+              <div className="flex items-center justify-between border-b border-[var(--m-hairline)] pb-2.5">
                 <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-0.5 text-[var(--brand-primary-strong)]">
+                  <div className="flex items-center gap-0.5 text-[var(--m-brand-on-surface)]">
                     {Array.from({ length: activeReview.rating }).map((_, i) => (
                       <Star
                         key={i}
-                        className="h-3.5 w-3.5 fill-[rgb(var(--brand-primary-strong-rgb)/0.85)]"
+                        className="h-3.5 w-3.5 fill-[rgb(var(--m-brand-on-surface-rgb)/0.85)]"
                       />
                     ))}
                   </div>
-                  <span className="font-mono text-xs font-bold text-luxury-50">4.9 / 5.0</span>
+                  <span className="font-mono text-xs font-bold text-m-text">4.9 / 5.0</span>
                 </div>
-                <span className="text-[11px] text-[var(--brand-muted)]">من آراء ضيوفنا الكرام</span>
+                <span className="text-[11px] text-[var(--m-text-subtle)]">من آراء ضيوفنا الكرام</span>
               </div>
 
               <div
@@ -1535,18 +1546,18 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <Quote className="absolute -top-0.5 right-0 h-5 w-5 text-[rgb(var(--brand-primary-strong-rgb)/0.35)]" />
+                <Quote className="absolute -top-0.5 right-0 h-5 w-5 text-[rgb(var(--m-brand-on-surface-rgb)/0.35)]" />
                 <p
                   key={activeReview.id}
-                  className="animate-in fade-in pr-6 text-xs italic leading-relaxed text-luxury-200 duration-500"
+                  className="animate-in fade-in pr-6 text-xs italic leading-relaxed text-m-text duration-500"
                 >
                   &ldquo;{activeReview.comment}&rdquo;
                 </p>
                 <div className="flex items-center justify-between gap-2 pt-1 text-[11px]">
-                  <span className="font-bold text-[var(--brand-primary-strong)]">
+                  <span className="font-bold text-[var(--m-brand-on-surface)]">
                     — {activeReview.author}
                   </span>
-                  <span className="text-[10px] text-luxury-500">{activeReview.badge}</span>
+                  <span className="text-[10px] text-m-text-subtle">{activeReview.badge}</span>
                 </div>
               </div>
 
@@ -1587,19 +1598,19 @@ export const LuxuryWelcomeScreen: React.FC<LuxuryWelcomeScreenProps> = ({
               <ArrowLeft className="relative z-10 h-5 w-5 transition-transform group-hover:-translate-x-1" />
             </button>
 
-            <div className="flex items-center justify-between px-1 text-[11px] text-luxury-500">
+            <div className="flex items-center justify-between px-1 text-[11px] text-m-text-subtle">
               <div className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 <span>مدعوم بـ</span>
-                <span className="font-bold tracking-wide text-luxury-200">MUREEH</span>
+                <span className="font-bold tracking-wide text-m-text">MUREEH</span>
               </div>
               <a
                 href="https://t.me/Mureeh_tech_bot"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-luxury-300 transition-colors hover:text-luxury-50 focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="flex items-center gap-1 text-m-text-muted transition-colors hover:text-m-text focus-visible:outline-2 focus-visible:outline-offset-2"
               >
-                <MessageCircle className="h-3.5 w-3.5 text-[var(--brand-primary-strong)]" />
+                <MessageCircle className="h-3.5 w-3.5 text-[var(--m-brand-on-surface)]" />
                 <span>الدعم الفني</span>
               </a>
             </div>

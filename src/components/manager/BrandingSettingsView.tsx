@@ -2,10 +2,25 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api, isEmbeddedImage, uiThemeConfigFromServer } from '../../services/api';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { applyBrandTheme, buildEffectiveThemeVars, getCachedBrandTheme, parseColor, rgbToHex, resolveThemeShadow, themeShadowKey } from '../../theme/brandTheme';
+import { buildEffectiveThemeVars, parseColor, rgbToHex, resolveThemeShadow, themeShadowKey } from '../../theme/brandTheme';
 import { ThemeColorField } from './ThemeColorField';
 import {
+  THEME_PRESETS,
+  CARD_STYLE_OPTIONS,
+  CORNER_STYLE_OPTIONS,
+  DENSITY_OPTIONS,
+  EDITOR_FONTS,
+  applyPresetToDraft,
+  detachPreset,
+  toDraft,
+  toThemeConfig,
+  type ThemeDraft,
+} from '../../theme/editorModel';
+import { ThemePreview } from './ThemePreview';
+
+import {
   AlertTriangle,
+  Sliders,
   Palette,
   Save,
   Image as ImageIcon,
@@ -68,15 +83,11 @@ const SOCIAL_FIELDS: Array<{
   { key: 'website', label: 'الموقع الإلكتروني', placeholder: 'https://yourvenue.com', hint: 'موقعك الرسمي — رابط HTTPS صالح', icon: Star, stateKey: 'websiteUrl' },
 ];
 
-const THEME_PRESETS: Array<{ id: string; label: string; desc: string; primary: string; accent: string }> = [
-  { id: 'royal-gold', label: 'ذهبي ملكي', desc: 'كلاسيكي فاخر دافئ', primary: '#D4AF37', accent: '#8C6D1F' },
-  { id: 'midnight-blue', label: 'أزرق ليلي', desc: 'هادئ وعصري وأنيق', primary: '#4F7CFF', accent: '#1E2F6E' },
-  { id: 'emerald', label: 'زمردي ملكي', desc: 'انتعاش وثقة راقية', primary: '#10B981', accent: '#065F46' },
-  { id: 'amber', label: 'عنبري دافئ', desc: 'طاقة ودفء ترحيبي', primary: '#F59E0B', accent: '#92400E' },
-  { id: 'rose', label: 'وردي فاخر', desc: 'ناعم للمقاهي والبووتيك', primary: '#EC4899', accent: '#831843' },
-  { id: 'wine', label: 'نبيذي داكن', desc: 'فخامة مطاعم اللحوم', primary: '#C0392B', accent: '#5C1A12' },
-  { id: 'silver', label: 'فضي معدني', desc: 'حديث بسيط نظيف', primary: '#94A3B8', accent: '#3E4A5B' },
-];
+// The simplified editor model. `editConfig` remains the single source of
+// truth and the save path is unchanged; the draft is a VIEW over it, so the
+// simple controls and the (unchanged) advanced controls edit the same object.
+const asDraft = (cfg: ThemeConfig, presetId: string | null): ThemeDraft => toDraft(cfg, presetId);
+
 
 // Exactly the five faces the server contract persists (THEME_FONT_KEYS) and
 // the five the document actually loads — a picker option outside this set
@@ -467,6 +478,7 @@ export const BrandingSettingsView: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [activePreset, setActivePreset] = useState<string | null>(null);
+
   const [isSaving, setIsSaving] = useState(false);
   const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
   const [uploadingGallery, setUploadingGallery] = useState(false);
@@ -488,6 +500,30 @@ export const BrandingSettingsView: React.FC = () => {
   const [themeLoading, setThemeLoading] = useState(false);
   const [themeSaving, setThemeSaving] = useState(false);
   const [editConfig, setEditConfig] = useState<ThemeConfig>(DEFAULT_THEME_FALLBACK);
+
+  // ---------------------------------------------------------------------
+  // SIMPLE EDITOR STATE.
+  //
+  // `editConfig` stays the single source of truth and the save path is
+  // untouched. `themeDraft` is a VIEW over it: reading projects the stored
+  // config into the seven simple decisions (preserving everything else as
+  // overrides), and writing derives a full ThemeConfig back. Advanced
+  // controls still edit `editConfig` directly, so the two never diverge.
+  // ---------------------------------------------------------------------
+  const themeDraft = useMemo(
+    () => asDraft(editConfig, activePreset),
+    [editConfig, activePreset]
+  );
+
+  const setThemeDraft = (next: ThemeDraft) => {
+    setActivePreset(next.presetId);
+    setEditConfig(toThemeConfig(next));
+  };
+
+  /** Any manual tweak detaches the draft from its preset (it is no longer that preset). */
+  const updateDraft = (fn: (d: ThemeDraft) => ThemeDraft) => {
+    setThemeDraft(detachPreset(fn(themeDraft)));
+  };
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   const [bgUploading, setBgUploading] = useState<'light' | 'dark' | null>(null);
   // Which surface the LIVE PREVIEW renders. Independent of the saved mode:
@@ -522,12 +558,15 @@ export const BrandingSettingsView: React.FC = () => {
       const acc = currentRestaurant.accentColor || '#C5A880';
       setPrimaryColor(prim);
       setAccentColor(acc);
-      const matched = THEME_PRESETS.find((p) => p.primary.toLowerCase() === prim.toLowerCase() && p.accent.toLowerCase() === acc.toLowerCase());
-      if (matched) setActivePreset(matched.id);
-      else {
-        const cached = getCachedBrandTheme();
-        if (cached?.presetId) setActivePreset(cached.presetId);
-      }
+      // presetId is NEVER inferred from stored colours.
+      //
+      // This used to hex-match primary/accent against the preset table and,
+      // failing that, read a cached presetId. Both are guesses: a theme whose
+      // primary happens to equal a preset's primary is not that preset, and
+      // labelling a manager's own palette as "ذهبي ملكي" misrepresents their
+      // work — the next preset tweak would then silently overwrite unrelated
+      // style choices. A preset is recorded only when explicitly selected.
+      setActivePreset(null);
       setBusinessType(currentRestaurant.businessType || 'RESTAURANT');
       setPromoVideoUrl(currentRestaurant.promoVideoUrl || '');
       setGalleryImages(currentRestaurant.galleryImages || []);
@@ -580,22 +619,6 @@ export const BrandingSettingsView: React.FC = () => {
     fetchTheme(selectedBranchId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBranchId, currentRestaurant?.id]);
-
-  const applyPreset = (presetId: string) => {
-    const preset = THEME_PRESETS.find((p) => p.id === presetId);
-    if (!preset) return;
-    setActivePreset(presetId);
-    // SINGLE WRITE PATH: presets edit the THEME model only. They used to also
-    // seed the legacy primaryColor/accentColor branding state (persisted by a
-    // DIFFERENT save button) and to paint <html> immediately — pre-save state
-    // that could persist a palette the manager never saved. The live preview
-    // below renders the edit model directly; the server keeps the legacy
-    // columns in sync when the theme is saved.
-    setEditConfig((prev) => ({
-      ...prev,
-      colors: { ...(prev.colors || DEFAULT_THEME_FALLBACK.colors!), primary: preset.primary, secondary: prev.colors?.secondary || '#94A3B8', accent: preset.accent, background: prev.colors?.background || '#0A0B0D', surface: prev.colors?.surface || '#121416', textPrimary: prev.colors?.textPrimary || '#F8FAFC', textSecondary: prev.colors?.textSecondary || '#94A3B8', border: prev.colors?.border || '#1E293B', success: prev.colors?.success || '#10B981', warning: prev.colors?.warning || '#F59E0B', error: prev.colors?.error || '#EF4444' },
-    }));
-  };
 
   const handleUpload = async (kind: 'logo' | 'cover', file?: File) => {
     if (!file || !currentRestaurant) return;
@@ -728,12 +751,18 @@ export const BrandingSettingsView: React.FC = () => {
     isDirtyRef.current = false;
     lastRestaurantIdRef.current = res.data.restaurant.id;
     lastCommittedRestaurantRef.current = `${res.data.restaurant.id}-${res.data.restaurant.updatedAt || ''}-${res.data.restaurant.logo}-${res.data.restaurant.coverImage}-${res.data.restaurant.name}`;
+    // STATE ONLY — no direct theme DOM mutation (Phase 2, world isolation).
+    //
+    // This used to call applyBrandTheme(...) after saving, writing the LEGACY
+    // primaryColor/accentColor columns straight onto <html>. Two defects:
+    // it made the manager editor a global appearance writer, and because the
+    // columns can lag a freshly saved Theme row, it could repaint stale colors
+    // over the new theme.
+    //
+    // setCurrentRestaurant below updates application STATE; the customer
+    // theme (live preview included) re-renders from that state through
+    // CustomerThemeProvider, the single writer.
     setCurrentRestaurant(res.data.restaurant);
-    applyBrandTheme(res.data.restaurant.primaryColor, res.data.restaurant.accentColor, null, {
-      presetId: activePreset || undefined,
-      restaurantId: res.data.restaurant.id,
-      slug: res.data.restaurant.slug,
-    });
     refreshTenantData();
     showToast('success', 'تم حفظ إعدادات الهوية بنجاح', 'تم تثبيت وتطبيق ألوان الـ Theme والشعار والمعرض مباشرة عبر النظام.');
   };
@@ -822,34 +851,6 @@ export const BrandingSettingsView: React.FC = () => {
       setBgUploading(null);
     }
   };
-
-  // Live preview vars — built from the EDIT model over the effective theme,
-  // resolved for the previewed surface (light/dark toggle). Local state only:
-  // no API request is made while editing (save persists).
-  const previewVars = useMemo(() => {
-    if (!effectiveTheme) return {};
-    // Build vars from editConfig merged with effective for preview
-    const tempEffective: EffectiveTheme = {
-      ...(effectiveTheme as EffectiveTheme),
-      ...{ rawConfig: editConfig },
-      colors: { ...(effectiveTheme.colors), ...(editConfig.colors || {}) } as any,
-      background: {
-        light: {
-          ...(effectiveTheme.background.light),
-          ...(editConfig.background?.light ? { type: editConfig.background.light.type, color: editConfig.background.light.color, gradient: editConfig.background.light.gradient, overlayColor: editConfig.background.light.overlayColor, overlayOpacity: editConfig.background.light.overlayOpacity, blur: editConfig.background.light.blur, position: editConfig.background.light.position, size: editConfig.background.light.size, readabilityBoost: editConfig.background.light.readabilityBoost } as any : {}),
-        } as any,
-        dark: {
-          ...(effectiveTheme.background.dark),
-          ...(editConfig.background?.dark ? { type: editConfig.background.dark.type, color: editConfig.background.dark.color, gradient: editConfig.background.dark.gradient, overlayColor: editConfig.background.dark.overlayColor, overlayOpacity: editConfig.background.dark.overlayOpacity, blur: editConfig.background.dark.blur, position: editConfig.background.dark.position, size: editConfig.background.dark.size, readabilityBoost: editConfig.background.dark.readabilityBoost } as any : {}),
-        } as any,
-      },
-    } as any;
-    try {
-      return buildEffectiveThemeVars(tempEffective as any, previewSurface === 'dark');
-    } catch {
-      return {};
-    }
-  }, [effectiveTheme, editConfig, previewSurface]);
 
   const currency = currentRestaurant?.currency || '₪';
   const logoPreview = logo || currentRestaurant?.logo || '';
@@ -944,83 +945,238 @@ export const BrandingSettingsView: React.FC = () => {
 
           {activeTab === 'theme' && (
             <>
-              {/* Mode — selects which background configuration (light/dark)
-                  paints the menu; `auto` follows the guest's device setting.
-                  The palette itself is single-valued (no dark re-mapping), so
-                  the copy below states exactly that. */}
-              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
-                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Sun className="w-4 h-4 text-gold-400" /> وضع الثيم</h3>
-                <div className="grid grid-cols-3 gap-2">
+              {/* ============================================================
+                  SIMPLE THEME EDITOR.
+                  Seven visual decisions. Everything the theme engine needs
+                  (surfaces, borders, text colours, status colours, the radius
+                  and shadow scales, contrast) is DERIVED from these by the
+                  same pipeline the customer menu uses.
+
+                  The previous screen asked the manager to fill in the engine's
+                  internal state: eleven raw colour pickers and seven free-text
+                  CSS boxes. Those now live under Advanced, unchanged, for the
+                  cases where an explicit override is genuinely needed.
+                  ============================================================ */}
+
+              {/* 1 — Appearance */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-3">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                  <Sun className="w-4 h-4 text-gold-400" /> اختر المظهر
+                </h3>
+                <p className="text-[11px] text-luxury-400">كيف تظهر قائمتك للعميل — «تلقائي» يتبع إعداد جهازه.</p>
+                <div className="grid grid-cols-3 gap-2" role="group" aria-label="مظهر القائمة">
                   {[
                     { id: 'light', label: 'فاتح', icon: Sun },
                     { id: 'dark', label: 'داكن', icon: Moon },
                     { id: 'auto', label: 'تلقائي', icon: Monitor },
                   ].map((m) => {
                     const Icon = m.icon;
-                    const sel = (editConfig.mode || 'auto') === m.id;
+                    const sel = themeDraft.appearance === m.id;
                     return (
-                      <button key={m.id} onClick={() => setEditConfig((p) => ({ ...p, mode: m.id as ThemeMode }))} className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>
-                        <Icon className="w-5 h-5" /> {m.label}
+                      <button
+                        key={m.id}
+                        type="button"
+                        aria-pressed={sel}
+                        onClick={() => updateDraft((d) => ({ ...d, appearance: m.id as ThemeMode }))}
+                        className={`p-3 rounded-xl border text-xs font-bold flex flex-col items-center gap-1 ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}
+                      >
+                        <Icon className="w-5 h-5" aria-hidden="true" /> {m.label}
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-[11px] text-luxury-400 leading-relaxed">الوضع يحدد خلفية القائمة (فاتح/داكن) — «تلقائي» يتبع إعداد الجهاز. ألوان الهوية تُطبق كما هي في كلتا الحالتين.</p>
               </div>
 
-              {/* Colors — semantic groups. Every field keeps its exact server
-                  contract key; ThemeColorField edits local state only and the
-                  live preview re-renders instantly (no API while dragging). */}
+              {/* 2 — Brand colours */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-gold-400" /> اختر ألوان مطعمك
+                </h3>
+                <p className="text-[11px] text-luxury-400">لونان فقط — بقية ألوان القائمة تُحسب تلقائياً لتبقى واضحة ومقروءة في الوضعين.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <ThemeColorField
+                    label="اللون الأساسي"
+                    hint="لون علامتك — الأزرار والعناوين"
+                    value={themeDraft.primary}
+                    defaultValue="#D4AF37"
+                    onChange={(hex) => updateDraft((d) => ({ ...d, primary: hex }))}
+                  />
+                  <ThemeColorField
+                    label="لون التأكيد"
+                    hint="لمسات مميزة وعناصر تفاعلية"
+                    value={themeDraft.accent}
+                    defaultValue="#C5A880"
+                    onChange={(hex) => updateDraft((d) => ({ ...d, accent: hex }))}
+                  />
+                </div>
+              </div>
+
+              {/* 3 — Style: preset + card + corners */}
               <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-5">
-                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Palette className="w-4 h-4 text-gold-400" /> ألوان الثيم</h3>
-                {(() => {
-                  const colorValue = (key: string): string =>
-                    (editConfig.colors as any)?.[key] || (DEFAULT_THEME_FALLBACK.colors as any)[key];
-                  const setColor = (key: string) => (hex: string) =>
-                    setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
-                  const groups: Array<{ title: string; desc?: string; fields: Array<{ key: string; label: string; hint?: string }> }> = [
-                    {
-                      title: 'هوية العلامة',
-                      desc: 'اللون الأساسي للهوية ولون التأكيد للإجراءات والعناصر التفاعلية — يظلان كما هما في الوضعين الفاتح والداكن مع تكييف التباين تلقائياً.',
-                      fields: [
-                        { key: 'primary', label: 'اللون الأساسي (Brand)', hint: 'يظهر في الأزرار الرئيسية والعناوين والهوية' },
-                        { key: 'accent', label: 'لون التأكيد (Accent)', hint: 'للإجراءات والعناصر التفاعلية المميزة' },
-                        { key: 'secondary', label: 'لون ثانوي', hint: 'للتدرجات واللمسات الثانوية' },
-                      ],
-                    },
-                    {
-                      title: 'الأسطح والخلفيات',
-                      desc: 'ألوان الخلفيات والبطاقات والحدود في وضع القائمة الداكن.',
-                      fields: [
-                        { key: 'background', label: 'خلفية القائمة (داكن)', hint: 'في الوضع الفاتح تُشتق خلفية فاتحة تلقائياً ما لم تخصصها' },
-                        { key: 'surface', label: 'سطح البطاقات', hint: 'خلفية بطاقات الأطباق والألواح' },
-                        { key: 'border', label: 'لون الحدود', hint: 'خطوط الفصل والإطارات' },
-                      ],
-                    },
-                    {
-                      title: 'النصوص',
-                      fields: [
-                        { key: 'textPrimary', label: 'النص الأساسي' },
-                        { key: 'textSecondary', label: 'النص الثانوي', hint: 'الأوصاف والتفاصيل الهادئة' },
-                      ],
-                    },
-                    {
-                      title: 'ألوان الحالة',
-                      fields: [
-                        { key: 'success', label: 'نجاح' },
-                        { key: 'warning', label: 'تحذير' },
-                        { key: 'error', label: 'خطأ' },
-                      ],
-                    },
-                  ];
-                  return (
-                    <div className="space-y-4">
-                      {groups.map((group) => (
-                        <div key={group.title} className="bg-luxury-950 border border-luxury-800 rounded-xl p-3.5 space-y-3">
-                          <div>
-                            <span className="text-xs font-bold text-luxury-200">{group.title}</span>
-                            {group.desc && <p className="text-[10px] text-luxury-500 mt-0.5 leading-relaxed">{group.desc}</p>}
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                  <Wand2 className="w-4 h-4 text-gold-400" /> اختر الأسلوب
+                </h3>
+
+                <div>
+                  <span className="text-xs font-bold text-luxury-300">ثيمات جاهزة</span>
+                  <p className="text-[11px] text-luxury-500 mt-0.5">اختر واحداً كنقطة بداية — يمكنك تعديل أي شيء بعده.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                    {THEME_PRESETS.map((preset) => {
+                      const sel = themeDraft.presetId === preset.id;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          aria-pressed={sel}
+                          onClick={() => setThemeDraft(applyPresetToDraft(themeDraft, preset.id))}
+                          className={`p-2.5 rounded-xl border text-right ${sel ? 'border-gold-500 bg-gold-500/10' : 'border-luxury-800 bg-luxury-950'}`}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="w-5 h-5 rounded-lg shrink-0" style={{ background: `linear-gradient(135deg, ${preset.primary}, ${preset.accent})` }} />
+                            <span className="text-[11px] font-bold text-luxury-100 truncate">{preset.label}</span>
                           </div>
+                          <span className="text-[10px] text-luxury-500">{preset.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <span className="text-xs font-bold text-luxury-300">شكل البطاقات</span>
+                    <div className="space-y-1.5 mt-2">
+                      {CARD_STYLE_OPTIONS.map((o) => {
+                        const sel = themeDraft.cardStyle === o.id;
+                        return (
+                          <button
+                            key={o.id}
+                            type="button"
+                            aria-pressed={sel}
+                            onClick={() => updateDraft((d) => ({ ...d, cardStyle: o.id }))}
+                            className={`w-full p-2.5 rounded-xl border text-right ${sel ? 'border-gold-500 bg-gold-500/10' : 'border-luxury-800 bg-luxury-950'}`}
+                          >
+                            <div className="text-[11px] font-bold text-luxury-100">{o.label}</div>
+                            <div className="text-[10px] text-luxury-500">{o.desc}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-luxury-300">شكل الزوايا</span>
+                    <div className="space-y-1.5 mt-2">
+                      {CORNER_STYLE_OPTIONS.map((o) => {
+                        const sel = themeDraft.cornerStyle === o.id;
+                        return (
+                          <button
+                            key={o.id}
+                            type="button"
+                            aria-pressed={sel}
+                            onClick={() => updateDraft((d) => ({ ...d, cornerStyle: o.id }))}
+                            className={`w-full p-2.5 rounded-xl border text-right ${sel ? 'border-gold-500 bg-gold-500/10' : 'border-luxury-800 bg-luxury-950'}`}
+                          >
+                            <div className="text-[11px] font-bold text-luxury-100">{o.label}</div>
+                            <div className="text-[10px] text-luxury-500">{o.desc}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 — Typography */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-4">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                  <Type className="w-4 h-4 text-gold-400" /> اختر الخط
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {EDITOR_FONTS.map((f) => {
+                    const sel = themeDraft.font === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        aria-pressed={sel}
+                        onClick={() => updateDraft((d) => ({ ...d, font: f.id }))}
+                        className={`p-2.5 rounded-xl border text-xs ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}
+                        style={{ fontFamily: f.family }}
+                      >
+                        {f.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-luxury-300">كثافة العرض</span>
+                  <div className="grid grid-cols-3 gap-2 mt-2">
+                    {DENSITY_OPTIONS.map((o) => {
+                      const sel = themeDraft.density === o.id;
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          aria-pressed={sel}
+                          onClick={() => updateDraft((d) => ({ ...d, density: o.id }))}
+                          className={`p-2.5 rounded-xl border text-right ${sel ? 'border-gold-500 bg-gold-500/10' : 'border-luxury-800 bg-luxury-950'}`}
+                        >
+                          <div className="text-[11px] font-bold text-luxury-100">{o.label}</div>
+                          <div className="text-[10px] text-luxury-500">{o.desc}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* 5 — Advanced, collapsed by default */}
+              <details className="bg-luxury-900 border border-luxury-800 rounded-2xl overflow-hidden group">
+                <summary className="p-5 cursor-pointer list-none flex items-center justify-between gap-3">
+                  <span className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-luxury-400" /> تخصيص متقدم
+                  </span>
+                  <span className="text-[10px] text-luxury-500">اختياري — للمطاعم التي تحتاج تحكماً دقيقاً</span>
+                </summary>
+                <div className="px-5 pb-5 space-y-5 border-t border-luxury-800 pt-5">
+                  <p className="text-[11px] text-luxury-400 leading-relaxed">
+                    القيم هنا تتجاوز الحسابات التلقائية. اتركها فارغة ما لم تكن لديك حاجة محددة — الإعدادات البسيطة أعلاه تغطي معظم الحالات.
+                  </p>
+
+                  {/* Exact colour overrides — the previous primary controls. */}
+                  <div className="space-y-5">
+                    {(() => {
+                      const colorValue = (key: string): string =>
+                        (editConfig.colors as any)?.[key] || (DEFAULT_THEME_FALLBACK.colors as any)[key];
+                      const setColor = (key: string) => (hex: string) =>
+                        setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
+                      const groups: Array<{ title: string; desc?: string; fields: Array<{ key: string; label: string; hint?: string }> }> = [
+                        {
+                          title: 'ألوان محددة يدوياً',
+                          desc: 'تُستخدم كما هي بدل اللون المحسوب تلقائياً.',
+                          fields: [
+                            { key: 'secondary', label: 'لون ثانوي' },
+                            { key: 'background', label: 'خلفية القائمة' },
+                            { key: 'surface', label: 'سطح البطاقات' },
+                            { key: 'border', label: 'لون الحدود' },
+                            { key: 'textPrimary', label: 'النص الأساسي' },
+                            { key: 'textSecondary', label: 'النص الثانوي' },
+                          ],
+                        },
+                        {
+                          title: 'ألوان الحالة',
+                          desc: 'رسائل النجاح والتنبيه والخطأ.',
+                          fields: [
+                            { key: 'success', label: 'نجاح' },
+                            { key: 'warning', label: 'تنبيه' },
+                            { key: 'error', label: 'خطأ' },
+                          ],
+                        },
+                      ];
+                      return groups.map((group) => (
+                        <div key={group.title}>
+                          <span className="text-xs font-bold text-luxury-200">{group.title}</span>
+                          {group.desc && <p className="text-[10px] text-luxury-500 mt-0.5 mb-2">{group.desc}</p>}
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             {group.fields.map((f) => (
                               <ThemeColorField
@@ -1034,92 +1190,37 @@ export const BrandingSettingsView: React.FC = () => {
                             ))}
                           </div>
                         </div>
-                      ))}
+                      ));
+                    })()}
+                  </div>
+
+                  {/* Exact corner/shadow values. */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-luxury-800">
+                    <div>
+                      <span className="text-xs font-bold text-luxury-300">قياسات الزوايا</span>
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        {(['sm', 'md', 'lg', 'xl'] as const).map((k) => (
+                          <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
+                            <span className="text-[10px] text-luxury-400">{k}</span>
+                            <input aria-label={`زاوية ${k}`} type="text" value={(editConfig.radius as any)?.[k] || (DEFAULT_THEME_FALLBACK.radius as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, radius: { ...(p.radius || DEFAULT_THEME_FALLBACK.radius!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[11px] font-mono text-luxury-100 mt-1" />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  );
-                })()}
-
-                {/* Presets */}
-                <div className="pt-3 border-t border-luxury-800">
-                  <span className="text-xs font-bold text-luxury-200 flex items-center gap-1"><Wand2 className="w-3.5 h-3.5 text-gold-400" /> ثيمات جاهزة</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                    {THEME_PRESETS.map((preset) => (
-                      <button key={preset.id} onClick={() => applyPreset(preset.id)} className={`p-2.5 rounded-xl border text-right ${activePreset === preset.id ? 'border-gold-500 bg-gold-500/10' : 'border-luxury-800 bg-luxury-950'}`}>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="w-5 h-5 rounded-lg" style={{ background: `linear-gradient(135deg, ${preset.primary}, ${preset.accent})` }} />
-                          <span className="text-[11px] font-bold text-luxury-100">{preset.label}</span>
-                        </div>
-                        <span className="text-[10px] text-luxury-500">{preset.desc}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Typography & Radius & Shadows */}
-              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-5">
-                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2"><Type className="w-4 h-4 text-gold-400" /> الخطوط والزوايا والظلال</h3>
-
-                <div>
-                  <span className="text-xs font-bold text-luxury-300">الخط</span>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                    {FONT_OPTIONS.map((f) => {
-                      const sel = (editConfig.typography?.fontFamily || 'tajawal') === f.id;
-                      return (
-                        <button key={f.id} onClick={() => setEditConfig((p) => ({ ...p, typography: { ...(p.typography || DEFAULT_THEME_FALLBACK.typography!), fontFamily: f.id } }))} className={`p-2.5 rounded-xl border text-xs ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`} style={{ fontFamily: f.family }}>
-                          {f.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-xs font-bold text-luxury-300">نصف القطر (Radius)</span>
-                    <div className="grid grid-cols-2 gap-2 mt-2">
-                      {(['sm', 'md', 'lg', 'xl'] as const).map((k) => (
-                        <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
-                          <span className="text-[10px] text-luxury-400">{k}</span>
-                          <input type="text" value={(editConfig.radius as any)?.[k] || (DEFAULT_THEME_FALLBACK.radius as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, radius: { ...(p.radius || DEFAULT_THEME_FALLBACK.radius!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[11px] font-mono text-luxury-100 mt-1" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-luxury-300">الظلال</span>
-                    <div className="space-y-2 mt-2">
-                      {(['sm', 'md', 'lg'] as const).map((k) => (
-                        <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
-                          <span className="text-[10px] text-luxury-400">{k}</span>
-                          <input type="text" value={(editConfig.shadows as any)?.[k] || (DEFAULT_THEME_FALLBACK.shadows as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, shadows: { ...(p.shadows || DEFAULT_THEME_FALLBACK.shadows!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[10px] font-mono text-luxury-100 mt-1" />
-                        </div>
-                      ))}
+                    <div>
+                      <span className="text-xs font-bold text-luxury-300">قياسات الظلال</span>
+                      <div className="space-y-2 mt-2">
+                        {(['sm', 'md', 'lg'] as const).map((k) => (
+                          <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
+                            <span className="text-[10px] text-luxury-400">{k}</span>
+                            <input aria-label={`ظل ${k}`} type="text" value={(editConfig.shadows as any)?.[k] || (DEFAULT_THEME_FALLBACK.shadows as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, shadows: { ...(p.shadows || DEFAULT_THEME_FALLBACK.shadows!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[10px] font-mono text-luxury-100 mt-1" />
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                {/* Card shadow — persisted as `colors.card.shadow` (resolved
-                    from the shadows scale at save time). Controls whose state
-                    has no persistence model (button/badge/category visual
-                    variants) were removed so the editor only offers what the
-                    Theme system can actually store. */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-luxury-800">
-                  <div>
-                    <span className="text-xs font-bold text-luxury-300">ظل البطاقات</span>
-                    <select
-                      value={themeShadowKey(editConfig.cards?.shadow, editConfig.shadows) || 'md'}
-                      onChange={(e) => setEditConfig((p) => ({ ...p, cards: { ...(p.cards || {}), shadow: e.target.value as 'sm' | 'md' | 'lg' } }))}
-                      className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100"
-                    >
-                      <option value="sm">ظل صغير</option>
-                      <option value="md">ظل متوسط</option>
-                      <option value="lg">ظل كبير</option>
-                    </select>
-                    <p className="mt-1.5 text-[10px] text-luxury-500">يعتمد على سلّم الظلال أعلاه — يُحفظ كقيمة CSS فعلية.</p>
-                  </div>
-                </div>
-              </div>
+              </details>
             </>
           )}
 
@@ -1403,52 +1504,28 @@ export const BrandingSettingsView: React.FC = () => {
             </div>
           </div>
 
-          <div className={`mx-auto rounded-[2rem] border-[6px] border-luxury-800 bg-[#0B0C0F] shadow-2xl overflow-hidden relative ${previewDevice === 'mobile' ? 'w-[320px]' : previewDevice === 'tablet' ? 'w-[480px]' : 'w-full'}`} style={previewVars as any}>
-            {/* Background layer preview — renders the variant of the previewed
-                surface so the manager sees the light AND dark canvas. */}
-            {(editConfig.background || effectiveTheme?.background) && (
-              <div className="absolute inset-0 -z-10 pointer-events-none">
-                <div className="w-full h-full" style={{
-                  backgroundColor: (previewSurface === 'light'
-                    ? editConfig.background?.light?.color || effectiveTheme?.background.light.color || '#FFFFFF'
-                    : editConfig.background?.dark?.color || effectiveTheme?.background.dark.color || effectiveTheme?.colors.background) as any,
-                  backgroundImage: (previewSurface === 'light'
-                    ? editConfig.background?.light?.gradient || effectiveTheme?.background.light.gradient
-                    : editConfig.background?.dark?.gradient || effectiveTheme?.background.dark.gradient) || undefined,
-                }} />
-              </div>
-            )}
+          {/* LIVE PREVIEW — rendered through the PRODUCTION pipeline.
 
-            <div className="relative">
-              <div className="h-40 w-full relative">
-                {coverImage ? <img src={coverImage} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.secondary || accentColor}33, ${editConfig.colors?.primary || primaryColor}55)` }} />}
-                <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(7,8,10,0.95), rgba(7,8,10,0.15))' }} />
-                <div className="absolute top-2 inset-x-3 flex items-center justify-between text-[11px] text-luxury-200/90 font-mono"><span>9:41</span><span className="w-16 h-3.5 rounded-full bg-black/60 border border-luxury-700" /></div>
-                <div className="absolute bottom-3 inset-x-4 flex items-end gap-3">
-                  <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center border-2 shadow-lg shrink-0 text-lg font-serif font-bold text-white" style={{ background: logoPreview ? 'transparent' : `linear-gradient(135deg, ${editConfig.colors?.primary || primaryColor}, ${editConfig.colors?.accent || accentColor})`, borderColor: `${editConfig.colors?.primary || primaryColor}99` }}>
-                    {logoPreview ? <img src={logoPreview} alt="" className="w-full h-full" style={{ objectFit: logoFit, objectPosition: logoPosition }} /> : (nameEn.charAt(0) || 'م')}
-                  </div>
-                  <div className="min-w-0 pb-0.5"><div className="text-sm font-serif font-bold text-white truncate" style={{ fontFamily: 'var(--font-family)' }}>{name || 'اسم المطعم'}</div><div className="text-[11px] text-luxury-300 truncate">{nameEn || 'Restaurant Name'}</div></div>
-                </div>
-              </div>
+              This replaces a hand-rolled preview that re-implemented the theme
+              in inline styles (`linear-gradient(135deg, ${primary}, ${accent})`,
+              `${primary}22` tints, hardcoded luxury-* panels). That was a
+              second theme engine and it disagreed with the real menu: it
+              ignored the mode-aware colour remapping and the semantic surface
+              ladder entirely, so a light theme previewed as dark panels.
 
-              {galleryImages.length > 0 && <div className="px-3 pt-2"><div className="flex gap-1.5 overflow-hidden rounded-lg p-1 bg-luxury-900 border border-luxury-800">{galleryImages.slice(0, 3).map((g, idx) => <img key={idx} src={g} alt="" className="w-10 h-8 rounded object-cover" />)}{galleryImages.length > 3 && <span className="text-[11px] text-gold-400 self-center font-mono">+{galleryImages.length - 3}</span>}</div></div>}
-
-              <div className="p-3.5 space-y-2.5">
-                <div className="flex gap-1.5 overflow-hidden">
-                  {['الأطباق الرئيسية', 'مشاوي', 'مقبلات'].map((c) => (
-                    <span key={c} className="px-2.5 py-1 rounded-full text-[11px] font-bold whitespace-nowrap text-white" style={{ background: `${editConfig.colors?.primary || primaryColor}22`, color: editConfig.colors?.primary || primaryColor, border: `1px solid ${editConfig.colors?.primary || primaryColor}55`, borderRadius: editConfig.radius?.full || '9999px' }}>{c}</span>
-                  ))}
-                </div>
-                {[{ n: 'تندرلوين مشوي مع صوص الترافل', p: 135 }, { n: 'مقبلات البحر المتوسط الملكية', p: 85 }].map((dish, i) => (
-                  <div key={i} className="flex items-center gap-2.5 bg-luxury-900/90 border border-luxury-800 rounded-xl p-2" style={{ borderRadius: editConfig.cards?.radius || editConfig.radius?.lg || '16px', boxShadow: resolveThemeShadow(editConfig.cards?.shadow, editConfig.shadows) || '0 4px 12px rgba(0,0,0,0.3)' }}>
-                    <div className="w-11 h-11 rounded-lg shrink-0 flex items-center justify-center text-white/90 text-lg" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.secondary || accentColor}55, ${editConfig.colors?.primary || primaryColor}88)` }}><UtensilsCrossed className="w-4 h-4" /></div>
-                    <div className="flex-1 min-w-0"><div className="text-[10px] font-bold text-luxury-100 truncate" style={{ fontFamily: 'var(--font-family)' }}>{dish.n}</div><div className="text-[11px] text-luxury-400 flex items-center gap-1"><Clock className="w-2.5 h-2.5" /> 15-20 دقيقة</div><div className="text-[10px] font-bold mt-0.5" style={{ color: editConfig.colors?.primary || primaryColor }}>{currency} {dish.p}</div></div>
-                    <button className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold shrink-0" style={{ background: `linear-gradient(135deg, ${editConfig.colors?.primary || primaryColor}, ${editConfig.colors?.accent || accentColor})`, borderRadius: editConfig.radius?.md || '10px' }}><Plus className="w-3 h-3" /></button>
-                  </div>
-                ))}
-              </div>
-            </div>
+              ThemePreview feeds the draft through
+              toThemeConfig -> normalizeTheme -> buildSemanticTokens ->
+              CustomerThemeProvider, exactly as the customer menu does, and
+              styles itself only from --m-* tokens. It therefore cannot drift.
+              The provider writes to its own scope, never <html>, so previewing
+              a light theme inside the dark dashboard changes nothing else. */}
+          <div className={`mx-auto ${previewDevice === 'mobile' ? 'w-[320px]' : previewDevice === 'tablet' ? 'w-[480px]' : 'w-full'}`}>
+            <ThemePreview
+              draft={themeDraft}
+              forceMode={previewSurface}
+              restaurantName={name || currentRestaurant?.name || 'مطعمك'}
+              currency={currency}
+            />
           </div>
 
           <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-4 space-y-2 text-xs">

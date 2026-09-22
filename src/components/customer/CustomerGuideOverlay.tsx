@@ -237,16 +237,16 @@ export const CustomerGuideOverlay: React.FC = () => {
           className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
           onClick={dismissConfirm}
         />
-        <div className="relative w-full max-w-sm rounded-2xl bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.45)] backdrop-blur-xl p-5 shadow-[0_18px_50px_rgba(0,0,0,0.7)] text-right space-y-3">
+        <div className="relative w-full max-w-sm rounded-2xl bg-m-surface/95 border border-[rgb(var(--m-brand-on-surface-rgb)/0.45)] backdrop-blur-xl p-5 shadow-[0_18px_50px_rgba(0,0,0,0.7)] text-right space-y-3">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)] shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)] shrink-0">
               <HelpCircle className="w-5 h-5" />
             </div>
             <div>
-              <h3 id="guide-confirm-title" className="text-sm font-bold text-luxury-50 font-serif">
+              <h3 id="guide-confirm-title" className="text-sm font-bold text-m-text font-serif">
                 الدليل الإرشادي
               </h3>
-              <p id="guide-confirm-desc" className="text-[11px] text-luxury-400 mt-1 leading-relaxed">
+              <p id="guide-confirm-desc" className="text-[11px] text-m-text-muted mt-1 leading-relaxed">
                 جولة قصيرة تشرح خطوات الطلب داخل القائمة. هل ترغب أن نبدأها الآن؟
               </p>
             </div>
@@ -264,7 +264,7 @@ export const CustomerGuideOverlay: React.FC = () => {
             <button
               type="button"
               onClick={dismissConfirm}
-              className="touch-target px-4 py-2.5 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-luxury-200 text-xs font-bold cursor-pointer"
+              className="touch-target px-4 py-2.5 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text text-xs font-bold cursor-pointer"
             >
               ليس الآن
             </button>
@@ -321,22 +321,22 @@ export const CustomerGuideOverlay: React.FC = () => {
             className={`guide-arrow mx-auto ${arrowPointsDown ? 'mb-1' : 'mt-1 order-last'}`}
             style={arrowPointsDown ? {} : { transform: 'rotate(180deg)' }}
           >
-            <ArrowDown className="w-8 h-8 text-[var(--brand-primary-strong)]" />
+            <ArrowDown className="w-8 h-8 text-[var(--m-brand-on-surface)]" />
           </div>
 
-          <div className="bg-luxury-900/95 border border-[rgb(var(--brand-primary-strong-rgb)/0.45)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_18px_50px_rgba(0,0,0,0.7)] space-y-2.5 text-right">
+          <div className="bg-m-surface/95 border border-[rgb(var(--m-brand-on-surface-rgb)/0.45)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_18px_50px_rgba(0,0,0,0.7)] space-y-2.5 text-right">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)] shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)] shrink-0">
                 <StepIcon className="w-5 h-5" />
               </div>
               <div>
-                <h4 id="guide-step-title" className="text-sm font-bold text-luxury-50 font-serif">{activeStep.title}</h4>
-                <p id="guide-step-desc" className="text-[11px] text-luxury-400 mt-0.5 leading-relaxed">{activeStep.description}</p>
+                <h4 id="guide-step-title" className="text-sm font-bold text-m-text font-serif">{activeStep.title}</h4>
+                <p id="guide-step-desc" className="text-[11px] text-m-text-muted mt-0.5 leading-relaxed">{activeStep.description}</p>
               </div>
             </div>
 
             {/* Controls */}
-            <div className="flex items-center justify-between pt-1 border-t border-luxury-800/80">
+            <div className="flex items-center justify-between pt-1 border-t border-m-hairline/80">
               <div className="flex items-center gap-1">
                 {GUIDE_STEPS.map((s, i) => (
                   <button
@@ -344,7 +344,7 @@ export const CustomerGuideOverlay: React.FC = () => {
                     onClick={() => setStepIndex(i)}
                     aria-label={`الذهاب إلى الخطوة ${i + 1}: ${s.title}`}
                     aria-current={i === stepIndex ? 'step' : undefined}
-                    className={`touch-target h-1.5 rounded-full transition-all ${i === stepIndex ? 'w-5 bg-[var(--brand-primary-strong)]' : 'w-1.5 bg-luxury-700 hover:bg-luxury-600'}`}
+                    className={`touch-target h-1.5 rounded-full transition-all ${i === stepIndex ? 'w-5 bg-[var(--m-brand-on-surface)]' : 'w-1.5 bg-m-surface-raised hover:bg-m-surface-raised'}`}
                   />
                 ))}
               </div>
@@ -352,14 +352,14 @@ export const CustomerGuideOverlay: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <button
                   onClick={close}
-                  className="touch-target px-2.5 py-1.5 rounded-lg text-luxury-400 hover:text-luxury-200 text-[11px] font-bold transition-colors cursor-pointer"
+                  className="touch-target px-2.5 py-1.5 rounded-lg text-m-text-muted hover:text-m-text text-[11px] font-bold transition-colors cursor-pointer"
                 >
                   تخطي
                 </button>
                 {stepIndex > 0 && (
                   <button
                     onClick={prev}
-                    className="px-2.5 py-1.5 rounded-lg bg-luxury-850 hover:bg-luxury-800 text-luxury-200 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                    className="px-2.5 py-1.5 rounded-lg bg-m-surface-raised hover:bg-m-surface-raised text-m-text text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
                   >
                     <ArrowRight className="w-3.5 h-3.5" />
                     السابق
@@ -390,13 +390,13 @@ export const CustomerGuideOverlay: React.FC = () => {
 
       {/* Header hint + close */}
       <div className="absolute top-3 left-3 z-10 flex items-center gap-2">
-        <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-luxury-950/80 border border-luxury-750 text-luxury-300 text-[11px] font-bold">
-          <Sparkles className="w-3.5 h-3.5 text-[var(--brand-primary-strong)]" />
+        <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-m-bg/80 border border-m-hairline text-m-text-muted text-[11px] font-bold">
+          <Sparkles className="w-3.5 h-3.5 text-[var(--m-brand-on-surface)]" />
           جولة تعريفية — الخطوة {stepIndex + 1} من {GUIDE_STEPS.length}
         </span>
         <button
           onClick={close}
-          className="touch-target p-2.5 rounded-full bg-luxury-950/80 border border-luxury-750 text-luxury-300 hover:text-white transition-colors cursor-pointer"
+          className="touch-target p-2.5 rounded-full bg-m-bg/80 border border-m-hairline text-m-text-muted hover:text-white transition-colors cursor-pointer"
           aria-label="إغلاق الدليل"
         >
           <X className="w-4 h-4" />

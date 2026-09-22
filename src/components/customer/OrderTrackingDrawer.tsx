@@ -100,27 +100,27 @@ export const OrderTrackingDrawer: React.FC = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-tracking-title"
-        className="relative w-full max-w-lg border-r border-luxury-800 text-luxury-50 h-full flex flex-col z-10 animate-in slide-in-from-right duration-300"
-        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
+        className="relative w-full max-w-lg border-r border-m-hairline text-m-text h-full flex flex-col z-10 animate-in slide-in-from-right duration-300"
+        style={{ backgroundColor: 'var(--m-surface)', boxShadow: 'var(--m-shadow-lg)' }}
         dir="rtl"
       >
         {/* Header */}
-        <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-850/60" data-guide="tracking-panel">
+        <div className="p-5 border-b border-m-hairline flex items-center justify-between bg-m-surface-raised/60" data-guide="tracking-panel">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
+            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
               <ChefHat className="w-5 h-5" />
             </div>
             <div className="text-right">
               <div className="flex items-center gap-2">
-                <h3 id="order-tracking-title" className="text-base font-bold text-luxury-50 font-serif">المطبخ الحي ومتابعة الطلب</h3>
+                <h3 id="order-tracking-title" className="text-base font-bold text-m-text font-serif">المطبخ الحي ومتابعة الطلب</h3>
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                   مباشر
                 </span>
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-xs text-[var(--brand-primary-strong)] font-semibold">طاولة {tableNumStr}</span>
-                <span className="text-xs text-luxury-400">
+                <span className="text-xs text-[var(--m-brand-on-surface)] font-semibold">طاولة {tableNumStr}</span>
+                <span className="text-xs text-m-text-muted">
                   ({activeTableOrders.length} طلبات نشطة)
                 </span>
               </div>
@@ -129,7 +129,7 @@ export const OrderTrackingDrawer: React.FC = () => {
 
           <button
             onClick={() => setIsOrderTrackingOpen(false)}
-            className="p-2 rounded-xl text-luxury-400 hover:text-luxury-100 hover:bg-luxury-800 transition-colors cursor-pointer"
+            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors cursor-pointer"
             aria-label="إغلاق"
           >
             <X className="w-5 h-5" />
@@ -139,17 +139,17 @@ export const OrderTrackingDrawer: React.FC = () => {
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5 text-right">
           {activeTableOrders.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-luxury-400 space-y-3">
-              <div className="w-16 h-16 rounded-full bg-luxury-800/80 flex items-center justify-center text-luxury-500">
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-m-text-muted space-y-3">
+              <div className="w-16 h-16 rounded-full bg-m-surface-raised/80 flex items-center justify-center text-m-text-subtle">
                 <Utensils className="w-8 h-8 stroke-1" />
               </div>
-              <h4 className="text-base font-bold text-luxury-200">لا توجد طلبات نشطة لطاولتك</h4>
-              <p className="text-xs text-luxury-400 max-w-xs leading-relaxed">
+              <h4 className="text-base font-bold text-m-text">لا توجد طلبات نشطة لطاولتك</h4>
+              <p className="text-xs text-m-text-muted max-w-xs leading-relaxed">
                 اطلب من القائمة وسنقوم بعرض مراحل إعداد طلبك في المطبخ لحظة بلحظة.
               </p>
               <button
                 onClick={() => setIsOrderTrackingOpen(false)}
-                className="mt-2 px-4 py-2 rounded-xl brand-fill text-xs font-bold transition-all shadow-[0_0_22px_-6px_var(--brand-glow)] cursor-pointer"
+                className="mt-2 px-4 py-2 rounded-xl brand-fill text-xs font-bold transition-all shadow-[0_0_22px_-6px_var(--m-brand-glow)] cursor-pointer"
               >
                 تصفح قائمة الطعام
               </button>
@@ -157,17 +157,17 @@ export const OrderTrackingDrawer: React.FC = () => {
           ) : (
             <>
               {/* Live Kitchen Radar Banner */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-luxury-900 via-luxury-850 to-luxury-900 border border-[rgb(var(--brand-primary-strong-rgb)/0.4)] shadow-lg space-y-3">
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-m-surface via-m-surface-raised to-m-surface border border-[rgb(var(--m-brand-on-surface-rgb)/0.4)] shadow-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xl">👨‍🍳</span>
                     <div>
-                      <h4 className="text-sm font-bold text-[var(--brand-primary-strong)]">المطبخ الحي (Live KDS)</h4>
-                      <p className="text-[11px] text-luxury-300">يتم إرسال حالة الأطباق مباشرة من شاشة المطبخ</p>
+                      <h4 className="text-sm font-bold text-[var(--m-brand-on-surface)]">المطبخ الحي (Live KDS)</h4>
+                      <p className="text-[11px] text-m-text-muted">يتم إرسال حالة الأطباق مباشرة من شاشة المطبخ</p>
                     </div>
                   </div>
                   <div className="text-left" role="status" aria-live="polite">
-                    <span className="text-[10px] text-luxury-400 block">حالة المتابعة</span>
+                    <span className="text-[10px] text-m-text-muted block">حالة المتابعة</span>
                     <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
                       تحديث مباشر
@@ -187,15 +187,15 @@ export const OrderTrackingDrawer: React.FC = () => {
                 return (
                   <div
                     key={order.id}
-                    className="rounded-2xl bg-luxury-850/90 border border-luxury-750 overflow-hidden shadow-lg transition-all"
+                    className="rounded-2xl bg-m-surface-raised/90 border border-m-hairline overflow-hidden shadow-lg transition-all"
                   >
                     {/* Order Card Header */}
-                    <div className="p-4 bg-luxury-800/50 border-b border-luxury-750 flex items-center justify-between">
+                    <div className="p-4 bg-m-surface-raised/50 border-b border-m-hairline flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-[var(--brand-primary-strong)] font-mono">
+                        <span className="text-sm font-bold text-[var(--m-brand-on-surface)] font-mono">
                           طلب {order.id}
                         </span>
-                        <span className="text-[11px] text-luxury-400">
+                        <span className="text-[11px] text-m-text-muted">
                           {formatTime(order.createdAt)}
                         </span>
                       </div>
@@ -214,7 +214,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                           }
                           aria-expanded={isExpanded}
                           aria-label={isExpanded ? `طي تفاصيل الطلب ${order.id}` : `عرض تفاصيل الطلب ${order.id}`}
-                          className="touch-target p-1.5 text-luxury-400 hover:text-luxury-200 cursor-pointer"
+                          className="touch-target p-1.5 text-m-text-muted hover:text-m-text cursor-pointer"
                         >
                           {isExpanded ? (
                             <ChevronUp className="w-4 h-4" />
@@ -233,12 +233,12 @@ export const OrderTrackingDrawer: React.FC = () => {
                           rejected          → the guest must act
                           paid / released   → the kitchen is working on it */}
                     {isAwaitingGuestPayment(order) && (
-                      <div className="p-3 bg-[rgb(var(--brand-primary-strong-rgb)/0.12)] border-b border-[rgb(var(--brand-primary-strong-rgb)/0.4)] space-y-1">
-                        <div className="flex items-center gap-2 text-xs text-[var(--brand-primary-strong)] font-bold">
+                      <div className="p-3 bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border-b border-[rgb(var(--m-brand-on-surface-rgb)/0.4)] space-y-1">
+                        <div className="flex items-center gap-2 text-xs text-[var(--m-brand-on-surface)] font-bold">
                           <CreditCard className="w-4 h-4 shrink-0" />
                           <span>تم إرسال طلبك، يرجى تأكيد عملية الدفع لإتمام الطلب.</span>
                         </div>
-                        <p className="text-[11px] text-luxury-300 leading-relaxed pr-6">
+                        <p className="text-[11px] text-m-text-muted leading-relaxed pr-6">
                           لن يبدأ المطبخ بتحضير الطلب قبل تأكيد الدفع. أرسل إشعار التحويل (بنكي أو
                           محفظة) مع رقم هاتفك وصورة الإشعار، أو ادفع عند الكاشير.
                         </p>
@@ -289,10 +289,10 @@ export const OrderTrackingDrawer: React.FC = () => {
                     )}
 
                     {/* Visual Status Progress Flow */}
-                    <div className="p-4 bg-luxury-950/40 border-b border-luxury-800">
+                    <div className="p-4 bg-m-bg/40 border-b border-m-hairline">
                       <div className="text-xs mb-3">
-                        <span className="font-bold text-luxury-100">{statusCfg.customerTitle}</span>
-                        <p className="text-luxury-400 text-[11px] mt-0.5">{statusCfg.customerDesc}</p>
+                        <span className="font-bold text-m-text">{statusCfg.customerTitle}</span>
+                        <p className="text-m-text-muted text-[11px] mt-0.5">{statusCfg.customerDesc}</p>
                       </div>
 
                       {/* Step bar */}
@@ -313,13 +313,13 @@ export const OrderTrackingDrawer: React.FC = () => {
                                 step.active
                                   ? step.done
                                     ? 'bg-emerald-500'
-                                    : 'bg-[var(--brand-primary-strong)] animate-pulse'
-                                  : 'bg-luxury-800'
+                                    : 'bg-[var(--m-brand-on-surface)] animate-pulse'
+                                  : 'bg-m-surface-raised'
                               }`}
                             />
                             <span
                               className={`text-[10px] ${
-                                step.active ? 'text-luxury-200 font-bold' : 'text-luxury-500'
+                                step.active ? 'text-m-text font-bold' : 'text-m-text-subtle'
                               }`}
                             >
                               {step.title}
@@ -337,19 +337,19 @@ export const OrderTrackingDrawer: React.FC = () => {
                         {order.items.map((item) => (
                           <div
                             key={item.id}
-                            className="flex items-start justify-between text-xs py-1 border-b border-luxury-800/60 last:border-0"
+                            className="flex items-start justify-between text-xs py-1 border-b border-m-hairline/60 last:border-0"
                           >
                             <div className="flex-1">
-                              <span className="font-bold text-luxury-100">
+                              <span className="font-bold text-m-text">
                                 {item.quantity} × {item.productName || item.name}
                               </span>
                               {item.selectedSize && (
-                                <span className="text-[11px] text-[var(--brand-primary-strong)] block">
+                                <span className="text-[11px] text-[var(--m-brand-on-surface)] block">
                                   {typeof item.selectedSize === "object" ? item.selectedSize.name : item.selectedSize}
                                 </span>
                               )}
                               {item.selectedAddOns && item.selectedAddOns.length > 0 && (
-                                <span className="text-[10px] text-luxury-400 block">
+                                <span className="text-[10px] text-m-text-muted block">
                                   + {item.selectedAddOns.join('، ')}
                                 </span>
                               )}
@@ -359,7 +359,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <span className="font-bold text-luxury-200 shrink-0">
+                            <span className="font-bold text-m-text shrink-0">
                               {formatPrice(item.totalPrice, currency)}
                             </span>
                           </div>
@@ -367,7 +367,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                       </div>
 
                       {/* Notes / Edit Notes */}
-                      <div className="pt-2 border-t border-luxury-800">
+                      <div className="pt-2 border-t border-m-hairline">
                         {editingNotesOrderId === order.id ? (
                           <div className="space-y-2">
                             <label htmlFor="tracking-notes-edit" className="sr-only">
@@ -377,7 +377,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                               id="tracking-notes-edit"
                               value={editingNotesText}
                               onChange={(e) => setEditingNotesText(e.target.value)}
-                              className="w-full bg-luxury-950 border border-luxury-750 text-luxury-100 p-2 rounded-lg text-xs"
+                              className="w-full bg-m-bg border border-m-hairline text-m-text p-2 rounded-lg text-xs"
                               rows={2}
                               placeholder="ملاحظاتك للشيف…"
                             />
@@ -390,7 +390,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                               </button>
                               <button
                                 onClick={() => setEditingNotesOrderId(null)}
-                                className="px-3 py-1 bg-luxury-800 text-luxury-300 text-xs rounded-lg cursor-pointer"
+                                className="px-3 py-1 bg-m-surface-raised text-m-text-muted text-xs rounded-lg cursor-pointer"
                               >
                                 إلغاء
                               </button>
@@ -398,7 +398,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                           </div>
                         ) : (
                           order.notes && (
-                            <p className="text-[11px] text-luxury-300 italic bg-luxury-950/60 p-2 rounded-lg">
+                            <p className="text-[11px] text-m-text-muted italic bg-m-bg/60 p-2 rounded-lg">
                               ملاحظاتك: "{order.notes}"
                             </p>
                           )
@@ -406,22 +406,22 @@ export const OrderTrackingDrawer: React.FC = () => {
                       </div>
 
                       {/* Total & Payment method */}
-                      <div className="flex items-center justify-between pt-2 border-t border-luxury-800 text-xs">
-                        <span className="text-luxury-400">
+                      <div className="flex items-center justify-between pt-2 border-t border-m-hairline text-xs">
+                        <span className="text-m-text-muted">
                           {order.paymentStatus === 'PAID'
                             ? 'طريقة الدفع: تم الدفع'
                             : 'طريقة الدفع: نقداً عند الكاشير أو حوالة بنكية'}
                         </span>
                         <div className="text-left">
-                          <span className="text-xs text-luxury-400 ml-2">الإجمالي:</span>
-                          <span className="text-sm font-bold text-[var(--brand-primary-strong)]">
+                          <span className="text-xs text-m-text-muted ml-2">الإجمالي:</span>
+                          <span className="text-sm font-bold text-[var(--m-brand-on-surface)]">
                             {formatPrice(order.total, currency)}
                           </span>
                         </div>
                       </div>
 
                       {/* Quick Actions: Share WhatsApp & Rate Experience */}
-                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-luxury-800">
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-m-hairline">
                         <button
                           onClick={() => handleShareWhatsApp(order)}
                           className="p-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
@@ -432,9 +432,9 @@ export const OrderTrackingDrawer: React.FC = () => {
 
                         <button
                           onClick={() => setIsRatingModalOpen(true)}
-                          className="p-2.5 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] hover:bg-[rgb(var(--brand-primary-strong-rgb)/0.25)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] text-[var(--brand-primary-strong)] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                          className="p-2.5 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.15)] hover:bg-[rgb(var(--m-brand-on-surface-rgb)/0.25)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] text-[var(--m-brand-on-surface)] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                         >
-                          <Star className="w-3.5 h-3.5 fill-[var(--brand-primary-strong)]" />
+                          <Star className="w-3.5 h-3.5 fill-[var(--m-brand-on-surface)]" />
                           <span>تقييم الوجبة</span>
                         </button>
                       </div>
@@ -444,12 +444,12 @@ export const OrderTrackingDrawer: React.FC = () => {
                           cashier has nothing to verify and the order never
                           reaches the kitchen. */}
                       {order.status !== 'CANCELLED' && isAwaitingGuestPayment(order) && (
-                        <div className="p-3 rounded-xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.35)] space-y-1">
-                          <p className="text-xs font-bold text-[var(--brand-primary-strong)] flex items-center gap-1.5">
+                        <div className="p-3 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.35)] space-y-1">
+                          <p className="text-xs font-bold text-[var(--m-brand-on-surface)] flex items-center gap-1.5">
                             <CreditCard className="w-3.5 h-3.5" />
                             دفعت عبر البنك أو المحفظة؟ أرسل إشعار التحويل
                           </p>
-                          <p className="text-[11px] text-luxury-300 leading-relaxed">
+                          <p className="text-[11px] text-m-text-muted leading-relaxed">
                             سيظهر إشعارك فوراً على شاشة الكاشير مع طلبك، وبعد تأكيد العملية ينتقل
                             طلبك إلى المطبخ بحالة «جاهز للبدء».
                           </p>
@@ -464,7 +464,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                           className={`w-full p-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer ${
                             isPaymentVerificationPending(order)
                               ? 'bg-amber-500/15 border-amber-500/30 text-amber-200 hover:bg-amber-500/25'
-                              : 'bg-luxury-950 border-luxury-750 text-[var(--brand-primary-strong)] hover:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]'
+                              : 'bg-m-bg border-m-hairline text-[var(--m-brand-on-surface)] hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]'
                           }`}
                         >
                           <CreditCard className="w-3.5 h-3.5" />
@@ -479,12 +479,12 @@ export const OrderTrackingDrawer: React.FC = () => {
                       )}
 
                       {/* Customer Actions & Rules Enforcement */}
-                      <div className="pt-2 border-t border-luxury-800 flex items-center justify-between gap-2">
+                      <div className="pt-2 border-t border-m-hairline flex items-center justify-between gap-2">
                         {isPending ? (
                           <>
                             <button
                               onClick={() => handleStartEditNotes(order)}
-                              className="flex items-center gap-1 text-xs text-[var(--brand-primary-strong)] hover:text-[var(--brand-primary-strong)] transition-colors cursor-pointer"
+                              className="flex items-center gap-1 text-xs text-[var(--m-brand-on-surface)] hover:text-[var(--m-brand-on-surface)] transition-colors cursor-pointer"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                               <span>تعديل الملاحظات</span>
@@ -502,7 +502,7 @@ export const OrderTrackingDrawer: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => setConfirmCancelId(null)}
-                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-luxury-800 text-luxury-200 hover:bg-luxury-750 transition-colors cursor-pointer"
+                                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-m-surface-raised text-m-text hover:bg-m-surface-raised transition-colors cursor-pointer"
                                   >
                                     تراجع
                                   </button>
@@ -531,8 +531,8 @@ export const OrderTrackingDrawer: React.FC = () => {
                             ) : null}
                           </>
                         ) : (
-                          <div className="w-full flex items-center gap-2 p-2 rounded-xl bg-luxury-950/70 border border-luxury-800 text-luxury-400 text-[11px]">
-                            <Lock className="w-3.5 h-3.5 text-luxury-400 shrink-0" />
+                          <div className="w-full flex items-center gap-2 p-2 rounded-xl bg-m-bg/70 border border-m-hairline text-m-text-muted text-[11px]">
+                            <Lock className="w-3.5 h-3.5 text-m-text-muted shrink-0" />
                             <span>
                               بدأ المطبخ بتحضير طلبك، لذلك لم يعد بالإمكان تعديله أو إلغاؤه.
                             </span>
@@ -549,7 +549,7 @@ export const OrderTrackingDrawer: React.FC = () => {
       </div>
 
         {/* Sticky Footer: Order More, Call Waiter & Telegram Bot Support */}
-        <div className="p-4 bg-luxury-950 border-t border-luxury-800 space-y-2 shrink-0">
+        <div className="p-4 bg-m-bg border-t border-m-hairline space-y-2 shrink-0">
           <div className="flex items-center gap-2 text-xs justify-between">
             <a
               href="https://t.me/Mureeh_tech_bot"
@@ -565,7 +565,7 @@ export const OrderTrackingDrawer: React.FC = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsWaiterModalOpen(true)}
-              className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-luxury-850 hover:bg-luxury-800 text-[var(--brand-primary-strong)] border border-luxury-750 text-xs font-bold transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-[var(--m-brand-on-surface)] border border-m-hairline text-xs font-bold transition-all cursor-pointer"
             >
               <Bell className="w-4 h-4" />
               <span>طلب النادل</span>

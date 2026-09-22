@@ -56,16 +56,16 @@ export const CartDrawer: React.FC = () => {
       />
 
       <div className="fixed inset-y-0 left-0 max-w-full flex">
-        <div role="dialog" aria-modal="true" aria-labelledby="cart-title" className="w-screen max-w-md border-r border-luxury-750 flex flex-col text-right" style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="cart-title" className="w-screen max-w-md border-r border-m-hairline flex flex-col text-right" style={{ backgroundColor: 'var(--m-surface)', boxShadow: 'var(--m-shadow-lg)' }}>
           {/* Header */}
-          <div className="p-5 border-b border-luxury-800 flex items-center justify-between bg-luxury-950" data-guide="cart-panel">
+          <div className="p-5 border-b border-m-hairline flex items-center justify-between bg-m-bg" data-guide="cart-panel">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
+              <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <div>
-                <h3 id="cart-title" className="text-base font-bold text-luxury-50 font-serif">سلة الطلبات</h3>
-                <p className="text-xs text-luxury-400">
+                <h3 id="cart-title" className="text-base font-bold text-m-text font-serif">سلة الطلبات</h3>
+                <p className="text-xs text-m-text-muted">
                   {currentRestaurant?.name} · {cartTotalCount} أطباق مختارة
                 </p>
               </div>
@@ -74,18 +74,18 @@ export const CartDrawer: React.FC = () => {
             <button
               onClick={() => setIsCartOpen(false)}
               aria-label="إغلاق سلة الطلبات"
-              className="p-2 rounded-xl text-luxury-400 hover:text-luxury-200 hover:bg-luxury-850 transition-colors"
+              className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Table Indicator Warning if not chosen */}
-          <div className="bg-luxury-950/80 px-5 py-2.5 border-b border-luxury-800/80 flex items-center justify-between text-xs">
-            <span className="text-luxury-400">طاولة الطلب:</span>
+          <div className="bg-m-bg/80 px-5 py-2.5 border-b border-m-hairline/80 flex items-center justify-between text-xs">
+            <span className="text-m-text-muted">طاولة الطلب:</span>
             {activeTableId ? (
-              <span className="font-bold text-[var(--brand-primary-strong)] font-mono flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--theme-success, #34d399)' }} />
+              <span className="font-bold text-[var(--m-brand-on-surface)] font-mono flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--m-success)' }} />
                 طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? (formatTableNumber(activeTableId) || '—')}
               </span>
             ) : (
@@ -102,11 +102,11 @@ export const CartDrawer: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
             {cartItems.length === 0 ? (
               <div className="py-20 text-center space-y-3">
-                <div className="w-16 h-16 rounded-3xl bg-luxury-850 text-luxury-500 flex items-center justify-center mx-auto border border-luxury-800">
+                <div className="w-16 h-16 rounded-3xl bg-m-surface-raised text-m-text-subtle flex items-center justify-center mx-auto border border-m-hairline">
                   <Utensils className="w-8 h-8 stroke-1" />
                 </div>
-                <h4 className="text-base font-bold text-luxury-200">سلتك فارغة حالياً</h4>
-                <p className="text-xs text-luxury-400 max-w-xs mx-auto">
+                <h4 className="text-base font-bold text-m-text">سلتك فارغة حالياً</h4>
+                <p className="text-xs text-m-text-muted max-w-xs mx-auto">
                   تصفح قائمة الأطباق الفاخرة وأضف خياراتك المفضلة لتجربة عشاء استثنائية.
                 </p>
               </div>
@@ -114,7 +114,7 @@ export const CartDrawer: React.FC = () => {
               cartItems.map((item) => (
                 <div
                   key={item.id}
-                  className="bg-luxury-950/60 border border-luxury-800 rounded-2xl p-4 space-y-3 relative group transition-all hover:border-[rgb(var(--brand-primary-strong-rgb)/0.3)]"
+                  className="bg-m-bg/60 border border-m-hairline rounded-2xl p-4 space-y-3 relative group transition-all hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.3)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3">
@@ -122,20 +122,20 @@ export const CartDrawer: React.FC = () => {
                         <img
                           src={item.product?.image || item.productImage}
                           alt={item.product?.name || item.productName}
-                          className="w-14 h-14 rounded-xl object-cover border border-luxury-800 shrink-0"
+                          className="w-14 h-14 rounded-xl object-cover border border-m-hairline shrink-0"
                         />
                       )}
                       <div className="min-w-0">
-                        <h4 className="text-sm font-bold text-luxury-100 line-clamp-1">
+                        <h4 className="text-sm font-bold text-m-text line-clamp-1">
                           {item.product?.name || item.productName}
                         </h4>
                         {item.options.size && (
-                          <p className="text-[11px] text-[rgb(var(--brand-primary-strong-rgb)/0.9)] font-medium">
+                          <p className="text-[11px] text-[rgb(var(--m-brand-on-surface-rgb)/0.9)] font-medium">
                             الحجم: {typeof item.options.size === 'object' ? item.options.size.name : item.options.size}
                           </p>
                         )}
                         {item.options.selectedAddOns && item.options.selectedAddOns.length > 0 && (
-                          <p className="text-[11px] text-luxury-400 line-clamp-1">
+                          <p className="text-[11px] text-m-text-muted line-clamp-1">
                             إضافات: {item.options.selectedAddOns.map((a: any) => typeof a === 'object' ? a.name : a).join('، ')}
                           </p>
                         )}
@@ -145,7 +145,7 @@ export const CartDrawer: React.FC = () => {
                           </p>
                         )}
                         {item.options.specialInstructions && (
-                          <p className="text-[11px] text-luxury-400 italic line-clamp-1">
+                          <p className="text-[11px] text-m-text-muted italic line-clamp-1">
                             "{item.options.specialInstructions}"
                           </p>
                         )}
@@ -153,32 +153,32 @@ export const CartDrawer: React.FC = () => {
                     </div>
 
                     <div className="text-left shrink-0">
-                      <span className="text-sm font-bold text-[var(--brand-primary-strong)]">
+                      <span className="text-sm font-bold text-[var(--m-brand-on-surface)]">
                         {formatPrice(item.totalPrice || item.itemTotal || 0, currency)}
                       </span>
                     </div>
                   </div>
 
                   {/* Quantity row */}
-                  <div className="flex items-center justify-between pt-2 border-t border-luxury-800/60">
+                  <div className="flex items-center justify-between pt-2 border-t border-m-hairline/60">
                     <button
                       onClick={() => removeFromCart(item.id)}
-                      className="text-luxury-400 hover:text-red-400 p-1 rounded-md transition-colors text-xs flex items-center gap-1"
+                      className="text-m-text-muted hover:text-red-400 p-1 rounded-md transition-colors text-xs flex items-center gap-1"
                       title="حذف"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>حذف</span>
                     </button>
 
-                    <div className="flex items-center gap-2 bg-luxury-900 border border-luxury-800 rounded-xl p-0.5">
+                    <div className="flex items-center gap-2 bg-m-surface border border-m-hairline rounded-xl p-0.5">
                       <button
                         onClick={() => updateCartItemQuantity(item.id, item.quantity - 1)}
                         aria-label={`إنقاص كمية ${item.product?.name || item.productName}`}
-                        className="touch-target w-7 h-7 rounded-lg bg-luxury-800 hover:bg-luxury-750 text-luxury-300 flex items-center justify-center transition-colors"
+                        className="touch-target w-7 h-7 rounded-lg bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted flex items-center justify-center transition-colors"
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </button>
-                      <span className="w-6 text-center font-bold text-xs font-mono text-luxury-100" aria-live="polite">
+                      <span className="w-6 text-center font-bold text-xs font-mono text-m-text" aria-live="polite">
                         {item.quantity}
                       </span>
                       <button
@@ -197,10 +197,10 @@ export const CartDrawer: React.FC = () => {
 
           {/* Footer & Checkout */}
           {cartItems.length > 0 && (
-            <div className="p-5 bg-luxury-950 border-t border-luxury-800 space-y-4 shrink-0">
+            <div className="p-5 bg-m-bg border-t border-m-hairline space-y-4 shrink-0">
               {/* Order Notes Input */}
               <div>
-                <label className="block text-[11px] font-bold text-luxury-300 mb-1" htmlFor="cartdrawer-f1">
+                <label className="block text-[11px] font-bold text-m-text-muted mb-1" htmlFor="cartdrawer-f1">
                   ملاحظات عامة للطلب (اختياري)
                 </label>
                 <input id="cartdrawer-f1"
@@ -208,36 +208,36 @@ export const CartDrawer: React.FC = () => {
                   value={orderNotes}
                   onChange={(e) => setOrderNotes(e.target.value)}
                   placeholder="مثال: تقديم المقبلات أولاً، أطباق وملاعق إضافية..."
-                  className="w-full bg-luxury-900 border border-luxury-800 rounded-xl px-3 py-2 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
+                  className="w-full bg-m-surface border border-m-hairline rounded-xl px-3 py-2 text-xs text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
                 />
               </div>
 
               {/* Subtotal & Payment Notice */}
-              <div className="space-y-1.5 pt-2 border-t border-luxury-800/80">
-                <div className="flex justify-between text-xs text-luxury-400">
+              <div className="space-y-1.5 pt-2 border-t border-m-hairline/80">
+                <div className="flex justify-between text-xs text-m-text-muted">
                   <span>المجموع الفرعي</span>
                   <span className="font-mono">{formatPrice(cartSubtotal, currency)}</span>
                 </div>
-                <div className="flex justify-between text-xs text-luxury-400">
+                <div className="flex justify-between text-xs text-m-text-muted">
                   <span>الضريبة والخدمة</span>
-                  <span className="text-[rgb(var(--brand-primary-strong-rgb)/0.9)] font-medium">مشمولة</span>
+                  <span className="text-[rgb(var(--m-brand-on-surface-rgb)/0.9)] font-medium">مشمولة</span>
                 </div>
-                <div className="flex justify-between text-sm font-bold text-luxury-100 pt-1">
+                <div className="flex justify-between text-sm font-bold text-m-text pt-1">
                   <span>الإجمالي النهائي</span>
-                  <span className="text-[var(--brand-primary-strong)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
+                  <span className="text-[var(--m-brand-on-surface)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
                 </div>
               </div>
 
               {/* Payment Method Notice */}
-              <div className="bg-luxury-900/90 border border-luxury-800 p-2.5 rounded-xl flex items-center gap-2.5 text-[11px] text-luxury-300">
-                <Receipt className="w-4 h-4 text-[var(--brand-primary-strong)] shrink-0" />
+              <div className="bg-m-surface/90 border border-m-hairline p-2.5 rounded-xl flex items-center gap-2.5 text-[11px] text-m-text-muted">
+                <Receipt className="w-4 h-4 text-[var(--m-brand-on-surface)] shrink-0" />
                 <span>طريقة المحاسبة: الدفع نقداً أو بالبطاقة لدى الكاشير، أو عبر التحويل</span>
               </div>
 
               {/* Confirm CTA */}
               <button
                 onClick={handleOpenConfirm}
-                className="w-full py-3.5 rounded-xl brand-cta font-bold text-sm shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full py-3.5 rounded-xl brand-cta font-bold text-sm shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
                 <span>مراجعة وتأكيد الطلب</span>
                 <ArrowLeft className="w-4 h-4" />

@@ -134,7 +134,7 @@ const MemoProductCard: React.FC<ProductCardProps> = ({
 
           <div className="menu-actions">
             {!available ? (
-              <span className="text-[11px] font-semibold text-luxury-500">نفد من المطبخ</span>
+              <span className="text-[11px] font-semibold text-m-text-subtle">نفد من المطبخ</span>
             ) : inCart ? (
               <div className="menu-qty" role="group" aria-label={`كمية ${product.name}`}>
                 <button

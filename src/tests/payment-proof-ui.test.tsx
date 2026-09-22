@@ -127,7 +127,11 @@ describe('guest transfer modal — rendered', () => {
   });
 
   it('reuses the tenant brand tokens instead of hardcoding Mureeh gold', () => {
-    expect(transferModalTsx).toContain('var(--brand-primary-strong)');
+    // Phase 4 renamed the consumed token to the canonical semantic name.
+    // --m-brand-on-surface is emitted from the SAME value as the former
+    // --brand-primary-strong, so the intent of this test (tenant brand, never
+    // hardcoded Mureeh gold) is unchanged and still strictly enforced below.
+    expect(transferModalTsx).toContain('var(--m-brand-on-surface)');
     expect(transferModalTsx).toContain('brand-cta');
     expect(transferModalTsx).not.toMatch(/#D4AF37|#E2C067/i);
   });

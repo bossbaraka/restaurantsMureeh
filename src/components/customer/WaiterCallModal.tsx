@@ -105,19 +105,19 @@ export const WaiterCallModal: React.FC = () => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="waiter-call-title"
-        className="relative w-full max-w-lg border border-luxury-700/70 sm:rounded-3xl rounded-t-3xl p-6 z-10 space-y-5 animate-fade-in text-right"
-        style={{ backgroundColor: 'var(--theme-surface, #111317)', boxShadow: 'var(--shadow-lg, 0 25px 50px -12px rgb(0 0 0 / 0.25))' }}
+        className="relative w-full max-w-lg border border-m-hairline/70 sm:rounded-3xl rounded-t-3xl p-6 z-10 space-y-5 animate-fade-in text-right"
+        style={{ backgroundColor: 'var(--m-surface)', boxShadow: 'var(--m-shadow-lg)' }}
         dir="rtl"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-luxury-800 pb-4">
+        <div className="flex items-center justify-between border-b border-m-hairline pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--brand-primary-strong-rgb)/0.1)] border border-[rgb(var(--brand-primary-strong-rgb)/0.3)] flex items-center justify-center text-[var(--brand-primary-strong)]">
+            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
               <Bell className="w-5 h-5 animate-bounce" />
             </div>
             <div>
-              <h3 id="waiter-call-title" className="text-base font-bold text-luxury-50 font-serif">طلب النادل إلى الطاولة</h3>
-              <p className="text-xs text-luxury-400 font-mono">
+              <h3 id="waiter-call-title" className="text-base font-bold text-m-text font-serif">طلب النادل إلى الطاولة</h3>
+              <p className="text-xs text-m-text-muted font-mono">
                 {activeTableNumber != null
                   ? `طاولة رقم ${activeTableNumber}`
                   : activeTable?.tableNumber != null
@@ -130,7 +130,7 @@ export const WaiterCallModal: React.FC = () => {
           </div>
           <button
             onClick={() => setIsWaiterModalOpen(false)}
-            className="p-2 rounded-xl text-luxury-400 hover:text-luxury-200 hover:bg-luxury-800 transition-colors"
+            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -141,22 +141,22 @@ export const WaiterCallModal: React.FC = () => {
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto animate-pulse">
               <Check className="w-8 h-8" />
             </div>
-            <h4 className="text-base font-bold text-luxury-100 font-serif">تم إرسال طلبك إلى طاقم الضيافة</h4>
-            <p className="text-xs text-luxury-400">حالة الطلب: بانتظار استلام أحد أفراد الطاقم. لا حاجة لإعادة الإرسال.</p>
+            <h4 className="text-base font-bold text-m-text font-serif">تم إرسال طلبك إلى طاقم الضيافة</h4>
+            <p className="text-xs text-m-text-muted">حالة الطلب: بانتظار استلام أحد أفراد الطاقم. لا حاجة لإعادة الإرسال.</p>
           </div>
         ) : activeRequest && cooldownSeconds === 0 ? (
           <div
             className="p-4 rounded-2xl border space-y-2"
             style={{
-              backgroundColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 10%, transparent)',
-              borderColor: 'color-mix(in srgb, var(--theme-warning, #f59e0b) 30%, transparent)',
+              backgroundColor: 'color-mix(in srgb, var(--m-warning) 10%, transparent)',
+              borderColor: 'color-mix(in srgb, var(--m-warning) 30%, transparent)',
             }}
           >
             <div className="flex items-center gap-2 text-amber-400 text-xs font-bold">
               <Clock className="w-4 h-4 animate-spin" />
               <span>{activeRequest.status === 'ACKNOWLEDGED' ? 'تم استلام طلبك والطاقم في الطريق' : 'طلبك بانتظار استلام طاقم الضيافة'}</span>
             </div>
-            <p className="text-[11px] text-luxury-300">
+            <p className="text-[11px] text-m-text-muted">
               يوجد طلب نشط لطاولتك ({reasons.find((r) => r.id === activeRequest.reason)?.label || activeRequest.reason}). لا حاجة لإرسال طلب آخر الآن.
             </p>
           </div>
@@ -165,7 +165,7 @@ export const WaiterCallModal: React.FC = () => {
         {!justCalled && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <p className="block text-xs font-bold text-luxury-200 mb-2">نوع الطلب:</p>
+              <p className="block text-xs font-bold text-m-text mb-2">نوع الطلب:</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {reasons.map((r) => {
                   const isSelected = selectedReason === r.id;
@@ -176,14 +176,14 @@ export const WaiterCallModal: React.FC = () => {
                       onClick={() => setSelectedReason(r.id)}
                       className={`p-3 rounded-2xl border text-right transition-all flex items-center gap-3 ${
                         isSelected
-                          ? 'bg-[rgb(var(--brand-primary-strong-rgb)/0.15)] border-[rgb(var(--brand-primary-strong-rgb)/0.6)] ring-1 ring-[rgb(var(--brand-primary-strong-rgb)/0.4)] text-[var(--brand-primary-strong)]'
-                          : 'bg-luxury-850/60 border-luxury-800 text-luxury-300 hover:border-luxury-700'
+                          ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.15)] border-[rgb(var(--m-brand-on-surface-rgb)/0.6)] ring-1 ring-[rgb(var(--m-brand-on-surface-rgb)/0.4)] text-[var(--m-brand-on-surface)]'
+                          : 'bg-m-surface-raised/60 border-m-hairline text-m-text-muted hover:border-m-hairline'
                       }`}
                     >
                       <span className="text-xl">{r.icon}</span>
                       <div>
                         <div className="text-xs font-bold">{r.label}</div>
-                        <div className="text-[10px] text-luxury-400 mt-0.5">{r.desc}</div>
+                        <div className="text-[10px] text-m-text-muted mt-0.5">{r.desc}</div>
                       </div>
                     </button>
                   );
@@ -192,18 +192,18 @@ export const WaiterCallModal: React.FC = () => {
             </div>
 
             <div>
-              <label htmlFor="waitercallmodal-f1" className="block text-xs font-bold text-luxury-200 mb-1.5">ملاحظة إضافية (اختياري):</label>
+              <label htmlFor="waitercallmodal-f1" className="block text-xs font-bold text-m-text mb-1.5">ملاحظة إضافية (اختياري):</label>
               <input id="waitercallmodal-f1"
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="مثال: يرجى إحضار كراسي إضافية أو مكعبات ثلج..."
-                className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 placeholder-luxury-500 focus:outline-none focus:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
+                className="w-full bg-m-bg border border-m-hairline rounded-xl px-3.5 py-2.5 text-xs text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
               />
             </div>
 
             {cooldownSeconds > 0 && (
-              <div className="text-center text-[11px] text-[rgb(var(--brand-primary-strong-rgb)/0.8)] bg-[rgb(var(--brand-primary-strong-rgb)/0.05)] py-1.5 rounded-lg border border-[rgb(var(--brand-primary-strong-rgb)/0.2)]">
+              <div className="text-center text-[11px] text-[rgb(var(--m-brand-on-surface-rgb)/0.8)] bg-[rgb(var(--m-brand-on-surface-rgb)/0.05)] py-1.5 rounded-lg border border-[rgb(var(--m-brand-on-surface-rgb)/0.2)]">
                 يرجى الانتظار {cooldownSeconds} ثانية قبل إرسال نداء آخر منعاً للتكرار.
               </div>
             )}
@@ -229,7 +229,7 @@ export const WaiterCallModal: React.FC = () => {
               type="submit"
               disabled={isSubmitting || cooldownSeconds > 0 || !!activeRequest}
               aria-busy={isSubmitting}
-              className="w-full py-3.5 rounded-2xl bg-[var(--brand-primary-strong)] hover:bg-[var(--brand-primary-strong)] disabled:opacity-50 text-luxury-950 font-bold text-xs shadow-[0_0_22px_-6px_var(--brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
+              className="w-full py-3.5 rounded-2xl bg-[var(--m-brand-on-surface)] hover:bg-[var(--m-brand-on-surface)] disabled:opacity-50 text-m-bg font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>

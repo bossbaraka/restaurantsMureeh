@@ -58,18 +58,18 @@ export const CustomerSocialSection: React.FC = () => {
 
   return (
     <section
-      className="customer-social mt-10 rounded-3xl border border-luxury-800 bg-luxury-900/70 p-5 sm:p-6"
+      className="customer-social mt-10 rounded-3xl border border-m-hairline bg-m-surface/70 p-5 sm:p-6"
       aria-labelledby="customer-social-title"
     >
       <header className="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
           <h3
             id="customer-social-title"
-            className="font-serif text-base sm:text-lg font-bold text-luxury-50"
+            className="font-serif text-base sm:text-lg font-bold text-m-text"
           >
             تابعنا
           </h3>
-          <p className="text-[11px] text-luxury-400 mt-0.5">
+          <p className="text-[11px] text-m-text-muted mt-0.5">
             قنوات {restaurantName} الرسمية — تابع جديدنا وعروضنا أولاً بأول.
           </p>
         </div>
@@ -77,7 +77,7 @@ export const CustomerSocialSection: React.FC = () => {
           className="h-px flex-1 min-w-[3rem] opacity-60"
           style={{
             backgroundImage:
-              'linear-gradient(to left, rgb(var(--brand-primary-strong-rgb) / 0.55), transparent)',
+              'linear-gradient(to left, rgb(var(--m-brand-on-surface-rgb) / 0.55), transparent)',
           }}
           aria-hidden="true"
         />
@@ -95,23 +95,23 @@ export const CustomerSocialSection: React.FC = () => {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`مراسلة ${restaurantName} على واتساب`}
-              className="group flex h-full items-center gap-3 rounded-2xl border border-luxury-700/70 bg-luxury-950/70 p-3 transition-colors hover:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
+              className="group flex h-full items-center gap-3 rounded-2xl border border-m-hairline/70 bg-m-bg/70 p-3 transition-colors hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
             >
               <span
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-luxury-950"
-                style={{ backgroundImage: 'var(--brand-fill)' }}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-m-bg"
+                style={{ backgroundImage: 'var(--m-brand-fill)' }}
                 aria-hidden="true"
               >
                 <WhatsappMark className="h-5 w-5" />
               </span>
               <span className="min-w-0">
-                <span className="block text-xs font-bold text-luxury-100">واتساب</span>
-                <span className="block truncate text-[11px] text-luxury-400 direction-ltr" dir="ltr">
+                <span className="block text-xs font-bold text-m-text">واتساب</span>
+                <span className="block truncate text-[11px] text-m-text-muted direction-ltr" dir="ltr">
                   +{whatsapp}
                 </span>
               </span>
               <ArrowUpLeft
-                className="ms-auto h-3.5 w-3.5 shrink-0 text-luxury-600 transition-colors group-hover:text-[var(--brand-primary-strong)]"
+                className="ms-auto h-3.5 w-3.5 shrink-0 text-m-text-subtle transition-colors group-hover:text-[var(--m-brand-on-surface)]"
                 aria-hidden="true"
               />
             </a>
@@ -128,19 +128,19 @@ export const CustomerSocialSection: React.FC = () => {
                 rel="noopener noreferrer"
                 title={link.labelEn}
                 aria-label={`${link.label} — ${restaurantName}`}
-                className="group flex h-full items-center gap-3 rounded-2xl border border-luxury-800 bg-luxury-950/50 p-3 transition-colors hover:border-[rgb(var(--brand-primary-strong-rgb)/0.6)]"
+                className="group flex h-full items-center gap-3 rounded-2xl border border-m-hairline bg-m-bg/50 p-3 transition-colors hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
               >
                 <span
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-luxury-700/70 bg-luxury-900 text-[var(--brand-primary-strong)]"
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-m-hairline/70 bg-m-surface text-[var(--m-brand-on-surface)]"
                   aria-hidden="true"
                 >
                   <Mark className="h-5 w-5" />
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-xs font-bold text-luxury-100">{link.label}</span>
+                  <span className="block text-xs font-bold text-m-text">{link.label}</span>
                   {link.handle && (
                     <span
-                      className="block truncate text-[11px] text-luxury-400"
+                      className="block truncate text-[11px] text-m-text-muted"
                       dir={link.handle.startsWith('@') ? 'ltr' : undefined}
                     >
                       {link.handle}
@@ -148,7 +148,7 @@ export const CustomerSocialSection: React.FC = () => {
                   )}
                 </span>
                 <ArrowUpLeft
-                  className="ms-auto h-3.5 w-3.5 shrink-0 text-luxury-600 transition-colors group-hover:text-[var(--brand-primary-strong)]"
+                  className="ms-auto h-3.5 w-3.5 shrink-0 text-m-text-subtle transition-colors group-hover:text-[var(--m-brand-on-surface)]"
                   aria-hidden="true"
                 />
               </a>

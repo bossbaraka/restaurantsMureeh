@@ -1,7 +1,7 @@
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { CartItem, Product } from '../../types/restaurant';
-import { useEffectiveTheme } from '../../theme/brandTheme';
+import { CustomerThemeProvider } from '../../theme/CustomerThemeProvider';
 import { useMenuPreferences } from '../../hooks/useMenuPreferences';
 import { CustomerHeader } from './CustomerHeader';
 import { CustomerHero } from './CustomerHero';
@@ -106,7 +106,12 @@ const sortProducts = (list: Product[], sort: MenuSortKey): Product[] => {
   }
 };
 
-export const CustomerLayout: React.FC = () => {
+/**
+ * The menu body. Rendered INSIDE the customer theme scope (see the
+ * `CustomerLayout` wrapper at the bottom of this file), so every token it and
+ * its descendants consume comes from that one scope element.
+ */
+const CustomerLayoutContent: React.FC = () => {
   const {
     products,
     categories,
@@ -129,14 +134,9 @@ export const CustomerLayout: React.FC = () => {
   } = useRestaurant();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
-  // Tenant palette -> CSS custom properties consumed by the whole menu.
-  // Single --brand-* writer in this path: useEffectiveTheme applies the brand
-  // tokens itself (from theme.colors.primary/accent) alongside the full
-  // --theme-*/--radius-*/--shadow-*/--bg-* set. A second useBrandTheme call
-  // here used to write the same variables from the legacy columns, racing the
-  // effective theme. When no theme is loaded yet (entry window), the
-  // app-level useBrandTheme + context sync effect cover the legacy fallback.
-  useEffectiveTheme(currentRestaurant?.theme);
+  // NOTE: no theme application here any more. Tokens are applied once by the
+  // CustomerThemeProvider wrapping this component (bottom of this file), which
+  // is the single runtime writer for the customer theme.
 
   const [preferences, updatePreferences] = useMenuPreferences(currentRestaurant?.slug || 'default');
   const { sort, layout, availableOnly } = preferences;
@@ -362,11 +362,11 @@ export const CustomerLayout: React.FC = () => {
   const isPublicRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/r/');
   if (isPublicRoute && !activeTableId) {
     return (
-      <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex items-center justify-center p-6 text-center" dir="rtl">
-        <div className="max-w-md p-8 rounded-3xl bg-luxury-900 border border-amber-500/40 space-y-4">
+      <div className="min-h-screen bg-m-bg text-m-text flex items-center justify-center p-6 text-center" dir="rtl">
+        <div className="max-w-md p-8 rounded-3xl bg-m-surface border border-amber-500/40 space-y-4">
           <div className="text-4xl">QR</div>
-          <h2 className="text-xl font-bold font-serif text-luxury-50">افتح القائمة عبر رمز QR</h2>
-          <p className="text-xs text-luxury-400 leading-relaxed">هذا الرابط غير صالح للدخول المباشر. امسح رمز QR الموجود على طاولة المطعم.</p>
+          <h2 className="text-xl font-bold font-serif text-m-text">افتح القائمة عبر رمز QR</h2>
+          <p className="text-xs text-m-text-muted leading-relaxed">هذا الرابط غير صالح للدخول المباشر. امسح رمز QR الموجود على طاولة المطعم.</p>
         </div>
       </div>
     );
@@ -374,13 +374,13 @@ export const CustomerLayout: React.FC = () => {
 
   if (currentRestaurant?.status === 'SUSPENDED') {
     return (
-      <div className="min-h-screen bg-[#0A0B0D] text-luxury-50 flex items-center justify-center p-6 text-center" dir="rtl">
-        <div className="max-w-md p-8 rounded-3xl bg-luxury-900 border border-red-500/40 space-y-4">
+      <div className="min-h-screen bg-m-bg text-m-text flex items-center justify-center p-6 text-center" dir="rtl">
+        <div className="max-w-md p-8 rounded-3xl bg-m-surface border border-red-500/40 space-y-4">
           <div className="w-14 h-14 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center mx-auto">
             <AlertTriangle className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-bold font-serif text-luxury-50">هذا المطعم غير متاح للطلب حالياً</h2>
-          <p className="text-xs text-luxury-400 leading-relaxed">
+          <h2 className="text-xl font-bold font-serif text-m-text">هذا المطعم غير متاح للطلب حالياً</h2>
+          <p className="text-xs text-m-text-muted leading-relaxed">
             تم إيقاف الخدمة مؤقتاً لهذا المطعم. يرجى مراجعة إدارة المطعم أو الكاشير.
           </p>
         </div>
@@ -392,14 +392,14 @@ export const CustomerLayout: React.FC = () => {
 
   return (
     <div
-      className={`customer-shell ${menuReveal ? 'customer-shell--reveal' : ''} min-h-screen text-luxury-50 flex flex-col pb-24 touch-manipulation relative`}
+      className={`customer-shell ${menuReveal ? 'customer-shell--reveal' : ''} min-h-screen text-m-text flex flex-col pb-24 touch-manipulation relative`}
       dir="rtl"
       style={{
-        // Tokens written by the theme engine (applyEffectiveTheme) — already
-        // mode-aware, so light/dark flip with no re-render path here.
-        backgroundColor: 'var(--theme-bg, #0A0B0D)',
-        color: 'var(--theme-text-primary, #F8FAFC)',
-        fontFamily: 'var(--font-family)',
+        // Canonical customer tokens, guaranteed present by
+        // CustomerThemeProvider — so no hardcoded hex fallback is needed.
+        backgroundColor: 'var(--m-bg)',
+        color: 'var(--m-text)',
+        fontFamily: 'var(--m-font)',
       }}
     >
       {/* Central Theme Background Layer — the single consumer of the --bg-*
@@ -444,7 +444,7 @@ export const CustomerLayout: React.FC = () => {
               )}
             </div>
             <span className="menu-section-head__rule" aria-hidden="true" />
-            <span className="text-[11px] font-semibold text-luxury-500 whitespace-nowrap pb-1">
+            <span className="text-[11px] font-semibold text-m-text-subtle whitespace-nowrap pb-1">
               {visibleProducts.length} أطباق
             </span>
           </div>
@@ -452,14 +452,14 @@ export const CustomerLayout: React.FC = () => {
 
         {/* Products Grid */}
         {visibleProducts.length === 0 ? (
-          <div className="menu-empty my-8 p-6 sm:p-8 text-center rounded-2xl bg-luxury-900/60 border border-luxury-800">
-            <div className="menu-empty__icon mx-auto mb-3 w-12 h-12 rounded-full bg-luxury-800/80 flex items-center justify-center text-luxury-400">
+          <div className="menu-empty my-8 p-6 sm:p-8 text-center rounded-2xl bg-m-surface/60 border border-m-hairline">
+            <div className="menu-empty__icon mx-auto mb-3 w-12 h-12 rounded-full bg-m-surface-raised/80 flex items-center justify-center text-m-text-muted">
               <UtensilsCrossed className="w-6 h-6 stroke-1" />
             </div>
-            <h4 className="text-base font-bold text-luxury-200">
+            <h4 className="text-base font-bold text-m-text">
               {isSearching ? `لا توجد نتائج بحث عن "${deferredSearch}"` : 'لا توجد أطباق في هذا القسم حالياً'}
             </h4>
-            <p className="text-xs text-luxury-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
+            <p className="text-xs text-m-text-muted mt-1.5 max-w-sm mx-auto leading-relaxed">
               {isSearching
                 ? 'جرّب البحث بكلمات أخرى أو تصفح الأقسام المختلفة في القائمة.'
                 : 'يمكنك استعراض كامل قائمة الطعام أو تصفح الأقسام المتوفرة الأخرى.'}
@@ -469,7 +469,7 @@ export const CustomerLayout: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-m-surface-raised hover:bg-m-surface-raised text-m-text transition-colors cursor-pointer"
                 >
                   مسح البحث
                 </button>
@@ -478,7 +478,7 @@ export const CustomerLayout: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => updatePreferences({ availableOnly: false })}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-luxury-800 hover:bg-luxury-750 text-luxury-100 transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-m-surface-raised hover:bg-m-surface-raised text-m-text transition-colors cursor-pointer"
                 >
                   إلغاء فلتر المتوفر فقط
                 </button>
@@ -490,8 +490,8 @@ export const CustomerLayout: React.FC = () => {
                 style={{
                   // colors.button.primaryBg/primaryText → the primary action
                   // role; falls back to the brand identity fill.
-                  background: 'var(--button-bg, var(--brand-primary))',
-                  color: 'var(--button-text, var(--brand-ink))',
+                  background: 'var(--button-bg, var(--m-brand))',
+                  color: 'var(--button-text, var(--m-brand-ink))',
                 }}
               >
                 تصفح كامل القائمة
@@ -526,15 +526,15 @@ export const CustomerLayout: React.FC = () => {
       <footer
         className="mt-16 border-t py-8 px-4 text-center text-xs bg-transparent"
         style={{
-          borderColor: 'var(--theme-border, rgba(255,255,255,0.08))',
-          color: 'var(--theme-text-secondary, rgba(255,255,255,0.45))',
+          borderColor: 'var(--m-hairline)',
+          color: 'var(--m-text-subtle)',
         }}
       >
         <div className="max-w-md mx-auto space-y-3">
-          <div className="font-serif text-sm font-bold tracking-widest uppercase" style={{ color: 'var(--theme-text-primary, #f8fafc)' }}>
+          <div className="font-serif text-sm font-bold tracking-widest uppercase" style={{ color: 'var(--m-text)' }}>
             {currentRestaurant?.name} {currentRestaurant?.nameEn ? `· ${currentRestaurant?.nameEn}` : ''}
           </div>
-          <p className="text-[11px]" style={{ color: 'var(--theme-text-secondary, rgba(255,255,255,0.45))' }}>
+          <p className="text-[11px]" style={{ color: 'var(--m-text-subtle)' }}>
             جميع الأسعار تشمل ضريبة القيمة المضافة · المحاسبة عند الكاشير
           </p>
         </div>
@@ -574,5 +574,27 @@ export const CustomerLayout: React.FC = () => {
           dialog surface wins focus/Escape management over the drawers it opens. */}
       {!showWelcome && <CustomerGuideOverlay />}
     </div>
+  );
+};
+
+/**
+ * CustomerLayout — the customer menu, wrapped in its theme scope.
+ *
+ * The scope element is the ONLY place customer theme tokens are applied at
+ * runtime. It uses `display: contents` (see `.customer-theme-scope` in
+ * index.css) so it introduces no box of its own: the existing layout, sticky
+ * positioning and flex/grid relationships are completely unchanged, while CSS
+ * custom properties still inherit normally to every descendant.
+ *
+ * Every customer modal and drawer renders in-tree (this codebase uses no
+ * `createPortal`), so they all inherit the scope without extra wiring.
+ */
+export const CustomerLayout: React.FC = () => {
+  const { currentRestaurant } = useRestaurant();
+
+  return (
+    <CustomerThemeProvider restaurant={currentRestaurant}>
+      <CustomerLayoutContent />
+    </CustomerThemeProvider>
   );
 };

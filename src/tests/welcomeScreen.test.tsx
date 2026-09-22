@@ -165,10 +165,12 @@ describe('QR splash paints itself from the tenant brand tokens', () => {
     }
   });
 
-  it('consumes the same --brand-* custom properties the menu uses', () => {
+  it('consumes the same tenant brand custom properties the menu uses', () => {
     const markup = render();
 
-    expect(markup).toContain('var(--brand-primary-strong)');
+    // Canonical name after the Phase 4 migration; same derived value as the
+    // former --brand-primary-strong.
+    expect(markup).toContain('var(--m-brand-on-surface)');
     expect(markup).toContain('welcome-shell');
     expect(markup).toContain('welcome-medallion');
     // The particle canvas is decorative and must never be announced.
@@ -202,9 +204,15 @@ describe('QR splash hand-off into the menu', () => {
   it('sits on the exact canvas the menu is drawn on, so dismissal has no colour jump', () => {
     expect(cssValue('.welcome-shell', 'background-color')).toBe('var(--welcome-canvas)');
 
+    // The body canvas is now a PLATFORM token (--mureeh-canvas) instead of a
+    // hardcoded `@apply bg-[#0A0B0D]`, because the platform gained a light
+    // mode. The invariant under test is unchanged and just as strict: the
+    // splash canvas must be the SAME colour as the page canvas it hands off
+    // to, so dismissing the splash produces no colour jump.
     const canvasToken = cssText.match(/--welcome-canvas:\s*([^;]+);/)?.[1]?.trim();
-    const bodyCanvas = cssText.match(/@apply\s+bg-\[(#[0-9a-fA-F]{6})\]/)?.[1];
+    const bodyCanvas = cssText.match(/--mureeh-canvas:\s*(#[0-9a-fA-F]{6})\s*;/)?.[1];
     expect(canvasToken).toBeTruthy();
+    expect(bodyCanvas).toBeTruthy();
     expect(canvasToken?.toLowerCase()).toBe(bodyCanvas?.toLowerCase());
   });
 
