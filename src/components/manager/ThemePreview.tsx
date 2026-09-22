@@ -41,6 +41,137 @@ interface ThemePreviewProps {
   currency?: string;
 }
 
+/**
+ * THE production token scope, reusable by any preview fragment (the advanced
+ * per-component samples below, or the full menu preview). It projects the
+ * draft through `toThemeConfig` and hands it to `CustomerThemeProvider` — the
+ * exact tail of the customer pipeline — so a fragment styled from `--m-*`
+ * tokens cannot disagree with the real menu.
+ */
+export const ThemeTokensScope: React.FC<{
+  draft: ThemeDraft;
+  forceMode?: SurfaceMode;
+  children?: React.ReactNode;
+}> = ({ draft, forceMode, children }) => {
+  const themeConfig = toThemeConfig(draft);
+  const previewRestaurant = {
+    theme: themeConfig,
+    primaryColor: draft.primary,
+    accentColor: draft.accent,
+  } as never;
+  return (
+    <CustomerThemeProvider restaurant={previewRestaurant} forceMode={forceMode}>
+      {children}
+    </CustomerThemeProvider>
+  );
+};
+
+/*
+ * MINI SAMPLES — one tiny live preview per «تخصيص متقدم» group.
+ *
+ * Each sample styles itself EXCLUSIVELY from the canonical `--m-*` tokens
+ * (same names the customer markup consumes), wrapped by the caller in
+ * `ThemeTokensScope`. No colour arithmetic, no hex, no second engine.
+ */
+
+/** الأزرار — primary + secondary action buttons (colors.button.*). */
+export const ButtonTokensSample: React.FC = () => (
+  <div className="flex flex-wrap items-center gap-2" dir="rtl">
+    <span
+      className="px-3 py-1.5 text-[11px] font-bold"
+      style={{
+        // The shorthand (not background-image): --m-button-bg may be a gradient
+        // OR a plain hex override — the shorthand paints both.
+        background: 'var(--m-button-bg)',
+        color: 'var(--m-button-text)',
+        borderRadius: 'var(--m-radius-md)',
+      }}
+    >
+      أضف للسلة
+    </span>
+    <span
+      className="px-3 py-1.5 text-[11px] font-bold"
+      style={{
+        background: 'var(--m-button-secondary-bg)',
+        color: 'var(--m-button-secondary-text)',
+        borderRadius: 'var(--m-radius-md)',
+        border: '1px solid var(--m-hairline)',
+      }}
+    >
+      تفاصيل
+    </span>
+  </div>
+);
+
+/** البطاقات — the dish card material: background/border/radius/shadow (colors.card.*). */
+export const CardTokensSample: React.FC = () => (
+  <div
+    className="p-3 max-w-[300px]"
+    dir="rtl"
+    style={{
+      background: 'var(--m-card-bg)',
+      border: '1px solid var(--m-card-border)',
+      borderRadius: 'var(--m-card-radius)',
+      boxShadow: 'var(--m-card-shadow)',
+      fontFamily: 'var(--m-font)',
+    }}
+  >
+    <div className="text-xs font-bold" style={{ color: 'var(--m-text)' }}>
+      طبق اليوم
+    </div>
+    <div className="text-[10px] mt-0.5" style={{ color: 'var(--m-text-muted)' }}>
+      يعكس هذه العينة الخلفية والحدود والزاوية والظل
+    </div>
+  </div>
+);
+
+/** الشارات — the product badge chip (colors.badge.*). */
+export const BadgeTokensSample: React.FC = () => (
+  <div dir="rtl">
+    <span
+      className="px-2.5 py-0.5 text-[10px] font-bold"
+      style={{
+        background: 'var(--m-badge-bg)',
+        color: 'var(--m-badge-text)',
+        borderRadius: 'var(--m-badge-radius)',
+      }}
+    >
+      جديد
+    </span>
+  </div>
+);
+
+/** التصنيفات — inactive + active chips (colors.category.*), same contract as .menu-chip. */
+export const CategoryTokensSample: React.FC = () => (
+  <div className="flex flex-wrap items-center gap-2" dir="rtl">
+    <span
+      className="px-3 py-1.5 text-[11px] font-bold"
+      style={{
+        background: 'var(--m-chip-bg)',
+        color: 'var(--m-chip-text)',
+        borderRadius: 'var(--m-radius-full)',
+        border: '1px solid var(--m-hairline)',
+      }}
+    >
+      تصنيف عادي
+    </span>
+    <span
+      className="px-3 py-1.5 text-[11px] font-bold"
+      style={{
+        // Active chip contract (identical to .menu-chip[data-active='true']):
+        // the derived brand-gradient image layer is switched off automatically
+        // when an explicit activeBg colour exists — see --category-active-image.
+        backgroundImage: 'var(--m-chip-active-image)',
+        backgroundColor: 'var(--m-chip-active-bg)',
+        color: 'var(--m-chip-active-text)',
+        borderRadius: 'var(--m-radius-full)',
+      }}
+    >
+      تصنيف نشط
+    </span>
+  </div>
+);
+
 const SAMPLE_CATEGORIES = ['الكل', 'المشاوي', 'المقبلات', 'الحلويات'];
 const SAMPLE_DISHES = [
   { name: 'مشاوي مشكلة', price: '85' },
@@ -54,16 +185,10 @@ export const ThemePreview: React.FC<ThemePreviewProps> = ({
   currency = '₪',
 }) => {
   // The draft is projected through the real derivation, then handed to the
-  // real provider in the shape it already accepts for a restaurant.
-  const themeConfig = toThemeConfig(draft);
-  const previewRestaurant = {
-    theme: themeConfig,
-    primaryColor: draft.primary,
-    accentColor: draft.accent,
-  } as never;
-
+  // real provider in the shape it already accepts for a restaurant
+  // (ThemeTokensScope owns that projection — same one the mini samples use).
   return (
-    <CustomerThemeProvider restaurant={previewRestaurant} forceMode={forceMode}>
+    <ThemeTokensScope draft={draft} forceMode={forceMode}>
       <div
         dir="rtl"
         className="rounded-2xl overflow-hidden border"
@@ -176,7 +301,7 @@ export const ThemePreview: React.FC<ThemePreviewProps> = ({
                 aria-hidden="true"
                 className="w-7 h-7 flex items-center justify-center shrink-0"
                 style={{
-                  backgroundImage: 'var(--m-button-bg)',
+                  background: 'var(--m-button-bg)',
                   color: 'var(--m-button-text)',
                   borderRadius: 'var(--m-radius-md)',
                 }}
@@ -222,6 +347,6 @@ export const ThemePreview: React.FC<ThemePreviewProps> = ({
           </div>
         </div>
       </div>
-    </CustomerThemeProvider>
+    </ThemeTokensScope>
   );
 };

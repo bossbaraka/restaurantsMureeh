@@ -16,7 +16,7 @@ import {
   toThemeConfig,
   type ThemeDraft,
 } from '../../theme/editorModel';
-import { ThemePreview } from './ThemePreview';
+import { ThemePreview, ThemeTokensScope, ButtonTokensSample, CardTokensSample, BadgeTokensSample, CategoryTokensSample } from './ThemePreview';
 
 import {
   AlertTriangle,
@@ -54,6 +54,8 @@ import {
   Square,
   Sparkles,
   Eye,
+  ChevronDown,
+  Eraser,
 } from 'lucide-react';
 import type { BusinessType, ThemeConfig, EffectiveTheme, ThemeRow, BackgroundConfig, ThemeMode, BackgroundType, ThemeFontKey, ThemeColors, ResolvedBackground } from '../../types/restaurant';
 
@@ -443,6 +445,49 @@ export function toServerThemePayload(
 
   return payload;
 }
+
+// ============================================================
+// «تخصيص متقدم» — a collapsible group inside the Advanced disclosure.
+//
+// State-based disclosure (NOT a nested details element): the source-contract
+// tests cut the advanced block at the first literal closing details tag, so a
+// nested element would hide the low-level controls from their assertions. Each group carries a title,
+// one-line description, and (where meaningful) a small live preview rendered
+// through the production token scope — never a bespoke style engine.
+// ============================================================
+const AdvancedSection: React.FC<{
+  title: string;
+  desc?: string;
+  preview?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, desc, preview, children }) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <section className="bg-luxury-950/50 border border-luxury-800 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full p-3.5 flex items-center justify-between gap-3 text-right hover:bg-luxury-900/50 transition-colors"
+      >
+        <span className="min-w-0">
+          <span className="block text-xs font-bold text-luxury-200">{title}</span>
+          {desc && <span className="block text-[10px] text-luxury-500 mt-0.5 leading-relaxed">{desc}</span>}
+        </span>
+        <ChevronDown
+          className={`w-4 h-4 text-luxury-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
+        <div className="px-3.5 pb-3.5 space-y-3">
+          {preview && <div className="p-3 rounded-lg bg-luxury-900/70 border border-luxury-800">{preview}</div>}
+          {children}
+        </div>
+      )}
+    </section>
+  );
+};
 
 export const BrandingSettingsView: React.FC = () => {
   const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast, branches } = useRestaurant();
@@ -855,6 +900,97 @@ export const BrandingSettingsView: React.FC = () => {
   const currency = currentRestaurant?.currency || '₪';
   const logoPreview = logo || currentRestaurant?.logo || '';
 
+  // ---------------------------------------------------------------------
+  // PER-COMPONENT OVERRIDE CONTROLS («تخصيص متقدم»).
+  //
+  // Everything below edits the EXISTING keys of `editConfig` (the single
+  // source of truth) and nothing else: colors.button/card/badge/category via
+  // `setGroupColor`, and the card's own radius/shadow via `setCardOverride`
+  // (the `cards` edit slot — the same server slot as colors.card.radius/shadow).
+  // The save path (colorGroupsToServer / toServerThemePayload) and the preview
+  // path (toDraft → toThemeConfig → CustomerThemeProvider) are untouched.
+  //
+  // CLEAR = delete the override so the value returns to inheritance. Group
+  // colours delete their key outright (nothing resurrects them downstream).
+  // The `cards` slot encodes «auto» as the EMPTY STRING — the engine's own
+  // absence encoding (buildEffectiveThemeVars emits '' for absent tokens and
+  // every consumer falls through to its derived value) — because toThemeConfig
+  // re-fills a *missing* cards.radius/shadow from the chosen styles on the next
+  // simple edit, which would silently re-pin a cleared override. An empty
+  // value is never persisted (toServerThemePayload skips it), so the override
+  // is truly gone from the saved theme.
+  // ---------------------------------------------------------------------
+  type GroupName = 'button' | 'card' | 'badge' | 'category';
+
+  const groupColor = (group: GroupName, key: string): string | undefined =>
+    ((editConfig.colors as any)?.[group] as Record<string, string> | undefined)?.[key];
+
+  const setGroupColor = (group: GroupName, key: string, hex: string | null) => {
+    setEditConfig((p) => {
+      const colors = { ...((p.colors as any) || {}) } as Record<string, any>;
+      const next: Record<string, string> = { ...((colors[group] as Record<string, string>) || {}) };
+      if (hex === null) delete next[key];
+      else next[key] = hex;
+      if (Object.keys(next).length === 0) delete colors[group];
+      else colors[group] = next;
+      return { ...p, colors: colors as ThemeColors };
+    });
+  };
+
+  /** Effective card radius/shadow override ('' or absent = «تلقائي»). */
+  const cardOverride = (key: 'radius' | 'shadow'): string => (editConfig.cards?.[key] || '').trim();
+  const hasCardRadius = cardOverride('radius') !== '';
+  const hasCardShadow = cardOverride('shadow') !== '';
+
+  const setCardOverride = (key: 'radius' | 'shadow', value: string | null) => {
+    setEditConfig((p) => {
+      const cards = { ...((p.cards as Record<string, string>) || {}) };
+      const colors = { ...((p.colors as any) || {}) } as Record<string, any>;
+      const cardGroup: Record<string, string> = { ...((colors.card as Record<string, string>) || {}) };
+      // Single source of truth: the `cards` slot wins at save time — keep no
+      // stale twin inside colors.card that copyGroupFields could re-send.
+      delete cardGroup[key];
+      cards[key] = value === null ? '' : value;
+      if (Object.keys(cardGroup).length === 0) delete colors.card;
+      else colors.card = cardGroup;
+      return { ...p, cards, colors: colors as ThemeColors };
+    });
+  };
+
+  // Shadow override UX: the manager picks a scale KEY (sm/md/lg) — the adapter
+  // resolves keys to real CSS at save and maps them back on load (the documented
+  // themeShadowKey «select round-trip») — or types a custom shadow.
+  const rawCardShadow = cardOverride('shadow');
+  const shadowScaleKey = rawCardShadow ? themeShadowKey(rawCardShadow, editConfig.shadows) : null;
+  const shadowChoice = !hasCardShadow ? '' : (shadowScaleKey ?? 'custom');
+  const handleShadowChoice = (choice: string) => {
+    if (choice === '') setCardOverride('shadow', null);
+    else if (choice === 'custom') {
+      // Start from the shadow the engine would apply anyway (shadows.md — the
+      // same source --card-shadow derives from) so no value is invented.
+      setCardOverride('shadow', resolveThemeShadow(rawCardShadow, editConfig.shadows) || editConfig.shadows?.md || (DEFAULT_THEME_FALLBACK.shadows as any).md);
+    } else setCardOverride('shadow', choice);
+  };
+
+  // Basic/status scalar fields (unchanged behavior — always concrete values).
+  const basicColorFields: Array<{ key: string; label: string }> = [
+    { key: 'secondary', label: 'لون ثانوي' },
+    { key: 'background', label: 'خلفية القائمة' },
+    { key: 'surface', label: 'سطح البطاقات' },
+    { key: 'border', label: 'لون الحدود' },
+    { key: 'textPrimary', label: 'النص الأساسي' },
+    { key: 'textSecondary', label: 'النص الثانوي' },
+  ];
+  const statusColorFields: Array<{ key: string; label: string }> = [
+    { key: 'success', label: 'نجاح' },
+    { key: 'warning', label: 'تنبيه' },
+    { key: 'error', label: 'خطأ' },
+  ];
+  const colorValue = (key: string): string =>
+    (editConfig.colors as any)?.[key] || (DEFAULT_THEME_FALLBACK.colors as any)[key];
+  const setColor = (key: string) => (hex: string) =>
+    setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
+
   const hasLegacyEmbeddedImages = isEmbeddedImage(logoPreview) || isEmbeddedImage(coverImage) || galleryImages.some((u) => isEmbeddedImage(u));
 
   const socialValues = { instagramUrl, facebookUrl, tiktokUrl, youtubeUrl, websiteUrl } as const;
@@ -1138,87 +1274,277 @@ export const BrandingSettingsView: React.FC = () => {
                   </span>
                   <span className="text-[10px] text-luxury-500">اختياري — للمطاعم التي تحتاج تحكماً دقيقاً</span>
                 </summary>
-                <div className="px-5 pb-5 space-y-5 border-t border-luxury-800 pt-5">
+                <div className="px-5 pb-5 space-y-3 border-t border-luxury-800 pt-5">
                   <p className="text-[11px] text-luxury-400 leading-relaxed">
-                    القيم هنا تتجاوز الحسابات التلقائية. اتركها فارغة ما لم تكن لديك حاجة محددة — الإعدادات البسيطة أعلاه تغطي معظم الحالات.
+                    تجاوزات يدوية على الحسابات التلقائية، موزّعة على مجموعات واضحة. أي حقل على «تلقائي» يبقى محسوبًا/موروثًا من إعداداتك العامة — و«إزالة التخصيص» تحذف القيمة المخصّصة وتعيدها للوراثة. الإعدادات البسيطة أعلاه تغطي معظم الحالات.
                   </p>
 
-                  {/* Exact colour overrides — the previous primary controls. */}
-                  <div className="space-y-5">
-                    {(() => {
-                      const colorValue = (key: string): string =>
-                        (editConfig.colors as any)?.[key] || (DEFAULT_THEME_FALLBACK.colors as any)[key];
-                      const setColor = (key: string) => (hex: string) =>
-                        setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
-                      const groups: Array<{ title: string; desc?: string; fields: Array<{ key: string; label: string; hint?: string }> }> = [
-                        {
-                          title: 'ألوان محددة يدوياً',
-                          desc: 'تُستخدم كما هي بدل اللون المحسوب تلقائياً.',
-                          fields: [
-                            { key: 'secondary', label: 'لون ثانوي' },
-                            { key: 'background', label: 'خلفية القائمة' },
-                            { key: 'surface', label: 'سطح البطاقات' },
-                            { key: 'border', label: 'لون الحدود' },
-                            { key: 'textPrimary', label: 'النص الأساسي' },
-                            { key: 'textSecondary', label: 'النص الثانوي' },
-                          ],
-                        },
-                        {
-                          title: 'ألوان الحالة',
-                          desc: 'رسائل النجاح والتنبيه والخطأ.',
-                          fields: [
-                            { key: 'success', label: 'نجاح' },
-                            { key: 'warning', label: 'تنبيه' },
-                            { key: 'error', label: 'خطأ' },
-                          ],
-                        },
-                      ];
-                      return groups.map((group) => (
-                        <div key={group.title}>
-                          <span className="text-xs font-bold text-luxury-200">{group.title}</span>
-                          {group.desc && <p className="text-[10px] text-luxury-500 mt-0.5 mb-2">{group.desc}</p>}
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            {group.fields.map((f) => (
-                              <ThemeColorField
-                                key={f.key}
-                                label={f.label}
-                                hint={f.hint}
-                                value={colorValue(f.key)}
-                                defaultValue={(DEFAULT_THEME_FALLBACK.colors as any)[f.key]}
-                                onChange={setColor(f.key)}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
+                  {/* 1 — الألوان الأساسية (unchanged scalar behavior). */}
+                  <AdvancedSection title="الألوان الأساسية" desc="تُستخدم كما هي بدل اللون المحسوب تلقائياً.">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {basicColorFields.map((f) => (
+                        <ThemeColorField
+                          key={f.key}
+                          label={f.label}
+                          value={colorValue(f.key)}
+                          defaultValue={(DEFAULT_THEME_FALLBACK.colors as any)[f.key]}
+                          onChange={setColor(f.key)}
+                        />
+                      ))}
+                    </div>
+                  </AdvancedSection>
 
-                  {/* Exact corner/shadow values. */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-luxury-800">
-                    <div>
-                      <span className="text-xs font-bold text-luxury-300">قياسات الزوايا</span>
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        {(['sm', 'md', 'lg', 'xl'] as const).map((k) => (
-                          <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
-                            <span className="text-[10px] text-luxury-400">{k}</span>
-                            <input aria-label={`زاوية ${k}`} type="text" value={(editConfig.radius as any)?.[k] || (DEFAULT_THEME_FALLBACK.radius as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, radius: { ...(p.radius || DEFAULT_THEME_FALLBACK.radius!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[11px] font-mono text-luxury-100 mt-1" />
-                          </div>
-                        ))}
+                  {/* 2 — الأزرار (colors.button.*). */}
+                  <AdvancedSection
+                    title="الأزرار"
+                    desc="خلفية ونص الزر الأساسي والثانوي — اتركها تلقائية لتتبع هوية مطعمك."
+                    preview={
+                      <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
+                        <ButtonTokensSample />
+                      </ThemeTokensScope>
+                    }
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {([
+                        ['primaryBg', 'خلفية الزر الأساسي'],
+                        ['primaryText', 'لون نص الزر الأساسي'],
+                        ['secondaryBg', 'خلفية الزر الثانوي'],
+                        ['secondaryText', 'لون نص الزر الثانوي'],
+                      ] as const).map(([fieldKey, label]) => (
+                        <ThemeColorField
+                          key={fieldKey}
+                          clearable
+                          label={label}
+                          value={groupColor('button', fieldKey)}
+                          onChange={(hex) => setGroupColor('button', fieldKey, hex)}
+                          onClear={() => setGroupColor('button', fieldKey, null)}
+                        />
+                      ))}
+                    </div>
+                  </AdvancedSection>
+
+                  {/* 3 — البطاقات (colors.card.* + cards.radius/shadow overrides). */}
+                  <AdvancedSection
+                    title="البطاقات"
+                    desc="خلفية وزاوية وظل بطاقة الطبق — بطاقة العينة بالأسفل تعكسها مباشرة."
+                    preview={
+                      <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
+                        <CardTokensSample />
+                      </ThemeTokensScope>
+                    }
+                  >
+                    <p className="text-[10px] text-luxury-500 leading-relaxed">
+                      «شكل البطاقات» و«شكل الزوايا» أعلاه قوالب جاهزة تؤثر على مقاييس الظلال والزوايا. حقول الزاوية والظل أدناه تخصيص يدوي مباشر لبطاقة الطبق يتفوق على القالب — وعند «تلقائي» تتبع البطاقة القالب والإعداد الوراثي.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <ThemeColorField
+                        clearable
+                        label="خلفية البطاقة"
+                        value={groupColor('card', 'bg')}
+                        onChange={(hex) => setGroupColor('card', 'bg', hex)}
+                        onClear={() => setGroupColor('card', 'bg', null)}
+                      />
+                      <ThemeColorField
+                        clearable
+                        label="لون حدود البطاقة"
+                        value={groupColor('card', 'border')}
+                        onChange={(hex) => setGroupColor('card', 'border', hex)}
+                        onClear={() => setGroupColor('card', 'border', null)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-[11px] text-luxury-300 font-bold">زاوية البطاقة — تخصيص يدوي</span>
+                          {hasCardRadius ? (
+                            <button
+                              type="button"
+                              onClick={() => setCardOverride('radius', null)}
+                              className="p-1 rounded-md text-luxury-500 hover:text-red-300 hover:bg-luxury-800 transition-colors"
+                              title="إزالة التخصيص — تعود القيمة للقالب والوراثة"
+                              aria-label="إزالة تخصيص زاوية البطاقة"
+                            >
+                              <Eraser className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-luxury-500">تلقائي — يتبع شكل الزوايا</span>
+                          )}
+                        </div>
+                        {hasCardRadius ? (
+                          <input
+                            aria-label="زاوية البطاقة"
+                            type="text"
+                            value={cardOverride('radius')}
+                            onChange={(e) => setCardOverride('radius', e.target.value)}
+                            className="w-full bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-[11px] font-mono text-luxury-100"
+                            placeholder="16px"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setCardOverride('radius', editConfig.radius?.lg || (DEFAULT_THEME_FALLBACK.radius as any).lg)}
+                            className="w-full px-2.5 py-2 rounded-lg border border-dashed border-luxury-700 text-[10px] text-luxury-400 hover:text-luxury-100 hover:border-luxury-500 transition-colors"
+                          >
+                            تخصيص زاوية البطاقة يدوياً
+                          </button>
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="text-[11px] text-luxury-300 font-bold">ظل البطاقة — تخصيص يدوي</span>
+                          {hasCardShadow ? (
+                            <button
+                              type="button"
+                              onClick={() => setCardOverride('shadow', null)}
+                              className="p-1 rounded-md text-luxury-500 hover:text-red-300 hover:bg-luxury-800 transition-colors"
+                              title="إزالة التخصيص — يعود الظل لشكل البطاقات والوراثة"
+                              aria-label="إزالة تخصيص ظل البطاقة"
+                            >
+                              <Eraser className="w-3 h-3" />
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-luxury-500">تلقائي — يتبع شكل البطاقات</span>
+                          )}
+                        </div>
+                        <select
+                          aria-label="ظل البطاقة"
+                          value={shadowChoice}
+                          onChange={(e) => handleShadowChoice(e.target.value)}
+                          className="w-full bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100"
+                        >
+                          <option value="">تلقائي (يتبع شكل البطاقات)</option>
+                          <option value="sm">خفيف</option>
+                          <option value="md">متوسط</option>
+                          <option value="lg">بارز</option>
+                          <option value="custom">مخصص…</option>
+                        </select>
+                        {shadowChoice === 'custom' && (
+                          <input
+                            aria-label="ظل البطاقة المخصص"
+                            type="text"
+                            value={cardOverride('shadow')}
+                            onChange={(e) => setCardOverride('shadow', e.target.value)}
+                            className="w-full mt-1.5 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-[10px] font-mono text-luxury-100"
+                            placeholder="0 4px 12px rgba(0,0,0,0.3)"
+                          />
+                        )}
                       </div>
                     </div>
-                    <div>
-                      <span className="text-xs font-bold text-luxury-300">قياسات الظلال</span>
-                      <div className="space-y-2 mt-2">
-                        {(['sm', 'md', 'lg'] as const).map((k) => (
-                          <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
-                            <span className="text-[10px] text-luxury-400">{k}</span>
-                            <input aria-label={`ظل ${k}`} type="text" value={(editConfig.shadows as any)?.[k] || (DEFAULT_THEME_FALLBACK.shadows as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, shadows: { ...(p.shadows || DEFAULT_THEME_FALLBACK.shadows!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[10px] font-mono text-luxury-100 mt-1" />
-                          </div>
-                        ))}
+                  </AdvancedSection>
+
+                  {/* 4 — الشارات (colors.badge.*). */}
+                  <AdvancedSection
+                    title="الشارات"
+                    desc="شارات «الجديد» والتنبيهات الصغيرة على الأطباق."
+                    preview={
+                      <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
+                        <BadgeTokensSample />
+                      </ThemeTokensScope>
+                    }
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <ThemeColorField
+                        clearable
+                        label="خلفية الشارة"
+                        value={groupColor('badge', 'bg')}
+                        onChange={(hex) => setGroupColor('badge', 'bg', hex)}
+                        onClear={() => setGroupColor('badge', 'bg', null)}
+                      />
+                      <ThemeColorField
+                        clearable
+                        label="لون نص الشارة"
+                        value={groupColor('badge', 'text')}
+                        onChange={(hex) => setGroupColor('badge', 'text', hex)}
+                        onClear={() => setGroupColor('badge', 'text', null)}
+                      />
+                    </div>
+                  </AdvancedSection>
+
+                  {/* 5 — التصنيفات (colors.category.*). */}
+                  <AdvancedSection
+                    title="التصنيفات"
+                    desc="شرائط تصنيفات القائمة — العادي والنشط."
+                    preview={
+                      <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
+                        <CategoryTokensSample />
+                      </ThemeTokensScope>
+                    }
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <ThemeColorField
+                        clearable
+                        label="خلفية التصنيف"
+                        value={groupColor('category', 'bg')}
+                        onChange={(hex) => setGroupColor('category', 'bg', hex)}
+                        onClear={() => setGroupColor('category', 'bg', null)}
+                      />
+                      <ThemeColorField
+                        clearable
+                        label="لون نص التصنيف"
+                        value={groupColor('category', 'text')}
+                        onChange={(hex) => setGroupColor('category', 'text', hex)}
+                        onClear={() => setGroupColor('category', 'text', null)}
+                      />
+                      <ThemeColorField
+                        clearable
+                        label="خلفية التصنيف النشط"
+                        hint="عند تحديدها تُطفأ صورة تدرّج الهوية تلقائيًا فيظهر اللون وحده."
+                        value={groupColor('category', 'activeBg')}
+                        onChange={(hex) => setGroupColor('category', 'activeBg', hex)}
+                        onClear={() => setGroupColor('category', 'activeBg', null)}
+                      />
+                      <ThemeColorField
+                        clearable
+                        label="لون نص التصنيف النشط"
+                        value={groupColor('category', 'activeText')}
+                        onChange={(hex) => setGroupColor('category', 'activeText', hex)}
+                        onClear={() => setGroupColor('category', 'activeText', null)}
+                      />
+                    </div>
+                  </AdvancedSection>
+
+                  {/* 6 — ألوان الحالة (unchanged scalar behavior). */}
+                  <AdvancedSection title="ألوان الحالة" desc="رسائل النجاح والتنبيه والخطأ.">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {statusColorFields.map((f) => (
+                        <ThemeColorField
+                          key={f.key}
+                          label={f.key === 'success' ? 'رسائل النجاح' : f.label}
+                          value={colorValue(f.key)}
+                          defaultValue={(DEFAULT_THEME_FALLBACK.colors as any)[f.key]}
+                          onChange={setColor(f.key)}
+                        />
+                      ))}
+                    </div>
+                  </AdvancedSection>
+
+                  {/* 7 — القياسات (exact corner/shadow scales — the derivation source). */}
+                  <AdvancedSection title="القياسات" desc="سُلّم الزوايا والظلال — مصدر القيم المشتقة للبطاقات والأزرار والشارات.">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <span className="text-xs font-bold text-luxury-300">قياسات الزوايا</span>
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {(['sm', 'md', 'lg', 'xl'] as const).map((k) => (
+                            <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
+                              <span className="text-[10px] text-luxury-400">{k}</span>
+                              <input aria-label={`زاوية ${k}`} type="text" value={(editConfig.radius as any)?.[k] || (DEFAULT_THEME_FALLBACK.radius as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, radius: { ...(p.radius || DEFAULT_THEME_FALLBACK.radius!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[11px] font-mono text-luxury-100 mt-1" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-luxury-300">قياسات الظلال</span>
+                        <div className="space-y-2 mt-2">
+                          {(['sm', 'md', 'lg'] as const).map((k) => (
+                            <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
+                              <span className="text-[10px] text-luxury-400">{k}</span>
+                              <input aria-label={`ظل ${k}`} type="text" value={(editConfig.shadows as any)?.[k] || (DEFAULT_THEME_FALLBACK.shadows as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, shadows: { ...(p.shadows || DEFAULT_THEME_FALLBACK.shadows!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[10px] font-mono text-luxury-100 mt-1" />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  </AdvancedSection>
                 </div>
               </details>
             </>

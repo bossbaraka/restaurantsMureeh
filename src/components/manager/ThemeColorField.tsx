@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Copy, RotateCcw, X } from 'lucide-react';
+import { Check, Copy, Eraser, RotateCcw, Wand2, X } from 'lucide-react';
 import { extractAlpha, formatColorOutput, hslToRgb, parseColor, rgbaCss, rgbToHex, rgbToHsl, type Hsl, type Rgb } from '../../theme/brandTheme';
 
 /**
@@ -32,6 +32,16 @@ interface ThemeColorFieldProps {
    * alpha < 1 — plain fields keep the HEX6-only contract.
    */
   allowAlpha?: boolean;
+  /**
+   * OPTIONAL-OVERRIDE MODE (the per-component groups of «تخصيص متقدم»).
+   * A clearable field may hold NO value: it then renders «تلقائي» — the engine
+   * keeps its inherited/derived resolution — and NEVER a fabricated fallback.
+   * While a value is set, «إزالة التخصيص» removes the override (via `onClear`)
+   * so the token returns to inheritance.
+   */
+  clearable?: boolean;
+  /** Removes the override (used with `clearable`). Must delete the stored key — not replace it. */
+  onClear?: () => void;
 }
 
 const HUE_RANGE_BACKGROUND =
@@ -56,7 +66,14 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
   hint,
   compact = false,
   allowAlpha = false,
+  clearable = false,
+  onClear,
 }) => {
+  // Clearable fields may legitimately hold NO value («تلقائي» — inherited /
+  // derived upstream). That state is representational: no hex is invented for
+  // it; the editor shows a placeholder and the engine keeps its own fallback.
+  const hasValue = typeof value === 'string' && value.trim() !== '';
+  const isAuto = clearable === true && !hasValue;
   const resolved = toHexOrNull(value) || toHexOrNull(defaultValue) || '#000000';
   const hsl = useMemo<Hsl>(() => rgbToHsl(parseColor(resolved) as Rgb), [resolved]);
   const alphaEnabled = allowAlpha === true;
@@ -78,13 +95,16 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
     setAlpha(extractAlpha(value) ?? 1);
   }
 
-  // Keep the text draft in sync with EXTERNAL value changes (preset clicks)
-  // by adjusting state during render — the React-recommended pattern here;
-  // an effect would cascade an extra render on every keystroke round-trip.
-  const [lastExternal, setLastExternal] = useState(resolved);
-  if (lastExternal !== resolved) {
-    setLastExternal(resolved);
-    setHexDraft(resolved);
+  // Keep the text draft in sync with EXTERNAL value changes (preset clicks,
+  // theme load, clear-to-auto) by adjusting state during render — the
+  // React-recommended pattern here; an effect would cascade an extra render on
+  // every keystroke round-trip. The «تلقائي» state syncs to EMPTY, never to a
+  // fabricated hex.
+  const syncedHex = isAuto ? '' : resolved;
+  const [lastExternal, setLastExternal] = useState(syncedHex);
+  if (lastExternal !== syncedHex) {
+    setLastExternal(syncedHex);
+    setHexDraft(syncedHex);
   }
 
   // Dismiss on outside pointer / Escape.
@@ -142,7 +162,7 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
       }
       onChange(parsed);
     },
-    [onChange, resolved, alphaEnabled]
+    [onChange, resolved, alphaEnabled, isAuto]
   );
 
   const handleCopy = useCallback(async () => {
@@ -186,31 +206,49 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
     <div ref={rootRef} className="relative">
       <div className="flex items-center justify-between gap-2 mb-1">
         <span className="text-[11px] text-luxury-300 font-bold">{label}</span>
-        {resetTarget && resetTarget !== resolved && (
-          <button
-            type="button"
-            onClick={() => onChange(resetTarget)}
-            className="p-1 rounded-md text-luxury-500 hover:text-luxury-200 hover:bg-luxury-800 transition-colors"
-            title={`إعادة التعيين إلى ${resetTarget}`}
-            aria-label={`إعادة تعيين لون ${label}`}
-          >
-            <RotateCcw className="w-3 h-3" />
-          </button>
-        )}
+        <span className="flex items-center gap-0.5">
+          {clearable && hasValue && (
+            <button
+              type="button"
+              onClick={() => onClear?.()}
+              className="p-1 rounded-md text-luxury-500 hover:text-red-300 hover:bg-luxury-800 transition-colors"
+              title="إزالة التخصيص — تعود القيمة للوراثة"
+              aria-label={`إزالة تخصيص ${label}`}
+            >
+              <Eraser className="w-3 h-3" />
+            </button>
+          )}
+          {resetTarget && resetTarget !== resolved && (
+            <button
+              type="button"
+              onClick={() => onChange(resetTarget)}
+              className="p-1 rounded-md text-luxury-500 hover:text-luxury-200 hover:bg-luxury-800 transition-colors"
+              title={`إعادة التعيين إلى ${resetTarget}`}
+              aria-label={`إعادة تعيين لون ${label}`}
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
+          )}
+        </span>
       </div>
 
       <div className="flex items-center gap-1.5">
-        {/* Swatch — opens the picker */}
+        {/* Swatch — opens the picker. In «تلقائي» mode it is a dashed, colourless
+            affordance: no fallback hex is ever painted as the field's value. */}
         <button
           type="button"
           onClick={() => setOpen((prev) => !prev)}
-          className={`relative shrink-0 rounded-lg border border-luxury-700 overflow-hidden transition-shadow cursor-pointer ${open ? 'ring-2 ring-gold-500/60' : ''}`}
-          style={{ background: displayColor }}
-          title={`${label} — ${resolved}`}
-          aria-label={`${label}: فتح منتقي الألوان`}
+          className={`relative shrink-0 rounded-lg border overflow-hidden transition-shadow cursor-pointer ${isAuto ? 'border-dashed border-luxury-600 bg-luxury-950 flex items-center justify-center' : 'border-luxury-700'} ${open ? 'ring-2 ring-gold-500/60' : ''}`}
+          style={isAuto ? undefined : { background: displayColor }}
+          title={isAuto ? `${label} — تلقائي (يتبع الثيم)` : `${label} — ${resolved}`}
+          aria-label={isAuto ? `${label}: تلقائي — افتح منتقي الألوان للتخصيص` : `${label}: فتح منتقي الألوان`}
           aria-expanded={open}
         >
-          <span className={compact ? 'block w-8 h-8' : 'block w-9 h-9'} />
+          <span className={compact ? 'block w-8 h-8' : 'block w-9 h-9'}>
+            {isAuto && (
+              <Wand2 className="w-3.5 h-3.5 text-luxury-500 absolute inset-0 m-auto" aria-hidden="true" />
+            )}
+          </span>
         </button>
 
         {/* HEX input */}
@@ -229,8 +267,8 @@ export const ThemeColorField: React.FC<ThemeColorFieldProps> = ({
           spellCheck={false}
           maxLength={alphaEnabled ? 40 : 7}
           className="flex-1 min-w-0 bg-luxury-950 border border-luxury-800 rounded-lg px-2 py-1.5 font-mono text-[11px] text-luxury-100 text-left focus:border-gold-500/60"
-          placeholder="#AABBCC"
-          aria-label={`قيمة اللون ${label} بصيغة HEX`}
+          placeholder={clearable ? 'تلقائي' : '#AABBCC'}
+          aria-label={isAuto ? `${label}: تلقائي — اكتب HEX للتخصيص` : `قيمة اللون ${label} بصيغة HEX`}
         />
       </div>
 
