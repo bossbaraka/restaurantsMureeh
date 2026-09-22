@@ -117,6 +117,14 @@ const FIX = { created: {} };
 
 let orderSeq = 100000;
 let tableSeq = 0;
+// Unique per-process counter for matrix POST /tables bodies. The old
+// `800 + Math.floor(Math.random() * 100)` draw had only 100 possible values
+// and both the RESTAURANT_MANAGER and PLATFORM_ADMIN matrix loops create a
+// table in restaurant A every run — when the two draws matched, the second
+// got a 409 («يوجد طاولة بهذا الرقم بالفعل») and the suite flaked ~1% of runs.
+// seed() resets the DB at suite start, so a monotonic counter is collision-free
+// in-run and stays inside the API's 1..5000 tableNumber range.
+let matrixTableSeq = 0;
 async function makeFixtures(tag) {
   const a = ctx.restaurantA.id;
   const nextNum = () => (orderSeq += 1);
@@ -207,7 +215,7 @@ function matrixEndpoints(f) {
     { id: 'GET /tables', cat: 'Tables', method: 'GET', path: '/api/manager/tables', allow: ALL_TENANT_ROLES },
     {
       id: 'POST /tables', cat: 'Tables', method: 'POST', path: '/api/manager/tables', allow: MANAGER_ONLY,
-      body: () => ({ tableNumber: 800 + Math.floor(Math.random() * 100), capacity: 2 }),
+      body: () => ({ tableNumber: 800 + (matrixTableSeq += 1), capacity: 2 }),
     },
     {
       id: 'PUT /tables/:id', cat: 'Tables', method: 'PUT', path: () => `/api/manager/tables/${f.table.id}`,
