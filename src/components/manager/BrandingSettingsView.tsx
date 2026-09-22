@@ -10,6 +10,7 @@ import {
   CORNER_STYLE_OPTIONS,
   DENSITY_OPTIONS,
   EDITOR_FONTS,
+  EDITOR_HEADING_FONTS,
   applyPresetToDraft,
   detachPreset,
   toDraft,
@@ -89,16 +90,18 @@ const SOCIAL_FIELDS: Array<{
 const asDraft = (cfg: ThemeConfig, presetId: string | null): ThemeDraft => toDraft(cfg, presetId);
 
 
-// Exactly the five faces the server contract persists (THEME_FONT_KEYS) and
-// the five the document actually loads — a picker option outside this set
-// could never survive a save (strict schema) and would render as a fallback
-// stack anyway, so it must not be offered.
+// Exactly the faces the server contract persists (THEME_FONT_KEYS) and the
+// document actually loads — a picker option outside this set could never
+// survive a save (strict schema) and would render as a fallback stack
+// anyway, so it must not be offered.
 const FONT_OPTIONS: Array<{ id: ThemeFontKey; label: string; family: string }> = [
-  { id: 'auto', label: 'تلقائي', family: 'system-ui' },
-  { id: 'tajawal', label: 'Tajawal', family: 'Tajawal' },
-  { id: 'cairo', label: 'Cairo', family: 'Cairo' },
-  { id: 'amiri', label: 'Amiri', family: 'Amiri' },
-  { id: 'cormorant', label: 'Cormorant', family: 'Cormorant Garamond' },
+  { id: 'auto', label: 'تلقائي', family: 'Alexandria, Tajawal, system-ui, sans-serif' },
+  { id: 'alexandria', label: 'Alexandria', family: 'Alexandria, Tajawal, sans-serif' },
+  { id: 'tajawal', label: 'Tajawal', family: 'Tajawal, sans-serif' },
+  { id: 'cairo', label: 'Cairo', family: 'Cairo, sans-serif' },
+  { id: 'kufi', label: 'Noto Kufi', family: '"Noto Kufi Arabic", Alexandria, sans-serif' },
+  { id: 'amiri', label: 'Amiri', family: 'Amiri, serif' },
+  { id: 'cormorant', label: 'Cormorant', family: '"Cormorant Garamond", Alexandria, serif' },
 ];
 
 const BG_TYPES: Array<{ id: BackgroundType; label: string }> = [
@@ -161,7 +164,7 @@ const DEFAULT_THEME_FALLBACK: ThemeConfig = {
 // never sees an unknown key, and every conversion is spelled out
 // field-by-field — no blind spreading of the UI object into the request.
 
-type ServerThemeFontKey = 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'auto';
+type ServerThemeFontKey = 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'auto' | 'alexandria' | 'kufi';
 type ServerBackgroundType = 'solid' | 'gradient' | 'image' | 'image+overlay' | 'none';
 type ServerBackgroundSize = 'cover' | 'contain' | 'auto';
 
@@ -185,6 +188,7 @@ interface ServerThemePayload {
   shadows?: Partial<Record<'sm' | 'md' | 'lg', string>>;
   typography?: {
     fontFamily?: ServerThemeFontKey;
+    headingFont?: ServerThemeFontKey;
     headingWeight?: number;
     bodyWeight?: number;
   };
@@ -194,7 +198,7 @@ interface ServerThemePayload {
   };
 }
 
-const SERVER_THEME_FONT_KEYS: readonly ServerThemeFontKey[] = ['tajawal', 'cairo', 'amiri', 'cormorant', 'auto'];
+const SERVER_THEME_FONT_KEYS: readonly ServerThemeFontKey[] = ['tajawal', 'cairo', 'amiri', 'cormorant', 'auto', 'alexandria', 'kufi'];
 const SERVER_BACKGROUND_TYPES: readonly ServerBackgroundType[] = ['solid', 'gradient', 'image', 'image+overlay', 'none'];
 const SERVER_BACKGROUND_SIZES: readonly ServerBackgroundSize[] = ['cover', 'contain', 'auto'];
 // Mirrors the server's `overlayColor` validation (HEX, rgb()/rgba(), hsl()/hsla()).
@@ -424,6 +428,16 @@ export function toServerThemePayload(
     // sent — they are not part of the server contract.
     if (SERVER_THEME_FONT_KEYS.includes(ui.typography.fontFamily as ServerThemeFontKey)) {
       typography.fontFamily = ui.typography.fontFamily as ServerThemeFontKey;
+    }
+    // The heading face is sent only as a real explicit choice: 'auto'/absent
+    // means "same as body", which the contract expresses as an ABSENT key
+    // (the derivation then inherits the body stack).
+    if (
+      ui.typography.headingFont &&
+      ui.typography.headingFont !== 'auto' &&
+      SERVER_THEME_FONT_KEYS.includes(ui.typography.headingFont as ServerThemeFontKey)
+    ) {
+      typography.headingFont = ui.typography.headingFont as ServerThemeFontKey;
     }
     const headingWeight = normalizeThemeFontWeight(ui.typography.headingWeight);
     if (headingWeight !== undefined) typography.headingWeight = headingWeight;
@@ -1091,22 +1105,47 @@ export const BrandingSettingsView: React.FC = () => {
                 <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
                   <Type className="w-4 h-4 text-gold-400" /> اختر الخط
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  {EDITOR_FONTS.map((f) => {
-                    const sel = themeDraft.font === f.id;
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        aria-pressed={sel}
-                        onClick={() => updateDraft((d) => ({ ...d, font: f.id }))}
-                        className={`p-2.5 rounded-xl border text-xs ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}
-                        style={{ fontFamily: f.family }}
-                      >
-                        {f.label}
-                      </button>
-                    );
-                  })}
+                <div>
+                  <span className="text-xs font-bold text-luxury-300">خط النص</span>
+                  <p className="text-[10px] text-luxury-500 mt-0.5 mb-2">أسماء الأطباق والأوصاف والأزرار — معظم المنيو.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {EDITOR_FONTS.map((f) => {
+                      const sel = themeDraft.font === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          aria-pressed={sel}
+                          onClick={() => updateDraft((d) => ({ ...d, font: f.id }))}
+                          className={`p-2.5 rounded-xl border text-xs ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}
+                          style={{ fontFamily: f.family }}
+                        >
+                          {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-luxury-300">خط العناوين</span>
+                  <p className="text-[10px] text-luxury-500 mt-0.5 mb-2">اسم المطعم وعناوين الأقسام — «مثل خط النص» يجعل العناوين تتبع الخط الأساسي.</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {EDITOR_HEADING_FONTS.map((f) => {
+                      const sel = themeDraft.headingFont === f.id;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          aria-pressed={sel}
+                          onClick={() => updateDraft((d) => ({ ...d, headingFont: f.id }))}
+                          className={`p-2.5 rounded-xl border text-xs ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}
+                          style={f.family ? { fontFamily: f.family } : undefined}
+                        >
+                          {f.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
                   <span className="text-xs font-bold text-luxury-300">كثافة العرض</span>
@@ -1150,6 +1189,33 @@ export const BrandingSettingsView: React.FC = () => {
                         (editConfig.colors as any)?.[key] || (DEFAULT_THEME_FALLBACK.colors as any)[key];
                       const setColor = (key: string) => (hex: string) =>
                         setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
+                      // Card group (colors.card.bg/border → --m-card-bg/--m-card-border).
+                      // ABSENT means "automatic": the customer menu derives the card
+                      // surface from the brand per-mode, so an unset field never
+                      // locks the cards to a fixed colour in the wrong mode.
+                      const isLightDraft = themeDraft.appearance === 'light';
+                      const cardFields: Array<{ key: 'bg' | 'border'; label: string; seed: string }> = [
+                        { key: 'bg', label: 'لون البطاقات', seed: isLightDraft ? '#FFFFFF' : '#15171A' },
+                        { key: 'border', label: 'حدّ البطاقات', seed: isLightDraft ? '#E3E7EE' : '#2A2D32' },
+                      ];
+                      const setCardField = (key: 'bg' | 'border') => (hex: string) =>
+                        setEditConfig((p) => {
+                          const colors: any = { ...(p.colors || {}) };
+                          colors.card = { ...(colors.card || {}), [key]: hex };
+                          return { ...p, colors } as any;
+                        });
+                      const clearCardField = (key: 'bg' | 'border') => () =>
+                        setEditConfig((p) => {
+                          const colors: any = { ...(p.colors || {}) };
+                          if (!colors.card) return p;
+                          const card: any = { ...colors.card };
+                          delete card[key];
+                          // A truly empty group is removed so "absent" stays
+                          // representable (never serialized as colors.card = {}).
+                          if (Object.keys(card).length === 0) delete colors.card;
+                          else colors.card = card;
+                          return { ...p, colors } as any;
+                        });
                       const groups: Array<{ title: string; desc?: string; fields: Array<{ key: string; label: string; hint?: string }> }> = [
                         {
                           title: 'ألوان محددة يدوياً',
@@ -1157,7 +1223,6 @@ export const BrandingSettingsView: React.FC = () => {
                           fields: [
                             { key: 'secondary', label: 'لون ثانوي' },
                             { key: 'background', label: 'خلفية القائمة' },
-                            { key: 'surface', label: 'سطح البطاقات' },
                             { key: 'border', label: 'لون الحدود' },
                             { key: 'textPrimary', label: 'النص الأساسي' },
                             { key: 'textSecondary', label: 'النص الثانوي' },
@@ -1173,7 +1238,58 @@ export const BrandingSettingsView: React.FC = () => {
                           ],
                         },
                       ];
-                      return groups.map((group) => (
+                      return (
+                        <>
+                      {/* Cards — the controls that actually drive the rendered card
+                          surface (--m-card-bg/--m-card-border). The previous «سطح
+                          البطاقات» field wrote colors.surface, a token with no
+                          consumer, so it never changed the cards. */}
+                      <div>
+                        <span className="text-xs font-bold text-luxury-200">البطاقات</span>
+                        <p className="text-[10px] text-luxury-500 mt-0.5 mb-2">اتركها «تلقائي» ليُشتق لون البطاقة من علامتك ويتبدل مع الفاتح/الداكن.</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          {cardFields.map((f) => {
+                            const current = ((editConfig.colors as any)?.card?.[f.key] as string | undefined) || '';
+                            if (!current) {
+                              return (
+                                <div key={f.key} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2.5">
+                                  <span className="text-xs font-bold text-luxury-200 block">{f.label}</span>
+                                  <div className="flex items-center justify-between mt-2 gap-2">
+                                    <span className="text-[10px] text-luxury-500">تلقائي — يتبع الثيم</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setCardField(f.key)(f.seed)}
+                                      className="text-[10px] font-bold text-gold-300 bg-gold-500/10 border border-gold-500/40 rounded-lg px-2 py-1"
+                                    >
+                                      تخصيص
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={f.key} className="relative">
+                                <ThemeColorField
+                                  label={f.label}
+                                  hint="ثابت — لا يتبدل مع الوضع"
+                                  value={current}
+                                  defaultValue={f.seed}
+                                  onChange={setCardField(f.key)}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={clearCardField(f.key)}
+                                  title="إعادة إلى تلقائي"
+                                  className="absolute top-0 left-0 text-[10px] font-bold text-luxury-400 hover:text-red-300 bg-luxury-900 border border-luxury-700 rounded-lg px-1.5 py-0.5"
+                                >
+                                  إزالة
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      {groups.map((group) => (
                         <div key={group.title}>
                           <span className="text-xs font-bold text-luxury-200">{group.title}</span>
                           {group.desc && <p className="text-[10px] text-luxury-500 mt-0.5 mb-2">{group.desc}</p>}
@@ -1190,7 +1306,9 @@ export const BrandingSettingsView: React.FC = () => {
                             ))}
                           </div>
                         </div>
-                      ));
+                      ))}
+                        </>
+                      );
                     })()}
                   </div>
 

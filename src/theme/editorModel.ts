@@ -39,7 +39,8 @@ import type { ThemeConfig, ThemeMode } from '../types/restaurant';
 export type CardStyle = 'flat' | 'soft' | 'elevated';
 export type CornerStyle = 'sharp' | 'rounded' | 'pill';
 export type Density = 'compact' | 'comfortable' | 'spacious';
-export type EditorFont = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
+/** `auto` on `font` = the platform body face; on `headingFont` = "same as body". */
+export type EditorFont = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'alexandria' | 'kufi';
 
 /** A real visual preset — not just a pair of colours. */
 export interface ThemePreset {
@@ -51,6 +52,8 @@ export interface ThemePreset {
   cardStyle: CardStyle;
   cornerStyle: CornerStyle;
   font: EditorFont;
+  /** Heading face; 'auto' = inherits the body face. */
+  headingFont: EditorFont;
   /** Appearance the preset was designed around. */
   appearance: ThemeMode;
 }
@@ -72,6 +75,8 @@ export interface ThemeDraft {
   cardStyle: CardStyle;
   cornerStyle: CornerStyle;
   font: EditorFont;
+  /** Heading face control («خط العناوين»). 'auto' inherits the body face. */
+  headingFont: EditorFont;
   density: Density;
   background: ThemeConfig['background'];
   /**
@@ -83,13 +88,16 @@ export interface ThemeDraft {
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: 'royal-gold', label: 'ذهبي ملكي', desc: 'كلاسيكي فاخر دافئ', primary: '#D4AF37', accent: '#8C6D1F', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'cormorant', appearance: 'dark' },
-  { id: 'midnight-blue', label: 'أزرق ليلي', desc: 'هادئ وعصري وأنيق', primary: '#4F7CFF', accent: '#1E2F6E', cardStyle: 'soft', cornerStyle: 'rounded', font: 'tajawal', appearance: 'dark' },
-  { id: 'emerald', label: 'زمردي ملكي', desc: 'انتعاش وثقة راقية', primary: '#10B981', accent: '#065F46', cardStyle: 'soft', cornerStyle: 'pill', font: 'cairo', appearance: 'light' },
-  { id: 'amber', label: 'عنبري دافئ', desc: 'طاقة ودفء ترحيبي', primary: '#F59E0B', accent: '#92400E', cardStyle: 'elevated', cornerStyle: 'pill', font: 'cairo', appearance: 'light' },
-  { id: 'rose', label: 'وردي فاخر', desc: 'ناعم للمقاهي والبوتيك', primary: '#EC4899', accent: '#831843', cardStyle: 'soft', cornerStyle: 'pill', font: 'tajawal', appearance: 'light' },
-  { id: 'wine', label: 'نبيذي داكن', desc: 'فخامة مطاعم اللحوم', primary: '#C0392B', accent: '#5C1A12', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'amiri', appearance: 'dark' },
-  { id: 'silver', label: 'فضي معدني', desc: 'حديث بسيط نظيف', primary: '#94A3B8', accent: '#3E4A5B', cardStyle: 'flat', cornerStyle: 'sharp', font: 'tajawal', appearance: 'light' },
+  // Font roles are body + heading pairs (the Arabic typography system):
+  // every preset pairs a readable body face with a display face that suits
+  // its character — never a Latin-only face for Arabic content.
+  { id: 'royal-gold', label: 'ذهبي ملكي', desc: 'كلاسيكي فاخر دافئ', primary: '#D4AF37', accent: '#8C6D1F', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'alexandria', headingFont: 'kufi', appearance: 'dark' },
+  { id: 'midnight-blue', label: 'أزرق ليلي', desc: 'هادئ وعصري وأنيق', primary: '#4F7CFF', accent: '#1E2F6E', cardStyle: 'soft', cornerStyle: 'rounded', font: 'alexandria', headingFont: 'cairo', appearance: 'dark' },
+  { id: 'emerald', label: 'زمردي ملكي', desc: 'انتعاش وثقة راقية', primary: '#10B981', accent: '#065F46', cardStyle: 'soft', cornerStyle: 'pill', font: 'alexandria', headingFont: 'cairo', appearance: 'light' },
+  { id: 'amber', label: 'عنبري دافئ', desc: 'طاقة ودفء ترحيبي', primary: '#F59E0B', accent: '#92400E', cardStyle: 'elevated', cornerStyle: 'pill', font: 'alexandria', headingFont: 'cairo', appearance: 'light' },
+  { id: 'rose', label: 'وردي فاخر', desc: 'ناعم للمقاهي والبوتيك', primary: '#EC4899', accent: '#831843', cardStyle: 'soft', cornerStyle: 'pill', font: 'alexandria', headingFont: 'auto', appearance: 'light' },
+  { id: 'wine', label: 'نبيذي داكن', desc: 'فخامة مطاعم اللحوم', primary: '#C0392B', accent: '#5C1A12', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'alexandria', headingFont: 'amiri', appearance: 'dark' },
+  { id: 'silver', label: 'فضي معدني', desc: 'حديث بسيط نظيف', primary: '#94A3B8', accent: '#3E4A5B', cardStyle: 'flat', cornerStyle: 'sharp', font: 'alexandria', headingFont: 'auto', appearance: 'light' },
 ];
 
 /** Corner scales. One choice replaces four free-text CSS boxes. */
@@ -192,7 +200,7 @@ export function toDraft(config: ThemeConfig | null | undefined, presetId: string
     overrides.shadows = cfg.shadows;
   }
   if (cfg.typography) {
-    const { fontFamily: _f, headingWeight: _h, bodyWeight: _b, ...restTypography } =
+    const { fontFamily: _f, headingFont: _hf, headingWeight: _h, bodyWeight: _b, ...restTypography } =
       cfg.typography as unknown as Record<string, unknown>;
     if (Object.keys(restTypography).length) {
       overrides.typography = restTypography as unknown as ThemeConfig['typography'];
@@ -208,6 +216,8 @@ export function toDraft(config: ThemeConfig | null | undefined, presetId: string
     cardStyle: card,
     cornerStyle: corner,
     font: ((cfg.typography?.fontFamily as EditorFont) || 'auto'),
+    // Absent stored heading face = the inherit choice («تلقائي — مثل خط النص»).
+    headingFont: ((cfg.typography?.headingFont as EditorFont) || 'auto'),
     density: densityFromWeights(cfg.typography),
     background: cfg.background,
     overrides,
@@ -234,6 +244,10 @@ export function toThemeConfig(draft: ThemeDraft): ThemeConfig {
     typography: {
       ...(draft.overrides.typography || {}),
       fontFamily: draft.font,
+      // 'auto' on the heading control means INHERIT the body face: the key is
+      // omitted (absent in the contract), so the derivation falls back to the
+      // body stack and no stale override can linger.
+      ...(draft.headingFont !== 'auto' ? { headingFont: draft.headingFont } : {}),
       ...DENSITY_WEIGHTS[draft.density],
     } as unknown as ThemeConfig['typography'],
     cards: {
@@ -260,6 +274,7 @@ export function applyPresetToDraft(draft: ThemeDraft, presetId: string): ThemeDr
     cardStyle: preset.cardStyle,
     cornerStyle: preset.cornerStyle,
     font: preset.font,
+    headingFont: preset.headingFont,
     appearance: preset.appearance,
   };
 }
@@ -270,11 +285,28 @@ export function detachPreset(draft: ThemeDraft): ThemeDraft {
 }
 
 export const EDITOR_FONTS: Array<{ id: EditorFont; label: string; family: string }> = [
-  { id: 'auto', label: 'تلقائي', family: 'system-ui' },
-  { id: 'tajawal', label: 'Tajawal', family: 'Tajawal' },
-  { id: 'cairo', label: 'Cairo', family: 'Cairo' },
-  { id: 'amiri', label: 'Amiri', family: 'Amiri' },
-  { id: 'cormorant', label: 'Cormorant', family: 'Cormorant Garamond' },
+  { id: 'auto', label: 'تلقائي', family: 'Alexandria, Tajawal, system-ui, sans-serif' },
+  { id: 'alexandria', label: 'Alexandria', family: 'Alexandria, Tajawal, sans-serif' },
+  { id: 'tajawal', label: 'Tajawal', family: 'Tajawal, sans-serif' },
+  { id: 'cairo', label: 'Cairo', family: 'Cairo, sans-serif' },
+  { id: 'kufi', label: 'Noto Kufi', family: '"Noto Kufi Arabic", Alexandria, sans-serif' },
+  { id: 'amiri', label: 'Amiri', family: 'Amiri, serif' },
+  { id: 'cormorant', label: 'Cormorant', family: '"Cormorant Garamond", Alexandria, serif' },
+];
+
+/**
+ * The heading-face picker («خط العناوين»). 'auto' here means "مثل خط النص"
+ * (inherit the body face) — rendered with a null family so the tile inherits
+ * the page font rather than promising a specific one.
+ */
+export const EDITOR_HEADING_FONTS: Array<{ id: EditorFont; label: string; family: string | null }> = [
+  { id: 'auto', label: 'مثل خط النص', family: null },
+  { id: 'alexandria', label: 'Alexandria', family: 'Alexandria, Tajawal, sans-serif' },
+  { id: 'tajawal', label: 'Tajawal', family: 'Tajawal, sans-serif' },
+  { id: 'cairo', label: 'Cairo', family: 'Cairo, sans-serif' },
+  { id: 'kufi', label: 'Noto Kufi', family: '"Noto Kufi Arabic", Alexandria, sans-serif' },
+  { id: 'amiri', label: 'Amiri', family: 'Amiri, serif' },
+  { id: 'cormorant', label: 'Cormorant', family: '"Cormorant Garamond", Alexandria, serif' },
 ];
 
 export const CARD_STYLE_OPTIONS: Array<{ id: CardStyle; label: string; desc: string }> = [

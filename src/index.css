@@ -168,31 +168,24 @@
 }
 
 /* ==========================================================================
-   LIGHT APPEARANCE — resolved-mode surface layer
+   LIGHT APPEARANCE — resolved-mode surface layer  [RETIRED — Phase 6]
    --------------------------------------------------------------------------
-   applyEffectiveTheme() sets data-theme to the RESOLVED mode ('light' |
-   'dark', never 'auto'). Brand identity tokens (--brand-primary/-accent and
-   their contrast-adapted -strong roles) are re-derived per mode by the theme
-   engine in JS; this block re-derives only the SURFACE and chrome-ink tokens
-   so the same components read correctly on both canvases.
-   ========================================================================== */
-:root[data-theme='light'],
-.customer-theme-scope[data-appearance='light'] {
-  /* NOTE: no `color-scheme` here. That property is PLATFORM state, owned by
-     PlatformAppearanceProvider on <html>. A restaurant choosing a light menu
-     must not restyle the browser chrome of the whole product — that was part
-     of the platform/customer coupling.
+   This block used to re-derive the --menu-* family for light scopes in CSS.
+   It is REMOVED because it was doubly redundant and a drift surface:
 
-     The `:root[data-theme='light']` selector is retained only as a
-     COMPATIBILITY alias for the legacy attribute; the scope selector is the
-     canonical one. */
-  --menu-surface: color-mix(in srgb, var(--brand-soft) 62%, #ffffff);
-  --menu-surface-raised: color-mix(in srgb, var(--brand-soft-strong) 55%, #ffffff);
-  --menu-hairline: color-mix(in srgb, var(--brand-primary) 22%, transparent);
-  --menu-text-base: #3c4352;
-  --menu-text-strong: #10141b;
-  --menu-media-end: #e6e9ef;
-}
+     1. CustomerThemeProvider ALWAYS emits the mode-correct --menu-* aliases
+        INLINE on the scope element (buildCompatibilityAliases → surfaceTokens),
+        and inline custom properties beat any stylesheet selector — so this
+        block never painted a scoped menu.
+     2. The :root[data-theme='light'] half only mattered when the legacy
+        engine (applyEffectiveTheme) wrote data-theme onto <html> — a writer
+        that no longer exists in production.
+
+   The :root --menu-* defaults above STAY as dark-platform fallbacks for
+   stray pre-scope rendering paths; light menus are fully served by the
+   scope's inline tokens. The --menu-* surface ladder now has exactly ONE
+   derivation: semanticTokens.surfaceTokens().
+   ========================================================================== */
 
 /* ==========================================================================
    CUSTOMER THEME SCOPE
@@ -213,6 +206,19 @@
    ========================================================================== */
 .customer-theme-scope {
   display: contents;
+  /* Theme typography wiring (body weight). Inherited by every descendant
+     that does not set its own weight, so the editor's «كثافة العرض» control
+     actually reaches body text; utility classes (font-bold etc.) keep their
+     explicit weights. */
+  font-weight: var(--m-font-body-weight, 400);
+}
+/* The heading weight control reaches every designed heading spot: those all
+   carry the `font-serif` class, and the class's FAMILY already resolves to
+   var(--m-font-heading) via the Tailwind config. Utility font weights on the
+   same elements lose to this scoped rule by specificity — that is the intent:
+   one theme control, predictable headings. */
+.customer-theme-scope .font-serif {
+  font-weight: var(--m-font-heading-weight, 800);
 }
 
 /* Shared brand primitives used across the customer experience */
@@ -885,14 +891,14 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  /* colors.category.text/bg → --category-text/--category-bg (optional overrides). */
-  color: var(--category-text, color-mix(in srgb, var(--brand-muted) 70%, var(--menu-text-base)));
-  background: var(--category-bg, var(--menu-surface-raised));
-  border: 1px solid var(--menu-hairline);
+  /* colors.category.text/bg → --m-chip-text/--m-chip-bg (optional overrides). */
+  color: var(--m-chip-text, color-mix(in srgb, var(--brand-muted) 70%, var(--menu-text-base)));
+  background: var(--m-chip-bg, var(--menu-surface-raised));
+  border: 1px solid var(--m-hairline, var(--menu-hairline));
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 .menu-chip:hover {
-  color: var(--menu-text-strong);
+  color: var(--m-text, var(--menu-text-strong));
   border-color: var(--brand-line);
 }
 .menu-chip:active {
@@ -900,11 +906,11 @@
 }
 .menu-chip[data-active='true'] {
   /* colors.category.activeBg/activeText → the selected chip. When an explicit
-     activeBg color is provided the engine also emits --category-active-image:
+     activeBg color is provided the engine also emits --m-chip-active-image:
      none, so the color — not the brand gradient — paints. */
-  color: var(--category-active-text, var(--brand-ink));
-  background-color: var(--category-active-bg, transparent);
-  background-image: var(--category-active-image, var(--brand-fill));
+  color: var(--m-chip-active-text, var(--brand-ink));
+  background-color: var(--m-chip-active-bg, transparent);
+  background-image: var(--m-chip-active-image, var(--brand-fill));
   border-color: transparent;
   font-weight: 800;
   box-shadow: 0 6px 20px -10px var(--brand-glow);
@@ -957,8 +963,8 @@
   min-width: 0;
   max-width: 100%;
   padding: 0.4rem 1.6rem 0.4rem 0.7rem;
-  /* radius.md → inputs (same scale slot as buttons). */
-  border-radius: var(--radius-md, 10px);
+  /* radius.md → --m-radius-md (inputs, same scale slot as buttons). */
+  border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
   font-weight: 700;
   color: var(--menu-text-strong, #e6e9f0);
@@ -980,7 +986,7 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.4rem 0.6rem;
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
   font-weight: 700;
   color: var(--brand-muted);
@@ -1063,17 +1069,18 @@
   grid-template-columns: 100px minmax(0, 1fr);
   gap: 0.85rem;
   padding: 0.7rem;
-  /* Theme-driven card geometry: radius.card → --card-radius (falls back to
-     radius.lg at runtime), colors.card.shadow / shadows.* → --card-shadow.
+  /* Theme-driven card geometry: radius.card → --m-card-radius (falls back to
+     radius.lg at runtime), colors.card.shadow / shadows.* → --m-card-shadow.
      The inset highlight is a fixed material of this card, not themeable. */
-  border-radius: var(--card-radius, 20px);
+  border-radius: var(--m-card-radius, 20px);
   text-align: start;
-  /* colors.card.bg/border → --card-bg/--card-border (optional overrides). */
-  background: var(--card-bg, linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%));
-  border: 1px solid var(--card-border, var(--menu-hairline));
+  /* colors.card.bg/border → --m-card-bg/--m-card-border (optional overrides;
+     absent → the mode-aware derived gradient in --m-card-bg itself). */
+  background: var(--m-card-bg, linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%));
+  border: 1px solid var(--m-card-border, var(--menu-hairline));
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.035),
-    var(--card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
+    var(--m-card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (min-width: 640px) {
@@ -1139,7 +1146,9 @@
   border-radius: 15px;
   overflow: hidden;
   background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
-  border: 1px solid rgb(255 255 255 / 0.05);
+  /* Was rgb(255 255 255 / 0.05) — invisible white-glass on light menus;
+     the hairline token is the same subtle strength in both modes. */
+  border: 1px solid var(--m-hairline, rgb(255 255 255 / 0.05));
 }
 @media (min-width: 640px) {
   .menu-media {
@@ -1219,8 +1228,8 @@
   align-items: center;
   gap: 0.2rem;
   padding: 0.15rem 0.4rem;
-  /* radius.full → --badge-radius (pill scale slot shared by badge chips). */
-  border-radius: var(--badge-radius, 8px);
+  /* radius.full → --m-badge-radius (pill scale slot shared by badge chips). */
+  border-radius: var(--m-badge-radius, 8px);
   font-size: 9.5px;
   font-weight: 800;
   line-height: 1.5;
@@ -1234,14 +1243,14 @@
   background-image: var(--brand-fill);
 }
 .menu-badge--dark {
-  /* colors.badge.text/bg → --badge-text/--badge-bg (optional overrides). */
-  color: var(--badge-text, #e7ebf2);
-  background: var(--badge-bg, rgb(8 9 12 / 0.72));
+  /* colors.badge.text/bg → --m-badge-text/--m-badge-bg (optional overrides). */
+  color: var(--m-badge-text, #e7ebf2);
+  background: var(--m-badge-bg, rgb(8 9 12 / 0.72));
   border: 1px solid var(--theme-border, rgb(255 255 255 / 0.12));
 }
 .menu-badge--danger {
   color: #fff1f1;
-  background: color-mix(in srgb, var(--theme-error, rgb(190 32 45)) 85%, transparent);
+  background: color-mix(in srgb, var(--m-error, rgb(190 32 45)) 85%, transparent);
 }
 .menu-badge--signature {
   color: var(--brand-ink);
@@ -1257,9 +1266,9 @@
 }
 .menu-card__title {
   font-size: 14.5px;
-  font-weight: var(--font-heading-weight, 800);
+  font-weight: var(--m-font-heading-weight, 800);
   line-height: 1.35;
-  color: var(--theme-text-primary, #f4f6fa);
+  color: var(--m-text, #f4f6fa);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -1282,9 +1291,9 @@
 .menu-card__desc {
   margin-top: 0.3rem;
   font-size: 12px;
-  font-weight: var(--font-body-weight, 400);
+  font-weight: var(--m-font-body-weight, 400);
   line-height: 1.55;
-  color: var(--theme-text-secondary, #9aa3b2);
+  color: var(--m-text-muted, #9aa3b2);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1336,7 +1345,7 @@
 .menu-price__from {
   font-size: 9.5px;
   font-weight: 600;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
 }
 .menu-price__value {
   display: inline-flex;
@@ -1344,14 +1353,19 @@
   gap: 0.2rem;
   font-size: 17px;
   font-weight: 800;
-  color: var(--brand-primary-strong);
+  /* Price is a brand-identity role by design: it follows --m-brand-on-surface
+     (the contrast-adapted brand color), independently themeable via the Brand
+     section rather than a one-off price color that would drift from it. */
+  color: var(--m-brand-on-surface);
   font-variant-numeric: tabular-nums;
+  /* Western digits are Latin-script: mild negative tracking is safe here
+     (unlike on Arabic-joined text, where tracking is avoided). */
   letter-spacing: -0.01em;
 }
 .menu-price__currency {
   font-size: 11px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--brand-primary-strong) 75%, #ffffff);
+  color: color-mix(in srgb, var(--m-brand-on-surface) 75%, var(--m-text));
 }
 
 .menu-actions {
@@ -1366,14 +1380,14 @@
   align-items: center;
   gap: 0.3rem;
   padding: 0.45rem 0.8rem;
-  /* radius.md → --button-radius (the scale slot buttons derive from). */
-  border-radius: var(--button-radius, 12px);
+  /* radius.md → --m-radius-md (the scale slot buttons derive from). */
+  border-radius: var(--m-radius-md, 12px);
   font-size: 11.5px;
   font-weight: 800;
   /* colors.button.secondaryText/secondaryBg → the resting add-button role;
      its hover stays the brand-fill CTA so the label contrast stays guaranteed. */
-  color: var(--button-secondary-text, var(--brand-primary-strong));
-  background: var(--button-secondary-bg, rgb(var(--brand-primary-strong-rgb) / 0.12));
+  color: var(--m-button-secondary-text, var(--brand-primary-strong));
+  background: var(--m-button-secondary-bg, rgb(var(--brand-primary-strong-rgb) / 0.12));
   border: 1px solid rgb(var(--brand-primary-strong-rgb) / 0.34);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
@@ -1392,9 +1406,11 @@
   outline-offset: 2px;
 }
 .menu-add--customize {
-  color: var(--menu-text-strong, #eef1f6);
-  background: rgb(255 255 255 / 0.05);
-  border-color: rgb(255 255 255 / 0.1);
+  color: var(--m-text, #eef1f6);
+  /* Mode-aware subtle fill: the previous white-glass values were invisible
+     on light menus. Reads from the raised-surface channels + hairline. */
+  background: rgb(var(--m-surface-raised-rgb) / 0.65);
+  border-color: var(--m-hairline);
 }
 .menu-add--customize:hover {
   color: var(--brand-ink);
@@ -1480,9 +1496,10 @@
 }
 .menu-section-head__title {
   font-size: 19px;
-  font-weight: var(--font-heading-weight, 800);
-  color: var(--theme-text-primary, #f6f8fb);
-  letter-spacing: -0.01em;
+  font-weight: var(--m-font-heading-weight, 800);
+  color: var(--m-text, #f6f8fb);
+  /* No letter-spacing: negative tracking breaks the rhythm of Arabic-joined
+     glyphs (the tracked style belonged to Latin display type). */
 }
 .menu-section-head__sub {
   margin-top: 2px;
@@ -1859,7 +1876,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   --lm-title-face: 'Tajawal', 'Cairo', sans-serif;
   --lm-body-face: 'Tajawal', 'Cairo', system-ui, sans-serif;
   --lm-title-weight: 900;
-  --lm-title-tracking: -0.022em;
+  --lm-title-tracking: 0em; /* Arabic-joined glyphs must not be tracked. */
   --lm-eyebrow-spacing: 0.26em;
   --lm-ken-burns: 1.1;
   --lm-stagger: 70ms;
@@ -4052,14 +4069,16 @@ input[type='range'].saas-range::-moz-range-thumb {
   overflow: hidden;
   background: #0a0b0d; /* identical to the customer menu canvas */
   color: #f6f8fb;
-  /* Theme typography, never this layer's own: the theme token is first, so a
-     theme that swaps its display face re-types this page. The trailing family
-     is the platform's OWN Arabic face (the one index.html sets on <body>) — a
-     script-coverage fallback, never an identity: when a theme supplies a
-     Latin-only display face, Arabic still renders in the app's Arabic type
-     instead of in whatever the device happens to pick. */
-  --entry-font-display: var(--font-serif, Georgia, serif);
-  --entry-font-text: var(--font-sans, system-ui, -apple-system, sans-serif);
+  /* Theme typography, never this layer's own: the TENANT heading/body tokens
+     come first (--m-font-heading / --m-font, written by CustomerThemeProvider
+     on this ancestor scope), so a theme that swaps its display face re-types
+     the splash. Older resolution read the PLATFORM --font-serif (Amiri) /
+     --font-sans (Inter — never loaded), which silently overrode the tenant's
+     font with Amiri/system-ui regardless of the theme choice. The trailing
+     family is the product's own Arabic body face — a script-coverage
+     fallback, never an identity. */
+  --entry-font-display: var(--m-font-heading, var(--font-serif, Georgia, serif));
+  --entry-font-text: var(--m-font, var(--font-sans, system-ui, -apple-system, sans-serif));
   font-family: var(--entry-font-text), 'Tajawal', sans-serif;
   overscroll-behavior: contain;
   -webkit-tap-highlight-color: transparent;

@@ -377,7 +377,9 @@ export function resolveLiveProfile(
       ? "'Cormorant Garamond', 'Tajawal', serif"
       : "'Tajawal', 'Cairo', sans-serif",
     '--lm-title-weight': editorial ? '600' : '900',
-    '--lm-title-tracking': editorial ? '0.005em' : '-0.022em',
+    // Arabic titles keep 0 tracking (joined glyphs); the editorial Latin
+    // accent keeps its subtle spread.
+    '--lm-title-tracking': editorial ? '0.005em' : '0em',
     '--lm-eyebrow-spacing': editorial ? '0.42em' : '0.26em',
     // Motion (read by CSS so the whole screen shares one rhythm)
     '--lm-ken-burns': String(1 + kenBurns),

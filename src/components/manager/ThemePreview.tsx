@@ -88,7 +88,11 @@ export const ThemePreview: React.FC<ThemePreviewProps> = ({
             <div className="min-w-0">
               <div
                 className="text-sm font-bold truncate"
-                style={{ color: 'var(--m-text)', fontWeight: 'var(--m-font-heading-weight)' as never }}
+                style={{
+                  color: 'var(--m-text)',
+                  fontFamily: 'var(--m-font-heading)',
+                  fontWeight: 'var(--m-font-heading-weight)' as never,
+                }}
               >
                 {restaurantName}
               </div>
@@ -157,7 +161,14 @@ export const ThemePreview: React.FC<ThemePreviewProps> = ({
                 <UtensilsCrossed className="w-5 h-5" aria-hidden="true" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-bold truncate" style={{ color: 'var(--m-text)' }}>
+                <div
+                  className="text-xs font-bold truncate"
+                  style={{
+                    color: 'var(--m-text)',
+                    fontFamily: 'var(--m-font-heading)',
+                    fontWeight: 'var(--m-font-heading-weight)' as never,
+                  }}
+                >
                   {dish.name}
                 </div>
                 <div className="text-[10px] mt-0.5 truncate" style={{ color: 'var(--m-text-muted)' }}>

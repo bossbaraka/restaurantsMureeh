@@ -62,6 +62,7 @@ const REQUIRED = [
   '--m-warning',
   '--m-error',
   '--m-font',
+  '--m-font-heading',
   '--m-shadow-lg',
 ];
 
@@ -99,6 +100,67 @@ describe('token presence — no consumer needs a fallback', () => {
         }
       }
     }
+  });
+});
+
+/**
+ * BLACK-CARD CONTRACT (Phase 0/1).
+ * The regression: the server fallback materialized colors.card.bg=#15171A
+ * into every theme, so "absent" was indistinguishable from "explicitly dark"
+ * and every light menu rendered near-black cards. These tests pin the fixed
+ * behaviour from both ends (absent ⇒ derived; persisted dark default ⇒
+ * remapped to absent in light mode only).
+ */
+describe('group fallbacks — the black-card contract', () => {
+  it('absent card group ⇒ derived, mode-aware card surface (never a frozen hex)', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const tokens = build('#D4AF37', mode);
+      expect(tokens['--m-card-bg'], `${mode} card`).toContain('gradient');
+      // The alias must be ABSENT (empty ⇒ removed from the style attribute),
+      // so the canonical token is the single source of the card surface.
+      expect(tokens['--card-bg'], `${mode} alias`).toBe('');
+    }
+  });
+
+  it('persisted platform-dark card value ⇒ remapped to derived in light, verbatim in dark', () => {
+    const withCard = (mode: 'light' | 'dark') =>
+      normalizeTheme({
+        theme: { mode, colors: { primary: '#D4AF37', card: { bg: '#15171A' } } },
+      } as never);
+    const light = buildSemanticTokens(withCard('light'), 'light') as Tokens;
+    expect(light['--m-card-bg']).toContain('gradient');
+    expect(light['--m-card-bg']).not.toBe('#15171A');
+    // Same value in dark mode is visually at home there — respected as-is.
+    const dark = buildSemanticTokens(withCard('dark'), 'dark') as Tokens;
+    expect(dark['--m-card-bg']).toBe('#15171A');
+  });
+
+  it('an explicit non-default card color passes through in BOTH modes', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const t = normalizeTheme({
+        theme: { mode, colors: { primary: '#D4AF37', card: { bg: '#222222' } } },
+      } as never);
+      expect(buildSemanticTokens(t, mode)['--m-card-bg']).toBe('#222222');
+    }
+  });
+
+  it('persisted platform-dark chip/secondary-button values never paint a light menu', () => {
+    const t = normalizeTheme({
+      theme: {
+        mode: 'light',
+        colors: {
+          primary: '#D4AF37',
+          button: { secondaryBg: '#2A2D32', secondaryText: '#F5F5F0' },
+          category: { bg: '#1F2226', text: '#A0A0A0' },
+        },
+      },
+    } as never);
+    const tokens = buildCustomerThemeStyle(t, 'light') as Tokens;
+    // Remapped to absent ⇒ canonical tokens carry the derived light values.
+    expect(tokens['--m-chip-bg']).not.toBe('#1F2226');
+    expect(tokens['--m-chip-text']).not.toBe('#A0A0A0');
+    expect(tokens['--m-button-secondary-bg']).not.toBe('#2A2D32');
+    expect(tokens['--m-button-secondary-text']).not.toBe('#F5F5F0');
   });
 });
 

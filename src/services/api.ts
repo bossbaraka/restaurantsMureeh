@@ -32,6 +32,17 @@ import {
 } from '../types/restaurant';
 import { themeShadowKey } from '../theme/brandTheme';
 
+/** Faces the server contract persists — mirrors THEME_FONT_KEYS in server/validation/schemas.ts. */
+const SUPPORTED_THEME_FONT_KEYS: readonly string[] = [
+  'tajawal',
+  'cairo',
+  'amiri',
+  'cormorant',
+  'auto',
+  'alexandria',
+  'kufi',
+];
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -681,6 +692,11 @@ export function uiThemeConfigFromServer(raw: any): ThemeConfig {
   if (raw.typography && typeof raw.typography === 'object') {
     config.typography = {
       fontFamily: raw.typography.fontFamily || 'auto',
+      // Optional heading face — passes through only when it is a real
+      // persisted choice; absent means "same as body" (inherit).
+      ...(SUPPORTED_THEME_FONT_KEYS.includes(raw.typography.headingFont)
+        ? { headingFont: raw.typography.headingFont }
+        : {}),
       headingWeight: String(raw.typography.headingWeight || '700'),
       bodyWeight: String(raw.typography.bodyWeight || '400'),
     } as ThemeConfig['typography'];
@@ -778,6 +794,10 @@ export function mapEffectiveTheme(raw: any): EffectiveTheme | null {
     shadows,
     typography: {
       fontFamily: typography.fontFamily || 'tajawal',
+      // Optional heading face override — absent => derived from fontFamily.
+      ...(SUPPORTED_THEME_FONT_KEYS.includes(typography.headingFont)
+        ? { headingFont: typography.headingFont }
+        : {}),
       headingWeight: String(typography.headingWeight || '700'),
       bodyWeight: String(typography.bodyWeight || '400'),
     },

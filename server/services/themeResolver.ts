@@ -132,7 +132,16 @@ export interface ResolvedTheme {
   rawConfig: ThemeConfig;
 }
 
-// Hardcoded fallback — mirrors legacy #D4AF37/#C5A880 dark #0A0B0D
+// Hardcoded fallback — mirrors legacy #D4AF37/#C5A880 dark #0A0B0D.
+//
+// NOTE (black-card fix): the per-component colour groups (button/card/badge/
+// category) are DELIBERATELY ABSENT here. They used to be materialized with
+// platform-DARK values (#15171A card, #1F2226 chips, …) into every resolved
+// theme, which made "absent" indistinguishable from "the tenant explicitly
+// chose a dark card": every light-mode menu rendered near-black cards, and
+// the mode-aware derived fallbacks (--m-card-bg gradient et al.) were
+// unreachable. Absent groups now stay absent so the client derives them
+// per-mode from the brand; explicit tenant choices still pass through.
 export const FALLBACK_THEME: ResolvedTheme = {
   mode: 'auto',
   colors: {
@@ -147,28 +156,6 @@ export const FALLBACK_THEME: ResolvedTheme = {
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
-    button: {
-      primaryBg: '#D4AF37',
-      primaryText: '#0A0B0D',
-      secondaryBg: '#2A2D32',
-      secondaryText: '#F5F5F0',
-    },
-    card: {
-      bg: '#15171A',
-      border: '#2A2D32',
-      shadow: '0 4px 20px rgba(0,0,0,0.4)',
-      radius: '16px',
-    },
-    badge: {
-      bg: '#D4AF37',
-      text: '#0A0B0D',
-    },
-    category: {
-      bg: '#1F2226',
-      text: '#A0A0A0',
-      activeBg: '#D4AF37',
-      activeText: '#0A0B0D',
-    },
   },
   radius: {
     sm: '6px',
@@ -205,7 +192,10 @@ export const FALLBACK_THEME: ResolvedTheme = {
   rawConfig: {},
 };
 
-// Default platform theme config — used when no platform row exists
+// Default platform theme config — used when no platform row exists.
+// Same contract as FALLBACK_THEME: no per-component colour groups are
+// materialized (see the black-card note above); groups appear in a resolved
+// theme only when a real Theme row (platform/restaurant/branch) set them.
 export const DEFAULT_PLATFORM_CONFIG: ThemeConfig = {
   mode: 'auto',
   colors: {
@@ -220,28 +210,6 @@ export const DEFAULT_PLATFORM_CONFIG: ThemeConfig = {
     success: '#10B981',
     warning: '#F59E0B',
     error: '#EF4444',
-    button: {
-      primaryBg: '#D4AF37',
-      primaryText: '#0A0B0D',
-      secondaryBg: '#2A2D32',
-      secondaryText: '#F5F5F0',
-    },
-    card: {
-      bg: '#15171A',
-      border: '#2A2D32',
-      shadow: '0 4px 20px rgba(0,0,0,0.4)',
-      radius: '16px',
-    },
-    badge: {
-      bg: '#D4AF37',
-      text: '#0A0B0D',
-    },
-    category: {
-      bg: '#1F2226',
-      text: '#A0A0A0',
-      activeBg: '#D4AF37',
-      activeText: '#0A0B0D',
-    },
   },
   radius: {
     sm: '6px',
@@ -436,22 +404,14 @@ export async function resolveEffectiveTheme(params: {
     colors: {
       ...FALLBACK_THEME.colors,
       ...(merged.colors || {}),
-      button: {
-        ...FALLBACK_THEME.colors.button,
-        ...(merged.colors?.button || {}),
-      },
-      card: {
-        ...FALLBACK_THEME.colors.card,
-        ...(merged.colors?.card || {}),
-      },
-      badge: {
-        ...FALLBACK_THEME.colors.badge,
-        ...(merged.colors?.badge || {}),
-      },
-      category: {
-        ...FALLBACK_THEME.colors.category,
-        ...(merged.colors?.category || {}),
-      },
+      // Per-component colour groups pass through ONLY when some layer of the
+      // cascade actually set them. They must never be materialized with
+      // platform-dark fill values: an absent group is what lets the client
+      // derive the component surface per-mode (see FALLBACK_THEME note).
+      ...(merged.colors?.button ? { button: { ...merged.colors.button } } : {}),
+      ...(merged.colors?.card ? { card: { ...merged.colors.card } } : {}),
+      ...(merged.colors?.badge ? { badge: { ...merged.colors.badge } } : {}),
+      ...(merged.colors?.category ? { category: { ...merged.colors.category } } : {}),
     },
     radius: {
       ...FALLBACK_THEME.radius,
