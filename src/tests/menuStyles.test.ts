@@ -104,16 +104,25 @@ describe('menu grid layout cannot overlap itself', () => {
     expect((rootVars.get('--m-stack-above-header') || []).join(' ')).toBe('0px');
   });
 
-  it('declares a resolved light appearance keyed on data-theme (never "auto")', () => {
-    const lightBlock = root.nodes.find(
-      (node) =>
-        node.type === 'rule' &&
-        (node as { selectors?: string[] }).selectors?.some((s) => s.trim() === ":root[data-theme='light']")
-    );
-    expect(lightBlock).toBeTruthy();
-    const vars = declarations(":root[data-theme='light']");
-    expect((vars.get('--menu-surface') || []).join(' ')).toContain('color-mix');
-    expect((vars.get('--menu-text-base') || []).join(' ')).toBeTruthy();
+  it('has exactly ONE surface derivation — the JS engine, never a CSS mode block', () => {
+    // The retired `:root[data-theme='light']` block re-derived --menu-* in
+    // CSS, duplicating semanticTokens.surfaceTokens() and drifting from it.
+    // CustomerThemeProvider now ALWAYS emits the mode-correct --menu-*
+    // aliases INLINE on the scope (inline styles beat any selector), so no
+    // stylesheet rule may re-declare --menu-surface outside the dark :root
+    // defaults (which serve stray pre-scope rendering only).
+    const offenders: string[] = [];
+    root.walkRules((rule) => {
+      const selectors = rule.selectors || [];
+      const isRootDefaults = selectors.some((s) => s.trim() === ':root');
+      if (isRootDefaults) return;
+      rule.walkDecls((decl) => {
+        if (decl.prop.startsWith('--menu-')) {
+          offenders.push(`${selectors.join(', ')} → ${decl.prop}`);
+        }
+      });
+    });
+    expect(offenders).toEqual([]);
   });
 
   it('renders the theme background through ONE token-consuming layer', () => {
@@ -186,36 +195,60 @@ describe('product card click model — one card-wide target, never a dead zone',
 });
 
 describe('customer menu consumes the Effective Theme tokens', () => {
-  // Phase 4 — Theme Property → CSS Token → UI Consumer. Each assertion pins
-  // one consumer to the token that must drive it (with a visual fallback).
+  // Phase 4/5 — Theme Property → CSS Token → UI Consumer. Each assertion
+  // pins one consumer to the CANONICAL --m-* token that must drive it
+  // (legacy --card-*/--button-*/--theme-* names remain emitted as byte-
+  // identical aliases during migration, but are no longer the live reads).
   it('cards consume the card radius/shadow tokens', () => {
-    expect(value('.menu-card', 'border-radius')).toContain('var(--card-radius');
+    expect(value('.menu-card', 'border-radius')).toContain('var(--m-card-radius');
     const shadow = value('.menu-card', 'box-shadow');
-    expect(shadow).toContain('var(--card-shadow');
+    expect(shadow).toContain('var(--m-card-shadow');
     // The inset material highlight stays a fixed part of the card.
     expect(shadow).toContain('inset');
   });
 
+  it('cards consume the card surface tokens', () => {
+    expect(value('.menu-card', 'background')).toContain('var(--m-card-bg');
+    expect(value('.menu-card', 'border')).toContain('var(--m-card-border');
+  });
+
   it('buttons and inputs consume the radius scale', () => {
-    expect(value('.menu-add', 'border-radius')).toContain('var(--button-radius');
-    expect(value('.menu-select', 'border-radius')).toContain('var(--radius-md');
-    expect(value('.menu-toggle', 'border-radius')).toContain('var(--radius-md');
+    expect(value('.menu-add', 'border-radius')).toContain('var(--m-radius-md');
+    expect(value('.menu-select', 'border-radius')).toContain('var(--m-radius-md');
+    expect(value('.menu-toggle', 'border-radius')).toContain('var(--m-radius-md');
   });
 
   it('badges consume the badge radius token', () => {
-    expect(value('.menu-badge', 'border-radius')).toContain('var(--badge-radius');
+    expect(value('.menu-badge', 'border-radius')).toContain('var(--m-badge-radius');
   });
 
-  it('text roles consume the theme text colours and font weights', () => {
-    expect(value('.menu-card__title', 'color')).toContain('var(--theme-text-primary');
-    expect(value('.menu-card__title', 'font-weight')).toContain('var(--font-heading-weight');
-    expect(value('.menu-card__desc', 'color')).toContain('var(--theme-text-secondary');
-    expect(value('.menu-card__desc', 'font-weight')).toContain('var(--font-body-weight');
-    expect(value('.menu-section-head__title', 'color')).toContain('var(--theme-text-primary');
+  it('text roles consume the semantic text colours and theme font weights', () => {
+    expect(value('.menu-card__title', 'color')).toContain('var(--m-text');
+    expect(value('.menu-card__title', 'font-weight')).toContain('var(--m-font-heading-weight');
+    expect(value('.menu-card__desc', 'color')).toContain('var(--m-text-muted');
+    expect(value('.menu-card__desc', 'font-weight')).toContain('var(--m-font-body-weight');
+    expect(value('.menu-section-head__title', 'color')).toContain('var(--m-text');
   });
 
   it('status colours consume success/warning/error/border tokens', () => {
-    expect(value('.menu-badge--danger', 'background')).toContain('var(--theme-error');
+    expect(value('.menu-badge--danger', 'background')).toContain('var(--m-error');
     expect(value('.menu-badge--dark', 'border')).toContain('var(--theme-border');
+  });
+
+  it('Arabic display text carries no letter-spacing on the section heads', () => {
+    // Negative/wide tracking breaks Arabic glyph joining; the tracked style
+    // belonged to Latin display type and must not return to Arabic selectors.
+    expect(has('.menu-section-head__title', 'letter-spacing')).toBe(false);
+  });
+
+  it('theme typography reaches headings through the semantic tokens', () => {
+    // The heading FACE: `font-serif` (the heading class across the customer
+    // UI) resolves to var(--m-font-heading) via the Tailwind config — pinned
+    // here so nobody re-points it at a Latin-only family for Arabic text.
+    const scopeWeight = declarations('.customer-theme-scope .font-serif');
+    expect((scopeWeight.get('font-weight') || []).join(' ')).toContain('var(--m-font-heading-weight');
+    // The body weight control reaches descendants on the scope itself.
+    const scope = declarations('.customer-theme-scope');
+    expect((scope.get('font-weight') || []).join(' ')).toContain('var(--m-font-body-weight');
   });
 });

@@ -93,10 +93,15 @@ export type BackgroundPosition = 'center' | 'top' | 'bottom' | 'left' | 'right';
 /**
  * Exactly the faces the server contract persists (`THEME_FONT_KEYS`). The
  * picker must not offer anything outside this set: the fonts are only ever
- * loaded for these five families, and an unsupported key would be rejected by
- * the strict `themeConfigSchema` on save.
+ * loaded for these families, and an unsupported key would be rejected by the
+ * strict `themeConfigSchema` on save.
+ *
+ * Curated set (Arabic typography system):
+ *   auto/tajawal/cairo/amiri/cormorant  — the original five;
+ *   alexandria                          — variable (100–900) Arabic-first body face;
+ *   kufi                                — Noto Kufi Arabic display face.
  */
-export type ThemeFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
+export type ThemeFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant' | 'alexandria' | 'kufi';
 
 export interface BackgroundImageRef {
   storagePath: string;
@@ -182,6 +187,12 @@ export interface ThemeShadows {
 
 export interface ThemeTypography {
   fontFamily: ThemeFontKey;
+  /**
+   * Optional heading face ("خط العناوين"). Absent (or 'auto') means
+   * "same as body" — the derivation resolves it to the `fontFamily` stack,
+   * so stored themes need no migration.
+   */
+  headingFont?: ThemeFontKey;
   headingWeight: string;
   bodyWeight: string;
 }

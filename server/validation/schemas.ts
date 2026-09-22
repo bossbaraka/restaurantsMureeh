@@ -1369,7 +1369,7 @@ export const onboardSchema = z
 export const THEME_MODES = ['light', 'dark', 'auto'] as const;
 export const BACKGROUND_TYPES = ['solid', 'gradient', 'image', 'image+overlay', 'none'] as const;
 export const BACKGROUND_SIZES = ['cover', 'contain', 'auto'] as const;
-export const THEME_FONT_KEYS = ['tajawal', 'cairo', 'amiri', 'cormorant', 'auto'] as const;
+export const THEME_FONT_KEYS = ['tajawal', 'cairo', 'amiri', 'cormorant', 'auto', 'alexandria', 'kufi'] as const;
 
 const hexColorRequired = z
   .string()
@@ -1536,6 +1536,8 @@ const themeShadowsSchema = z
 const themeTypographySchema = z
   .object({
     fontFamily: z.enum(THEME_FONT_KEYS).optional(),
+    // Optional heading face; absent inherits the body face ("same as body").
+    headingFont: z.enum(THEME_FONT_KEYS).optional(),
     headingWeight: z.number().int().min(100).max(900).optional(),
     bodyWeight: z.number().int().min(100).max(900).optional(),
   })

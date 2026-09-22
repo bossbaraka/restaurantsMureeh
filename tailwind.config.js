@@ -123,7 +123,20 @@ export default {
       },
       fontFamily: {
         sans: ['Tajawal', 'Cairo', 'system-ui', '-apple-system', 'sans-serif'],
-        serif: ['Cormorant Garamond', 'serif'],
+        /**
+         * THE HEADING FACE. `font-serif` is the class the customer UI puts on
+         * headings (restaurant name, hero, modal titles — Arabic text).
+         * It used to be Cormorant Garamond — a LATIN-only face — so Arabic
+         * headings silently fell back to the browser's default serif,
+         * ignoring the tenant's typography entirely.
+         *
+         * Now it resolves to the tenant's heading token (--m-font-heading,
+         * written by CustomerThemeProvider). Outside the customer scope
+         * (manager/admin, where the class is also used) the fallback stack
+         * applies — Alexandria-first, which covers Arabic AND Latin by
+         * design, so no text can ever land in an unnamed browser serif again.
+         */
+        serif: ['var(--m-font-heading, "Alexandria")', '"Tajawal"', 'system-ui', 'sans-serif'],
         arabic: ['Tajawal', 'Cairo', 'sans-serif'],
       },
       boxShadow: {

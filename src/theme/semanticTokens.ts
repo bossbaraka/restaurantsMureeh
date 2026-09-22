@@ -76,6 +76,10 @@ export const SEMANTIC_TOKEN_NAMES = {
     '--m-surface-raised',
     '--m-hairline',
     '--m-hairline-strong',
+    // Media placeholder end-stop. It was already emitted by surfaceTokens()
+    // and aliased to --menu-media-end; listing it here makes it part of the
+    // tracked contract (completeness assertions, migration lint).
+    '--m-media-end',
   ],
   content: ['--m-text', '--m-text-muted', '--m-text-subtle'],
   component: [
@@ -96,7 +100,12 @@ export const SEMANTIC_TOKEN_NAMES = {
     '--m-badge-text',
     '--m-badge-radius',
   ],
-  typography: ['--m-font', '--m-font-heading-weight', '--m-font-body-weight'],
+  typography: [
+    '--m-font',
+    '--m-font-heading',
+    '--m-font-heading-weight',
+    '--m-font-body-weight',
+  ],
   shape: [
     '--m-radius-sm',
     '--m-radius-md',
@@ -243,6 +252,9 @@ export function buildSemanticTokens(
 
     // ---- Typography -----------------------------------------------------
     '--m-font': themeVars['--font-family'],
+    // Heading face — resolved by buildEffectiveThemeVars: the stored
+    // `headingFont` override, else the body stack ("same as body" fallback).
+    '--m-font-heading': themeVars['--font-family-heading'],
     '--m-font-heading-weight': themeVars['--font-heading-weight'],
     '--m-font-body-weight': themeVars['--font-body-weight'],
 

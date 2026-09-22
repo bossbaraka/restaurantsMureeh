@@ -152,6 +152,7 @@ export const THEME_VAR_NAMES = [
   '--shadow-md',
   '--shadow-lg',
   '--font-family',
+  '--font-family-heading',
   '--font-heading-weight',
   '--font-body-weight',
   '--button-radius',
@@ -743,11 +744,21 @@ export function useBrandTheme(
  */
 
 const FONT_FAMILY_MAP: Record<string, string> = {
-  auto: 'Tajawal, Cairo, system-ui, -apple-system, sans-serif',
-  tajawal: '"Tajawal", system-ui, sans-serif',
-  cairo: '"Cairo", system-ui, sans-serif',
-  amiri: '"Amiri", serif',
-  cormorant: '"Cormorant Garamond", serif',
+  // The default face. Alexandria is the curated Arabic-first body family
+  // (variable 100–900, Arabic + Latin cuts in one file, screen-optimised
+  // metrics); Tajawal/Cairo trail it purely as glyph-coverage fallbacks.
+  auto: '"Alexandria", "Tajawal", "Cairo", system-ui, -apple-system, sans-serif',
+  alexandria: '"Alexandria", "Tajawal", system-ui, sans-serif',
+  tajawal: '"Tajawal", "Alexandria", system-ui, sans-serif',
+  cairo: '"Cairo", "Alexandria", "Tajawal", system-ui, sans-serif',
+  // Display faces. Arabic-first stacks: a Latin-only or script-limited face
+  // must never leave Arabic text to the browser's default font — the stacks
+  // below guarantee Arabic resolves to a designed face in every case.
+  kufi: '"Noto Kufi Arabic", "Alexandria", "Tajawal", system-ui, sans-serif',
+  amiri: '"Amiri", "Noto Kufi Arabic", "Alexandria", serif',
+  // Cormorant is a LATIN-only accent: Arabic falls to Alexandria (never to an
+  // unnamed browser serif), Latin renders in the display serif as intended.
+  cormorant: '"Cormorant Garamond", "Alexandria", serif',
   // Not part of the persistable server contract (THEME_FONT_KEYS) — kept only
   // so legacy raw rows that predate the strict schema still resolve a stack.
   inter: '"Inter", system-ui, sans-serif',
@@ -757,6 +768,35 @@ const FONT_FAMILY_MAP: Record<string, string> = {
 export type ThemeShadowKey = 'sm' | 'md' | 'lg';
 
 const THEME_SHADOW_KEYS: readonly ThemeShadowKey[] = ['sm', 'md', 'lg'];
+
+/**
+ * Per-component colour groups that older persisted themes carry as
+ * PLATFORM-DARK values (filled by the pre-fix server fallback). In LIGHT mode
+ * these exact strings mean "never explicitly chosen", not "the tenant wants a
+ * near-black card on a white menu" — so they are remapped to ABSENT (the
+ * empty-string removal contract), which lets the derived, mode-aware
+ * fallbacks apply. Any other value is a genuine tenant choice and passes
+ * through verbatim, mirroring `PLATFORM_DARK_DEFAULT_COLORS` for scalars.
+ */
+const PLATFORM_DARK_GROUP_DEFAULTS: Record<string, string[]> = {
+  'card.bg': ['#15171A', '#121416'],
+  'card.border': ['#2A2D32', '#1E293B'],
+  'button.secondaryBg': ['#2A2D32', '#1E293B'],
+  'button.secondaryText': ['#F5F5F0', '#F8FAFC'],
+  'category.bg': ['#1F2226'],
+  'category.text': ['#A0A0A0', '#94A3B8'],
+};
+
+/** Group override value → the value to emit (light mode remaps dark defaults to absent). */
+function resolveModeAwareGroupValue(groupKey: string, value: string | undefined, surfaceMode: SurfaceMode): string {
+  const v = typeof value === 'string' ? value.trim() : '';
+  if (!v) return '';
+  if (surfaceMode === 'light') {
+    const darkDefaults = PLATFORM_DARK_GROUP_DEFAULTS[groupKey];
+    if (darkDefaults && darkDefaults.some((d) => d.toUpperCase() === v.toUpperCase())) return '';
+  }
+  return v;
+}
 
 /**
  * Resolves `colors.card.shadow` to a real CSS shadow. The value is either a
@@ -854,14 +894,21 @@ export function buildEffectiveThemeVars(
   theme: EffectiveTheme,
   prefersDark = false
 ): Record<string, string> {
+  const surfaceMode = resolveThemeMode(theme.mode, prefersDark);
   const currentBg = resolveCurrentBackground(theme, prefersDark);
-  const bgVars = backgroundToCssVars(currentBg, resolveThemeMode(theme.mode, prefersDark));
+  const bgVars = backgroundToCssVars(currentBg, surfaceMode);
   // Mode-aware scalar colors: light mode must never render the platform's
   // DARK fallback palette. Explicit tenant values pass through untouched.
   const modeColors = resolveModeAwareColors(
     theme.colors as unknown as Record<string, string | undefined>,
-    resolveThemeMode(theme.mode, prefersDark)
+    surfaceMode
   );
+  // Mode-aware component groups: same rule as the scalars — a persisted
+  // platform-DARK group value (card #15171A, chip #1F2226, …) means ABSENT
+  // on a light surface, so the derived per-mode fallback paints instead of a
+  // black card (see PLATFORM_DARK_GROUP_DEFAULTS).
+  const group = (key: string, value: string | undefined): string =>
+    resolveModeAwareGroupValue(key, value, surfaceMode);
 
   return {
     // Colors
@@ -883,14 +930,14 @@ export function buildEffectiveThemeVars(
     // palette) until a theme explicitly sets the group.
     '--button-bg': theme.colors.button?.primaryBg || '',
     '--button-text': theme.colors.button?.primaryText || '',
-    '--button-secondary-bg': theme.colors.button?.secondaryBg || '',
-    '--button-secondary-text': theme.colors.button?.secondaryText || '',
-    '--card-bg': theme.colors.card?.bg || '',
-    '--card-border': theme.colors.card?.border || '',
+    '--button-secondary-bg': group('button.secondaryBg', theme.colors.button?.secondaryBg),
+    '--button-secondary-text': group('button.secondaryText', theme.colors.button?.secondaryText),
+    '--card-bg': group('card.bg', theme.colors.card?.bg),
+    '--card-border': group('card.border', theme.colors.card?.border),
     '--badge-bg': theme.colors.badge?.bg || '',
     '--badge-text': theme.colors.badge?.text || '',
-    '--category-bg': theme.colors.category?.bg || '',
-    '--category-text': theme.colors.category?.text || '',
+    '--category-bg': group('category.bg', theme.colors.category?.bg),
+    '--category-text': group('category.text', theme.colors.category?.text),
     '--category-active-bg': theme.colors.category?.activeBg || '',
     '--category-active-text': theme.colors.category?.activeText || '',
     // An explicit activeBg color must paint OVER the brand gradient, so when
@@ -912,8 +959,16 @@ export function buildEffectiveThemeVars(
     '--shadow-md': theme.shadows.md,
     '--shadow-lg': theme.shadows.lg,
     '--card-shadow': resolveThemeShadow(theme.cards?.shadow, theme.shadows) || theme.shadows.md,
-    // Typography
+    // Typography. The heading face defaults to the body face ("same as body")
+    // — `headingFont` is an OPTIONAL contract field: absent/'auto' inherits,
+    // so stored themes need no migration.
     '--font-family': FONT_FAMILY_MAP[theme.typography.fontFamily] || FONT_FAMILY_MAP.auto,
+    '--font-family-heading':
+      (theme.typography.headingFont &&
+        theme.typography.headingFont !== 'auto' &&
+        FONT_FAMILY_MAP[theme.typography.headingFont]) ||
+      FONT_FAMILY_MAP[theme.typography.fontFamily] ||
+      FONT_FAMILY_MAP.auto,
     '--font-heading-weight': theme.typography.headingWeight,
     '--font-body-weight': theme.typography.bodyWeight,
     // Background (current resolved)
