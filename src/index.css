@@ -103,11 +103,8 @@
   }
 }
 
-/* Custom Utilities for Luxury Responsive UI */
-.bg-subtle-pattern {
-  background-image: radial-gradient(rgba(197, 168, 128, 0.06) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
+/* Removed: `.bg-subtle-pattern` — zero consumers anywhere in src/ (verified),
+   yet its dark-tinted dot grid shipped in every CSS bundle. */
 
 /* ==========================================================================
    TENANT BRAND TOKENS
@@ -1562,27 +1559,10 @@
   background: #C5A880;
 }
 
-/* Luxury card borders & glassmorphism */
-.luxury-border {
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.luxury-border-gold {
-  border: 1px solid rgba(197, 168, 128, 0.25);
-}
-
-.glass-panel {
-  background: rgba(18, 20, 26, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.gold-gradient-text {
-  background: linear-gradient(135deg, #FFF6DD 0%, #E6C86E 50%, #C5A880 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+/* Removed: `.luxury-border`, `.luxury-border-gold`, `.glass-panel` and
+   `.gold-gradient-text` — zero consumers anywhere in src/ (verified), yet all
+   four shipped in every CSS bundle. `.gold-glow` STAYS: it has 18 consumers
+   on platform surfaces. */
 
 .gold-glow {
   box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.25);
@@ -3131,9 +3111,8 @@ input[type='range'].saas-range::-moz-range-thumb {
 [class*="backdrop-blur"] {
   -webkit-backdrop-filter: blur(12px);
 }
-.glass-panel {
-  -webkit-backdrop-filter: blur(16px);
-}
+/* (the duplicate `.glass-panel` -webkit rule that sat here was removed with
+   the class itself — zero consumers anywhere in src/.) */
 
 /* Prevent sticky headers from disappearing behind the iOS status bar
    when viewport-fit=cover is active. The inline style on CustomerHeader
