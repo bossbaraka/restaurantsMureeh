@@ -293,3 +293,24 @@ ThemeConfig (server) → normalizeTheme() → buildSemanticTokens() (--m-*)
 ## ⏳ البند الوحيد المتبقي
 
 **هجرة قسم القائمة CSS إلى `--m-*` (~230 مرجعاً)** — جولة مستقلة بذاتها: تغيير واسع ميكانيكي (aliases مشتقة من نفس الحساب فلا خطر قيمي)، لكنه يستحق نطاقاً ومراجعة مستقلين مع استثناء الكلاسات المشتركة مع المنصة (`.brand-soft`, `.brand-cta`). لم يُنفذ — يحتاج موافقة صريحة على نطاقه.
+
+---
+
+## ✅ COMMIT 6 (52c7683) — الهجرة إلى `--m-*` (البند 3 — الأمنية فقط)
+
+**المنهجية:** فحص ما قبل التنفيذ كشف أن الهجرة الكاملة **ليست** ميكانيكية 100% — عدة عائلات من التوكنز القانونية لها **قيم افتراضية تخالف** الـ fallbacks التي ستستبدلها (`--m-button-secondary-bg` = surface-raised مصمت مقابل brand-tint الشفاف؛ `--m-badge-bg` مصمت مقابل داكن شفاف؛ `--m-text-muted` = #cfd6e2 مقابل #A0A0A0 الفعلي للنص الثانوي) — وسبب إضافي: **المحرر المتقدم يكشف textPrimary/textSecondary/border كـ pickers مخزنة** بينما التوكنز القانونية derived-only. لذا نُفّذت **الهجرة متطابقة البايت فقط: 91 مرجعاً** في قسم CUSTOMER MENU (82 سطراً: +82/−82، تبديل أسماء خالص):
+
+- `--menu-*` ×12 → `--m-surface/-raised/--m-hairline/--m-text/-muted/--m-media-end`
+- `--card-bg/border/radius/shadow` → `--m-card-*` · `--category-*` ×5 → `--m-chip-*`
+- هوية `--brand-*` (primary/accent/strong/rgb/ink/fill/glow/muted/line-strong) → `--m-brand*`/`--m-text-subtle`/`--m-hairline-strong`
+- `--button-radius`→`--m-radius-md` · `--badge-radius`→`--m-badge-radius` · `--radius-md/full`→`--m-radius-*` · الأوزان → `--m-font-*-weight` · `--theme-error`→`--m-error`
+
+**الاستثناءات الموثقة في ترويسة القسم** (تبديلها يغيّر القيم المرسومة): `--brand-soft-strong`، `--brand-line` (rgb strong/22% ≠ مزيج `--m-hairline`)، `--theme-text-primary/-secondary/-border` (قيم مخزنة للمستأجر)، `--badge-text/-bg`، `--button-secondary-*`، مركّبة `--bg-*`، وكلاسات `.brand-*` المشتركة مع المنصة.
+
+**الاختبارات:** تثبيتات `menuStyles.test.ts` التسع حُدّثت للأسماء القانونية (تطور عقد الهجرة نفسه)؛ كتلتا light-appearance و`:root` للمستأجر **بقيتا** عمداً (توافق + اختبار يثبتهما).
+
+**التحقق:** lint 0 errors · `tsc -b` PASS · build PASS · vitest **1297** (مطابق لما قبل الهجرة حرفياً؛ نفس الفشلين البيئيين) · الحزمة المبنية فُحصت: `.menu-rail` يقرأ `var(--m-surface)` و`.menu-card` يقرأ `var(--m-card-radius/--m-card-bg)`.
+
+## 🏁 الحالة النهائية للمشروع
+
+سلسلة **Theme → Tokens → CSS → Components** مكتملة التماسك: كاتب واحد للتوكنز، توكنز قانونية في كل قواعد الزبون الحاكمة، صفر تعارضات cascade، صفر كلاسات ميتة في المسار الإنتاجي، preview عبر الأنبوب نفسه، والحالات الدلالية موحدة على `--m-*`. المتبقي الوحيد (اختياري/مستقبلي): إكمال الهجرة للعائلات غير المتطابقة يتطلب **قرارات تصميم** (توحيد المواد الافتراضية للثانوي/badge/secondary-button وتوسيع التوكنز القانونية بقيم soft/line) — لا يُنفذ دون طلب بصري صريح منك.
