@@ -135,15 +135,23 @@ export function getOrderStatusConfig(status: OrderStatus): {
   dotColor: string;
   stepIndex: number;
 } {
+  /* Status colours flow through the canonical --m-* status tokens
+     (--m-success/-warning/-error/-info + their -strong dark-surface shades).
+     Each class carries the token's DEFAULT as an arbitrary-value fallback so
+     the SAME strings render correctly on manager surfaces too (KDS, order
+     management) which sit outside `.customer-theme-scope`. The fallbacks are
+     byte-identical to the previous raw palette classes, so rendering is
+     unchanged everywhere. SERVED stays on the zinc neutral on purpose: it is
+     the "no longer active" state, not a brand status. */
   switch (status) {
     case 'PENDING':
       return {
         label: 'تم استلام الطلب',
         customerTitle: 'تم استلام الطلب',
         customerDesc: 'طلبك وصل إلى المطعم وجاهز للإرسال للمطبخ.',
-        badgeBg: 'bg-amber-500/10 border-amber-500/30',
-        badgeText: 'text-amber-400',
-        dotColor: 'bg-amber-400',
+        badgeBg: 'bg-[rgb(var(--m-warning-rgb,245_158_11)/0.1)] border-[rgb(var(--m-warning-rgb,245_158_11)/0.3)]',
+        badgeText: 'text-[rgb(var(--m-warning-strong-rgb,251_191_36))]',
+        dotColor: 'bg-[rgb(var(--m-warning-strong-rgb,251_191_36))]',
         stepIndex: 1,
       };
     case 'PREPARING':
@@ -151,9 +159,9 @@ export function getOrderStatusConfig(status: OrderStatus): {
         label: 'جاري التحضير',
         customerTitle: 'جاري التحضير',
         customerDesc: 'المطبخ يعمل على إعداد طلبك بعناية واهتمام فائق.',
-        badgeBg: 'bg-blue-500/10 border-blue-500/30',
-        badgeText: 'text-blue-400',
-        dotColor: 'bg-blue-400 animate-pulse',
+        badgeBg: 'bg-[rgb(var(--m-info-rgb,59_130_246)/0.1)] border-[rgb(var(--m-info-rgb,59_130_246)/0.3)]',
+        badgeText: 'text-[rgb(var(--m-info-strong-rgb,96_165_250))]',
+        dotColor: 'bg-[rgb(var(--m-info-strong-rgb,96_165_250))] animate-pulse',
         stepIndex: 2,
       };
     case 'READY':
@@ -161,9 +169,9 @@ export function getOrderStatusConfig(status: OrderStatus): {
         label: 'الطلب جاهز',
         customerTitle: 'الطلب جاهز',
         customerDesc: 'طلبك جاهز تماماً وفي طريقه إلى طاولتك الآن.',
-        badgeBg: 'bg-emerald-500/10 border-emerald-500/30',
-        badgeText: 'text-emerald-400',
-        dotColor: 'bg-emerald-400',
+        badgeBg: 'bg-[rgb(var(--m-success-rgb,16_185_129)/0.1)] border-[rgb(var(--m-success-rgb,16_185_129)/0.3)]',
+        badgeText: 'text-[rgb(var(--m-success-strong-rgb,52_211_153))]',
+        dotColor: 'bg-[rgb(var(--m-success-strong-rgb,52_211_153))]',
         stepIndex: 3,
       };
     case 'SERVED':
@@ -181,9 +189,9 @@ export function getOrderStatusConfig(status: OrderStatus): {
         label: 'ملغي',
         customerTitle: 'تم إلغاء الطلب',
         customerDesc: 'تم إلغاء هذا الطلب بناءً على رغبتك.',
-        badgeBg: 'bg-red-500/10 border-red-500/30',
-        badgeText: 'text-red-400',
-        dotColor: 'bg-red-500',
+        badgeBg: 'bg-[rgb(var(--m-error-rgb,239_68_68)/0.1)] border-[rgb(var(--m-error-rgb,239_68_68)/0.3)]',
+        badgeText: 'text-[rgb(var(--m-error-strong-rgb,248_113_113))]',
+        dotColor: 'bg-[rgb(var(--m-error-rgb,239_68_68))]',
         stepIndex: 0,
       };
   }
