@@ -249,6 +249,26 @@
 
 /* ==========================================================================
    CUSTOMER MENU — professional, tenant-themed, performance-first
+   ==========================================================================
+   TOKEN MIGRATION (2026-09-23): every var() in this section now reads the
+   canonical `--m-*` tokens — the swap is value-identical because the legacy
+   aliases (`--menu-*`, `--card-*`, `--category-*`, `--brand-*`, radius/font
+   families) are DERIVED from the same buildSemanticTokens computation.
+
+   Deliberate legacy exceptions (no identical canonical counterpart — swapping
+   would change rendered values):
+     --brand-soft-strong      .menu-media gradient base (no --m-* soft token)
+     --brand-line             brand border (rgb strong/22% ≠ --m-hairline mix)
+     --theme-text-primary/-secondary/-border   the advanced editor persists
+                              these per tenant; the canonical text/border
+                              tokens are derived-only and would drop the
+                              stored values
+     --badge-text/-bg         canonical defaults are opaque; this badge's
+                              fallback material is translucent dark
+     --button-secondary-bg/-text  canonical defaults (surface-raised/text)
+                              diverge from the brand-tint resting material
+   The `.brand-*` utility classes further below are PLATFORM-shared and keep
+   reading the aliases on purpose.
    ========================================================================== */
 
 /* Sticky filter/category rail ------------------------------------------------ */
@@ -265,8 +285,8 @@
   padding: 0.5rem var(--m-gutter) 0.6rem;
   /* Fully opaque: dishes scrolling underneath must never bleed through the
      rail, otherwise the sticky bar reads as cards stacked on top of cards. */
-  background-color: var(--menu-surface);
-  border-bottom: 1px solid var(--menu-hairline);
+  background-color: var(--m-surface);
+  border-bottom: 1px solid var(--m-hairline);
   box-shadow: 0 14px 24px -22px rgb(0 0 0 / 0.95);
 }
 @media (min-width: 640px) {
@@ -299,11 +319,11 @@
 }
 .menu-cats::before {
   inset-inline-start: calc(-1 * var(--m-gutter));
-  background: linear-gradient(to right, color-mix(in srgb, var(--menu-surface) 95%, transparent), transparent);
+  background: linear-gradient(to right, color-mix(in srgb, var(--m-surface) 95%, transparent), transparent);
 }
 .menu-cats::after {
   inset-inline-end: calc(-1 * var(--m-gutter));
-  background: linear-gradient(to left, color-mix(in srgb, var(--menu-surface) 95%, transparent), transparent);
+  background: linear-gradient(to left, color-mix(in srgb, var(--m-surface) 95%, transparent), transparent);
 }
 @media (min-width: 640px) {
   .menu-cats::before {
@@ -339,18 +359,18 @@
   padding: 0.5rem 0.85rem;
   /* radius.full — same scale slot ThemePreview renders (was a hardcoded 999px,
      so a custom radius.full theme updated the preview but not the real menu). */
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--m-radius-full, 999px);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   /* colors.category.text/bg → --category-text/--category-bg (optional overrides). */
-  color: var(--category-text, color-mix(in srgb, var(--brand-muted) 70%, var(--menu-text-base)));
-  background: var(--category-bg, var(--menu-surface-raised));
-  border: 1px solid var(--menu-hairline);
+  color: var(--m-chip-text, color-mix(in srgb, var(--m-text-subtle) 70%, var(--m-text-muted)));
+  background: var(--m-chip-bg, var(--m-surface-raised));
+  border: 1px solid var(--m-hairline);
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 .menu-chip:hover {
-  color: var(--menu-text-strong);
+  color: var(--m-text);
   border-color: var(--brand-line);
 }
 .menu-chip:active {
@@ -360,12 +380,12 @@
   /* colors.category.activeBg/activeText → the selected chip. When an explicit
      activeBg color is provided the engine also emits --category-active-image:
      none, so the color — not the brand gradient — paints. */
-  color: var(--category-active-text, var(--brand-ink));
-  background-color: var(--category-active-bg, transparent);
-  background-image: var(--category-active-image, var(--brand-fill));
+  color: var(--m-chip-active-text, var(--m-brand-ink));
+  background-color: var(--m-chip-active-bg, transparent);
+  background-image: var(--m-chip-active-image, var(--m-brand-fill));
   border-color: transparent;
   font-weight: 800;
-  box-shadow: 0 6px 20px -10px var(--brand-glow);
+  box-shadow: 0 6px 20px -10px var(--m-brand-glow);
 }
 .menu-chip__count {
   min-width: 1.25rem;
@@ -375,11 +395,11 @@
   font-weight: 800;
   line-height: 1.25rem;
   text-align: center;
-  color: var(--brand-muted);
-  background: rgb(var(--brand-primary-strong-rgb) / 0.12);
+  color: var(--m-text-subtle);
+  background: rgb(var(--m-brand-on-surface-rgb) / 0.12);
 }
 .menu-chip[data-active='true'] .menu-chip__count {
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
   background: rgb(0 0 0 / 0.16);
 }
 
@@ -391,7 +411,7 @@
   gap: 0.5rem 0.75rem;
   margin-top: 0.55rem;
   font-size: 11px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
   /* WRAPPING IS EXPLICIT AND BOUNDED.
      The toolbar has two groups: a count label and the controls. If they
      cannot share a line, the controls drop to a second line — a predictable
@@ -416,21 +436,21 @@
   max-width: 100%;
   padding: 0.4rem 1.6rem 0.4rem 0.7rem;
   /* radius.md → inputs (same scale slot as buttons). */
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
   font-weight: 700;
-  color: var(--menu-text-strong, #e6e9f0);
-  background-color: var(--menu-surface-raised);
+  color: var(--m-text, #e6e9f0);
+  background-color: var(--m-surface-raised);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='3' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
   background-repeat: no-repeat;
   background-position: left 0.45rem center;
-  border: 1px solid var(--menu-hairline);
+  border: 1px solid var(--m-hairline);
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease;
 }
 .menu-select:hover,
 .menu-select:focus-visible {
-  border-color: var(--brand-line-strong);
+  border-color: var(--m-hairline-strong);
   /* No `outline: none` here: it used to kill the global :focus-visible ring
      (A11Y-003) for this control, leaving border-color as the only focus
      indicator. The select now inherits the shared ring like .menu-toggle. */
@@ -440,12 +460,12 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.4rem 0.6rem;
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
   font-weight: 700;
-  color: var(--brand-muted);
-  background: var(--menu-surface-raised);
-  border: 1px solid var(--menu-hairline);
+  color: var(--m-text-subtle);
+  background: var(--m-surface-raised);
+  border: 1px solid var(--m-hairline);
   cursor: pointer;
   transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
@@ -453,20 +473,20 @@
   /* Mode-safe: was a hardcoded dark-mode ink (#eef1f6) that stayed white on a
      light menu. Reads the resolved surface ladder instead — the fallback keeps
      the exact previous dark value. */
-  color: var(--menu-text-strong, #eef1f6);
+  color: var(--m-text, #eef1f6);
   border-color: var(--brand-line);
 }
 .menu-toggle[data-on='true'] {
-  color: var(--brand-primary-strong);
-  background: rgb(var(--brand-primary-strong-rgb) / 0.12);
-  border-color: rgb(var(--brand-primary-strong-rgb) / 0.38);
+  color: var(--m-brand-on-surface);
+  background: rgb(var(--m-brand-on-surface-rgb) / 0.12);
+  border-color: rgb(var(--m-brand-on-surface-rgb) / 0.38);
 }
 .menu-layout-switch {
   display: inline-flex;
   padding: 2px;
   border-radius: 11px;
-  background: var(--menu-surface-raised);
-  border: 1px solid var(--menu-hairline);
+  background: var(--m-surface-raised);
+  border: 1px solid var(--m-hairline);
 }
 .menu-layout-switch button {
   display: inline-flex;
@@ -480,7 +500,7 @@
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease;
 }
@@ -494,8 +514,8 @@
   min-height: 44px;
 }
 .menu-layout-switch button[data-on='true'] {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
 }
 
 /* Grid ---------------------------------------------------------------------- */
@@ -529,14 +549,14 @@
   /* Theme-driven card geometry: radius.card → --card-radius (falls back to
      radius.lg at runtime), colors.card.shadow / shadows.* → --card-shadow.
      The inset highlight is a fixed material of this card, not themeable. */
-  border-radius: var(--card-radius, 20px);
+  border-radius: var(--m-card-radius, 20px);
   text-align: start;
   /* colors.card.bg/border → --card-bg/--card-border (optional overrides). */
-  background: var(--card-bg, linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%));
-  border: 1px solid var(--card-border, var(--menu-hairline));
+  background: var(--m-card-bg, linear-gradient(160deg, var(--m-surface-raised) 0%, var(--m-surface) 100%));
+  border: 1px solid var(--m-card-border, var(--m-hairline));
   box-shadow:
     inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.035),
-    var(--card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
+    var(--m-card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (min-width: 640px) {
@@ -551,13 +571,13 @@
   transform: translateY(-2px);
   box-shadow:
     inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.05),
-    0 22px 44px -26px var(--brand-glow);
+    0 22px 44px -26px var(--m-brand-glow);
 }
 .menu-card--featured {
   grid-template-columns: 116px minmax(0, 1fr);
   background:
-    radial-gradient(120% 140% at 100% 0%, rgb(var(--brand-primary-strong-rgb) / 0.14) 0%, rgba(0, 0, 0, 0) 62%),
-    linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%);
+    radial-gradient(120% 140% at 100% 0%, rgb(var(--m-brand-on-surface-rgb) / 0.14) 0%, rgba(0, 0, 0, 0) 62%),
+    linear-gradient(160deg, var(--m-surface-raised) 0%, var(--m-surface) 100%);
   border-color: var(--brand-line);
 }
 @media (min-width: 640px) {
@@ -573,7 +593,7 @@
 }
 .menu-card--unavailable:hover {
   transform: none;
-  border-color: var(--menu-hairline);
+  border-color: var(--m-hairline);
   box-shadow: inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.03);
 }
 
@@ -587,7 +607,7 @@
   cursor: pointer;
 }
 .menu-card__hit:focus-visible {
-  outline: 2px solid var(--brand-primary-strong);
+  outline: 2px solid var(--m-brand-on-surface);
   outline-offset: 2px;
 }
 .menu-card--unavailable .menu-card__hit {
@@ -601,7 +621,7 @@
   min-height: 100px;
   border-radius: 15px;
   overflow: hidden;
-  background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
+  background: linear-gradient(140deg, var(--brand-soft-strong), var(--m-media-end, #0b0d11));
   /* Ink-tinted hairline (was white-alpha — invisible on light surfaces). */
   border: 1px solid rgb(var(--m-text-rgb, 255 255 255) / 0.05);
 }
@@ -637,7 +657,7 @@
   inset: 0;
   background:
     linear-gradient(110deg, transparent 20%, rgb(255 255 255 / 0.07) 42%, transparent 62%),
-    linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
+    linear-gradient(140deg, var(--brand-soft-strong), var(--m-media-end, #0b0d11));
   background-size: 220% 100%, 100% 100%;
   animation: menu-shimmer 1.4s ease-in-out infinite;
 }
@@ -654,8 +674,8 @@
   inset: 0;
   display: grid;
   place-items: center;
-  color: rgb(var(--brand-primary-strong-rgb) / 0.55);
-  background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
+  color: rgb(var(--m-brand-on-surface-rgb) / 0.55);
+  background: linear-gradient(140deg, var(--brand-soft-strong), var(--m-media-end, #0b0d11));
 }
 .menu-media__scrim {
   position: absolute;
@@ -684,7 +704,7 @@
   gap: 0.2rem;
   padding: 0.15rem 0.4rem;
   /* radius.full → --badge-radius (pill scale slot shared by badge chips). */
-  border-radius: var(--badge-radius, 8px);
+  border-radius: var(--m-badge-radius, 8px);
   font-size: 9.5px;
   font-weight: 800;
   line-height: 1.5;
@@ -694,8 +714,8 @@
   box-shadow: 0 4px 12px -6px rgb(0 0 0 / 0.9);
 }
 .menu-badge--brand {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
 }
 .menu-badge--dark {
   /* colors.badge.text/bg → --badge-text/--badge-bg (optional overrides). */
@@ -705,11 +725,11 @@
 }
 .menu-badge--danger {
   color: #fff1f1;
-  background: color-mix(in srgb, var(--theme-error, rgb(190 32 45)) 85%, transparent);
+  background: color-mix(in srgb, var(--m-error, rgb(190 32 45)) 85%, transparent);
 }
 .menu-badge--signature {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
 }
 
 /* Body ---------------------------------------------------------------------- */
@@ -721,7 +741,7 @@
 }
 .menu-card__title {
   font-size: 14.5px;
-  font-weight: var(--font-heading-weight, 800);
+  font-weight: var(--m-font-heading-weight, 800);
   line-height: 1.35;
   color: var(--theme-text-primary, #f4f6fa);
   overflow: hidden;
@@ -731,14 +751,14 @@
   -webkit-box-orient: vertical;
 }
 .menu-card:hover .menu-card__title {
-  color: var(--menu-text-strong, #fff);
+  color: var(--m-text, #fff);
 }
 .menu-card__title-en {
   margin-top: 1px;
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-style: italic;
   font-size: 11.5px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -746,7 +766,7 @@
 .menu-card__desc {
   margin-top: 0.3rem;
   font-size: 12px;
-  font-weight: var(--font-body-weight, 400);
+  font-weight: var(--m-font-body-weight, 400);
   line-height: 1.55;
   color: var(--theme-text-secondary, #9aa3b2);
   overflow: hidden;
@@ -782,7 +802,7 @@
 .menu-meta svg {
   width: 11px;
   height: 11px;
-  color: var(--brand-primary-strong);
+  color: var(--m-brand-on-surface);
 }
 
 /* Footer: price + action ----------------------------------------------------- */
@@ -803,7 +823,7 @@
 .menu-price__from {
   font-size: 9.5px;
   font-weight: 600;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
 }
 .menu-price__value {
   display: inline-flex;
@@ -811,14 +831,14 @@
   gap: 0.2rem;
   font-size: 17px;
   font-weight: 800;
-  color: var(--brand-primary-strong);
+  color: var(--m-brand-on-surface);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
 .menu-price__currency {
   font-size: 11px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--brand-primary-strong) 75%, #ffffff);
+  color: color-mix(in srgb, var(--m-brand-on-surface) 75%, #ffffff);
 }
 
 .menu-actions {
@@ -834,38 +854,38 @@
   gap: 0.3rem;
   padding: 0.45rem 0.8rem;
   /* radius.md → --button-radius (the scale slot buttons derive from). */
-  border-radius: var(--button-radius, 12px);
+  border-radius: var(--m-radius-md, 12px);
   font-size: 11.5px;
   font-weight: 800;
   /* colors.button.secondaryText/secondaryBg → the resting add-button role;
      its hover stays the brand-fill CTA so the label contrast stays guaranteed. */
-  color: var(--button-secondary-text, var(--brand-primary-strong));
-  background: var(--button-secondary-bg, rgb(var(--brand-primary-strong-rgb) / 0.12));
-  border: 1px solid rgb(var(--brand-primary-strong-rgb) / 0.34);
+  color: var(--button-secondary-text, var(--m-brand-on-surface));
+  background: var(--button-secondary-bg, rgb(var(--m-brand-on-surface-rgb) / 0.12));
+  border: 1px solid rgb(var(--m-brand-on-surface-rgb) / 0.34);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 .menu-add:hover {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
   border-color: transparent;
-  box-shadow: 0 8px 20px -12px var(--brand-glow);
+  box-shadow: 0 8px 20px -12px var(--m-brand-glow);
 }
 .menu-add:active {
   transform: scale(0.95);
 }
 .menu-add:focus-visible {
-  outline: 2px solid var(--brand-primary-strong);
+  outline: 2px solid var(--m-brand-on-surface);
   outline-offset: 2px;
 }
 .menu-add--customize {
-  color: var(--menu-text-strong, #eef1f6);
+  color: var(--m-text, #eef1f6);
   /* Ink-tinted overlay (was white-alpha — invisible on light surfaces). */
   background: rgb(var(--m-text-rgb, 255 255 255) / 0.05);
   border-color: rgb(var(--m-text-rgb, 255 255 255) / 0.1);
 }
 .menu-add--customize:hover {
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
 }
 
 /* Inline quantity stepper (appears once the dish is in the cart) */
@@ -875,8 +895,8 @@
   gap: 0.15rem;
   padding: 2px;
   border-radius: 12px;
-  background-image: var(--brand-fill);
-  box-shadow: 0 8px 20px -14px var(--brand-glow);
+  background-image: var(--m-brand-fill);
+  box-shadow: 0 8px 20px -14px var(--m-brand-glow);
 }
 .menu-qty button {
   position: relative;
@@ -886,7 +906,7 @@
   width: 26px;
   height: 26px;
   border-radius: 9px;
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
   cursor: pointer;
   transition: background-color 0.18s ease, transform 0.15s ease;
 }
@@ -916,7 +936,7 @@
   text-align: center;
   font-size: 13px;
   font-weight: 900;
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
   font-variant-numeric: tabular-nums;
 }
 
@@ -948,7 +968,7 @@
 }
 .menu-section-head__title {
   font-size: 19px;
-  font-weight: var(--font-heading-weight, 800);
+  font-weight: var(--m-font-heading-weight, 800);
   color: var(--theme-text-primary, #f6f8fb);
   letter-spacing: -0.01em;
 }
@@ -957,7 +977,7 @@
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-style: italic;
   font-size: 12px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
 }
 .menu-section-head__rule {
   flex: 1;
@@ -966,7 +986,7 @@
   background: linear-gradient(
     to left,
     transparent,
-    var(--brand-line-strong) 45%,
+    var(--m-hairline-strong) 45%,
     transparent
   );
 }
@@ -974,7 +994,7 @@
   padding: 2.75rem 1.5rem;
   text-align: center;
   border-radius: 22px;
-  background: var(--menu-surface);
+  background: var(--m-surface);
   border: 1px dashed var(--brand-line);
 }
 .menu-empty__icon {
@@ -984,8 +1004,8 @@
   height: 3.25rem;
   margin: 0 auto 0.85rem;
   border-radius: 999px;
-  color: var(--brand-primary-strong);
-  background: rgb(var(--brand-primary-strong-rgb) / 0.1);
+  color: var(--m-brand-on-surface);
+  background: rgb(var(--m-brand-on-surface-rgb) / 0.1);
   border: 1px solid var(--brand-line);
 }
 
