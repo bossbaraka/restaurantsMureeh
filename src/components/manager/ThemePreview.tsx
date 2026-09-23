@@ -172,6 +172,119 @@ export const CategoryTokensSample: React.FC = () => (
   </div>
 );
 
+/**
+ * TEMPLATE GALLERY SAMPLE — one compact live menu render per ready template.
+ *
+ * Same contract as the mini samples above: styled EXCLUSIVELY from the
+ * canonical `--m-*` tokens and wrapped by the caller in `ThemeTokensScope`
+ * (the production token pipeline). No hex, no colour arithmetic, no second
+ * engine — a gallery card can therefore never disagree with the real menu.
+ */
+export const TemplateMenuSample: React.FC = () => (
+  <div
+    dir="rtl"
+    className="rounded-xl overflow-hidden border"
+    style={{ background: 'var(--m-bg)', borderColor: 'var(--m-hairline)' }}
+  >
+    <div
+      className="flex items-center gap-1.5 px-2.5 py-1.5 border-b"
+      style={{ background: 'var(--m-surface)', borderColor: 'var(--m-hairline)' }}
+    >
+      <span
+        className="w-5 h-5 rounded-md shrink-0 flex items-center justify-center"
+        style={{ backgroundImage: 'var(--m-brand-fill)', color: 'var(--m-brand-ink)' }}
+      >
+        <UtensilsCrossed className="w-3 h-3" aria-hidden="true" />
+      </span>
+      <span className="text-[10px] font-bold truncate" style={{ color: 'var(--m-text)' }}>
+        قائمة الطعام
+      </span>
+    </div>
+    <div
+      className="flex items-center gap-1 px-2.5 py-1.5 border-b overflow-hidden"
+      style={{ background: 'var(--m-surface)', borderColor: 'var(--m-hairline)' }}
+    >
+      <span
+        className="px-2 py-0.5 text-[9px] font-bold shrink-0"
+        style={{
+          // Active chip contract — identical to the samples above: the derived
+          // brand-gradient image layer is switched off only when an explicit
+          // activeBg override exists (never the case for templates).
+          backgroundImage: 'var(--m-chip-active-image)',
+          backgroundColor: 'var(--m-chip-active-bg)',
+          color: 'var(--m-chip-active-text)',
+          borderRadius: 'var(--m-radius-full)',
+        }}
+      >
+        الكل
+      </span>
+      <span
+        className="px-2 py-0.5 text-[9px] font-bold shrink-0"
+        style={{
+          background: 'var(--m-chip-bg)',
+          color: 'var(--m-chip-text)',
+          borderRadius: 'var(--m-radius-full)',
+          border: '1px solid var(--m-hairline)',
+        }}
+      >
+        المشاوي
+      </span>
+    </div>
+    <div className="p-2 space-y-1.5">
+      <div
+        className="flex items-center gap-2 p-1.5"
+        style={{
+          background: 'var(--m-card-bg)',
+          border: '1px solid var(--m-card-border)',
+          borderRadius: 'var(--m-card-radius)',
+          boxShadow: 'var(--m-card-shadow)',
+        }}
+      >
+        <span
+          className="w-7 h-7 shrink-0 flex items-center justify-center"
+          style={{
+            backgroundImage: 'var(--m-brand-fill)',
+            borderRadius: 'var(--m-radius-sm)',
+            color: 'var(--m-brand-ink)',
+          }}
+        >
+          <UtensilsCrossed className="w-3.5 h-3.5" aria-hidden="true" />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-[10px] font-bold truncate" style={{ color: 'var(--m-text)' }}>
+            طبق اليوم
+          </span>
+          <span className="block text-[9px] truncate" style={{ color: 'var(--m-text-muted)' }}>
+            طبق مميز من مطبخنا
+          </span>
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span
+          className="px-2 py-0.5 text-[8px] font-bold"
+          style={{
+            background: 'var(--m-badge-bg)',
+            color: 'var(--m-badge-text)',
+            borderRadius: 'var(--m-badge-radius)',
+          }}
+        >
+          جديد
+        </span>
+        <span
+          className="px-2 py-0.5 text-[9px] font-bold"
+          style={{
+            backgroundImage: 'var(--m-button-bg)',
+            color: 'var(--m-button-text)',
+            borderRadius: 'var(--m-radius-md)',
+          }}
+        >
+          أضف للسلة
+        </span>
+      </div>
+    </div>
+  </div>
+);
+
 const SAMPLE_CATEGORIES = ['الكل', 'المشاوي', 'المقبلات', 'الحلويات'];
 const SAMPLE_DISHES = [
   { name: 'مشاوي مشكلة', price: '85' },
