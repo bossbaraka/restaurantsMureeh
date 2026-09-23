@@ -4,17 +4,17 @@
    Aesthetic: Royal · Elegant · Cinematic · Minimal · Premium · Hospitality
    ========================================================================== */
 
+/* The loader element carries BOTH `mload-root mload` (single usage, verified).
+   `.mload` (src/index.css) owns the shared canvas facts — position: fixed,
+   inset, display: flex, its centering, overflow, the z-index: 90 floor and the
+   token-driven text colour — and this file previously re-declared them with a
+   bare z-index: 9999 that only won because of import order. That battle is
+   removed: only what is UNIQUE to this layer (column direction, background
+   colour under .mload's gradient, motion/touch guards, dvh height, safe-area
+   padding, RTL) stays here. Rendered result is identical. */
 .mload-root {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   background-color: #060709;
-  color: #F8F9FA;
-  overflow: hidden;
   user-select: none;
   touch-action: none;
   height: 100vh;

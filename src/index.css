@@ -881,7 +881,9 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 0.85rem;
-  border-radius: 999px;
+  /* radius.full — same scale slot ThemePreview renders (was a hardcoded 999px,
+     so a custom radius.full theme updated the preview but not the real menu). */
+  border-radius: var(--radius-full, 999px);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -973,7 +975,9 @@
 .menu-select:hover,
 .menu-select:focus-visible {
   border-color: var(--brand-line-strong);
-  outline: none;
+  /* No `outline: none` here: it used to kill the global :focus-visible ring
+     (A11Y-003) for this control, leaving border-color as the only focus
+     indicator. The select now inherits the shared ring like .menu-toggle. */
 }
 .menu-toggle {
   display: inline-flex;
@@ -990,7 +994,10 @@
   transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 .menu-toggle:hover {
-  color: #eef1f6;
+  /* Mode-safe: was a hardcoded dark-mode ink (#eef1f6) that stayed white on a
+     light menu. Reads the resolved surface ladder instead — the fallback keeps
+     the exact previous dark value. */
+  color: var(--menu-text-strong, #eef1f6);
   border-color: var(--brand-line);
 }
 .menu-toggle[data-on='true'] {
@@ -1072,7 +1079,7 @@
   background: var(--card-bg, linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%));
   border: 1px solid var(--card-border, var(--menu-hairline));
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.035),
+    inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.035),
     var(--card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1087,7 +1094,7 @@
   border-color: var(--brand-line);
   transform: translateY(-2px);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.05),
     0 22px 44px -26px var(--brand-glow);
 }
 .menu-card--featured {
@@ -1111,7 +1118,7 @@
 .menu-card--unavailable:hover {
   transform: none;
   border-color: var(--menu-hairline);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
+  box-shadow: inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.03);
 }
 
 /* Full-card hit area: keeps the whole card tappable while the add/quantity
@@ -1139,7 +1146,8 @@
   border-radius: 15px;
   overflow: hidden;
   background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
-  border: 1px solid rgb(255 255 255 / 0.05);
+  /* Ink-tinted hairline (was white-alpha — invisible on light surfaces). */
+  border: 1px solid rgb(var(--m-text-rgb, 255 255 255) / 0.05);
 }
 @media (min-width: 640px) {
   .menu-media {
@@ -1309,8 +1317,11 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--theme-text-secondary, #98a1b0);
-  background: rgb(255 255 255 / 0.035);
-  border: 1px solid rgb(255 255 255 / 0.05);
+  /* Ink-tinted overlay (was white-alpha, which vanished on a light surface).
+     The text channel keeps the identical look in dark mode and gives the
+     chip a visible hairline in light mode. */
+  background: rgb(var(--m-text-rgb, 255 255 255) / 0.035);
+  border: 1px solid rgb(var(--m-text-rgb, 255 255 255) / 0.05);
 }
 .menu-meta svg {
   width: 11px;
@@ -1393,8 +1404,9 @@
 }
 .menu-add--customize {
   color: var(--menu-text-strong, #eef1f6);
-  background: rgb(255 255 255 / 0.05);
-  border-color: rgb(255 255 255 / 0.1);
+  /* Ink-tinted overlay (was white-alpha — invisible on light surfaces). */
+  background: rgb(var(--m-text-rgb, 255 255 255) / 0.05);
+  border-color: rgb(var(--m-text-rgb, 255 255 255) / 0.1);
 }
 .menu-add--customize:hover {
   color: var(--brand-ink);
@@ -1529,16 +1541,21 @@
   scrollbar-width: none;
 }
 
-/* Custom Sleek Scrollbar for Desktop */
+/* Custom Sleek Scrollbar for Desktop — PLATFORM-token driven.
+   These were hardcoded dark hexes that followed nothing: a light platform
+   shell kept a near-black scrollbar. The track/thumb now derive from the
+   platform appearance tokens (--mureeh-*), so dark mode is visually the same
+   and light mode gets a matching light scrollbar. The hover accent stays the
+   platform gold. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0D0E12;
+  background: var(--mureeh-canvas, #0D0E12);
 }
 ::-webkit-scrollbar-thumb {
-  background: #262933;
+  background: color-mix(in srgb, var(--mureeh-text, #262933) 16%, var(--mureeh-canvas, #0D0E12));
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -1571,9 +1588,15 @@
   box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.25);
 }
 
-/* Mobile Responsive Touch Optimizations */
+/* Mobile Responsive Touch Optimizations — CONFINED to the customer scope.
+   This used to be a bare global `button, input, select` rule, which leaked the
+   customer menu's touch floor into the manager/admin surfaces on phones.
+   `.customer-theme-scope` is `display: contents`, so the descendant selectors
+   still reach every customer control unchanged. */
 @media (max-width: 640px) {
-  button, input, select {
+  .customer-theme-scope button,
+  .customer-theme-scope input,
+  .customer-theme-scope select {
     min-height: 38px;
   }
 }

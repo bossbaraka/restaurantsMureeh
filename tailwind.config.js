@@ -1,4 +1,6 @@
 /** @type {import('tailwindcss').Config} */
+import tailwindcssAnimate from 'tailwindcss-animate';
+
 export default {
   darkMode: 'class',
   content: [
@@ -51,6 +53,17 @@ export default {
           brand: 'rgb(var(--m-brand-rgb) / <alpha-value>)',
           'brand-accent': 'rgb(var(--m-brand-accent-rgb) / <alpha-value>)',
           'brand-strong': 'rgb(var(--m-brand-on-surface-rgb) / <alpha-value>)',
+          /**
+           * STATUS — the canonical `--m-success/-warning/-error` tokens
+           * (platform-fixed, not manager-editable) and their channel triplets.
+           * Values are IDENTICAL to the Tailwind emerald-500 / amber-500 /
+           * red-500 shades the customer UI was painting status with by hand,
+           * so adopting these is zero-visual-change — it just gives status
+           * colouring ONE owner instead of raw palette classes.
+           */
+          success: 'rgb(var(--m-success-rgb) / <alpha-value>)',
+          warning: 'rgb(var(--m-warning-rgb) / <alpha-value>)',
+          error: 'rgb(var(--m-error-rgb) / <alpha-value>)',
         },
         luxury: {
           950: '#0A0B0D',
@@ -123,7 +136,16 @@ export default {
       },
       fontFamily: {
         sans: ['Tajawal', 'Cairo', 'system-ui', '-apple-system', 'sans-serif'],
-        serif: ['Cormorant Garamond', 'serif'],
+        /**
+         * `font-serif` is applied to ARABIC headings across the customer menu
+         * (35 usages), but Cormorant Garamond has no Arabic glyphs — Arabic
+         * fell through to the device's generic serif, while the entry loader
+         * renders the same restaurant name in Amiri. Amiri (already loaded by
+         * index.html, and first in the --font-serif token) is inserted as the
+         * Arabic fallback so one serif identity serves both scripts. Latin
+         * still renders Cormorant Garamond — zero change for English text.
+         */
+        serif: ['Cormorant Garamond', 'Amiri', 'Georgia', 'serif'],
         arabic: ['Tajawal', 'Cairo', 'sans-serif'],
       },
       boxShadow: {
@@ -144,5 +166,15 @@ export default {
       }
     },
   },
-  plugins: [],
+  /**
+   * tailwindcss-animate — owns the `animate-in` / `fade-in` / `slide-in-from-*`
+   * / `zoom-in-*` entrance vocabulary that customer overlays were ALREADY
+   * authored with (34 usages across drawers, sheets, modals and floating
+   * bars). Without this plugin those classes generated NO CSS, so every
+   * customer overlay appeared in one hard frame with no entrance animation.
+   * Registering the plugin activates the intent already in the markup;
+   * the global `prefers-reduced-motion` guard (index.css) applies to the
+   * generated keyframes automatically.
+   */
+  plugins: [tailwindcssAnimate],
 }

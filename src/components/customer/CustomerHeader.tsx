@@ -192,7 +192,7 @@ export const CustomerHeader: React.FC = () => {
               <ShoppingBag className="w-4 h-4" />
               <span>السلة</span>
               {cartTotalCount > 0 ? (
-                <span className="bg-m-bg text-[var(--m-brand-on-surface)] text-xs px-1.5 py-0.2 rounded-md font-bold">
+                <span className="bg-m-bg text-[var(--m-brand-on-surface)] text-xs px-1.5 py-0.5 rounded-md font-bold">
                   {cartTotalCount}
                 </span>
               ) : null}
@@ -216,7 +216,7 @@ export const CustomerHeader: React.FC = () => {
               <ShoppingBag className="w-4 h-4" />
               {cartTotalCount > 0 && (
                 <>
-                  <span className="bg-m-bg text-[var(--m-brand-on-surface)] text-[11px] px-1.5 py-0.2 rounded-md font-bold">
+                  <span className="bg-m-bg text-[var(--m-brand-on-surface)] text-[11px] px-1.5 py-0.5 rounded-md font-bold">
                     {cartTotalCount}
                   </span>
                   <span className="text-[11px] font-bold whitespace-nowrap" dir="ltr">
