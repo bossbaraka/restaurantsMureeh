@@ -189,33 +189,33 @@ describe('customer menu consumes the Effective Theme tokens', () => {
   // Phase 4 — Theme Property → CSS Token → UI Consumer. Each assertion pins
   // one consumer to the token that must drive it (with a visual fallback).
   it('cards consume the card radius/shadow tokens', () => {
-    expect(value('.menu-card', 'border-radius')).toContain('var(--card-radius');
+    expect(value('.menu-card', 'border-radius')).toContain('var(--m-card-radius');
     const shadow = value('.menu-card', 'box-shadow');
-    expect(shadow).toContain('var(--card-shadow');
+    expect(shadow).toContain('var(--m-card-shadow');
     // The inset material highlight stays a fixed part of the card.
     expect(shadow).toContain('inset');
   });
 
   it('buttons and inputs consume the radius scale', () => {
-    expect(value('.menu-add', 'border-radius')).toContain('var(--button-radius');
-    expect(value('.menu-select', 'border-radius')).toContain('var(--radius-md');
-    expect(value('.menu-toggle', 'border-radius')).toContain('var(--radius-md');
+    expect(value('.menu-add', 'border-radius')).toContain('var(--m-radius-md');
+    expect(value('.menu-select', 'border-radius')).toContain('var(--m-radius-md');
+    expect(value('.menu-toggle', 'border-radius')).toContain('var(--m-radius-md');
   });
 
   it('badges consume the badge radius token', () => {
-    expect(value('.menu-badge', 'border-radius')).toContain('var(--badge-radius');
+    expect(value('.menu-badge', 'border-radius')).toContain('var(--m-badge-radius');
   });
 
   it('text roles consume the theme text colours and font weights', () => {
     expect(value('.menu-card__title', 'color')).toContain('var(--theme-text-primary');
-    expect(value('.menu-card__title', 'font-weight')).toContain('var(--font-heading-weight');
+    expect(value('.menu-card__title', 'font-weight')).toContain('var(--m-font-heading-weight');
     expect(value('.menu-card__desc', 'color')).toContain('var(--theme-text-secondary');
-    expect(value('.menu-card__desc', 'font-weight')).toContain('var(--font-body-weight');
+    expect(value('.menu-card__desc', 'font-weight')).toContain('var(--m-font-body-weight');
     expect(value('.menu-section-head__title', 'color')).toContain('var(--theme-text-primary');
   });
 
   it('status colours consume success/warning/error/border tokens', () => {
-    expect(value('.menu-badge--danger', 'background')).toContain('var(--theme-error');
+    expect(value('.menu-badge--danger', 'background')).toContain('var(--m-error');
     expect(value('.menu-badge--dark', 'border')).toContain('var(--theme-border');
   });
 });

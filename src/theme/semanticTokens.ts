@@ -107,7 +107,20 @@ export const SEMANTIC_TOKEN_NAMES = {
     '--m-shadow-md',
     '--m-shadow-lg',
   ],
-  status: ['--m-success', '--m-warning', '--m-error'],
+  status: [
+    '--m-success',
+    '--m-warning',
+    '--m-error',
+    '--m-info',
+    '--m-success-strong',
+    '--m-warning-strong',
+    '--m-error-strong',
+    '--m-info-strong',
+    '--m-success-strong-rgb',
+    '--m-warning-strong-rgb',
+    '--m-error-strong-rgb',
+    '--m-info-strong-rgb',
+  ],
 } as const;
 
 /** Every canonical token name, flattened. */
@@ -193,6 +206,52 @@ function channelTokens(tokens: TokenMap, brand: BrandTokens, mode: SurfaceMode):
 }
 
 /**
+ * PLATFORM-FIXED STATUS EXTENSION.
+ *
+ * `--m-success/-warning/-error` come from the theme row when a restaurant
+ * overrides them. The shades below are deliberately NOT theme-editable:
+ *
+ *  - `--m-info` completes the status quartet. The order lifecycle has always
+ *    rendered «قيد التحضير» in Tailwind's blue-500; this token gives that
+ *    existing colour a canonical name instead of a raw palette class.
+ *  - `--m-*-strong` are the lighter -400 shades the status TEXT and STATUS
+ *    DOTS have always used. They are the dark-surface contrast companions of
+ *    the DEFAULT status palette — chosen once (like --m-success's default),
+ *    not derived from a tenant override, so a custom success colour cannot
+ *    silently change its text companion's contrast.
+ *
+ * Values are byte-identical to the Tailwind classes the UI used before
+ * (emerald/amber/red/blue 500 and 400), so consuming them is a pure refactor.
+ */
+const STATUS_INFO = '#3B82F6'; // = Tailwind blue-500
+const STATUS_STRONG: Record<'success' | 'warning' | 'error' | 'info', string> = {
+  success: '#34D399', // = Tailwind emerald-400
+  warning: '#FBBF24', // = Tailwind amber-400
+  error: '#F87171', // = Tailwind red-400
+  info: '#60A5FA', // = Tailwind blue-400
+};
+
+function statusExtensionTokens(): TokenMap {
+  const channels = (value: string): string => {
+    const rgb = parseColor(value);
+    if (!rgb) return '0 0 0';
+    return `${Math.round(rgb.r)} ${Math.round(rgb.g)} ${Math.round(rgb.b)}`;
+  };
+  return {
+    '--m-info': STATUS_INFO,
+    '--m-info-rgb': channels(STATUS_INFO),
+    '--m-success-strong': STATUS_STRONG.success,
+    '--m-warning-strong': STATUS_STRONG.warning,
+    '--m-error-strong': STATUS_STRONG.error,
+    '--m-info-strong': STATUS_STRONG.info,
+    '--m-success-strong-rgb': channels(STATUS_STRONG.success),
+    '--m-warning-strong-rgb': channels(STATUS_STRONG.warning),
+    '--m-error-strong-rgb': channels(STATUS_STRONG.error),
+    '--m-info-strong-rgb': channels(STATUS_STRONG.info),
+  };
+}
+
+/**
  * Builds the canonical semantic token set.
  *
  * @param theme       the normalized theme (already brand-resolved)
@@ -264,6 +323,9 @@ export function buildSemanticTokens(
 
   // Channel triplets for opacity-modified utilities (see channelTokens).
   Object.assign(tokens, channelTokens(tokens, brand, surfaceMode));
+
+  // Platform-fixed status extension (info + dark-surface strong shades).
+  Object.assign(tokens, statusExtensionTokens());
 
   // ---- Component layer --------------------------------------------------
   // Thin semantic aliases over identity/surface, with the stored per-component

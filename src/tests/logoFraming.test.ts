@@ -20,7 +20,6 @@ const brandingView = read('../components/manager/BrandingSettingsView.tsx');
 const customerHeader = read('../components/customer/CustomerHeader.tsx');
 const managerLayout = read('../components/manager/ManagerLayout.tsx');
 const printMenu = read('../components/manager/PrintMenuModal.tsx');
-const welcome = read('../components/customer/LuxuryWelcomeScreen.tsx');
 
 describe('logo framing is stored and validated', () => {
   it('adds logoFit + logoPosition columns to the Restaurant model', () => {
@@ -58,6 +57,5 @@ describe('logo framing is honoured at render time', () => {
     expect(customerHeader).toContain('objectPosition: currentRestaurant.logoPosition');
     expect(managerLayout).toContain('objectPosition: currentRestaurant.logoPosition');
     expect(printMenu).toContain('objectPosition: currentRestaurant.logoPosition');
-    expect(welcome).toContain('objectPosition: currentRestaurant?.logoPosition');
   });
 });

@@ -452,8 +452,14 @@ const CustomerLayoutContent: React.FC = () => {
 
         {/* Products Grid */}
         {visibleProducts.length === 0 ? (
-          <div className="menu-empty my-8 p-6 sm:p-8 text-center rounded-2xl bg-m-surface/60 border border-m-hairline">
-            <div className="menu-empty__icon mx-auto mb-3 w-12 h-12 rounded-full bg-m-surface-raised/80 flex items-center justify-center text-m-text-muted">
+          /* .menu-empty / .menu-empty__icon (index.css) own this card's
+             padding, radius, background, border and icon geometry. The
+             Tailwind classes that used to sit here lost the cascade to those
+             rules (component CSS loads after utilities), so they were dead
+             markup describing a different card — removed, CSS stays the
+             single source of truth. Visual rendering is unchanged. */
+          <div className="menu-empty my-8">
+            <div className="menu-empty__icon">
               <UtensilsCrossed className="w-6 h-6 stroke-1" />
             </div>
             <h4 className="text-base font-bold text-m-text">

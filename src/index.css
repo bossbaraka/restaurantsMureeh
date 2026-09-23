@@ -28,8 +28,8 @@
 :root,
 :root.dark {
   /* PAGE canvas — the document background behind everything. Exactly the
-     previous body color (#0A0B0D); the QR splash hands off onto it, so
-     --welcome-canvas must stay equal to this value. */
+     previous body color (#0A0B0D); the entry experience paints the same
+     hex as its own canvas so the hand-off stays seamless. */
   --mureeh-canvas: #0A0B0D;
   /* APP SHELL surface — the product frame drawn on top of the page canvas.
      Exactly the previous shell color (#040D1A). These are two DISTINCT
@@ -103,11 +103,8 @@
   }
 }
 
-/* Custom Utilities for Luxury Responsive UI */
-.bg-subtle-pattern {
-  background-image: radial-gradient(rgba(197, 168, 128, 0.06) 1px, transparent 1px);
-  background-size: 24px 24px;
-}
+/* Removed: `.bg-subtle-pattern` — zero consumers anywhere in src/ (verified),
+   yet its dark-tinted dot grid shipped in every CSS bundle. */
 
 /* ==========================================================================
    TENANT BRAND TOKENS
@@ -249,550 +246,29 @@
   outline-offset: 2px;
 }
 
-/* ==========================================================================
-   QR WELCOME SPLASH — what a guest lands on after scanning the table QR
-   --------------------------------------------------------------------------
-   Painted entirely from the tenant tokens, and on the SAME dark canvas as the
-   menu it hands off to (`--welcome-canvas` === the body's #0A0B0D), so there is
-   no colour jump when the splash is dismissed. Nothing here may hardcode a
-   tenant colour: a restaurant that brands itself emerald or magenta has to get
-   an emerald or magenta splash.
-   ========================================================================== */
-:root {
-  --welcome-canvas: #0a0b0d;
-  --welcome-surface: color-mix(in srgb, var(--brand-soft) 55%, #0d0f13);
-  --welcome-surface-raised: color-mix(in srgb, var(--brand-soft-strong) 50%, #14161c);
-  --welcome-scrim-top: color-mix(in srgb, var(--welcome-canvas) 94%, transparent);
-  --welcome-scrim-mid: color-mix(in srgb, var(--welcome-canvas) 85%, transparent);
-}
-
-.welcome-shell {
-  background-color: var(--welcome-canvas);
-  /* Brand aura bleeding in from the edges of an otherwise flat dark canvas. */
-  background-image: radial-gradient(
-    120% 80% at 50% -10%,
-    rgb(var(--brand-primary-strong-rgb) / 0.1) 0%,
-    transparent 60%
-  );
-}
-
-/* Evening sessions sit warmer and dimmer, so the splash reads as "tonight". */
-.welcome-shell--night {
-  background-image: radial-gradient(
-    120% 80% at 50% -10%,
-    rgb(var(--brand-primary-strong-rgb) / 0.14) 0%,
-    transparent 62%
-  );
-}
-.welcome-shell--night .welcome-aura {
-  filter: saturate(1.1) brightness(0.86);
-}
-
-/* Themed ambient glow behind the medallion / hero. */
-.welcome-aura {
-  background:
-    radial-gradient(58% 42% at 50% 34%, var(--brand-glow) 0%, transparent 70%),
-    radial-gradient(42% 32% at 84% 6%, rgb(var(--brand-accent-rgb) / 0.14) 0%, transparent 72%);
-}
-
-/* Drifting, twinkling stars. Colour comes from the tenant brand, so the default
-   gold tenant gets gold stars and every other restaurant gets its own hue. */
-.welcome-stars {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-.welcome-star {
-  position: absolute;
-  color: var(--brand-primary-strong);
-  animation-name: welcome-drift;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  animation-direction: alternate;
-  will-change: transform;
-}
-.welcome-star__glyph {
-  display: block;
-  filter: drop-shadow(0 0 6px var(--brand-glow));
-  animation-name: welcome-twinkle;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-}
-@keyframes welcome-drift {
-  from {
-    transform: translate3d(0, 12px, 0) rotate(0deg);
-  }
-  to {
-    transform: translate3d(8px, -24px, 0) rotate(22deg);
-  }
-}
-@keyframes welcome-twinkle {
-  0%,
-  100% {
-    opacity: 0.22;
-    transform: scale(0.72);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.14);
-  }
-}
-
-.welcome-card {
-  background-color: var(--welcome-surface);
-  border: 1px solid var(--brand-line);
-  box-shadow: 0 18px 40px -26px rgb(0 0 0 / 0.95), inset 0 1px 0 rgb(255 255 255 / 0.04);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-/* Brand-tinted pill (table badge, skip button, catalogue chips, gallery tags). */
-.welcome-chip {
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.1);
-  border: 1px solid rgb(var(--brand-primary-strong-rgb) / 0.28);
-  color: var(--brand-primary-strong);
-}
-.welcome-chip__value {
-  color: var(--brand-primary-strong);
-}
-/* Venue-specific line under the restaurant name. */
-.welcome-venue-tagline {
-  color: color-mix(in srgb, var(--brand-muted) 70%, #dbe2ee);
-}
-
-/* Filled variant — used for the venue-kind badge so it reads as a label. */
-.welcome-chip--solid {
-  background-image: var(--brand-fill);
-  border-color: transparent;
-  color: var(--brand-ink);
-}
-
-/* Logo medallion + the slow conic ring that orbits it. */
-.welcome-medallion {
-  position: relative;
-  isolation: isolate;
-  background-color: var(--welcome-surface-raised);
-  border: 1px solid var(--brand-line-strong);
-  box-shadow: 0 0 34px -10px var(--brand-glow), inset 0 1px 0 rgb(255 255 255 / 0.06);
-}
-.welcome-medallion::after {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: inherit;
-  padding: 1px;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0 52%,
-    rgb(var(--brand-primary-strong-rgb) / 0.55) 72%,
-    transparent 90%
-  );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  animation: welcome-orbit 6s linear infinite;
-  pointer-events: none;
-  z-index: -1;
-}
-@keyframes welcome-orbit {
-  to {
-    transform: rotate(1turn);
-  }
-}
-
-/* Contrast-safe monogram for tenants that have not uploaded a logo yet. */
-.welcome-monogram {
-  background-image: var(--brand-fill);
-  color: var(--brand-ink);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-/* Stage progress (connecting -> identity -> menu). */
-.welcome-progress {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-}
-.welcome-progress__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin-inline-end: 0.35rem;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: color-mix(in srgb, var(--brand-muted) 65%, #cfd6e2);
-}
-.welcome-progress__index {
-  font-family: var(--font-mono, ui-monospace, monospace);
-  color: var(--brand-primary-strong);
-}
-.welcome-progress__seg {
-  width: 22px;
-  height: 3px;
-  border-radius: 999px;
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.2);
-  transition: width 0.3s ease, background-color 0.3s ease;
-}
-.welcome-progress__seg--active {
-  width: 38px;
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.22);
-}
-/* The last segment fills with scroll progress, so the rail doubles as a
-   timeline for the showcase instead of a static three-dot indicator. */
-.welcome-progress__fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background-image: var(--brand-fill);
-  transform: scaleX(var(--scroll, 0));
-  transform-origin: right center;
-  will-change: transform;
-}
-
-/* Review dots — the active one carries the auto-advance timer. */
-.welcome-dot {
-  position: relative;
-  overflow: hidden;
-  width: 0.375rem;
-  height: 0.375rem;
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.22);
-  transition: width 0.3s ease, background-color 0.3s ease;
-}
-.welcome-dot:hover {
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.45);
-}
-.welcome-dot--active {
-  width: 1.75rem;
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.2);
-}
-.welcome-dot__timer {
-  position: absolute;
-  inset: 0;
-  background-image: var(--brand-fill);
-  /* RTL: the bar fills from the reading edge (right) towards the left. */
-  transform-origin: right center;
-  animation-name: welcome-timer;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-.welcome-dot__timer--paused {
-  animation-play-state: paused;
-}
-@keyframes welcome-timer {
-  from {
-    transform: scaleX(0);
-  }
-  to {
-    transform: scaleX(1);
-  }
-}
-
-/* Gallery tiles */
-.welcome-tile {
-  position: relative;
-  overflow: hidden;
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.05);
-  border: 1px solid var(--brand-line);
-  box-shadow: 0 12px 26px -22px rgb(0 0 0 / 0.95);
-  transition: border-color 0.25s ease, transform 0.25s ease;
-}
-.welcome-tile:hover,
-.welcome-tile:focus-visible {
-  border-color: var(--brand-line-strong);
-}
-.welcome-tile:active {
-  transform: scale(0.99);
-}
-.welcome-tile__scrim {
-  background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--welcome-canvas) 92%, transparent) 0%,
-    color-mix(in srgb, var(--welcome-canvas) 20%, transparent) 45%,
-    transparent 75%
-  );
-}
-
-/* Scrims that fade content into the shared canvas. */
-.welcome-scrim {
-  background: linear-gradient(
-    to bottom,
-    var(--welcome-scrim-top) 0%,
-    var(--welcome-scrim-mid) 45%,
-    var(--welcome-canvas) 100%
-  );
-}
-.welcome-footer-scrim {
-  background: linear-gradient(
-    to top,
-    var(--welcome-canvas) 30%,
-    var(--welcome-scrim-top) 68%,
-    transparent 100%
-  );
-}
-
-/* Primary CTA: the brand fill with a contrast-safe label and a slow sheen. */
-.welcome-cta {
-  position: relative;
-  overflow: hidden;
-  background-image: var(--brand-fill);
-  color: var(--brand-ink);
-  box-shadow:
-    0 16px 34px -18px var(--brand-glow),
-    0 0 0 1px rgb(var(--brand-primary-strong-rgb) / 0.35);
-  transition: filter 0.2s ease, transform 0.15s ease;
-}
-.welcome-cta:hover {
-  filter: brightness(1.08);
-}
-.welcome-cta::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 35%,
-    rgb(255 255 255 / 0.18) 50%,
-    transparent 65%
-  );
-  transform: translateX(-120%);
-  animation: welcome-sweep 5s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes welcome-sweep {
-  0%,
-  58% {
-    transform: translateX(-120%);
-  }
-  88%,
-  100% {
-    transform: translateX(120%);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .welcome-medallion::after,
-  .welcome-cta::after {
-    display: none;
-  }
-  .welcome-dot__timer {
-    animation: none;
-    transform: scaleX(1);
-  }
-  /* Stars stay as a static sky rather than freezing mid-fade at full opacity. */
-  .welcome-star,
-  .welcome-star__glyph {
-    animation: none;
-  }
-  .welcome-star__glyph {
-    opacity: 0.6;
-  }
-}
-
-/* ==========================================================================
-   QR WELCOME — interactive pseudo-3D menu device
-   --------------------------------------------------------------------------
-   Tilt is driven by two custom properties written straight from a pointer
-   handler (never React state), and only `transform` plus one gradient position
-   change, so it stays on the compositor. `perspective` lives on the stage so
-   the device can also travel along Z when it expands toward the guest.
-   ========================================================================== */
-.welcome-device-stage {
-  --tilt-x: 0deg;
-  --tilt-y: 0deg;
-  --glare-x: 50%;
-  --glare-y: 50%;
-  position: relative;
-  perspective: 1100px;
-  perspective-origin: 50% 42%;
-  /* Vertical page scroll must keep working over the device. */
-  touch-action: pan-y;
-}
-
-.welcome-device {
-  position: relative;
-  transform-style: preserve-3d;
-  transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-  transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
-  will-change: transform;
-}
-/* While the finger is down the device tracks it exactly — easing here reads
-   as lag rather than as weight. */
-.welcome-device-stage--dragging .welcome-device {
-  transition: none;
-}
-/* The camera moves closer: Z travel inside the stage perspective. */
-.welcome-device--expanded {
-  transform: rotateX(0deg) rotateY(0deg) translateZ(120px) scale(1.03);
-}
-
-.welcome-device__frame {
-  display: block;
-  border-radius: 24px;
-  padding: 7px;
-  background: linear-gradient(158deg, #232833 0%, #0d0f14 62%);
-  border: 1px solid var(--brand-line-strong);
-  box-shadow:
-    0 34px 60px -34px rgb(0 0 0 / 0.92),
-    inset 0 1px 0 rgb(255 255 255 / 0.07);
-}
-
-.welcome-device__screen {
-  position: relative;
-  display: block;
-  overflow: hidden;
-  border-radius: 17px;
-  background: var(--welcome-surface-raised);
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.5);
-}
-
-.welcome-device__ui {
-  display: block;
-}
-
-.welcome-device__row {
-  transition: background-color 0.2s ease;
-}
-.welcome-device--expanded .welcome-device__row:hover {
-  background-color: rgb(var(--brand-primary-strong-rgb) / 0.08);
-}
-
-.welcome-device__logo {
-  background-image: var(--brand-fill);
-}
-
-/* Specular highlight that travels with the pointer. */
-.welcome-device__glare {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: radial-gradient(
-    40% 32% at var(--glare-x) var(--glare-y),
-    rgb(255 255 255 / 0.14) 0%,
-    transparent 70%
-  );
-  mix-blend-mode: screen;
-}
-
-/* Cast shadow shifts opposite the tilt so the light source stays fixed. */
-.welcome-device__shadow {
-  position: absolute;
-  inset-inline: 10%;
-  bottom: -20px;
-  height: 24px;
-  border-radius: 50%;
-  background: radial-gradient(50% 50% at 50% 50%, rgb(0 0 0 / 0.6) 0%, transparent 72%);
-  filter: blur(9px);
-  transform: translateX(calc(var(--tilt-y) * -1.8));
-  transition: transform 0.5s cubic-bezier(0.22, 0.61, 0.36, 1);
-  pointer-events: none;
-}
-.welcome-device--expanded ~ .welcome-device__shadow {
-  opacity: 0.6;
-}
-
-.welcome-device-backdrop {
-  background: color-mix(in srgb, var(--welcome-canvas) 78%, transparent);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  animation: welcome-fade-in 0.3s ease both;
-}
-@keyframes welcome-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.welcome-device-hint {
-  color: color-mix(in srgb, var(--brand-muted) 60%, #cfd6e2);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /* No tilt, no Z travel: the device stays flat and still legible. */
-  .welcome-device,
-  .welcome-device--expanded {
-    transform: none;
-    transition: none;
-  }
-  .welcome-device__glare,
-  .welcome-device__shadow {
-    display: none;
-  }
-  .welcome-device-backdrop {
-    animation: none;
-  }
-}
-
-/* ==========================================================================
-   QR WELCOME — §13 signature moment + §8 scroll choreography
-   ========================================================================== */
-
-/* The cover art drifts against the scroll instead of moving with it. */
-.welcome-parallax {
-  transform: translateY(calc(var(--scroll, 0) * -46px)) scale(1.08);
-  will-change: transform;
-}
-
-/* Image-free ambient wash for the third beat (CONNECT). The tenant palette
-   itself is the backdrop — no photography to download, nothing to crop. */
-.welcome-canvas-wash {
-  background:
-    radial-gradient(72% 52% at 50% 0%, rgb(var(--brand-primary-rgb) / 0.20) 0%, transparent 70%),
-    radial-gradient(56% 44% at 88% 100%, rgb(var(--brand-accent-rgb) / 0.14) 0%, transparent 72%);
-}
-
-/* Dish rows in the menu preview keep their square rhythm without photos. */
-.welcome-device__thumb {
-  background-image: var(--brand-fill);
-  color: var(--brand-ink);
-}
-
-.welcome-qr-section {
-  /* Comes into focus as the guest scrolls it into the middle of the timeline. */
-  opacity: calc(0.55 + var(--scroll, 0) * 0.45);
-}
-
-.welcome-qr-stage {
-  position: relative;
-  border-radius: 20px;
-  border: 1px dashed var(--brand-line-strong);
-  background: radial-gradient(
-    70% 70% at 50% 50%,
-    rgb(var(--brand-primary-strong-rgb) / 0.07) 0%,
-    transparent 72%
-  );
-}
-
-.welcome-qr {
-  touch-action: none;
-}
-
-.welcome-wordmark {
-  background-image: var(--brand-fill);
-  color: var(--brand-ink);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .welcome-parallax {
-    transform: none;
-  }
-  .welcome-qr-section {
-    opacity: 1;
-  }
-}
 
 /* ==========================================================================
    CUSTOMER MENU — professional, tenant-themed, performance-first
+   ==========================================================================
+   TOKEN MIGRATION (2026-09-23): every var() in this section now reads the
+   canonical `--m-*` tokens — the swap is value-identical because the legacy
+   aliases (`--menu-*`, `--card-*`, `--category-*`, `--brand-*`, radius/font
+   families) are DERIVED from the same buildSemanticTokens computation.
+
+   Deliberate legacy exceptions (no identical canonical counterpart — swapping
+   would change rendered values):
+     --brand-soft-strong      .menu-media gradient base (no --m-* soft token)
+     --brand-line             brand border (rgb strong/22% ≠ --m-hairline mix)
+     --theme-text-primary/-secondary/-border   the advanced editor persists
+                              these per tenant; the canonical text/border
+                              tokens are derived-only and would drop the
+                              stored values
+     --badge-text/-bg         canonical defaults are opaque; this badge's
+                              fallback material is translucent dark
+     --button-secondary-bg/-text  canonical defaults (surface-raised/text)
+                              diverge from the brand-tint resting material
+   The `.brand-*` utility classes further below are PLATFORM-shared and keep
+   reading the aliases on purpose.
    ========================================================================== */
 
 /* Sticky filter/category rail ------------------------------------------------ */
@@ -809,8 +285,8 @@
   padding: 0.5rem var(--m-gutter) 0.6rem;
   /* Fully opaque: dishes scrolling underneath must never bleed through the
      rail, otherwise the sticky bar reads as cards stacked on top of cards. */
-  background-color: var(--menu-surface);
-  border-bottom: 1px solid var(--menu-hairline);
+  background-color: var(--m-surface);
+  border-bottom: 1px solid var(--m-hairline);
   box-shadow: 0 14px 24px -22px rgb(0 0 0 / 0.95);
 }
 @media (min-width: 640px) {
@@ -843,11 +319,11 @@
 }
 .menu-cats::before {
   inset-inline-start: calc(-1 * var(--m-gutter));
-  background: linear-gradient(to right, color-mix(in srgb, var(--menu-surface) 95%, transparent), transparent);
+  background: linear-gradient(to right, color-mix(in srgb, var(--m-surface) 95%, transparent), transparent);
 }
 .menu-cats::after {
   inset-inline-end: calc(-1 * var(--m-gutter));
-  background: linear-gradient(to left, color-mix(in srgb, var(--menu-surface) 95%, transparent), transparent);
+  background: linear-gradient(to left, color-mix(in srgb, var(--m-surface) 95%, transparent), transparent);
 }
 @media (min-width: 640px) {
   .menu-cats::before {
@@ -881,18 +357,20 @@
   align-items: center;
   gap: 0.4rem;
   padding: 0.5rem 0.85rem;
-  border-radius: 999px;
+  /* radius.full — same scale slot ThemePreview renders (was a hardcoded 999px,
+     so a custom radius.full theme updated the preview but not the real menu). */
+  border-radius: var(--m-radius-full, 999px);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   /* colors.category.text/bg → --category-text/--category-bg (optional overrides). */
-  color: var(--category-text, color-mix(in srgb, var(--brand-muted) 70%, var(--menu-text-base)));
-  background: var(--category-bg, var(--menu-surface-raised));
-  border: 1px solid var(--menu-hairline);
+  color: var(--m-chip-text, color-mix(in srgb, var(--m-text-subtle) 70%, var(--m-text-muted)));
+  background: var(--m-chip-bg, var(--m-surface-raised));
+  border: 1px solid var(--m-hairline);
   transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 .menu-chip:hover {
-  color: var(--menu-text-strong);
+  color: var(--m-text);
   border-color: var(--brand-line);
 }
 .menu-chip:active {
@@ -902,12 +380,12 @@
   /* colors.category.activeBg/activeText → the selected chip. When an explicit
      activeBg color is provided the engine also emits --category-active-image:
      none, so the color — not the brand gradient — paints. */
-  color: var(--category-active-text, var(--brand-ink));
-  background-color: var(--category-active-bg, transparent);
-  background-image: var(--category-active-image, var(--brand-fill));
+  color: var(--m-chip-active-text, var(--m-brand-ink));
+  background-color: var(--m-chip-active-bg, transparent);
+  background-image: var(--m-chip-active-image, var(--m-brand-fill));
   border-color: transparent;
   font-weight: 800;
-  box-shadow: 0 6px 20px -10px var(--brand-glow);
+  box-shadow: 0 6px 20px -10px var(--m-brand-glow);
 }
 .menu-chip__count {
   min-width: 1.25rem;
@@ -917,11 +395,11 @@
   font-weight: 800;
   line-height: 1.25rem;
   text-align: center;
-  color: var(--brand-muted);
-  background: rgb(var(--brand-primary-strong-rgb) / 0.12);
+  color: var(--m-text-subtle);
+  background: rgb(var(--m-brand-on-surface-rgb) / 0.12);
 }
 .menu-chip[data-active='true'] .menu-chip__count {
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
   background: rgb(0 0 0 / 0.16);
 }
 
@@ -933,7 +411,7 @@
   gap: 0.5rem 0.75rem;
   margin-top: 0.55rem;
   font-size: 11px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
   /* WRAPPING IS EXPLICIT AND BOUNDED.
      The toolbar has two groups: a count label and the controls. If they
      cannot share a line, the controls drop to a second line — a predictable
@@ -958,52 +436,57 @@
   max-width: 100%;
   padding: 0.4rem 1.6rem 0.4rem 0.7rem;
   /* radius.md → inputs (same scale slot as buttons). */
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
   font-weight: 700;
-  color: var(--menu-text-strong, #e6e9f0);
-  background-color: var(--menu-surface-raised);
+  color: var(--m-text, #e6e9f0);
+  background-color: var(--m-surface-raised);
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='3' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
   background-repeat: no-repeat;
   background-position: left 0.45rem center;
-  border: 1px solid var(--menu-hairline);
+  border: 1px solid var(--m-hairline);
   cursor: pointer;
   transition: border-color 0.2s ease, color 0.2s ease;
 }
 .menu-select:hover,
 .menu-select:focus-visible {
-  border-color: var(--brand-line-strong);
-  outline: none;
+  border-color: var(--m-hairline-strong);
+  /* No `outline: none` here: it used to kill the global :focus-visible ring
+     (A11Y-003) for this control, leaving border-color as the only focus
+     indicator. The select now inherits the shared ring like .menu-toggle. */
 }
 .menu-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.4rem 0.6rem;
-  border-radius: var(--radius-md, 10px);
+  border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
   font-weight: 700;
-  color: var(--brand-muted);
-  background: var(--menu-surface-raised);
-  border: 1px solid var(--menu-hairline);
+  color: var(--m-text-subtle);
+  background: var(--m-surface-raised);
+  border: 1px solid var(--m-hairline);
   cursor: pointer;
   transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
 }
 .menu-toggle:hover {
-  color: #eef1f6;
+  /* Mode-safe: was a hardcoded dark-mode ink (#eef1f6) that stayed white on a
+     light menu. Reads the resolved surface ladder instead — the fallback keeps
+     the exact previous dark value. */
+  color: var(--m-text, #eef1f6);
   border-color: var(--brand-line);
 }
 .menu-toggle[data-on='true'] {
-  color: var(--brand-primary-strong);
-  background: rgb(var(--brand-primary-strong-rgb) / 0.12);
-  border-color: rgb(var(--brand-primary-strong-rgb) / 0.38);
+  color: var(--m-brand-on-surface);
+  background: rgb(var(--m-brand-on-surface-rgb) / 0.12);
+  border-color: rgb(var(--m-brand-on-surface-rgb) / 0.38);
 }
 .menu-layout-switch {
   display: inline-flex;
   padding: 2px;
   border-radius: 11px;
-  background: var(--menu-surface-raised);
-  border: 1px solid var(--menu-hairline);
+  background: var(--m-surface-raised);
+  border: 1px solid var(--m-hairline);
 }
 .menu-layout-switch button {
   display: inline-flex;
@@ -1017,7 +500,7 @@
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease;
 }
@@ -1031,8 +514,8 @@
   min-height: 44px;
 }
 .menu-layout-switch button[data-on='true'] {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
 }
 
 /* Grid ---------------------------------------------------------------------- */
@@ -1066,14 +549,14 @@
   /* Theme-driven card geometry: radius.card → --card-radius (falls back to
      radius.lg at runtime), colors.card.shadow / shadows.* → --card-shadow.
      The inset highlight is a fixed material of this card, not themeable. */
-  border-radius: var(--card-radius, 20px);
+  border-radius: var(--m-card-radius, 20px);
   text-align: start;
   /* colors.card.bg/border → --card-bg/--card-border (optional overrides). */
-  background: var(--card-bg, linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%));
-  border: 1px solid var(--card-border, var(--menu-hairline));
+  background: var(--m-card-bg, linear-gradient(160deg, var(--m-surface-raised) 0%, var(--m-surface) 100%));
+  border: 1px solid var(--m-card-border, var(--m-hairline));
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.035),
-    var(--card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
+    inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.035),
+    var(--m-card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
   transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 @media (min-width: 640px) {
@@ -1087,14 +570,14 @@
   border-color: var(--brand-line);
   transform: translateY(-2px);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.05),
-    0 22px 44px -26px var(--brand-glow);
+    inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.05),
+    0 22px 44px -26px var(--m-brand-glow);
 }
 .menu-card--featured {
   grid-template-columns: 116px minmax(0, 1fr);
   background:
-    radial-gradient(120% 140% at 100% 0%, rgb(var(--brand-primary-strong-rgb) / 0.14) 0%, rgba(0, 0, 0, 0) 62%),
-    linear-gradient(160deg, var(--menu-surface-raised) 0%, var(--menu-surface) 100%);
+    radial-gradient(120% 140% at 100% 0%, rgb(var(--m-brand-on-surface-rgb) / 0.14) 0%, rgba(0, 0, 0, 0) 62%),
+    linear-gradient(160deg, var(--m-surface-raised) 0%, var(--m-surface) 100%);
   border-color: var(--brand-line);
 }
 @media (min-width: 640px) {
@@ -1110,8 +593,8 @@
 }
 .menu-card--unavailable:hover {
   transform: none;
-  border-color: var(--menu-hairline);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
+  border-color: var(--m-hairline);
+  box-shadow: inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.03);
 }
 
 /* Full-card hit area: keeps the whole card tappable while the add/quantity
@@ -1124,7 +607,7 @@
   cursor: pointer;
 }
 .menu-card__hit:focus-visible {
-  outline: 2px solid var(--brand-primary-strong);
+  outline: 2px solid var(--m-brand-on-surface);
   outline-offset: 2px;
 }
 .menu-card--unavailable .menu-card__hit {
@@ -1138,8 +621,9 @@
   min-height: 100px;
   border-radius: 15px;
   overflow: hidden;
-  background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
-  border: 1px solid rgb(255 255 255 / 0.05);
+  background: linear-gradient(140deg, var(--brand-soft-strong), var(--m-media-end, #0b0d11));
+  /* Ink-tinted hairline (was white-alpha — invisible on light surfaces). */
+  border: 1px solid rgb(var(--m-text-rgb, 255 255 255) / 0.05);
 }
 @media (min-width: 640px) {
   .menu-media {
@@ -1173,7 +657,7 @@
   inset: 0;
   background:
     linear-gradient(110deg, transparent 20%, rgb(255 255 255 / 0.07) 42%, transparent 62%),
-    linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
+    linear-gradient(140deg, var(--brand-soft-strong), var(--m-media-end, #0b0d11));
   background-size: 220% 100%, 100% 100%;
   animation: menu-shimmer 1.4s ease-in-out infinite;
 }
@@ -1190,8 +674,8 @@
   inset: 0;
   display: grid;
   place-items: center;
-  color: rgb(var(--brand-primary-strong-rgb) / 0.55);
-  background: linear-gradient(140deg, var(--brand-soft-strong), var(--menu-media-end, #0b0d11));
+  color: rgb(var(--m-brand-on-surface-rgb) / 0.55);
+  background: linear-gradient(140deg, var(--brand-soft-strong), var(--m-media-end, #0b0d11));
 }
 .menu-media__scrim {
   position: absolute;
@@ -1220,7 +704,7 @@
   gap: 0.2rem;
   padding: 0.15rem 0.4rem;
   /* radius.full → --badge-radius (pill scale slot shared by badge chips). */
-  border-radius: var(--badge-radius, 8px);
+  border-radius: var(--m-badge-radius, 8px);
   font-size: 9.5px;
   font-weight: 800;
   line-height: 1.5;
@@ -1230,8 +714,8 @@
   box-shadow: 0 4px 12px -6px rgb(0 0 0 / 0.9);
 }
 .menu-badge--brand {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
 }
 .menu-badge--dark {
   /* colors.badge.text/bg → --badge-text/--badge-bg (optional overrides). */
@@ -1241,11 +725,11 @@
 }
 .menu-badge--danger {
   color: #fff1f1;
-  background: color-mix(in srgb, var(--theme-error, rgb(190 32 45)) 85%, transparent);
+  background: color-mix(in srgb, var(--m-error, rgb(190 32 45)) 85%, transparent);
 }
 .menu-badge--signature {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
 }
 
 /* Body ---------------------------------------------------------------------- */
@@ -1257,7 +741,7 @@
 }
 .menu-card__title {
   font-size: 14.5px;
-  font-weight: var(--font-heading-weight, 800);
+  font-weight: var(--m-font-heading-weight, 800);
   line-height: 1.35;
   color: var(--theme-text-primary, #f4f6fa);
   overflow: hidden;
@@ -1267,14 +751,14 @@
   -webkit-box-orient: vertical;
 }
 .menu-card:hover .menu-card__title {
-  color: var(--menu-text-strong, #fff);
+  color: var(--m-text, #fff);
 }
 .menu-card__title-en {
   margin-top: 1px;
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-style: italic;
   font-size: 11.5px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1282,7 +766,7 @@
 .menu-card__desc {
   margin-top: 0.3rem;
   font-size: 12px;
-  font-weight: var(--font-body-weight, 400);
+  font-weight: var(--m-font-body-weight, 400);
   line-height: 1.55;
   color: var(--theme-text-secondary, #9aa3b2);
   overflow: hidden;
@@ -1309,13 +793,16 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--theme-text-secondary, #98a1b0);
-  background: rgb(255 255 255 / 0.035);
-  border: 1px solid rgb(255 255 255 / 0.05);
+  /* Ink-tinted overlay (was white-alpha, which vanished on a light surface).
+     The text channel keeps the identical look in dark mode and gives the
+     chip a visible hairline in light mode. */
+  background: rgb(var(--m-text-rgb, 255 255 255) / 0.035);
+  border: 1px solid rgb(var(--m-text-rgb, 255 255 255) / 0.05);
 }
 .menu-meta svg {
   width: 11px;
   height: 11px;
-  color: var(--brand-primary-strong);
+  color: var(--m-brand-on-surface);
 }
 
 /* Footer: price + action ----------------------------------------------------- */
@@ -1336,7 +823,7 @@
 .menu-price__from {
   font-size: 9.5px;
   font-weight: 600;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
 }
 .menu-price__value {
   display: inline-flex;
@@ -1344,14 +831,14 @@
   gap: 0.2rem;
   font-size: 17px;
   font-weight: 800;
-  color: var(--brand-primary-strong);
+  color: var(--m-brand-on-surface);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
 .menu-price__currency {
   font-size: 11px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--brand-primary-strong) 75%, #ffffff);
+  color: color-mix(in srgb, var(--m-brand-on-surface) 75%, #ffffff);
 }
 
 .menu-actions {
@@ -1367,37 +854,38 @@
   gap: 0.3rem;
   padding: 0.45rem 0.8rem;
   /* radius.md → --button-radius (the scale slot buttons derive from). */
-  border-radius: var(--button-radius, 12px);
+  border-radius: var(--m-radius-md, 12px);
   font-size: 11.5px;
   font-weight: 800;
   /* colors.button.secondaryText/secondaryBg → the resting add-button role;
      its hover stays the brand-fill CTA so the label contrast stays guaranteed. */
-  color: var(--button-secondary-text, var(--brand-primary-strong));
-  background: var(--button-secondary-bg, rgb(var(--brand-primary-strong-rgb) / 0.12));
-  border: 1px solid rgb(var(--brand-primary-strong-rgb) / 0.34);
+  color: var(--button-secondary-text, var(--m-brand-on-surface));
+  background: var(--button-secondary-bg, rgb(var(--m-brand-on-surface-rgb) / 0.12));
+  border: 1px solid rgb(var(--m-brand-on-surface-rgb) / 0.34);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 .menu-add:hover {
-  color: var(--brand-ink);
-  background-image: var(--brand-fill);
+  color: var(--m-brand-ink);
+  background-image: var(--m-brand-fill);
   border-color: transparent;
-  box-shadow: 0 8px 20px -12px var(--brand-glow);
+  box-shadow: 0 8px 20px -12px var(--m-brand-glow);
 }
 .menu-add:active {
   transform: scale(0.95);
 }
 .menu-add:focus-visible {
-  outline: 2px solid var(--brand-primary-strong);
+  outline: 2px solid var(--m-brand-on-surface);
   outline-offset: 2px;
 }
 .menu-add--customize {
-  color: var(--menu-text-strong, #eef1f6);
-  background: rgb(255 255 255 / 0.05);
-  border-color: rgb(255 255 255 / 0.1);
+  color: var(--m-text, #eef1f6);
+  /* Ink-tinted overlay (was white-alpha — invisible on light surfaces). */
+  background: rgb(var(--m-text-rgb, 255 255 255) / 0.05);
+  border-color: rgb(var(--m-text-rgb, 255 255 255) / 0.1);
 }
 .menu-add--customize:hover {
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
 }
 
 /* Inline quantity stepper (appears once the dish is in the cart) */
@@ -1407,8 +895,8 @@
   gap: 0.15rem;
   padding: 2px;
   border-radius: 12px;
-  background-image: var(--brand-fill);
-  box-shadow: 0 8px 20px -14px var(--brand-glow);
+  background-image: var(--m-brand-fill);
+  box-shadow: 0 8px 20px -14px var(--m-brand-glow);
 }
 .menu-qty button {
   position: relative;
@@ -1418,7 +906,7 @@
   width: 26px;
   height: 26px;
   border-radius: 9px;
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
   cursor: pointer;
   transition: background-color 0.18s ease, transform 0.15s ease;
 }
@@ -1448,7 +936,7 @@
   text-align: center;
   font-size: 13px;
   font-weight: 900;
-  color: var(--brand-ink);
+  color: var(--m-brand-ink);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1480,7 +968,7 @@
 }
 .menu-section-head__title {
   font-size: 19px;
-  font-weight: var(--font-heading-weight, 800);
+  font-weight: var(--m-font-heading-weight, 800);
   color: var(--theme-text-primary, #f6f8fb);
   letter-spacing: -0.01em;
 }
@@ -1489,7 +977,7 @@
   font-family: 'Cormorant Garamond', Georgia, serif;
   font-style: italic;
   font-size: 12px;
-  color: var(--brand-muted);
+  color: var(--m-text-subtle);
 }
 .menu-section-head__rule {
   flex: 1;
@@ -1498,7 +986,7 @@
   background: linear-gradient(
     to left,
     transparent,
-    var(--brand-line-strong) 45%,
+    var(--m-hairline-strong) 45%,
     transparent
   );
 }
@@ -1506,7 +994,7 @@
   padding: 2.75rem 1.5rem;
   text-align: center;
   border-radius: 22px;
-  background: var(--menu-surface);
+  background: var(--m-surface);
   border: 1px dashed var(--brand-line);
 }
 .menu-empty__icon {
@@ -1516,8 +1004,8 @@
   height: 3.25rem;
   margin: 0 auto 0.85rem;
   border-radius: 999px;
-  color: var(--brand-primary-strong);
-  background: rgb(var(--brand-primary-strong-rgb) / 0.1);
+  color: var(--m-brand-on-surface);
+  background: rgb(var(--m-brand-on-surface-rgb) / 0.1);
   border: 1px solid var(--brand-line);
 }
 
@@ -1529,51 +1017,45 @@
   scrollbar-width: none;
 }
 
-/* Custom Sleek Scrollbar for Desktop */
+/* Custom Sleek Scrollbar for Desktop — PLATFORM-token driven.
+   These were hardcoded dark hexes that followed nothing: a light platform
+   shell kept a near-black scrollbar. The track/thumb now derive from the
+   platform appearance tokens (--mureeh-*), so dark mode is visually the same
+   and light mode gets a matching light scrollbar. The hover accent stays the
+   platform gold. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #0D0E12;
+  background: var(--mureeh-canvas, #0D0E12);
 }
 ::-webkit-scrollbar-thumb {
-  background: #262933;
+  background: color-mix(in srgb, var(--mureeh-text, #262933) 16%, var(--mureeh-canvas, #0D0E12));
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #C5A880;
 }
 
-/* Luxury card borders & glassmorphism */
-.luxury-border {
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.luxury-border-gold {
-  border: 1px solid rgba(197, 168, 128, 0.25);
-}
-
-.glass-panel {
-  background: rgba(18, 20, 26, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.gold-gradient-text {
-  background: linear-gradient(135deg, #FFF6DD 0%, #E6C86E 50%, #C5A880 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+/* Removed: `.luxury-border`, `.luxury-border-gold`, `.glass-panel` and
+   `.gold-gradient-text` — zero consumers anywhere in src/ (verified), yet all
+   four shipped in every CSS bundle. `.gold-glow` STAYS: it has 18 consumers
+   on platform surfaces. */
 
 .gold-glow {
   box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.25);
 }
 
-/* Mobile Responsive Touch Optimizations */
+/* Mobile Responsive Touch Optimizations — CONFINED to the customer scope.
+   This used to be a bare global `button, input, select` rule, which leaked the
+   customer menu's touch floor into the manager/admin surfaces on phones.
+   `.customer-theme-scope` is `display: contents`, so the descendant selectors
+   still reach every customer control unchanged. */
 @media (max-width: 640px) {
-  button, input, select {
+  .customer-theme-scope button,
+  .customer-theme-scope input,
+  .customer-theme-scope select {
     min-height: 38px;
   }
 }
@@ -3108,9 +2590,8 @@ input[type='range'].saas-range::-moz-range-thumb {
 [class*="backdrop-blur"] {
   -webkit-backdrop-filter: blur(12px);
 }
-.glass-panel {
-  -webkit-backdrop-filter: blur(16px);
-}
+/* (the duplicate `.glass-panel` -webkit rule that sat here was removed with
+   the class itself — zero consumers anywhere in src/.) */
 
 /* Prevent sticky headers from disappearing behind the iOS status bar
    when viewport-fit=cover is active. The inline style on CustomerHeader
