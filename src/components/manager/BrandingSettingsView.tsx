@@ -16,7 +16,8 @@ import {
   toThemeConfig,
   type ThemeDraft,
 } from '../../theme/editorModel';
-import { ThemePreview, ThemeTokensScope, ButtonTokensSample, CardTokensSample, BadgeTokensSample, CategoryTokensSample } from './ThemePreview';
+import { ThemePreview, ThemeTokensScope, ButtonTokensSample, CardTokensSample, BadgeTokensSample, CategoryTokensSample, TemplateMenuSample } from './ThemePreview';
+import { THEME_TEMPLATES, TEMPLATE_DRAFTS, type ThemeTemplate } from '../../theme/themeTemplates';
 
 import {
   AlertTriangle,
@@ -447,6 +448,52 @@ export function toServerThemePayload(
 }
 
 // ============================================================
+// «قوالب جاهزة» — one ready-template card in the theme tab gallery.
+//
+// The card renders a LIVE sample through the production token pipeline
+// (ThemeTokensScope → CustomerThemeProvider → --m-* tokens), exactly like
+// the main preview — never a second styling engine. The sample follows the
+// editor's existing preview surface toggle (light/dark), so the manager
+// inspects both faces of every template with the SAME control they already
+// use for the main preview.
+// ============================================================
+const TemplateCard: React.FC<{
+  template: ThemeTemplate;
+  selected: boolean;
+  previewMode: 'light' | 'dark';
+  onApply: (template: ThemeTemplate) => void;
+}> = ({ template, selected, previewMode, onApply }) => {
+  const draft = TEMPLATE_DRAFTS.get(template.id);
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={() => onApply(template)}
+      className={`rounded-2xl border text-right overflow-hidden transition-all ${selected ? 'border-gold-500 bg-gold-500/10' : 'border-luxury-800 bg-luxury-950 hover:border-luxury-600'}`}
+    >
+      {draft && (
+        <div className="p-2 bg-luxury-950/60">
+          <ThemeTokensScope draft={draft} forceMode={previewMode}>
+            <TemplateMenuSample />
+          </ThemeTokensScope>
+        </div>
+      )}
+      <div className="px-3 py-2.5 flex items-start gap-2">
+        <span
+          className="w-4 h-4 rounded-full mt-0.5 shrink-0"
+          style={{ background: `linear-gradient(135deg, ${template.config.colors?.primary}, ${template.config.colors?.accent})` }}
+        />
+        <span className="min-w-0">
+          <span className="block text-[11px] font-bold text-luxury-100 truncate">{template.label}</span>
+          <span className="block text-[10px] text-luxury-500 leading-relaxed">{template.desc}</span>
+        </span>
+        {selected && <Check className="w-3.5 h-3.5 text-gold-400 mt-1 ml-auto shrink-0" />}
+      </div>
+    </button>
+  );
+};
+
+// ============================================================
 // «تخصيص متقدم» — a collapsible group inside the Advanced disclosure.
 //
 // State-based disclosure (NOT a nested details element): the source-contract
@@ -523,6 +570,10 @@ export const BrandingSettingsView: React.FC = () => {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  // Applied ready-template (UI label only — never persisted, never inferred
+  // on load: the same rule as activePreset). Detached by any manual edit via
+  // setThemeConfig; the template's VALUES remain in editConfig.
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
   const [uploading, setUploading] = useState<'logo' | 'cover' | null>(null);
@@ -562,12 +613,36 @@ export const BrandingSettingsView: React.FC = () => {
 
   const setThemeDraft = (next: ThemeDraft) => {
     setActivePreset(next.presetId);
-    setEditConfig(toThemeConfig(next));
+    setThemeConfig(toThemeConfig(next));
   };
 
   /** Any manual tweak detaches the draft from its preset (it is no longer that preset). */
   const updateDraft = (fn: (d: ThemeDraft) => ThemeDraft) => {
     setThemeDraft(detachPreset(fn(themeDraft)));
+  };
+
+  /**
+   * Every MANUAL write to the theme draft routes through here: the applied
+   * template label detaches (the design is no longer exactly that template)
+   * while the template's VALUES stay in the config. Scope hydration
+   * (loading a restaurant/branch) and theme reset also route here, so a
+   * fresh scope never carries a stale label.
+   */
+  const setThemeConfig: React.Dispatch<React.SetStateAction<ThemeConfig>> = (next) => {
+    setActiveTemplate(null);
+    setEditConfig(next);
+  };
+
+  /**
+   * Apply a ready template: the FULL design lands in the draft (editConfig).
+   * NO API request — the manager reviews the live preview and saves
+   * explicitly through the existing handleSaveTheme path. A template is a
+   * full design, not a style preset: selecting one detaches any preset.
+   */
+  const applyTemplate = (template: ThemeTemplate): void => {
+    setEditConfig(template.config);
+    setActivePreset(null);
+    setActiveTemplate(template.id);
   };
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   const [bgUploading, setBgUploading] = useState<'light' | 'dark' | null>(null);
@@ -630,7 +705,7 @@ export const BrandingSettingsView: React.FC = () => {
       setWebsiteUrl(currentRestaurant.socials?.website || '');
       if (currentRestaurant.theme) {
         setEffectiveTheme(currentRestaurant.theme);
-        setEditConfig(currentRestaurant.theme.rawConfig || DEFAULT_THEME_FALLBACK);
+        setThemeConfig(currentRestaurant.theme.rawConfig || DEFAULT_THEME_FALLBACK);
       }
     }
   }, [currentRestaurant]);
@@ -647,7 +722,7 @@ export const BrandingSettingsView: React.FC = () => {
         // Hydrate the edit model from the resolved raw config (already in the
         // UI shape via mapEffectiveTheme). A raw stored row is converted
         // through the reverse adapter first — it lives in the server contract.
-        setEditConfig(
+        setThemeConfig(
           res.data.effective.rawConfig ||
             (res.data.stored?.config ? uiThemeConfigFromServer(res.data.stored.config) : undefined) ||
             DEFAULT_THEME_FALLBACK
@@ -855,7 +930,7 @@ export const BrandingSettingsView: React.FC = () => {
         return;
       }
       setEffectiveTheme(res.data.effective);
-      setEditConfig(res.data.effective.rawConfig);
+      setThemeConfig(res.data.effective.rawConfig);
       setStoredTheme(null);
       setCurrentRestaurant({ ...currentRestaurant, theme: res.data.effective } as any);
       showToast('success', 'تمت إعادة التعيين', 'تم الرجوع للثيم الافتراضي (Platform → Restaurant → Branch)');
@@ -875,7 +950,7 @@ export const BrandingSettingsView: React.FC = () => {
         return;
       }
       // Update editConfig background
-      setEditConfig((prev) => {
+      setThemeConfig((prev) => {
         const currentBg = prev.background?.[variant] || { type: 'image' as BackgroundType };
         return {
           ...prev,
@@ -926,7 +1001,7 @@ export const BrandingSettingsView: React.FC = () => {
     ((editConfig.colors as any)?.[group] as Record<string, string> | undefined)?.[key];
 
   const setGroupColor = (group: GroupName, key: string, hex: string | null) => {
-    setEditConfig((p) => {
+    setThemeConfig((p) => {
       const colors = { ...((p.colors as any) || {}) } as Record<string, any>;
       const next: Record<string, string> = { ...((colors[group] as Record<string, string>) || {}) };
       if (hex === null) delete next[key];
@@ -943,7 +1018,7 @@ export const BrandingSettingsView: React.FC = () => {
   const hasCardShadow = cardOverride('shadow') !== '';
 
   const setCardOverride = (key: 'radius' | 'shadow', value: string | null) => {
-    setEditConfig((p) => {
+    setThemeConfig((p) => {
       const cards = { ...((p.cards as Record<string, string>) || {}) };
       const colors = { ...((p.colors as any) || {}) } as Record<string, any>;
       const cardGroup: Record<string, string> = { ...((colors.card as Record<string, string>) || {}) };
@@ -989,7 +1064,7 @@ export const BrandingSettingsView: React.FC = () => {
   const colorValue = (key: string): string =>
     (editConfig.colors as any)?.[key] || (DEFAULT_THEME_FALLBACK.colors as any)[key];
   const setColor = (key: string) => (hex: string) =>
-    setEditConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
+    setThemeConfig((p) => ({ ...p, colors: { ...(p.colors || DEFAULT_THEME_FALLBACK.colors!), [key]: hex } as any }));
 
   const hasLegacyEmbeddedImages = isEmbeddedImage(logoPreview) || isEmbeddedImage(coverImage) || galleryImages.some((u) => isEmbeddedImage(u));
 
@@ -1093,6 +1168,28 @@ export const BrandingSettingsView: React.FC = () => {
                   CSS boxes. Those now live under Advanced, unchanged, for the
                   cases where an explicit override is genuinely needed.
                   ============================================================ */}
+
+              {/* 0 — Ready templates: a full modern design (both faces) in one
+                  click. The sample below is a LIVE render through the
+                  production pipeline, following the SAME preview surface
+                  toggle as the main preview — no second engine. */}
+              <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-3">
+                <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-gold-400" /> قوالب جاهزة
+                </h3>
+                <p className="text-[11px] text-luxury-400">تصميم متكامل بنقرة واحدة — كل قالب وجهان (فاتح وداكن) يتبعان جهاز العميل. بدّل وضع المعاينة (فاتح/داكن) في عمود المعاينة لمقارنة وجهي أي قالب، وعدّل أي شيء بعدها قبل الحفظ.</p>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3" role="group" aria-label="قوالب الثيم الجاهزة">
+                  {THEME_TEMPLATES.map((template) => (
+                    <TemplateCard
+                      key={template.id}
+                      template={template}
+                      selected={activeTemplate === template.id}
+                      previewMode={previewSurface}
+                      onApply={applyTemplate}
+                    />
+                  ))}
+                </div>
+              </div>
 
               {/* 1 — Appearance */}
               <div className="bg-luxury-900 border border-luxury-800 rounded-2xl p-5 space-y-3">
@@ -1527,7 +1624,7 @@ export const BrandingSettingsView: React.FC = () => {
                           {(['sm', 'md', 'lg', 'xl'] as const).map((k) => (
                             <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
                               <span className="text-[10px] text-luxury-400">{k}</span>
-                              <input aria-label={`زاوية ${k}`} type="text" value={(editConfig.radius as any)?.[k] || (DEFAULT_THEME_FALLBACK.radius as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, radius: { ...(p.radius || DEFAULT_THEME_FALLBACK.radius!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[11px] font-mono text-luxury-100 mt-1" />
+                              <input aria-label={`زاوية ${k}`} type="text" value={(editConfig.radius as any)?.[k] || (DEFAULT_THEME_FALLBACK.radius as any)[k]} onChange={(e) => setThemeConfig((p) => ({ ...p, radius: { ...(p.radius || DEFAULT_THEME_FALLBACK.radius!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[11px] font-mono text-luxury-100 mt-1" />
                             </div>
                           ))}
                         </div>
@@ -1538,7 +1635,7 @@ export const BrandingSettingsView: React.FC = () => {
                           {(['sm', 'md', 'lg'] as const).map((k) => (
                             <div key={k} className="bg-luxury-950 border border-luxury-800 rounded-xl p-2">
                               <span className="text-[10px] text-luxury-400">{k}</span>
-                              <input aria-label={`ظل ${k}`} type="text" value={(editConfig.shadows as any)?.[k] || (DEFAULT_THEME_FALLBACK.shadows as any)[k]} onChange={(e) => setEditConfig((p) => ({ ...p, shadows: { ...(p.shadows || DEFAULT_THEME_FALLBACK.shadows!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[10px] font-mono text-luxury-100 mt-1" />
+                              <input aria-label={`ظل ${k}`} type="text" value={(editConfig.shadows as any)?.[k] || (DEFAULT_THEME_FALLBACK.shadows as any)[k]} onChange={(e) => setThemeConfig((p) => ({ ...p, shadows: { ...(p.shadows || DEFAULT_THEME_FALLBACK.shadows!), [k]: e.target.value } as any }))} className="w-full bg-luxury-900 border border-luxury-800 rounded-lg p-1.5 text-[10px] font-mono text-luxury-100 mt-1" />
                             </div>
                           ))}
                         </div>
@@ -1566,7 +1663,7 @@ export const BrandingSettingsView: React.FC = () => {
                       {BG_TYPES.map((t) => {
                         const sel = cfg.type === t.id;
                         return (
-                          <button key={t.id}  onClick={() => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), type: t.id } as any } }))} className={`p-2.5 rounded-xl border text-xs font-bold ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>
+                          <button key={t.id}  onClick={() => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), type: t.id } as any } }))} className={`p-2.5 rounded-xl border text-xs font-bold ${sel ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>
                             {t.label}
                           </button>
                         );
@@ -1579,7 +1676,7 @@ export const BrandingSettingsView: React.FC = () => {
                           label="لون الخلفية"
                           value={cfg.color || ''}
                           defaultValue={variant === 'light' ? '#FFFFFF' : '#0A0B0D'}
-                          onChange={(hex) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), color: hex } as any } }))}
+                          onChange={(hex) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), color: hex } as any } }))}
                         />
                       </div>
                     )}
@@ -1587,7 +1684,7 @@ export const BrandingSettingsView: React.FC = () => {
                     {cfg.type === 'gradient' && (
                       <div>
                         <span className="text-xs text-luxury-300">تدرج CSS</span>
-                        <input type="text" value={cfg.gradient || ''}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), gradient: e.target.value } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-xl p-2.5 text-xs font-mono text-luxury-100" placeholder="linear-gradient(135deg, #0A0B0D, #1E293B)" />
+                        <input type="text" value={cfg.gradient || ''}  onChange={(e) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), gradient: e.target.value } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-xl p-2.5 text-xs font-mono text-luxury-100" placeholder="linear-gradient(135deg, #0A0B0D, #1E293B)" />
                       </div>
                     )}
 
@@ -1603,7 +1700,7 @@ export const BrandingSettingsView: React.FC = () => {
                             <button disabled={bgUploading === variant} onClick={() => (variant === 'light' ? bgLightInputRef.current?.click() : bgDarkInputRef.current?.click())} className="px-3 py-2 rounded-xl bg-luxury-800 hover:bg-luxury-700 border border-luxury-700 text-luxury-100 text-xs flex items-center gap-1.5 disabled:opacity-60">
                               {bgUploading === variant ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} رفع صورة
                             </button>
-                            <button  onClick={() => { if (coverImage) setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), image: { storagePath: coverImage } } as any } })); }} className="px-3 py-2 rounded-xl bg-luxury-950 border border-luxury-800 text-luxury-300 text-xs">من مكتبة المطعم</button>
+                            <button  onClick={() => { if (coverImage) setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), image: { storagePath: coverImage } } as any } })); }} className="px-3 py-2 rounded-xl bg-luxury-950 border border-luxury-800 text-luxury-300 text-xs">من مكتبة المطعم</button>
                             <span className="px-3 py-2 rounded-xl bg-luxury-950 border border-dashed border-luxury-700 text-luxury-500 text-xs flex items-center gap-1"><Sparkles className="w-3 h-3" /> AI قريباً</span>
                           </div>
                           {cfg.image && <span className="text-[10px] text-luxury-400 font-mono truncate block">{cfg.image.storagePath}</span>}
@@ -1612,13 +1709,13 @@ export const BrandingSettingsView: React.FC = () => {
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <span className="text-[11px] text-luxury-400">الموضع</span>
-                            <select value={cfg.position || 'center'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), position: e.target.value as any } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                            <select value={cfg.position || 'center'}  onChange={(e) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), position: e.target.value as any } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
                               <option value="center">وسط</option><option value="top">أعلى</option><option value="bottom">أسفل</option><option value="left">يسار</option><option value="right">يمين</option>
                             </select>
                           </div>
                           <div>
                             <span className="text-[11px] text-luxury-400">الحجم</span>
-                            <select value={cfg.size || 'cover'}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), size: e.target.value as any } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
+                            <select value={cfg.size || 'cover'}  onChange={(e) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), size: e.target.value as any } as any } }))} className="w-full mt-1 bg-luxury-950 border border-luxury-800 rounded-lg p-2 text-xs text-luxury-100">
                               <option value="cover">تغطية</option><option value="contain">احتواء</option><option value="auto">تلقائي</option>
                             </select>
                           </div>
@@ -1639,22 +1736,22 @@ export const BrandingSettingsView: React.FC = () => {
                                        read + preserve their alpha, not flatten it. */
                                     value={cfg.overlayColor || ''}
                                     defaultValue="#000000"
-                                    onChange={(hex) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: hex } as any } }))}
+                                    onChange={(hex) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayColor: hex } as any } }))}
                                   />
                                 </div>
                               </div>
                               <div>
                                 <span className="text-[11px] text-luxury-400">شفافية Overlay: {cfg.overlayOpacity ?? 0.85}</span>
-                                <input type="range" min={0} max={1} step={0.05} value={cfg.overlayOpacity ?? 0.85}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayOpacity: parseFloat(e.target.value) } as any } }))} className="w-full mt-1" />
+                                <input type="range" min={0} max={1} step={0.05} value={cfg.overlayOpacity ?? 0.85}  onChange={(e) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), overlayOpacity: parseFloat(e.target.value) } as any } }))} className="w-full mt-1" />
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                               <div>
                                 <span className="text-[11px] text-luxury-400">Blur: {cfg.blur || 0}px</span>
-                                <input type="range" min={0} max={20} step={1} value={cfg.blur || 0}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), blur: parseInt(e.target.value) } as any } }))} className="w-full mt-1" />
+                                <input type="range" min={0} max={20} step={1} value={cfg.blur || 0}  onChange={(e) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), blur: parseInt(e.target.value) } as any } }))} className="w-full mt-1" />
                               </div>
                               <label className="flex items-center gap-2 text-xs text-luxury-300 mt-6">
-                                <input type="checkbox" checked={!!cfg.readabilityBoost}  onChange={(e) => setEditConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), readabilityBoost: e.target.checked } as any } }))} />
+                                <input type="checkbox" checked={!!cfg.readabilityBoost}  onChange={(e) => setThemeConfig((p) => ({ ...p, background: { ...(p.background || {}), [variant]: { ...(p.background?.[variant] || {}), readabilityBoost: e.target.checked } as any } }))} />
                                 تحسين قابلية القراءة
                               </label>
                             </div>
