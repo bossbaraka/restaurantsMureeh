@@ -38,8 +38,6 @@ const COLOR_EXEMPT_FILES: Record<string, string> = {
     'Canvas: paints the loading animation via ctx.fillStyle, which cannot read CSS variables.',
   'customerLoadingExperience.css':
     'Illustration: a self-contained loading experience with its own fixed art direction.',
-  'LuxuryWelcomeScreen.tsx':
-    'Canvas: the splash is drawn into a <canvas>; colours come from the pure buildBrandTokens derivation.',
 };
 
 function customerFiles(ext: RegExp): string[] {
@@ -166,7 +164,7 @@ describe('customer layer consumes canonical semantic tokens', () => {
   it('canvas paths stay pure — no CSS-variable reads in rasterization code', () => {
     // The rule is: DOM UI -> semantic CSS tokens, canvas -> pure resolved
     // values. Canvas code must not start reaching into the document.
-    for (const name of ['CustomerLoadingExperience.tsx', 'LuxuryWelcomeScreen.tsx']) {
+    for (const name of ['CustomerLoadingExperience.tsx']) {
       const src = code(path.join(CUSTOMER_DIR, name));
       expect(src, name).not.toContain('getComputedStyle');
       expect(src, name).not.toContain('documentElement');

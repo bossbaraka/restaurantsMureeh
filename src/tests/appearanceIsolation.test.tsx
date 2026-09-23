@@ -242,7 +242,6 @@ describe('single ownership of each appearance world', () => {
       '../context/RestaurantContext.tsx',
       '../components/customer/CustomerLayout.tsx',
       '../components/customer/RestaurantEntryExperience.tsx',
-      '../components/customer/LuxuryWelcomeScreen.tsx',
       '../components/display/LiveMenuStage.tsx',
       '../components/manager/BrandingSettingsView.tsx',
       '../components/common/ViewSwitcher.tsx',
@@ -262,7 +261,6 @@ describe('single ownership of each appearance world', () => {
       '../context/RestaurantContext.tsx',
       '../components/customer/CustomerLayout.tsx',
       '../components/customer/RestaurantEntryExperience.tsx',
-      '../components/customer/LuxuryWelcomeScreen.tsx',
       '../components/display/LiveMenuStage.tsx',
       '../components/manager/BrandingSettingsView.tsx',
     ];
@@ -280,12 +278,6 @@ describe('single ownership of each appearance world', () => {
     const src = read('../components/display/LiveMenuStage.tsx');
     expect(src).toContain('<CustomerThemeProvider');
     expect(src).toContain('forceMode="dark"');
-  });
-
-  it('the welcome screen derives colors purely, without a DOM-writing hook', () => {
-    const src = read('../components/customer/LuxuryWelcomeScreen.tsx');
-    expect(src).toContain('buildBrandTokens(');
-    expect(src).not.toMatch(/^\s*(const .* = )?useBrandTheme\(/m);
   });
 
   it('the manager editor saves state without applying theme to the document', () => {
