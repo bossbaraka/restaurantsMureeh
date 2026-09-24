@@ -36,6 +36,16 @@ const AppContent: React.FC = () => {
 
   const safeViewMode = canAccessView(viewMode) || viewMode === 'SAAS_LANDING' ? viewMode : 'CUSTOMER';
 
+  // PUBLIC_CUSTOMER vs PLATFORM_CUSTOMER_PREVIEW.
+  //
+  // `safeViewMode === 'CUSTOMER'` alone does not identify a public guest: a
+  // signed-in manager or staff member previewing the menu is in CUSTOMER too.
+  // The existing permission model already separates them — canAccessView()
+  // is false for every view when nobody is signed in, and true for CUSTOMER
+  // for every console role. A guest on the menu (QR scan, /r/{slug}) is
+  // therefore exactly `!canAccessView('CUSTOMER')`; no new state is needed.
+  const isPublicCustomer = safeViewMode === 'CUSTOMER' && !canAccessView('CUSTOMER');
+
   if (isLoginModalOpen) {
     return (
       <div
@@ -46,6 +56,26 @@ const AppContent: React.FC = () => {
     >
         <LoginModal />
       </div>
+    );
+  }
+
+  // PUBLIC CUSTOMER SHELL — the restaurant's own menu, with NO platform chrome
+  // mounted: no ViewSwitcher and no platform surface wrapper.
+  //
+  // Unmounting (not hiding) is what keeps the sticky geometry honest. The
+  // 'toolbar' band never registers with StickyStack, so it contributes 0:
+  // --m-stack-above-header = 0px (CustomerHeader parks at the viewport top)
+  // and --m-stack-h = the MEASURED CustomerHeader height (.menu-rail parks
+  // directly below it). No offset is declared anywhere.
+  if (isPublicCustomer) {
+    return (
+      <>
+        <CustomerLayout />
+        {/* Same global overlays as the platform shell, minus the
+            platform-only onboarding wizard. */}
+        <LoginModal />
+        <ToastContainer />
+      </>
     );
   }
 
