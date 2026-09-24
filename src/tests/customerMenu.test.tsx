@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { ProductCard } from '../components/customer/ProductCard';
 import { MenuToolbar } from '../components/customer/MenuToolbar';
 import { ProductImage } from '../components/customer/ProductImage';
@@ -207,11 +209,15 @@ describe('MenuToolbar', () => {
     onLayoutChange: () => {},
   };
 
-  it('reports the filtered slice of the section', () => {
+  it('renders no dishes count — Option A keeps it in the section head only', () => {
     const html = render(<MenuToolbar {...toolbarProps} />);
-    expect(html).toContain('12');
-    expect(html).toContain('14');
-    expect(html).toContain('طبق');
+    // The removed count group shared its class with the controls group, so
+    // exactly ONE group may remain: no duplicate count can silently return.
+    expect(html.split('menu-toolbar__group').length - 1).toBe(1);
+    // ...while every control stays rendered.
+    expect(html).toContain('menu-toggle');
+    expect(html).toContain('menu-select');
+    expect(html).toContain('menu-layout-switch');
   });
 
   it('exposes accessible state on every control', () => {
@@ -228,6 +234,29 @@ describe('MenuToolbar', () => {
     const html = render(<MenuToolbar {...toolbarProps} layout="list" />);
     expect(html).toContain('aria-label="عرض قائمة" title="عرض قائمة"');
     expect(html).toContain('data-on="false"');
+  });
+});
+
+describe('menu section head count (Option A)', () => {
+  const layoutSource = () =>
+    readFileSync(
+      fileURLToPath(new URL('../components/customer/CustomerLayout.tsx', import.meta.url)),
+      'utf8'
+    );
+
+  it('owns the dishes count: one grouped metadata line with the shown/total format', () => {
+    const layout = layoutSource();
+    // The count heads the title block it describes.
+    expect(layout).toContain('menu-section-head__count');
+    expect(layout).toContain('<strong>{visibleProducts.length}</strong> طبق');
+    // While a filter narrows the section, the shown/total pair is preserved.
+    expect(layout).toContain('visibleProducts.length !== scopedProducts.length');
+    expect(layout).toContain('<strong>{visibleProducts.length}</strong> من {scopedProducts.length} طبق');
+    // The whole head (count included) stays hidden during search.
+    expect(layout).toContain('!isSearching && activeCategoryObj');
+    expect(layout.indexOf('!isSearching && activeCategoryObj')).toBeLessThan(
+      layout.indexOf('menu-section-head__count')
+    );
   });
 });
 

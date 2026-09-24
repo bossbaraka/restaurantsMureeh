@@ -287,7 +287,9 @@
      rail, otherwise the sticky bar reads as cards stacked on top of cards. */
   background-color: var(--m-surface);
   border-bottom: 1px solid var(--m-hairline);
-  box-shadow: 0 14px 24px -22px rgb(0 0 0 / 0.95);
+  /* Quiet separation: the rail sits on the opaque surface + hairline alone.
+     The deep drop shadow made it read as a card floating over cards. */
+  box-shadow: 0 10px 20px -20px rgb(0 0 0 / 0.55);
 }
 @media (min-width: 640px) {
   .menu-rail {
@@ -356,6 +358,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  /* Unified 40px control rhythm shared with the toolbar below: every pill
+     and every toolbar control resolves to the same height on all screens. */
+  min-height: 40px;
   padding: 0.5rem 0.85rem;
   /* radius.full — same scale slot ThemePreview renders (was a hardcoded 999px,
      so a custom radius.full theme updated the preview but not the real menu). */
@@ -393,6 +398,7 @@
   border-radius: 999px;
   font-size: 10px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   line-height: 1.25rem;
   text-align: center;
   color: var(--m-text-subtle);
@@ -426,6 +432,23 @@
   gap: 0.4rem;
   /* Groups may shrink before the toolbar wraps. */
   min-width: 0;
+  /* Option A removed the count group, so the single controls group fits one
+     line on every phone (320px+). This inner wrap is only a graceful,
+     start-aligned fallback for unusually large tenant fonts — never an
+     orphaned row forced by one wide control. */
+  flex-wrap: wrap;
+}
+/* Mobile unification (visual follow-up): the global customer touch floor
+   (`.customer-theme-scope button/select { min-height: 38px }` below 640px)
+   outranks the plain 40px rhythm above by specificity (0,1,1 beats 0,1,0),
+   which left the chips/toggle/select at 38px while the switch (a div, not a
+   button) composed 40px. This scope-prefixed restatement (0,2,0) wins
+   cleanly, so every rail control resolves to the same 40px on phones — no
+   `!important`, no breakpoint of its own, no value change anywhere else. */
+.customer-theme-scope .menu-chip,
+.customer-theme-scope .menu-toggle,
+.customer-theme-scope .menu-select {
+  min-height: 40px;
 }
 .menu-select {
   appearance: none;
@@ -434,6 +457,8 @@
      that keeps the current option readable) avoids wrapping on 320-375px. */
   min-width: 0;
   max-width: 100%;
+  /* Same 40px rhythm as the chips and the toggle: one control system. */
+  min-height: 40px;
   padding: 0.4rem 1.6rem 0.4rem 0.7rem;
   /* radius.md → inputs (same scale slot as buttons). */
   border-radius: var(--m-radius-md, 10px);
@@ -459,6 +484,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+  /* Same 40px rhythm as the chips and the select: one control system. */
+  min-height: 40px;
   padding: 0.4rem 0.6rem;
   border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
@@ -483,10 +510,24 @@
 }
 .menu-layout-switch {
   display: inline-flex;
+  align-items: center;
   padding: 2px;
-  border-radius: 11px;
+  /* radius.md joins the shared control family (fallback keeps the exact
+     previous 11px). min-height locks the same 40px rhythm as its siblings. */
+  border-radius: var(--m-radius-md, 11px);
+  min-height: 40px;
   background: var(--m-surface-raised);
   border: 1px solid var(--m-hairline);
+}
+@media (max-width: 640px) {
+  /* The global customer touch floor (min-height: 38px on every button below
+     640px) stretches these segmented buttons from 34px to 38px. The
+     container drops its 2px inset padding on the SAME breakpoint, so the
+     composed height stays exactly 40px (38 + 0 padding + 2 border) like the
+     toggle and the select — a breakpoint-paired rule, not a magic offset. */
+  .menu-layout-switch {
+    padding: 0;
+  }
 }
 .menu-layout-switch button {
   display: inline-flex;
@@ -497,8 +538,10 @@
      so it meets the recommended touch-target size on phones — this is the
      primary layout control on the customer menu. */
   position: relative;
-  width: 28px;
-  height: 28px;
+  /* 34px composes the 40px rhythm with the container (34 + 2*2 padding +
+     2 border on desktop; 38 + 0 + 2 under the mobile touch floor). */
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
   color: var(--m-text-subtle);
   cursor: pointer;
@@ -960,11 +1003,25 @@
 /* Section heading + empty state ---------------------------------------------- */
 .menu-section-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   margin-block: 0.35rem 0.85rem;
   padding-inline: 0.15rem;
+}
+/* Option A: the dishes count heads the title block it describes
+   ("N طبق" / "N من M طبق") — one quiet metadata line, tabular numerals,
+   existing text tokens only. */
+.menu-section-head__count {
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--m-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.menu-section-head__count strong {
+  font-weight: 800;
+  color: var(--m-text-muted);
 }
 .menu-section-head__title {
   font-size: 19px;
@@ -982,11 +1039,12 @@
 .menu-section-head__rule {
   flex: 1;
   height: 1px;
-  margin-bottom: 0.5rem;
+  /* Calmed from hairline-strong to the plain hairline; the gradient shape
+     (the menu's identity) is unchanged, only its visual weight is lower. */
   background: linear-gradient(
     to left,
     transparent,
-    var(--m-hairline-strong) 45%,
+    var(--m-hairline) 50%,
     transparent
   );
 }
