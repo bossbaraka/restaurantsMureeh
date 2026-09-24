@@ -434,19 +434,31 @@ const CustomerLayoutContent: React.FC = () => {
           />
         </div>
 
-        {/* Section Title when browsing by category */}
+        {/* Section Title when browsing by category.
+            Option A: the ONLY dishes count on screen lives here, grouped with
+            the title it describes — "N طبق", or "N من M طبق" while a filter
+            (availability) narrows the section. Same values the toolbar used
+            to duplicate; no filtering/sorting logic changed. */}
         {!isSearching && activeCategoryObj && (
           <div className="menu-section-head">
             <div>
+              <p className="menu-section-head__count">
+                {visibleProducts.length !== scopedProducts.length ? (
+                  <>
+                    <strong>{visibleProducts.length}</strong> من {scopedProducts.length} طبق
+                  </>
+                ) : (
+                  <>
+                    <strong>{visibleProducts.length}</strong> طبق
+                  </>
+                )}
+              </p>
               <h3 className="menu-section-head__title">{activeCategoryObj.name}</h3>
               {activeCategoryObj.nameEn && (
                 <p className="menu-section-head__sub">{activeCategoryObj.nameEn}</p>
               )}
             </div>
             <span className="menu-section-head__rule" aria-hidden="true" />
-            <span className="text-[11px] font-semibold text-m-text-subtle whitespace-nowrap pb-1">
-              {visibleProducts.length} أطباق
-            </span>
           </div>
         )}
 

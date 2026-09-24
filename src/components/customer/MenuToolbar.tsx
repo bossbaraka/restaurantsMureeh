@@ -27,10 +27,13 @@ const SORT_OPTIONS: { value: MenuSortKey; label: string }[] = [
  * Menu controls: ordering, availability filter and density switch.
  * Purely presentational — the filtering/sorting math lives in CustomerLayout
  * so it stays memoized once for the whole grid.
+ *
+ * NOTE (Option A): the dishes count is intentionally NOT rendered here any
+ * more — it lives once, in the section header below the rail. `shownCount`
+ * and `totalCount` stay on the props contract untouched so the single caller
+ * (CustomerLayout) and every consumer of the type keep compiling unchanged.
  */
 export const MenuToolbar: React.FC<MenuToolbarProps> = ({
-  shownCount,
-  totalCount,
   sort,
   onSortChange,
   availableOnly,
@@ -41,19 +44,12 @@ export const MenuToolbar: React.FC<MenuToolbarProps> = ({
   return (
     <div className="menu-toolbar">
       <div className="menu-toolbar__group">
-        <span className="font-semibold text-m-text-muted">
-          {shownCount}
-          {shownCount !== totalCount && <span className="text-m-text-subtle"> / {totalCount}</span>}
-        </span>
-        <span>طبق</span>
-      </div>
-
-      <div className="menu-toolbar__group">
         <button
           type="button"
           className="menu-toggle"
           data-on={availableOnly}
           aria-pressed={availableOnly}
+          aria-label="إظهار الأطباق المتوفرة فقط"
           onClick={() => onAvailableOnlyChange(!availableOnly)}
           title="إظهار الأطباق المتوفرة فقط"
         >
