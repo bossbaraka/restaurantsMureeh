@@ -160,7 +160,7 @@ export const DirectTableEntryModal: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setIsTableSelectorOpen(false)}
-                  className="w-full py-3 rounded-xl brand-cta font-bold text-sm transition-all cursor-pointer"
+                  className="w-full py-3 rounded-full brand-cta font-bold text-sm transition-all cursor-pointer"
                 >
                   متابعة الطلب من طاولتي
                 </button>
@@ -277,7 +277,7 @@ export const DirectTableEntryModal: React.FC = () => {
               />
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl brand-fill font-bold text-xs hover:bg-[var(--m-brand-on-surface)] transition-colors shadow-[0_0_22px_-6px_var(--m-brand-glow)]"
+                className="px-5 py-2.5 rounded-full brand-fill font-bold text-xs hover:bg-[var(--m-brand-on-surface)] transition-colors"
               >
                 تأكيد الطاولة
               </button>
@@ -331,7 +331,7 @@ export const DirectTableEntryModal: React.FC = () => {
                     onClick={() => handleSelectTable(table.tableNumber)}
                     className={`p-2 rounded-xl flex flex-col items-center justify-center border transition-all text-center relative group ${
                       isActiveCurrent
-                        ? 'bg-[var(--m-brand-on-surface)] border-[var(--m-brand-on-surface)] text-m-bg font-extrabold shadow-[0_0_22px_-6px_var(--m-brand-glow)] scale-105 z-10'
+                        ? 'bg-[var(--m-brand-on-surface)] border-[var(--m-brand-on-surface)] text-m-bg font-extrabold z-10'
                         : isOccupied
                         ? 'bg-m-surface-raised/90 border-amber-500/40 text-amber-300 hover:border-amber-400'
                         : 'bg-m-surface-raised/50 border-m-hairline text-m-text-muted hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.4)] hover:text-m-text'

@@ -151,7 +151,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono text-m-text-muted">{activeNotification.updatedAt}</span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               تحديث حي
             </span>
           </div>
@@ -162,7 +162,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
           <div
             className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border shadow-lg ${
               activeNotification.status === 'READY'
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 animate-bounce'
+                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
                 : activeNotification.status === 'PREPARING'
                 ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
                 : activeNotification.status === 'SERVED'
@@ -171,7 +171,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
             }`}
           >
             {activeNotification.status === 'PREPARING' ? (
-              <ChefHat className="w-6 h-6 animate-pulse" />
+              <ChefHat className="w-6 h-6" />
             ) : activeNotification.status === 'READY' ? (
               <Bell className="w-6 h-6" />
             ) : activeNotification.status === 'SERVED' ? (
@@ -251,15 +251,15 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
               setIsOrderTrackingOpen(true);
               setIsDismissed(true);
             }}
-            className="flex-1 py-2 rounded-xl brand-fill font-bold text-xs flex items-center justify-center gap-1.5 shadow-[0_0_18px_-4px_var(--m-brand-glow)] active:scale-95 transition-all cursor-pointer"
+            className="flex-1 py-2 rounded-full brand-fill font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
           >
-            <span>👨‍🍳 تتبع المطبخ الحي</span>
+            <span>تتبع الطلب</span>
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
 
           <button
             onClick={() => setIsWaiterModalOpen(true)}
-            className="px-3 py-2 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+            className="px-3 py-2 rounded-full bg-m-surface-raised hover:bg-m-surface-raised text-m-text font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
             title="استدعاء النادل"
           >
             <Bell className="w-3.5 h-3.5 text-m-brand-strong" />

@@ -289,7 +289,9 @@
   border-bottom: 1px solid var(--m-hairline);
   /* Quiet separation: the rail sits on the opaque surface + hairline alone.
      The deep drop shadow made it read as a card floating over cards. */
-  box-shadow: 0 10px 20px -20px rgb(0 0 0 / 0.55);
+  /* Short separation only. No glow, and no `transparent` — the rail contract
+     forbids a fading background. */
+  box-shadow: 0 8px 16px -14px rgb(0 0 0 / 0.28);
 }
 @media (min-width: 640px) {
   .menu-rail {
@@ -389,8 +391,10 @@
   background-color: var(--m-chip-active-bg, transparent);
   background-image: var(--m-chip-active-image, var(--m-brand-fill));
   border-color: transparent;
-  font-weight: 800;
-  box-shadow: 0 6px 20px -10px var(--m-brand-glow);
+  font-weight: 700;
+  /* Quiet fill, no brand glow. The accent is the restaurant primary, not a
+     second palette. */
+  box-shadow: none;
 }
 .menu-chip__count {
   min-width: 1.25rem;
@@ -562,17 +566,20 @@
 }
 
 /* Grid ---------------------------------------------------------------------- */
+/* List is one column on a phone and two from the tablet breakpoint, matching
+   the pre-existing density. Grid stays two photo cards on a phone and three
+   from 1100px. Featured still spans the row from 640px. */
 .menu-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.85rem;
+  gap: 0.75rem;
 }
 .menu-grid[data-layout='grid'] {
-  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
 }
 @media (min-width: 640px) {
-  .menu-grid,
-  .menu-grid[data-layout='grid'] {
+  .menu-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -583,51 +590,43 @@
 }
 
 /* Card ---------------------------------------------------------------------- */
+/* Photo on top, type underneath. The card stays a grid so the hit-area and
+   token contracts are unchanged; only the track direction moved. Image ratio
+   comes from min-height, never aspect-ratio — a stretched ratio used to
+   collapse neighbouring rows. */
 .menu-card {
   position: relative;
   display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
-  gap: 0.85rem;
-  padding: 0.7rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0;
+  padding: 0;
   /* Theme-driven card geometry: radius.card → --card-radius (falls back to
      radius.lg at runtime), colors.card.shadow / shadows.* → --card-shadow.
      The inset highlight is a fixed material of this card, not themeable. */
   border-radius: var(--m-card-radius, 20px);
   text-align: start;
   /* colors.card.bg/border → --card-bg/--card-border (optional overrides). */
-  background: var(--m-card-bg, linear-gradient(160deg, var(--m-surface-raised) 0%, var(--m-surface) 100%));
+  background: var(--m-card-bg, var(--m-surface));
   border: 1px solid var(--m-card-border, var(--m-hairline));
   box-shadow:
     inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.035),
-    var(--m-card-shadow, 0 16px 30px -26px rgb(0 0 0 / 0.95));
-  transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-}
-@media (min-width: 640px) {
-  .menu-card {
-    grid-template-columns: 116px minmax(0, 1fr);
-    gap: 1rem;
-    padding: 0.8rem;
-  }
+    var(--m-card-shadow, 0 10px 24px -18px rgb(0 0 0 / 0.45));
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 .menu-card:hover {
-  border-color: var(--brand-line);
-  transform: translateY(-2px);
+  border-color: var(--m-hairline-strong, var(--m-hairline));
   box-shadow:
     inset 0 1px 0 rgb(var(--m-text-rgb, 255 255 255) / 0.05),
-    0 22px 44px -26px var(--m-brand-glow);
+    var(--m-card-shadow, 0 14px 28px -18px rgb(0 0 0 / 0.4));
 }
 .menu-card--featured {
-  grid-template-columns: 116px minmax(0, 1fr);
-  background:
-    radial-gradient(120% 140% at 100% 0%, rgb(var(--m-brand-on-surface-rgb) / 0.14) 0%, rgba(0, 0, 0, 0) 62%),
-    linear-gradient(160deg, var(--m-surface-raised) 0%, var(--m-surface) 100%);
-  border-color: var(--brand-line);
+  background: var(--m-card-bg, var(--m-surface));
+  border-color: var(--m-card-border, var(--m-hairline));
 }
 @media (min-width: 640px) {
   .menu-card--featured {
     grid-column: 1 / -1;
-    grid-template-columns: 200px minmax(0, 1fr);
-    padding: 0.9rem;
   }
 }
 .menu-card--unavailable {
@@ -661,20 +660,22 @@
 .menu-media {
   position: relative;
   width: 100%;
-  min-height: 100px;
-  border-radius: 15px;
+  /* Floor only — aspect-ratio is forbidden on this box. List is a 4:3-ish
+     band on a phone; grid's 11rem is near-square in a two-column phone card. */
+  min-height: 16rem;
+  border-start-start-radius: var(--m-card-radius, 20px);
+  border-start-end-radius: var(--m-card-radius, 20px);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
   overflow: hidden;
   background: linear-gradient(140deg, var(--brand-soft-strong), var(--m-media-end, #0b0d11));
-  /* Ink-tinted hairline (was white-alpha — invisible on light surfaces). */
-  border: 1px solid rgb(var(--m-text-rgb, 255 255 255) / 0.05);
+  border: 0;
 }
-@media (min-width: 640px) {
-  .menu-media {
-    min-height: 116px;
-  }
+.menu-grid[data-layout='grid'] .menu-media {
+  min-height: 8.25rem;
 }
 .menu-card--featured .menu-media {
-  min-height: 132px;
+  min-height: 18rem;
 }
 /* Absolutely filling the media box keeps the row height owned by the card
    body alone — no aspect-ratio/height feedback loop between the two columns. */
@@ -693,7 +694,7 @@
   transform: scale(1);
 }
 .menu-card:hover .menu-img.is-ready {
-  transform: scale(1.07);
+  transform: scale(1.025);
 }
 .menu-img__skeleton {
   position: absolute;
@@ -724,7 +725,9 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(to top, rgb(0 0 0 / 0.55) 0%, transparent 46%);
+  /* A short scrim only, so the dish stays the brightest thing on the card.
+     Badges still sit above it by DOM order. */
+  background: linear-gradient(to top, rgb(0 0 0 / 0.22) 0%, transparent 36%);
 }
 .menu-media__badges {
   position: absolute;
@@ -780,7 +783,10 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding-block: 0.15rem;
+  padding: 0.75rem 0.85rem 0.85rem;
+}
+.menu-grid[data-layout='grid'] .menu-card__body {
+  padding: 0.65rem 0.7rem 0.75rem;
 }
 .menu-card__title {
   font-size: 14.5px;
@@ -853,7 +859,8 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 0.6rem;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.6rem;
   margin-top: auto;
   padding-top: 0.55rem;
 }
@@ -872,16 +879,17 @@
   display: inline-flex;
   align-items: baseline;
   gap: 0.2rem;
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--m-brand-on-surface);
+  font-size: 15px;
+  font-weight: 700;
+  /* Price is ink, not the accent. The accent stays on the action. */
+  color: var(--theme-text-primary, var(--m-text));
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 .menu-price__currency {
   font-size: 11px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--m-brand-on-surface) 75%, #ffffff);
+  color: var(--theme-text-secondary, var(--m-text-muted));
 }
 
 .menu-actions {
@@ -895,24 +903,23 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.45rem 0.8rem;
-  /* radius.md → --button-radius (the scale slot buttons derive from). */
-  border-radius: var(--m-radius-md, 12px);
+  padding: 0.4rem 0.75rem;
+  /* Pill, still consuming the button radius slot the contract requires.
+     --m-radius-full wins when the theme defines it; --m-radius-md remains
+     the fallback so a custom button radius is never dropped. */
+  border-radius: var(--m-radius-full, var(--m-radius-md, 999px));
   font-size: 11.5px;
   font-weight: 800;
-  /* colors.button.secondaryText/secondaryBg → the resting add-button role;
-     its hover stays the brand-fill CTA so the label contrast stays guaranteed. */
-  color: var(--button-secondary-text, var(--m-brand-on-surface));
-  background: var(--button-secondary-bg, rgb(var(--m-brand-on-surface-rgb) / 0.12));
-  border: 1px solid rgb(var(--m-brand-on-surface-rgb) / 0.34);
+  /* Always the filled accent. Primary button tokens keep restaurant colour
+     and a contrast-safe label; hover is not required to see it. */
+  color: var(--m-button-text, var(--m-brand-ink));
+  background: var(--m-button-bg, var(--m-brand-fill));
+  border: 1px solid transparent;
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 .menu-add:hover {
-  color: var(--m-brand-ink);
-  background-image: var(--m-brand-fill);
-  border-color: transparent;
-  box-shadow: 0 8px 20px -12px var(--m-brand-glow);
+  filter: brightness(1.06);
 }
 .menu-add:active {
   transform: scale(0.95);
@@ -928,7 +935,9 @@
   border-color: rgb(var(--m-text-rgb, 255 255 255) / 0.1);
 }
 .menu-add--customize:hover {
-  color: var(--m-brand-ink);
+  color: var(--m-text);
+  filter: none;
+  border-color: var(--m-hairline-strong);
 }
 
 /* Inline quantity stepper (appears once the dish is in the cart) */
@@ -937,9 +946,10 @@
   align-items: center;
   gap: 0.15rem;
   padding: 2px;
-  border-radius: 12px;
-  background-image: var(--m-brand-fill);
-  box-shadow: 0 8px 20px -14px var(--m-brand-glow);
+  border-radius: var(--m-radius-full, 999px);
+  background: var(--m-surface-raised);
+  border: 1px solid var(--m-hairline);
+  box-shadow: none;
 }
 .menu-qty button {
   position: relative;
@@ -948,8 +958,8 @@
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 9px;
-  color: var(--m-brand-ink);
+  border-radius: var(--m-radius-full, 999px);
+  color: var(--m-text);
   cursor: pointer;
   transition: background-color 0.18s ease, transform 0.15s ease;
 }
@@ -978,8 +988,8 @@
   min-width: 24px;
   text-align: center;
   font-size: 13px;
-  font-weight: 900;
-  color: var(--m-brand-ink);
+  font-weight: 800;
+  color: var(--m-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1024,10 +1034,13 @@
   color: var(--m-text-muted);
 }
 .menu-section-head__title {
-  font-size: 19px;
-  font-weight: var(--m-font-heading-weight, 800);
+  font-family: 'Amiri', 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: var(--m-font-heading-weight, 700);
+  line-height: 1.25;
   color: var(--theme-text-primary, #f6f8fb);
-  letter-spacing: -0.01em;
+  /* No negative tracking: it collides Arabic letters. */
+  letter-spacing: 0;
 }
 .menu-section-head__sub {
   margin-top: 2px;
@@ -5449,4 +5462,12 @@ input[type='range'].saas-range::-moz-range-thumb {
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
+}
+
+/* Guest action rhythm. Unlayered so a pill wins over a leftover rounded-*
+   utility inside the customer scope. Menu-card controls keep their own
+   radius contract and are not brand-cta. */
+.customer-theme-scope .brand-cta,
+.customer-theme-scope .brand-fill {
+  border-radius: var(--m-radius-full, 999px);
 }

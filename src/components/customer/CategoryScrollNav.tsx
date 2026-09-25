@@ -60,7 +60,6 @@ export const CategoryScrollNav: React.FC = () => {
           onClick={() => setSelectedCategoryId('all')}
           className="menu-chip"
         >
-          <span aria-hidden="true" className="text-[13px] leading-none">✨</span>
           <span>الكل</span>
           <span className="menu-chip__count">{totalAvailableCount}</span>
         </button>

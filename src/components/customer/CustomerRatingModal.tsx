@@ -57,14 +57,14 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
       <div role="dialog" aria-modal="true" aria-label="تقييم تجربة المطعم" className="bg-m-surface border border-m-hairline rounded-3xl w-full max-w-md p-6 relative shadow-2xl text-center">
         <button
           onClick={onClose}
-          className="absolute left-4 top-4 p-2 rounded-xl text-m-text-muted hover:text-white bg-m-surface-raised/60 hover:bg-m-surface-raised transition-colors"
+          className="absolute left-4 top-4 p-2 rounded-full text-m-text-muted hover:text-m-text bg-m-surface-raised/60 hover:bg-m-surface-raised transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
 
         {isSubmitted ? (
           <div className="py-8 space-y-3 animate-fade-in">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto shadow-[0_0_22px_-6px_var(--m-brand-glow)]">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/30">
               <Heart className="w-8 h-8 fill-emerald-400" />
             </div>
             <h3 className="text-xl font-bold font-serif text-m-text">شكراً لك من القلب!</h3>
@@ -138,7 +138,7 @@ export const CustomerRatingModal: React.FC<CustomerRatingModalProps> = ({ isOpen
 
             <button
               type="submit"
-              className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-[var(--m-brand-on-surface)] via-[var(--m-brand-on-surface)] to-[var(--m-brand-on-surface)] text-m-bg font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] hover:from-[var(--m-brand-on-surface)] hover:to-[var(--m-brand-on-surface)] transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3.5 rounded-full brand-cta font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <Send className="w-4 h-4" />
               <span>إرسال التقييم للإدارة</span>

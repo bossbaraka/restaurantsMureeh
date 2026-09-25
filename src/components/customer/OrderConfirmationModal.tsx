@@ -147,7 +147,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={handleConfirmOrder}
-            className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            className="flex-1 py-3 rounded-full brand-cta font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
             <span>{isSubmitting ? 'جاري التأكيد...' : 'تأكيد الطلب'}</span>

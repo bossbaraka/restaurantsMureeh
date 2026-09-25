@@ -100,20 +100,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               className="w-full h-full object-cover"
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-m-surface via-m-surface/30 to-black/60" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent pointer-events-none" />
 
           {/* Close button */}
           <button
             onClick={onClose}
             aria-label="إغلاق تفاصيل الصنف"
-            className="absolute top-4 left-4 w-9 h-9 rounded-full bg-m-bg/80 text-m-text-muted hover:text-white flex items-center justify-center border border-m-hairline transition-colors backdrop-blur-sm cursor-pointer z-20"
+            className="absolute top-4 left-4 w-11 h-11 rounded-full bg-black/50 text-white flex items-center justify-center border border-white/20 transition-colors backdrop-blur-md cursor-pointer z-20"
           >
             <X className="w-5 h-5" />
           </button>
 
           {/* Badge */}
           {product.badge && (
-            <div className="absolute top-4 right-4 px-3 py-1 rounded-full brand-fill font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center gap-1">
+            <div className="absolute top-4 right-4 px-3 py-1 rounded-full brand-fill font-bold text-xs flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
               <span>{product.badge}</span>
             </div>
@@ -121,11 +121,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* Product Title on Image Bottom */}
           <div className="absolute bottom-3 right-4 left-4">
-            <h2 id="product-detail-title" className="text-xl sm:text-2xl font-bold font-serif text-m-text leading-tight">
+            <h2 id="product-detail-title" className="text-xl sm:text-2xl font-bold font-serif text-white leading-tight line-clamp-2">
               {product.name}
             </h2>
             {product.nameEn && (
-              <p className="text-xs text-[var(--m-brand-on-surface)] font-serif italic mt-0.5">
+              <p className="text-xs text-white/80 font-serif italic mt-0.5">
                 {product.nameEn}
               </p>
             )}
@@ -217,9 +217,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* ADD-ONS SELECTOR */}
           {product.addOns && product.addOns.length > 0 && (
-            <div role="group" aria-label="إضافات فاخرة اختيارية">
+            <div role="group" aria-label="إضافات اختيارية">
               <p className="block text-xs font-bold text-m-text mb-2">
-                إضافات فاخرة (اختياري)
+                إضافات (اختياري)
               </p>
               <div className="space-y-2">
                 {product.addOns.map((addOn) => {
@@ -275,7 +275,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
                       aria-checked={isRemoved}
                       aria-label={`${isRemoved ? 'إعادة' : 'استبعاد'} ${ing}`}
                       onClick={() => toggleRemoveIngredient(ing)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer ${
                         isRemoved
                           ? 'bg-red-500/20 border-red-500 text-red-400 line-through'
                           : 'bg-m-surface-raised border-m-hairline text-m-text-muted hover:border-m-hairline'
@@ -305,14 +305,14 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         </div>
 
         {/* Fixed Footer with Quantity & Add to Cart Button */}
-        <div className="p-4 sm:p-5 bg-m-bg border-t border-m-hairline flex items-center justify-between gap-4 shrink-0">
+        <div className="p-4 sm:p-5 pb-[max(1rem,env(safe-area-inset-bottom))] bg-m-bg border-t border-m-hairline flex items-center justify-between gap-4 shrink-0">
           {/* Quantity Controls */}
-          <div className="flex items-center gap-2 bg-m-surface border border-m-hairline rounded-xl p-1 shrink-0" role="group" aria-label="الكمية">
+          <div className="flex items-center gap-2 bg-m-surface border border-m-hairline rounded-full p-1 shrink-0" role="group" aria-label="الكمية">
             <button
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               disabled={quantity <= 1}
               aria-label="إنقاص الكمية"
-              className="touch-target w-9 h-9 rounded-lg bg-m-surface-raised hover:bg-m-surface-raised disabled:opacity-40 text-m-text flex items-center justify-center transition-colors cursor-pointer"
+              className="touch-target w-9 h-9 rounded-full bg-m-surface-raised hover:bg-m-surface-raised disabled:opacity-40 text-m-text flex items-center justify-center transition-colors cursor-pointer"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
@@ -322,7 +322,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
             <button
               onClick={() => setQuantity((q) => q + 1)}
               aria-label="زيادة الكمية"
-              className="touch-target w-9 h-9 rounded-lg brand-cta flex items-center justify-center transition-colors cursor-pointer font-bold"
+              className="touch-target w-9 h-9 rounded-full brand-cta flex items-center justify-center transition-colors cursor-pointer font-bold"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -331,7 +331,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* Add to Cart CTA Button */}
           <button
             onClick={handleAddToCart}
-            className="flex-1 py-3.5 px-4 rounded-xl brand-cta font-bold text-xs sm:text-sm flex items-center justify-between shadow-[0_0_22px_-6px_var(--m-brand-glow)] transition-all cursor-pointer"
+            className="flex-1 py-3.5 px-4 rounded-full brand-cta font-bold text-xs sm:text-sm flex items-center justify-between transition-all cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4" />

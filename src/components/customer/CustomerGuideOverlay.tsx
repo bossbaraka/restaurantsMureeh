@@ -257,7 +257,7 @@ export const CustomerGuideOverlay: React.FC = () => {
               type="button"
               data-autofocus
               onClick={confirmOpen}
-              className="flex-1 touch-target px-4 py-2.5 rounded-xl brand-cta font-bold text-xs cursor-pointer"
+              className="flex-1 touch-target px-4 py-2.5 rounded-full brand-cta font-bold text-xs cursor-pointer"
             >
               نعم، ابدأ الدليل
             </button>
@@ -368,7 +368,7 @@ export const CustomerGuideOverlay: React.FC = () => {
                 <button
                   onClick={next}
                   data-autofocus
-                  className="touch-target px-3 py-1.5 rounded-lg brand-cta font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                  className="touch-target px-3 py-1.5 rounded-full brand-cta font-bold text-[11px] flex items-center gap-1 cursor-pointer"
                 >
                   {stepIndex >= GUIDE_STEPS.length - 1 ? (
                     <>
