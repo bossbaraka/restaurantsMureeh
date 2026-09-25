@@ -110,10 +110,13 @@ const DEFAULT_RADIUS: ThemeRadius = {
   full: '9999px',
 };
 
+/* Elevation defaults: short, directional ambient lifts that ground surfaces
+   without haloing them. Tenants may still override per theme; these are the
+   calm product defaults every un-themed restaurant inherits. */
 const DEFAULT_SHADOWS: ThemeShadows = {
-  sm: '0 1px 3px rgba(0,0,0,0.3)',
-  md: '0 4px 20px rgba(0,0,0,0.4)',
-  lg: '0 10px 40px rgba(0,0,0,0.5)',
+  sm: '0 1px 2px rgba(0,0,0,0.28)',
+  md: '0 14px 30px -20px rgba(0,0,0,0.55)',
+  lg: '0 24px 60px -30px rgba(0,0,0,0.6)',
 };
 
 const DEFAULT_TYPOGRAPHY: ThemeTypography = {

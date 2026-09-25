@@ -164,7 +164,7 @@ export const LoginModal: React.FC = () => {
 
           <button
             onClick={() => setIsLoginModalOpen(false)}
-            className="p-2 rounded-xl bg-luxury-800/80 hover:bg-luxury-750 text-luxury-400 hover:text-white transition-colors cursor-pointer"
+            className="p-2 rounded-full bg-luxury-800/80 hover:bg-luxury-750 text-luxury-400 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -189,9 +189,9 @@ export const LoginModal: React.FC = () => {
               setAuthTab('MANAGERS');
               setErrorMsg('');
             }}
-            className={`flex-1 py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 rounded-full transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               authTab === 'MANAGERS'
-                ? 'bg-gold-500 text-luxury-950 shadow-gold-glow'
+                ? 'bg-gold-500 text-luxury-950'
                 : 'text-luxury-400 hover:text-luxury-200 hover:bg-luxury-850'
             }`}
           >
@@ -205,9 +205,9 @@ export const LoginModal: React.FC = () => {
               setAuthTab('STAFF_PIN');
               setErrorMsg('');
             }}
-            className={`flex-1 py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+            className={`flex-1 py-2.5 rounded-full transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
               authTab === 'STAFF_PIN'
-                ? 'bg-gold-500 text-luxury-950 shadow-gold-glow'
+                ? 'bg-gold-500 text-luxury-950'
                 : 'text-luxury-400 hover:text-luxury-200 hover:bg-luxury-850'
             }`}
           >

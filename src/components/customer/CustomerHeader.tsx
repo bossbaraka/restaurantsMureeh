@@ -62,7 +62,7 @@ export const CustomerHeader: React.FC = () => {
     <>
       <header
         ref={stickyBandRef}
-        className="sticky z-30 bg-m-bg/95 backdrop-blur-md border-b border-m-hairline px-4 sm:px-6 py-3.5 transition-all"
+        className="sticky z-30 bg-m-bg/90 backdrop-blur-lg border-b border-m-hairline px-4 sm:px-6 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 transition-all"
         style={{
           // Parks directly below the bands above it. --m-stack-above-header is
           // published by the same StickyStack owner as --m-stack-h, so the
@@ -72,11 +72,11 @@ export const CustomerHeader: React.FC = () => {
           top: 'var(--m-stack-above-header, 0px)',
         }}
       >
-        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-3">
           {/* Restaurant Identity & Table Badge */}
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden text-m-bg font-serif font-bold text-xl shadow-[0_0_22px_-6px_var(--m-brand-glow)] shrink-0 border border-m-hairline/60"
+              className="w-10 h-10 rounded-full flex items-center justify-center overflow-hidden text-m-bg font-serif font-bold text-xl shrink-0 border border-m-hairline"
               style={{
                 // Identity comes from the resolved theme (theme-first, legacy
                 // fallback) via the --brand-* tokens — never the legacy
@@ -101,9 +101,9 @@ export const CustomerHeader: React.FC = () => {
               )}
             </div>
             <div className="text-right min-w-0">
-              <h1 className="text-sm sm:text-base font-bold text-m-text font-serif tracking-wide flex items-center gap-1.5 truncate">
+              <h1 className="text-[15px] sm:text-lg font-bold text-m-text font-serif tracking-wide flex items-baseline gap-2 truncate">
                 <span className="truncate">{restName}</span>
-                <span className="text-[var(--m-brand-on-surface)] text-xs font-serif italic hidden xs:inline">{restNameEn}</span>
+                <span className="text-m-text-subtle text-xs font-serif italic hidden xs:inline truncate">{restNameEn}</span>
               </h1>
 
               {/* Table Indicator Pill — guests are locked to their scanned
@@ -113,7 +113,7 @@ export const CustomerHeader: React.FC = () => {
                   onClick={() => setIsTableSelectorOpen(true)}
                   className="flex items-center gap-1.5 text-xs text-[rgb(var(--m-brand-on-surface-rgb)/0.9)] hover:text-[var(--m-brand-on-surface)] mt-0.5 group cursor-pointer"
                 >
-                  <span className={`w-2 h-2 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                   <span className="font-semibold underline decoration-[rgb(var(--m-brand-on-surface-rgb)/0.4)] underline-offset-2">
                     {activeTableId ? `طاولة ${tableNumberStr}` : 'اختر رقم الطاولة'}
                   </span>
@@ -123,7 +123,7 @@ export const CustomerHeader: React.FC = () => {
                 </button>
               ) : (
                 <div className="flex items-center gap-1.5 text-xs text-[rgb(var(--m-brand-on-surface-rgb)/0.9)] mt-0.5" data-guide="table">
-                  <span className={`w-2 h-2 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+                  <span className={`w-1.5 h-1.5 rounded-full ${activeTableId ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                   <span className="font-semibold">
                     {activeTableId ? `طاولة ${tableNumberStr}` : 'امسح رمز QR للطاولة'}
                   </span>
@@ -140,33 +140,33 @@ export const CustomerHeader: React.FC = () => {
             {/* Usage Guide Button */}
             <button
               onClick={() => openCustomerGuide()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-m-surface hover:bg-m-surface-raised text-m-text hover:text-[var(--m-brand-on-surface)] border border-m-hairline transition-all active:scale-95 text-xs font-medium cursor-pointer"
+              className="customer-header__action"
               title="دليل استخدام القائمة خطوة بخطوة"
+              aria-label="دليل الاستخدام"
             >
-              <HelpCircle className="w-4 h-4 text-[var(--m-brand-on-surface)]" />
-              <span>دليل الاستخدام</span>
+              <HelpCircle className="w-4 h-4" />
             </button>
 
             {/* Restaurant Map Button */}
             <button
               onClick={() => setIsMapOpen(true)}
               data-guide="map"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-m-surface hover:bg-m-surface-raised text-m-text hover:text-m-brand-strong border border-m-hairline transition-all active:scale-95 text-xs font-medium cursor-pointer"
+              className="customer-header__action"
               title="عرض خريطة وموقع المطعم"
+              aria-label="الخريطة والموقع"
             >
-              <MapPin className="w-4 h-4 text-m-brand-strong" />
-              <span>الخريطة والموقع</span>
+              <MapPin className="w-4 h-4" />
             </button>
 
             {/* Waiter Call Button */}
             <button
               onClick={() => setIsWaiterModalOpen(true)}
               data-guide="waiter"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-m-surface hover:bg-m-surface-raised text-m-text hover:text-[var(--m-brand-on-surface)] border border-m-hairline transition-all active:scale-95 text-xs font-medium cursor-pointer"
+              className="customer-header__action"
               title="استدعاء طاقم الضيافة"
+              aria-label="استدعاء النادل"
             >
-              <Bell className="w-4 h-4 text-[var(--m-brand-on-surface)]" />
-              <span>استدعاء النادل</span>
+              <Bell className="w-4 h-4" />
             </button>
 
             {/* Live Kitchen & Active Orders Tracker Pill */}
@@ -174,11 +174,11 @@ export const CustomerHeader: React.FC = () => {
               <button
                 onClick={() => setIsOrderTrackingOpen(true)}
                 data-guide="kitchen"
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-[rgb(var(--m-brand-on-surface-rgb)/0.22)] via-emerald-500/20 to-[rgb(var(--m-brand-on-surface-rgb)/0.22)] hover:from-[rgb(var(--m-brand-on-surface-rgb)/0.32)] hover:to-emerald-500/30 text-[var(--m-brand-on-surface)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.4)] transition-all active:scale-95 text-xs font-bold shadow-[0_0_22px_-6px_var(--m-brand-glow)] animate-pulse cursor-pointer"
+                className="flex items-center gap-1.5 px-3 h-10 rounded-full bg-m-surface text-m-text border border-m-hairline text-xs font-bold cursor-pointer"
                 title="متابعة حالة الطلب والمطبخ الحي"
               >
-                <ChefHat className="w-4 h-4 text-emerald-400" />
-                <span>👨‍🍳 المطبخ الحي ({activeTableOrders.length})</span>
+                <ChefHat className="w-4 h-4" />
+                <span>المطبخ ({activeTableOrders.length})</span>
               </button>
             )}
 
@@ -186,7 +186,7 @@ export const CustomerHeader: React.FC = () => {
             <button
               onClick={() => setIsCartOpen(true)}
               data-guide="cart"
-              className="relative flex items-center gap-2 px-3.5 py-2 rounded-xl brand-cta font-bold transition-all active:scale-95 text-xs cursor-pointer"
+              className="relative flex items-center gap-2 px-3.5 h-10 rounded-full brand-cta font-bold transition-all active:scale-95 text-xs cursor-pointer"
               aria-label="عرض سلة الطلبات"
             >
               <ShoppingBag className="w-4 h-4" />
@@ -211,7 +211,7 @@ export const CustomerHeader: React.FC = () => {
               onClick={() => setIsCartOpen(true)}
               data-guide="cart"
               aria-label={cartTotalCount > 0 ? `عرض السلة — ${cartTotalCount} صنف` : 'عرض السلة'}
-              className="relative flex items-center gap-1.5 px-3 py-2 rounded-xl brand-cta font-bold text-xs active:scale-95 cursor-pointer"
+              className="relative flex items-center gap-1.5 px-3 py-2 rounded-full brand-cta font-bold text-xs active:scale-95 cursor-pointer"
             >
               <ShoppingBag className="w-4 h-4" />
               {cartTotalCount > 0 && (
@@ -229,7 +229,7 @@ export const CustomerHeader: React.FC = () => {
             {/* Mobile Hamburger Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-xl bg-m-surface border border-m-hairline text-m-text hover:text-[var(--m-brand-on-surface)] transition-all cursor-pointer"
+              className="w-10 h-10 rounded-full flex items-center justify-center bg-m-surface border border-m-hairline text-m-text hover:text-[var(--m-brand-on-surface)] transition-all cursor-pointer"
               aria-label="قائمة الخيارات"
             >
               {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -263,7 +263,7 @@ export const CustomerHeader: React.FC = () => {
               </div>
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="p-2 rounded-lg bg-m-surface-raised text-m-text-muted hover:text-white"
+                className="w-10 h-10 rounded-full flex items-center justify-center bg-m-surface-raised text-m-text-muted hover:text-m-text"
                 aria-label="إغلاق القائمة"
               >
                 <X className="w-4 h-4" />

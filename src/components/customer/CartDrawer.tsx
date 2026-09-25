@@ -58,9 +58,9 @@ export const CartDrawer: React.FC = () => {
       <div className="fixed inset-y-0 left-0 max-w-full flex">
         <div role="dialog" aria-modal="true" aria-labelledby="cart-title" className="w-screen max-w-md border-r border-m-hairline flex flex-col text-right" style={{ backgroundColor: 'var(--m-surface)', boxShadow: 'var(--m-shadow-lg)' }}>
           {/* Header */}
-          <div className="p-5 border-b border-m-hairline flex items-center justify-between bg-m-bg" data-guide="cart-panel">
+          <div className="px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-4 border-b border-m-hairline flex items-center justify-between bg-m-bg" data-guide="cart-panel">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
+              <div className="w-10 h-10 rounded-full bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-m-hairline flex items-center justify-center text-[var(--m-brand-on-surface)]">
                 <ShoppingBag className="w-5 h-5" />
               </div>
               <div>
@@ -74,7 +74,7 @@ export const CartDrawer: React.FC = () => {
             <button
               onClick={() => setIsCartOpen(false)}
               aria-label="إغلاق سلة الطلبات"
-              className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -85,7 +85,7 @@ export const CartDrawer: React.FC = () => {
             <span className="text-m-text-muted">طاولة الطلب:</span>
             {activeTableId ? (
               <span className="font-bold text-[var(--m-brand-on-surface)] font-mono flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--m-success)' }} />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--m-success)' }} />
                 طاولة رقم {activeTableNumber ?? activeTable?.tableNumber ?? (formatTableNumber(activeTableId) || '—')}
               </span>
             ) : (
@@ -107,7 +107,7 @@ export const CartDrawer: React.FC = () => {
                 </div>
                 <h4 className="text-base font-bold text-m-text">سلتك فارغة حالياً</h4>
                 <p className="text-xs text-m-text-muted max-w-xs mx-auto">
-                  تصفح قائمة الأطباق الفاخرة وأضف خياراتك المفضلة لتجربة عشاء استثنائية.
+                  أضف ما تحب من القائمة، ثم أكّد الطلب لطاولتك.
                 </p>
               </div>
             ) : (
@@ -153,7 +153,7 @@ export const CartDrawer: React.FC = () => {
                     </div>
 
                     <div className="text-left shrink-0">
-                      <span className="text-sm font-bold text-[var(--m-brand-on-surface)]">
+                      <span className="text-sm font-bold text-m-text">
                         {formatPrice(item.totalPrice || item.itemTotal || 0, currency)}
                       </span>
                     </div>
@@ -170,11 +170,11 @@ export const CartDrawer: React.FC = () => {
                       <span>حذف</span>
                     </button>
 
-                    <div className="flex items-center gap-2 bg-m-surface border border-m-hairline rounded-xl p-0.5">
+                    <div className="flex items-center gap-2 bg-m-surface border border-m-hairline rounded-full p-0.5">
                       <button
                         onClick={() => updateCartItemQuantity(item.id, item.quantity - 1)}
                         aria-label={`إنقاص كمية ${item.product?.name || item.productName}`}
-                        className="touch-target w-7 h-7 rounded-lg bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted flex items-center justify-center transition-colors"
+                        className="touch-target w-7 h-7 rounded-full bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted flex items-center justify-center transition-colors"
                       >
                         <Minus className="w-3.5 h-3.5" />
                       </button>
@@ -184,7 +184,7 @@ export const CartDrawer: React.FC = () => {
                       <button
                         onClick={() => updateCartItemQuantity(item.id, item.quantity + 1)}
                         aria-label={`زيادة كمية ${item.product?.name || item.productName}`}
-                        className="touch-target w-7 h-7 rounded-lg brand-cta font-bold flex items-center justify-center transition-colors"
+                        className="touch-target w-7 h-7 rounded-full brand-cta font-bold flex items-center justify-center transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
                       </button>
@@ -197,7 +197,7 @@ export const CartDrawer: React.FC = () => {
 
           {/* Footer & Checkout */}
           {cartItems.length > 0 && (
-            <div className="p-5 bg-m-bg border-t border-m-hairline space-y-4 shrink-0">
+            <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] bg-m-bg border-t border-m-hairline space-y-4 shrink-0">
               {/* Order Notes Input */}
               <div>
                 <label className="block text-[11px] font-bold text-m-text-muted mb-1" htmlFor="cartdrawer-f1">
@@ -208,7 +208,7 @@ export const CartDrawer: React.FC = () => {
                   value={orderNotes}
                   onChange={(e) => setOrderNotes(e.target.value)}
                   placeholder="مثال: تقديم المقبلات أولاً، أطباق وملاعق إضافية..."
-                  className="w-full bg-m-surface border border-m-hairline rounded-xl px-3 py-2 text-xs text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
+                  className="w-full bg-m-surface border border-m-hairline rounded-full px-4 py-2.5 text-xs text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
                 />
               </div>
 
@@ -224,7 +224,7 @@ export const CartDrawer: React.FC = () => {
                 </div>
                 <div className="flex justify-between text-sm font-bold text-m-text pt-1">
                   <span>الإجمالي النهائي</span>
-                  <span className="text-[var(--m-brand-on-surface)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
+                  <span className="text-m-text font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
                 </div>
               </div>
 
@@ -237,7 +237,7 @@ export const CartDrawer: React.FC = () => {
               {/* Confirm CTA */}
               <button
                 onClick={handleOpenConfirm}
-                className="w-full py-3.5 rounded-xl brand-cta font-bold text-sm shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer"
+                className="w-full py-3.5 rounded-xl brand-cta font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
               >
                 <span>مراجعة وتأكيد الطلب</span>
                 <ArrowLeft className="w-4 h-4" />

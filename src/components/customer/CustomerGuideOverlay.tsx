@@ -239,7 +239,7 @@ export const CustomerGuideOverlay: React.FC = () => {
         />
         <div className="relative w-full max-w-sm rounded-2xl bg-m-surface/95 border border-[rgb(var(--m-brand-on-surface-rgb)/0.45)] backdrop-blur-xl p-5 shadow-[0_18px_50px_rgba(0,0,0,0.7)] text-right space-y-3">
           <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)] shrink-0">
+            <div className="w-10 h-10 rounded-full bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border border-m-hairline flex items-center justify-center text-[var(--m-brand-on-surface)] shrink-0">
               <HelpCircle className="w-5 h-5" />
             </div>
             <div>
@@ -264,7 +264,7 @@ export const CustomerGuideOverlay: React.FC = () => {
             <button
               type="button"
               onClick={dismissConfirm}
-              className="touch-target px-4 py-2.5 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text text-xs font-bold cursor-pointer"
+              className="touch-target px-4 py-2.5 rounded-full bg-m-surface-raised hover:bg-m-surface-raised text-m-text text-xs font-bold cursor-pointer"
             >
               ليس الآن
             </button>
@@ -326,7 +326,7 @@ export const CustomerGuideOverlay: React.FC = () => {
 
           <div className="bg-m-surface/95 border border-[rgb(var(--m-brand-on-surface-rgb)/0.45)] backdrop-blur-xl rounded-2xl p-4 shadow-[0_18px_50px_rgba(0,0,0,0.7)] space-y-2.5 text-right">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)] shrink-0">
+              <div className="w-10 h-10 rounded-full bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border border-m-hairline flex items-center justify-center text-[var(--m-brand-on-surface)] shrink-0">
                 <StepIcon className="w-5 h-5" />
               </div>
               <div>

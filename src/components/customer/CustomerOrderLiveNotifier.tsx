@@ -141,7 +141,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
         <div className="flex items-center justify-between">
           <button
             onClick={() => setIsDismissed(true)}
-            className="touch-target p-1.5 rounded-lg text-m-text-muted hover:text-white hover:bg-m-surface-raised transition-colors"
+            className="touch-target w-9 h-9 rounded-full flex items-center justify-center text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
             title="إغلاق التنبيه"
             aria-label="إغلاق التنبيه"
           >
@@ -151,7 +151,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono text-m-text-muted">{activeNotification.updatedAt}</span>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               تحديث حي
             </span>
           </div>
@@ -171,7 +171,7 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
             }`}
           >
             {activeNotification.status === 'PREPARING' ? (
-              <ChefHat className="w-6 h-6 animate-pulse" />
+              <ChefHat className="w-6 h-6" />
             ) : activeNotification.status === 'READY' ? (
               <Bell className="w-6 h-6" />
             ) : activeNotification.status === 'SERVED' ? (

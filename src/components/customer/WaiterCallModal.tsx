@@ -112,8 +112,8 @@ export const WaiterCallModal: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-m-hairline pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
-              <Bell className="w-5 h-5 animate-bounce" />
+            <div className="w-10 h-10 rounded-full bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-m-hairline flex items-center justify-center text-[var(--m-brand-on-surface)]">
+              <Bell className="w-5 h-5" />
             </div>
             <div>
               <h3 id="waiter-call-title" className="text-base font-bold text-m-text font-serif">طلب النادل إلى الطاولة</h3>
@@ -130,7 +130,7 @@ export const WaiterCallModal: React.FC = () => {
           </div>
           <button
             onClick={() => setIsWaiterModalOpen(false)}
-            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -138,7 +138,7 @@ export const WaiterCallModal: React.FC = () => {
 
         {justCalled ? (
           <div className="py-8 text-center space-y-3">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto animate-pulse">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
               <Check className="w-8 h-8" />
             </div>
             <h4 className="text-base font-bold text-m-text font-serif">تم إرسال طلبك إلى طاقم الضيافة</h4>
@@ -198,7 +198,7 @@ export const WaiterCallModal: React.FC = () => {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="مثال: يرجى إحضار كراسي إضافية أو مكعبات ثلج..."
-                className="w-full bg-m-bg border border-m-hairline rounded-xl px-3.5 py-2.5 text-xs text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
+                className="w-full bg-m-bg border border-m-hairline rounded-full px-3.5 py-2.5 text-xs text-m-text placeholder-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
               />
             </div>
 
@@ -229,7 +229,7 @@ export const WaiterCallModal: React.FC = () => {
               type="submit"
               disabled={isSubmitting || cooldownSeconds > 0 || !!activeRequest}
               aria-busy={isSubmitting}
-              className="w-full py-3.5 rounded-2xl bg-[var(--m-brand-on-surface)] hover:bg-[var(--m-brand-on-surface)] disabled:opacity-50 text-m-bg font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
+              className="w-full py-3.5 rounded-2xl bg-[var(--m-brand-on-surface)] hover:bg-[var(--m-brand-on-surface)] disabled:opacity-50 text-m-bg font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>

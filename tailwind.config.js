@@ -149,8 +149,11 @@ export default {
         arabic: ['Tajawal', 'Cairo', 'sans-serif'],
       },
       boxShadow: {
-        'luxury': '0 10px 30px -10px rgba(0, 0, 0, 0.7)',
-        'gold-glow': '0 0 20px -5px rgba(212, 175, 55, 0.25)',
+        /* Elevation language: short, directional ambient lifts. Shadows ground
+           surfaces; they never halo them (the previous 0-spread glows read as
+           neon on a calm product). */
+        'luxury': '0 14px 34px -18px rgba(0, 0, 0, 0.65)',
+        'gold-glow': '0 10px 24px -16px rgba(212, 175, 55, 0.45)',
         'inner-glow': 'inset 0 1px 1px 0 rgba(255, 255, 255, 0.05)',
       },
       // Overlays across the app are authored as `z-60` (e.g. the customer's

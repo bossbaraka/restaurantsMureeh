@@ -487,7 +487,7 @@ const CustomerLayoutContent: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-m-surface-raised hover:bg-m-surface-raised text-m-text transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-full text-xs font-bold bg-m-surface-raised hover:bg-m-surface-raised text-m-text transition-colors cursor-pointer"
                 >
                   مسح البحث
                 </button>
@@ -496,7 +496,7 @@ const CustomerLayoutContent: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => updatePreferences({ availableOnly: false })}
-                  className="px-4 py-2 rounded-xl text-xs font-bold bg-m-surface-raised hover:bg-m-surface-raised text-m-text transition-colors cursor-pointer"
+                  className="px-4 py-2 rounded-full text-xs font-bold bg-m-surface-raised hover:bg-m-surface-raised text-m-text transition-colors cursor-pointer"
                 >
                   إلغاء فلتر المتوفر فقط
                 </button>
@@ -504,7 +504,7 @@ const CustomerLayoutContent: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedCategoryId('all')}
-                className="px-4 py-2 rounded-xl text-xs font-bold hover:brightness-110 transition-all shadow-md cursor-pointer"
+                className="px-4 py-2 rounded-full text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
                 style={{
                   // colors.button.primaryBg/primaryText → the primary action
                   // role; falls back to the brand identity fill.

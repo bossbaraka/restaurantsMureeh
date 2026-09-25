@@ -61,7 +61,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-m-hairline pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
+            <div className="w-10 h-10 rounded-full bg-[rgb(var(--m-brand-on-surface-rgb)/0.1)] border border-m-hairline flex items-center justify-center text-[var(--m-brand-on-surface)]">
               <ShoppingBag className="w-5 h-5" />
             </div>
             <div>
@@ -75,7 +75,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -125,7 +125,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
         <div className="p-4 rounded-2xl bg-m-bg border border-m-hairline space-y-2">
           <div className="flex justify-between items-center text-sm font-bold">
             <span className="text-m-text">الإجمالي المستحق</span>
-            <span className="text-[var(--m-brand-on-surface)] font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
+            <span className="text-m-text font-mono text-base">{formatPrice(cartSubtotal, currency)}</span>
           </div>
 
           <div className="flex items-center gap-2 pt-2 border-t border-m-hairline text-[11px] text-amber-300/90">
@@ -139,7 +139,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-1/3 py-3 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted font-bold text-xs transition-colors"
+            className="w-1/3 py-3 rounded-full bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted font-bold text-xs transition-colors"
           >
             تعديل الطلب
           </button>
@@ -147,7 +147,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             type="button"
             disabled={isSubmitting}
             onClick={handleConfirmOrder}
-            className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+            className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
             <span>{isSubmitting ? 'جاري التأكيد...' : 'تأكيد الطلب'}</span>

@@ -100,20 +100,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
               className="w-full h-full object-cover"
             />
           ) : null}
-          <div className="absolute inset-0 bg-gradient-to-t from-m-surface via-m-surface/30 to-black/60" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent pointer-events-none" />
 
           {/* Close button */}
           <button
             onClick={onClose}
             aria-label="إغلاق تفاصيل الصنف"
-            className="absolute top-4 left-4 w-9 h-9 rounded-full bg-m-bg/80 text-m-text-muted hover:text-white flex items-center justify-center border border-m-hairline transition-colors backdrop-blur-sm cursor-pointer z-20"
+            className="absolute top-4 left-4 w-11 h-11 rounded-full bg-black/50 text-white flex items-center justify-center border border-white/20 transition-colors backdrop-blur-md cursor-pointer z-20"
           >
             <X className="w-5 h-5" />
           </button>
 
           {/* Badge */}
           {product.badge && (
-            <div className="absolute top-4 right-4 px-3 py-1 rounded-full brand-fill font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center gap-1">
+            <div className="absolute top-4 right-4 px-3 py-1 rounded-full brand-fill font-bold text-xs flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
               <span>{product.badge}</span>
             </div>
@@ -121,11 +121,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* Product Title on Image Bottom */}
           <div className="absolute bottom-3 right-4 left-4">
-            <h2 id="product-detail-title" className="text-xl sm:text-2xl font-bold font-serif text-m-text leading-tight">
+            <h2 id="product-detail-title" className="text-xl sm:text-2xl font-bold font-serif text-white leading-tight line-clamp-2">
               {product.name}
             </h2>
             {product.nameEn && (
-              <p className="text-xs text-[var(--m-brand-on-surface)] font-serif italic mt-0.5">
+              <p className="text-xs text-white/80 font-serif italic mt-0.5">
                 {product.nameEn}
               </p>
             )}
@@ -217,9 +217,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
 
           {/* ADD-ONS SELECTOR */}
           {product.addOns && product.addOns.length > 0 && (
-            <div role="group" aria-label="إضافات فاخرة اختيارية">
+            <div role="group" aria-label="إضافات اختيارية">
               <p className="block text-xs font-bold text-m-text mb-2">
-                إضافات فاخرة (اختياري)
+                إضافات (اختياري)
               </p>
               <div className="space-y-2">
                 {product.addOns.map((addOn) => {
@@ -331,7 +331,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           {/* Add to Cart CTA Button */}
           <button
             onClick={handleAddToCart}
-            className="flex-1 py-3.5 px-4 rounded-xl brand-cta font-bold text-xs sm:text-sm flex items-center justify-between shadow-[0_0_22px_-6px_var(--m-brand-glow)] transition-all cursor-pointer"
+            className="flex-1 py-3.5 px-4 rounded-xl brand-cta font-bold text-xs sm:text-sm flex items-center justify-between transition-all cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <ShoppingBag className="w-4 h-4" />

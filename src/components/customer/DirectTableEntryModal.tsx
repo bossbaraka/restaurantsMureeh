@@ -129,7 +129,7 @@ export const DirectTableEntryModal: React.FC = () => {
 
             <button
               onClick={() => setIsTableSelectorOpen(false)}
-              className="p-1.5 rounded-lg text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
               aria-label="إغلاق"
             >
               <X className="w-5 h-5" />
@@ -249,7 +249,7 @@ export const DirectTableEntryModal: React.FC = () => {
 
           <button
             onClick={() => setIsTableSelectorOpen(false)}
-            className="p-1.5 rounded-lg text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -277,7 +277,7 @@ export const DirectTableEntryModal: React.FC = () => {
               />
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl brand-fill font-bold text-xs hover:bg-[var(--m-brand-on-surface)] transition-colors shadow-[0_0_22px_-6px_var(--m-brand-glow)]"
+                className="px-5 py-2.5 rounded-xl brand-fill font-bold text-xs hover:bg-[var(--m-brand-on-surface)] transition-colors"
               >
                 تأكيد الطاولة
               </button>
@@ -331,7 +331,7 @@ export const DirectTableEntryModal: React.FC = () => {
                     onClick={() => handleSelectTable(table.tableNumber)}
                     className={`p-2 rounded-xl flex flex-col items-center justify-center border transition-all text-center relative group ${
                       isActiveCurrent
-                        ? 'bg-[var(--m-brand-on-surface)] border-[var(--m-brand-on-surface)] text-m-bg font-extrabold shadow-[0_0_22px_-6px_var(--m-brand-glow)] scale-105 z-10'
+                        ? 'bg-[var(--m-brand-on-surface)] border-[var(--m-brand-on-surface)] text-m-bg font-extrabold scale-105 z-10'
                         : isOccupied
                         ? 'bg-m-surface-raised/90 border-amber-500/40 text-amber-300 hover:border-amber-400'
                         : 'bg-m-surface-raised/50 border-m-hairline text-m-text-muted hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.4)] hover:text-m-text'

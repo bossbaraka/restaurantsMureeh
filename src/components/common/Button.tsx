@@ -35,7 +35,7 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const variantStyles = {
-    gold: 'bg-gradient-to-r from-gold-500 to-gold-600 text-luxury-950 font-bold hover:from-gold-400 hover:to-gold-500 shadow-gold-glow',
+    gold: 'bg-gradient-to-r from-gold-500 to-gold-600 text-luxury-950 font-bold hover:from-gold-400 hover:to-gold-500 shadow-[0_10px_24px_-16px_rgba(212,175,55,0.55)]',
     primary: 'bg-luxury-800 text-luxury-50 hover:bg-luxury-750 border border-luxury-700',
     secondary: 'bg-luxury-900 text-luxury-200 hover:bg-luxury-850 border border-luxury-800',
     outline: 'bg-transparent text-gold-400 border border-gold-600/40 hover:bg-gold-500/10 hover:border-gold-500',
