@@ -300,7 +300,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
             </p>
             <button
               onClick={onClose}
-              className="w-full py-3 rounded-xl brand-cta font-bold text-sm shadow-[0_0_22px_-6px_var(--m-brand-glow)] transition-all cursor-pointer"
+              className="w-full py-3 rounded-full brand-cta font-bold text-sm transition-all cursor-pointer"
             >
               حسناً
             </button>
@@ -592,7 +592,7 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
                 type="button"
                 disabled={phase === 'uploading'}
                 onClick={handleSubmit}
-                className="flex-1 py-2.5 sm:py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                className="flex-1 py-2.5 sm:py-3 rounded-full brand-cta font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 {phase === 'error' ? <RefreshCw className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
                 <span>{phase === 'error' ? 'إعادة المحاولة' : 'إرسال إشعار التحويل'}</span>

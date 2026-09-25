@@ -135,6 +135,15 @@ export const CustomerHero: React.FC = () => {
   const isAwaitingPayment = latestOrder ? isAwaitingGuestPayment(latestOrder) : false;
   const isVerificationPending = latestOrder ? isPaymentVerificationPending(latestOrder) : false;
 
+  const scrollToMenu = () => {
+    const rail = document.querySelector('.menu-rail');
+    if (!rail) return;
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    rail.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  };
+
   const heroOrderStatusText = useMemo(() => {
     if (!latestOrder) return '';
     if (isAwaitingGuestPayment(latestOrder)) {
@@ -162,9 +171,12 @@ export const CustomerHero: React.FC = () => {
   }, [latestOrder]);
 
   return (
-    <div className="relative overflow-hidden mb-6">
-      {/* Background Editorial Hero Image & Video Container */}
-      <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl border border-m-hairline shadow-2xl mx-auto group">
+    <div className="relative mb-6">
+      {/* Photo-led venue frame. Bleeds to the mobile gutter token already set
+          on main; from sm the frame stays an inset card because main padding
+          is wider than --m-gutter. */}
+      <div className="relative -mx-[var(--m-gutter,0px)] sm:mx-0 mb-5">
+      <div className="relative h-[38vh] min-h-[18rem] max-h-[28rem] sm:h-[26rem] sm:max-h-none w-full overflow-hidden border-y sm:border sm:rounded-3xl border-m-hairline">
         {isPlayingVideo && promoVideo ? (
           <div
             role="dialog"
@@ -203,54 +215,49 @@ export const CustomerHero: React.FC = () => {
               decoding="async"
               // React 19 prop; DOM attribute is `fetchpriority`.
               {...({ fetchPriority: 'high' } as React.ImgHTMLAttributes<HTMLImageElement>)}
-              className="w-full h-full object-cover object-center transform scale-105 transition-transform duration-1000 ease-out group-hover:scale-100"
+              className="w-full h-full object-cover object-center"
             />
-            {/* Layered luxury overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-m-bg via-m-bg/70 to-m-bg/20" />
-            <div className="absolute inset-0 bg-gradient-to-r from-m-bg/90 via-m-bg/40 to-transparent" />
+            {/* Bottom scrim only. White type sits on the photograph, so light
+                and dark both stay readable without painting the photo in the
+                page colour. */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent pointer-events-none" />
 
-            {/* Hero Content */}
-            <div className="absolute inset-0 p-6 sm:p-8 flex flex-col justify-end text-right z-10 max-w-xl">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <div
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-m-surface/90 border backdrop-blur-md text-xs font-bold shadow-lg"
-                  style={{
-                    // Brand identity via the resolved --brand-* tokens
-                    // (theme-first), not the legacy color columns.
-                    borderColor: 'rgb(var(--m-brand-on-surface-rgb) / 0.5)',
-                    color: 'var(--m-brand-on-surface)',
-                  }}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>قائمة الطعام الرقمية — {restName}</span>
-                </div>
+            {promoVideo && toEmbeddableVideo(promoVideo) && (
+              <button
+                type="button"
+                onClick={() => setIsPlayingVideo(true)}
+                className="absolute top-3 left-3 z-20 inline-flex items-center justify-center w-11 h-11 rounded-full bg-black/50 text-white border border-white/20 backdrop-blur-md transition-transform active:scale-95 cursor-pointer"
+                title="فيديو صالة المطعم"
+                aria-label="تشغيل فيديو صالة المطعم"
+              >
+                <Play className="w-4 h-4 fill-current" />
+              </button>
+            )}
 
-                {promoVideo && toEmbeddableVideo(promoVideo) && (
-                  <button
-                    onClick={() => setIsPlayingVideo(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-600/90 hover:bg-red-500 text-white text-xs font-bold backdrop-blur-md shadow-lg transition-transform active:scale-95 cursor-pointer"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>فيديو صالة المطعم</span>
-                  </button>
-                )}
-              </div>
-
-              <h2 className="text-2xl sm:text-4xl font-extrabold text-m-text font-serif tracking-tight leading-tight mb-1.5">
-                أجواء فاخرة وتجربة تُكتشف.
+            <div className="absolute inset-x-0 bottom-0 p-4 sm:p-8 flex flex-col items-start text-right z-10">
+              <h2 className="font-serif text-[1.75rem] sm:text-5xl font-bold text-white leading-tight tracking-tight line-clamp-2 max-w-xl">
+                {restName || 'قائمة الطعام'}
               </h2>
-
-              <p className="text-xs sm:text-sm text-m-text-muted leading-relaxed max-w-md line-clamp-2">
+              <p className="mt-1.5 text-sm sm:text-base text-white/80 leading-relaxed max-w-md line-clamp-2">
                 {restDesc}
               </p>
+              <button
+                type="button"
+                onClick={scrollToMenu}
+                className="brand-cta mt-4 inline-flex items-center gap-2 self-start rounded-full px-5 py-2.5 text-sm font-bold cursor-pointer"
+              >
+                <span>تصفح القائمة</span>
+                <ArrowLeft className="w-4 h-4" />
+              </button>
             </div>
           </>
         )}
       </div>
+      </div>
 
       {/* RESTAURANT DINING HALL & EDITORIAL ATMOSPHERE GALLERY */}
       {galleryList.length > 0 && (
-        <div className="mt-5 p-4 sm:p-5 rounded-3xl bg-m-surface/90 border border-m-hairline space-y-3.5 shadow-2xl">
+        <div className="mt-6 space-y-3">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs sm:text-sm font-bold text-m-text flex items-center gap-2">
               <Camera className="w-4 h-4 text-[var(--m-brand-on-surface)]" />
@@ -389,14 +396,14 @@ export const CustomerHero: React.FC = () => {
 
       {/* PROMINENT LIVE ORDER STATUS BANNER ON MENU PAGE */}
       {latestOrder && statusCfg && (
-        <div className="mt-4 p-4 rounded-2xl bg-m-surface/95 border border-[rgb(var(--m-brand-on-surface-rgb)/0.5)] shadow-2xl backdrop-blur-md space-y-3 animate-in fade-in zoom-in-95 duration-300">
+        <div className="mt-4 p-4 rounded-2xl bg-m-surface border border-m-hairline space-y-3">
           <div className="flex items-center justify-between border-b border-m-hairline pb-2.5">
             <div className="flex items-center gap-2">
               <div className="w-9 h-9 rounded-xl bg-[rgb(var(--m-brand-on-surface-rgb)/0.15)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] flex items-center justify-center text-[var(--m-brand-on-surface)]">
                 {isAwaitingPayment || isVerificationPending ? (
                   <Clock className="w-5 h-5 text-amber-400" />
                 ) : (
-                  <ChefHat className="w-5 h-5 animate-pulse" />
+                  <ChefHat className="w-5 h-5" />
                 )}
               </div>
               <div>
@@ -414,7 +421,7 @@ export const CustomerHero: React.FC = () => {
 
             <button
               onClick={() => setIsOrderTrackingOpen(true)}
-              className="px-3.5 py-1.5 rounded-xl brand-cta font-bold text-xs flex items-center gap-1 shadow-[0_0_22px_-6px_var(--m-brand-glow)] transition-all"
+              className="px-3.5 py-1.5 rounded-full brand-cta font-bold text-xs flex items-center gap-1 transition-all"
             >
               <span>تفاصيل الطلب</span>
               <ArrowLeft className="w-3.5 h-3.5" />
@@ -438,7 +445,7 @@ export const CustomerHero: React.FC = () => {
             {/* Step 2: Kitchen Preparing */}
             <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
               currentStep >= 2
-                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 animate-pulse'
+                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300'
                 : 'bg-m-bg border-m-hairline text-m-text-subtle'
             }`}>
               <div className="flex items-center justify-center mb-1">
@@ -475,7 +482,7 @@ export const CustomerHero: React.FC = () => {
       )}
 
       {/* Search Input Bar */}
-      <div className="mt-4 relative max-w-4xl mx-auto">
+      <div className="mt-5 relative">
         <div className="relative flex items-center">
           <input
             type="text"
@@ -484,7 +491,7 @@ export const CustomerHero: React.FC = () => {
             placeholder="ابحث عن طبق، مكون، أو صنف..."
             aria-label="ابحث عن طبق، مكون، أو صنف"
             data-guide="search"
-            className="w-full bg-m-surface border border-m-hairline text-m-text placeholder-m-text-subtle rounded-xl py-3 pr-11 pl-4 text-sm focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)] focus:ring-1 focus:ring-[rgb(var(--m-brand-on-surface-rgb)/0.3)] transition-all shadow-inner"
+            className="w-full bg-m-surface border border-m-hairline text-m-text placeholder-m-text-subtle rounded-full py-3.5 pr-12 pl-4 text-sm focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)] focus:ring-1 focus:ring-[rgb(var(--m-brand-on-surface-rgb)/0.3)] transition-all"
           />
           <Search className="w-4 h-4 text-m-text-muted absolute right-4 pointer-events-none" />
           {searchQuery && (

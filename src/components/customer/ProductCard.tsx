@@ -59,7 +59,7 @@ const MemoProductCard: React.FC<ProductCardProps> = ({
           src={product.image}
           alt={product.name}
           priority={priority}
-          sizes="(max-width: 640px) 100px, 200px"
+          sizes="(max-width: 639px) 92vw, (max-width: 1099px) 46vw, 360px"
         />
         <div className="menu-media__scrim" aria-hidden="true" />
 

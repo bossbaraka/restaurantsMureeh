@@ -236,7 +236,7 @@ export const ManagerLayout: React.FC = () => {
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-sm shrink-0 shadow-gold-glow"
+                  className="w-9 h-9 rounded-full flex items-center justify-center overflow-hidden text-luxury-950 font-serif font-bold text-sm shrink-0 border border-luxury-700"
                   style={{
                     background: `linear-gradient(135deg, ${currentRestaurant?.primaryColor || '#D4AF37'}, ${currentRestaurant?.accentColor || '#C5A880'})`,
                   }}

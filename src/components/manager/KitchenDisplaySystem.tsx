@@ -52,15 +52,15 @@ export const KitchenDisplaySystem: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#07080A] text-luxury-50 p-4 sm:p-6 select-none" dir="rtl">
       {/* KDS Top Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-luxury-900 border border-luxury-800 p-4 sm:p-5 rounded-2xl shadow-luxury mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-luxury-900 border border-luxury-800 p-4 sm:p-5 rounded-3xl shadow-luxury mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold shadow-lg">
+          <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">
             <ChefHat className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold font-serif text-luxury-50">شاشة المطبخ والطهي (Kitchen Display)</h1>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
             </div>
             <p className="text-xs text-luxury-400">
               {currentRestaurant?.name} · تحديث لحظي مباشر لطلبات الطاولات
@@ -71,7 +71,7 @@ export const KitchenDisplaySystem: React.FC = () => {
         {/* Action Controls & Sound */}
         <div className="flex items-center gap-2">
           {/* Status Filters */}
-          <div className="flex items-center bg-luxury-950 p-1 rounded-xl border border-luxury-800">
+          <div className="flex items-center bg-luxury-950 p-1 rounded-full border border-luxury-800">
             {[
               { id: 'ALL', label: `الكل (${kitchenOrders.length})` },
               { id: 'PENDING', label: `جديدة (${kitchenOrders.filter((o) => o.status === 'PENDING').length})` },
@@ -141,7 +141,7 @@ export const KitchenDisplaySystem: React.FC = () => {
             return (
               <div
                 key={order.id}
-                className={`rounded-2xl border flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
+                className={`rounded-3xl border flex flex-col justify-between overflow-hidden shadow-2xl transition-all ${
                   isPending
                     ? 'bg-luxury-900 border-red-500/50 ring-1 ring-red-500/20 animate-pulse-slow'
                     : isPreparing
@@ -232,7 +232,7 @@ export const KitchenDisplaySystem: React.FC = () => {
                     onClick={() => handleAdvanceStatus(order.id, order.status)}
                     disabled={isUpdating}
                     aria-busy={isUpdating}
-                    className={`w-full py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer active:scale-98 disabled:opacity-60 disabled:cursor-wait ${
+                    className={`w-full py-3 rounded-full font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98 disabled:opacity-60 disabled:cursor-wait ${
                       isPending
                         ? 'bg-amber-500 hover:bg-amber-400 text-luxury-950'
                         : isPreparing

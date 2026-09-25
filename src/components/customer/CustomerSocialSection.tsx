@@ -95,7 +95,7 @@ export const CustomerSocialSection: React.FC = () => {
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`مراسلة ${restaurantName} على واتساب`}
-              className="group flex h-full items-center gap-3 rounded-2xl border border-m-hairline/70 bg-m-bg/70 p-3 transition-colors hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
+              className="group flex h-full items-center gap-3 rounded-3xl border border-m-hairline bg-m-bg/70 p-3 transition-colors hover:border-m-hairline-strong"
             >
               <span
                 className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-m-bg"
@@ -128,7 +128,7 @@ export const CustomerSocialSection: React.FC = () => {
                 rel="noopener noreferrer"
                 title={link.labelEn}
                 aria-label={`${link.label} — ${restaurantName}`}
-                className="group flex h-full items-center gap-3 rounded-2xl border border-m-hairline bg-m-bg/50 p-3 transition-colors hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
+                className="group flex h-full items-center gap-3 rounded-3xl border border-m-hairline bg-m-bg/50 p-3 transition-colors hover:border-m-hairline-strong"
               >
                 <span
                   className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-m-hairline/70 bg-m-surface text-[var(--m-brand-on-surface)]"
