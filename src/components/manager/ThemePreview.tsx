@@ -341,34 +341,24 @@ export const ThemePreview: React.FC<ThemePreviewProps> = ({
           </div>
         </div>
 
-        {/* Category rail */}
+        {/* Category rail: horizontally scrollable at phone widths, using the
+            same .menu-chip treatment as the live customer menu. */}
         <div
-          className="flex items-center gap-2 px-4 py-2.5 overflow-hidden border-b"
+          className="theme-preview__category-band border-b"
           style={{ background: 'var(--m-surface)', borderColor: 'var(--m-hairline)' }}
         >
-          {SAMPLE_CATEGORIES.map((cat, i) => (
-            <span
-              key={cat}
-              className="px-3 py-1.5 text-[11px] font-bold whitespace-nowrap"
-              style={
-                i === 0
-                  ? {
-                      backgroundImage: 'var(--m-chip-active-image)',
-                      backgroundColor: 'var(--m-chip-active-bg)',
-                      color: 'var(--m-chip-active-text)',
-                      borderRadius: 'var(--m-radius-full)',
-                    }
-                  : {
-                      background: 'var(--m-chip-bg)',
-                      color: 'var(--m-chip-text)',
-                      borderRadius: 'var(--m-radius-full)',
-                      border: '1px solid var(--m-hairline)',
-                    }
-              }
-            >
-              {cat}
-            </span>
-          ))}
+          <div className="theme-preview__category-track" role="list" aria-label="معاينة أقسام القائمة">
+            {SAMPLE_CATEGORIES.map((cat, i) => (
+              <span
+                key={cat}
+                role="listitem"
+                className="menu-chip"
+                data-active={i === 0}
+              >
+                {cat}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Dish cards */}

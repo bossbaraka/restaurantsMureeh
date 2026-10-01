@@ -409,6 +409,29 @@
   background: rgb(0 0 0 / 0.16);
 }
 
+/* The theme-editor phone preview mirrors the live rail's chip sizing and
+   horizontal overflow, instead of clipping the last categories at 320px. */
+.theme-preview__category-band {
+  min-width: 0;
+  padding: 0.5rem 1rem;
+}
+.theme-preview__category-track {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.theme-preview__category-track::-webkit-scrollbar {
+  display: none;
+}
+.theme-preview__category-track .menu-chip {
+  flex: none;
+}
+
 /* Toolbar: sort / availability / layout -------------------------------------- */
 .menu-toolbar {
   display: flex;
