@@ -971,7 +971,11 @@
   transform: scale(0.9);
 }
 .menu-qty button:focus-visible {
-  outline: 2px solid rgb(255 255 255 / 0.8);
+  /* Mode-aware ring: `--menu-text-strong` is the scope's strong chrome ink —
+     near-white on the night face (byte-close to the old white/80 ring) and
+     near-black on the light face, where a white ring was invisible. The
+     80% mix keeps the exact strength the dark-mode ring always had. */
+  outline: 2px solid color-mix(in srgb, var(--menu-text-strong, #f3f5f9) 80%, transparent);
   outline-offset: 1px;
 }
 .menu-qty__value {

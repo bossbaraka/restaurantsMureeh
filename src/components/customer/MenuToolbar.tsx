@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowDownWideNarrow, ChefHat, LayoutGrid, Rows3 } from 'lucide-react';
+import { CustomerModeToggle } from './CustomerModeToggle';
 
 export type MenuSortKey = 'menu' | 'featured' | 'price-asc' | 'price-desc' | 'fastest';
 export type MenuLayout = 'list' | 'grid';
@@ -99,6 +100,11 @@ export const MenuToolbar: React.FC<MenuToolbarProps> = ({
             <LayoutGrid className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
         </div>
+
+        {/* Guest night/light control. Reads its state straight from the theme
+            scope (single writer), so flipping it re-themes every element at
+            once — no local styling of the mode anywhere in the toolbar. */}
+        <CustomerModeToggle />
       </div>
     </div>
   );
