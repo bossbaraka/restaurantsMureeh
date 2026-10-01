@@ -40,6 +40,7 @@ import {
   buildBrandTokens,
   buildEffectiveThemeVars,
   resolveThemeMode,
+  FONT_FAMILY_MAP,
   type BrandTokens,
   type SurfaceMode,
 } from './brandTheme';
@@ -206,6 +207,46 @@ function channelTokens(tokens: TokenMap, brand: BrandTokens, mode: SurfaceMode):
 }
 
 /**
+ * Generic CSS font keywords (`serif`, `sans-serif`, `system-ui`, …).
+ *
+ * WHY THIS EXISTS — `--m-font-chosen` is consumed INSIDE a longer
+ * `font-family` chain (e.g. `var(--m-font-chosen, …), 'Tajawal', sans-serif`).
+ * If the chosen stack still carried its own trailing generic face, that
+ * generic would match BEFORE the chain's Arabic coverage, so a Latin-only
+ * display face (Cormorant) would drop Arabic glyphs onto the device serif
+ * instead of onto Tajawal. Stripping the generics leaves only the real faces
+ * and lets the consumer chain's own fallbacks stay in charge of coverage.
+ */
+const GENERIC_FONT_FACES = new Set([
+  'serif',
+  'sans-serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'system-ui',
+  'ui-sans-serif',
+  'ui-serif',
+  'ui-monospace',
+  'ui-rounded',
+  'emoji',
+  'math',
+  'fangsong',
+]);
+
+/** Removes generic CSS keywords from a font stack, keeping authored faces. */
+export function stripGenericFaces(stack: string): string {
+  return stack
+    .split(',')
+    .map((face) => face.trim())
+    .filter(Boolean)
+    .filter((face) => {
+      const bare = face.replace(/^['"]|['"]$/g, '').toLowerCase();
+      return !GENERIC_FONT_FACES.has(bare);
+    })
+    .join(', ');
+}
+
+/**
  * PLATFORM-FIXED STATUS EXTENSION.
  *
  * `--m-success/-warning/-error` come from the theme row when a restaurant
@@ -304,7 +345,28 @@ export function buildSemanticTokens(
     '--m-font': themeVars['--font-family'],
     '--m-font-heading-weight': themeVars['--font-heading-weight'],
     '--m-font-body-weight': themeVars['--font-body-weight'],
+  };
 
+  // OPTIONAL FONT-PRESENCE TOKEN — deliberately NOT part of
+  // SEMANTIC_TOKEN_NAMES (that registry is pinned by tests to be always
+  // non-empty). This one is the opposite on purpose: it uses the same
+  // "empty string = absent" contract as the per-component colour overrides,
+  // so consumers read `var(--m-font-chosen, <their own face>)`.
+  //
+  // Meaning: the tenant's font face ONLY when it was EXPLICITLY chosen in
+  // the theme editor (fontFamily ≠ 'auto'). Tenants that never picked a
+  // font keep rendering byte-identically (the fallback face applies), while
+  // any real font decision propagates to every guest-facing surface — the
+  // menu shell AND the entry experience — instead of stopping at the shell.
+  //
+  // Generic keywords are stripped (see stripGenericFaces) so the consumer's
+  // own Arabic-coverage fallbacks stay in charge of script fallback.
+  const chosenFontKey = theme.typography?.fontFamily;
+  const chosenFontStack =
+    chosenFontKey && chosenFontKey !== 'auto' ? FONT_FAMILY_MAP[chosenFontKey] : undefined;
+  tokens['--m-font-chosen'] = chosenFontStack ? stripGenericFaces(chosenFontStack) : '';
+
+  Object.assign(tokens, {
     // ---- Shape ----------------------------------------------------------
     '--m-radius-sm': themeVars['--radius-sm'],
     '--m-radius-md': themeVars['--radius-md'],
@@ -319,7 +381,7 @@ export function buildSemanticTokens(
     '--m-success': themeVars['--theme-success'],
     '--m-warning': themeVars['--theme-warning'],
     '--m-error': themeVars['--theme-error'],
-  };
+  });
 
   // Channel triplets for opacity-modified utilities (see channelTokens).
   Object.assign(tokens, channelTokens(tokens, brand, surfaceMode));

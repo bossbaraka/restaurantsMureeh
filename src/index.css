@@ -3597,8 +3597,17 @@ input[type='range'].saas-range::-moz-range-thumb {
      script-coverage fallback, never an identity: when a theme supplies a
      Latin-only display face, Arabic still renders in the app's Arabic type
      instead of in whatever the device happens to pick. */
-  --entry-font-display: var(--font-serif, Georgia, serif);
-  --entry-font-text: var(--font-sans, system-ui, -apple-system, sans-serif);
+  /* FONT PROPAGATION — theme-first, fallback-safe.
+     `--m-font-chosen` is the tenant's face ONLY when a font was explicitly
+     chosen in the theme editor (emitted by buildSemanticTokens; absent for
+     'auto'). Chaining it first means an explicit font decision now re-types
+     this page too — the entry experience moves together with the menu —
+     while a tenant that never picked a font falls through to the exact
+     values this rule shipped with (zero change). `--m-font-chosen` carries
+     no generic keywords (they are stripped), so the trailing 'Tajawal' in
+     each consumer stays in charge of Arabic glyph coverage. */
+  --entry-font-display: var(--m-font-chosen, var(--font-serif, Georgia, serif));
+  --entry-font-text: var(--m-font-chosen, var(--font-sans, system-ui, -apple-system, sans-serif));
   font-family: var(--entry-font-text), 'Tajawal', sans-serif;
   overscroll-behavior: contain;
   -webkit-tap-highlight-color: transparent;
