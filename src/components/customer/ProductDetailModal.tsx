@@ -89,8 +89,20 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
         style={{ backgroundColor: 'var(--m-surface)', boxShadow: 'var(--m-shadow-lg)' }}
         dir="rtl"
       >
-        {/* Sticky Header with Close Button & Image */}
-        <div className="relative aspect-[16/9] w-full shrink-0 bg-m-bg">
+        {/* Sticky Header with Close Button & Image.
+            NO `shrink-0` here, on purpose: the card is capped at
+            `max-h-[90vh]` and the footer is `shrink-0`, so on SHORT
+            viewports (landscape phones, split-screen, small windows) the
+            natural 16:9 header + footer used to exceed the cap — and with
+            the header shrink-proofed, the flex collapse hit the ONLY other
+            participant: the `flex-1` customization panel shrank to zero and
+            the image appeared to take over the whole dialog, blocking the
+            order customization. Now the header is the sole absorber of the
+            shortfall (flex-shrink default 1), floored at 6.5rem so the dish
+            photo always stays visible. On normal-height viewports the card
+            never overflows its cap, so the 16:9 header renders EXACTLY as
+            before — zero visual change. */}
+        <div className="relative aspect-[16/9] w-full min-h-[6.5rem] bg-m-bg">
           {product.image ? (
             <img
               src={optimizeImageUrl(product.image, 960, 75)}
@@ -132,8 +144,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({ product,
           </div>
         </div>
 
-        {/* Scrollable Customization Content */}
-        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
+        {/* Scrollable Customization Content.
+            `min-h-0` makes the scroll region an explicit flex-shrink
+            participant instead of relying on the implicit minimum of an
+            overflow box — the panel keeps its share of the 90vh budget and
+            scrolls internally, so customization is reachable even when the
+            header had to shrink. */}
+        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1 min-h-0 custom-scrollbar">
           {/* Description & Metadata Strip */}
           <div>
             <p className="text-xs sm:text-sm text-m-text-muted leading-relaxed">

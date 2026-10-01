@@ -218,4 +218,12 @@ describe('customer menu consumes the Effective Theme tokens', () => {
     expect(value('.menu-badge--danger', 'background')).toContain('var(--m-error');
     expect(value('.menu-badge--dark', 'border')).toContain('var(--theme-border');
   });
+
+  it('the stepper focus ring flips with the surface instead of staying white', () => {
+    // A fixed `rgb(255 255 255 / 0.8)` ring was invisible on the light face.
+    // The ring must read the scoped strong-ink token, which inverts per mode.
+    const outline = value('.menu-qty button:focus-visible', 'outline');
+    expect(outline).toContain('var(--menu-text-strong');
+    expect(outline).not.toContain('rgb(255 255 255');
+  });
 });

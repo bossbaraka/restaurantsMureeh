@@ -49,15 +49,36 @@
  * context.
  */
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import {
   buildCustomerThemeStyle,
-  resolveSurfaceMode,
   type SurfaceMode,
   type TokenMap,
 } from './semanticTokens';
 import { normalizeTheme, type NormalizedTheme, type ThemeSourceRestaurant } from './normalizeTheme';
 import { useStickyStackVars } from './StickyStack';
+import {
+  readGuestAppearanceOverride,
+  resolveCustomerSurfaceMode,
+  writeGuestAppearanceOverride,
+  type GuestAppearanceOverride,
+} from './guestAppearance';
+
+/**
+ * GUEST APPEARANCE OVERRIDE — the in-menu night/light button.
+ *
+ * The state model (storage key, validation, precedence resolution) lives in
+ * the pure module `guestAppearance.ts`; this provider remains the ONE place
+ * the result is applied, so the single-writer rule is untouched:
+ *
+ *     forceMode (signage)  >  guest override  >  tenant mode  >  device
+ *
+ *   • 'auto' is a real state: it CLEARS the override and hands control back
+ *     to the tenant/device chain, so the restaurant's decision is never
+ *     permanently clobbered.
+ *   • `forceMode` surfaces (the TV board) ignore the override entirely —
+ *     a signage canvas is an explicit contract, not a guest preference.
+ */
 
 /** What descendants can read about the active customer theme. */
 export interface CustomerThemeContextValue {
@@ -65,6 +86,10 @@ export interface CustomerThemeContextValue {
   /** The RESOLVED surface mode — 'light' or 'dark'. Never 'auto'. */
   surfaceMode: SurfaceMode;
   tokens: TokenMap;
+  /** The guest's night/light choice ('auto' = follow tenant/device). */
+  appearanceOverride: GuestAppearanceOverride;
+  /** Sets + persists the guest choice. The whole scope re-themes at once. */
+  setAppearanceOverride: (value: GuestAppearanceOverride) => void;
 }
 
 const CustomerThemeContext = createContext<CustomerThemeContextValue | null>(null);
@@ -158,7 +183,27 @@ export const CustomerThemeProvider: React.FC<CustomerThemeProviderProps> = ({
     [themeSignature]
   );
 
-  const surfaceMode: SurfaceMode = forceMode ?? resolveSurfaceMode(theme, prefersDark);
+  // The guest's night/light choice. Initialized from storage so a returning
+  // guest keeps their pick across reloads; 'auto' until they touch the
+  // in-menu toggle. Reading happens in the lazy initializer (one read, on
+  // mount), never during render of descendants.
+  const [appearanceOverride, setOverrideState] = useState<GuestAppearanceOverride>(
+    () => readGuestAppearanceOverride()
+  );
+
+  const setAppearanceOverride = useCallback((value: GuestAppearanceOverride) => {
+    setOverrideState(value);
+    writeGuestAppearanceOverride(value);
+  }, []);
+
+  // One precedence chain, defined ONCE in resolveCustomerSurfaceMode:
+  // forceMode (signage) > guest override > tenant mode > device preference.
+  const surfaceMode: SurfaceMode = resolveCustomerSurfaceMode({
+    forceMode,
+    override: appearanceOverride,
+    themeMode: theme.mode,
+    prefersDark,
+  });
 
   const tokens = useMemo(
     () => buildCustomerThemeStyle(theme, surfaceMode),
@@ -173,8 +218,8 @@ export const CustomerThemeProvider: React.FC<CustomerThemeProviderProps> = ({
   const stackVars = useStickyStackVars();
 
   const contextValue = useMemo<CustomerThemeContextValue>(
-    () => ({ theme, surfaceMode, tokens }),
-    [theme, surfaceMode, tokens]
+    () => ({ theme, surfaceMode, tokens, appearanceOverride, setAppearanceOverride }),
+    [theme, surfaceMode, tokens, appearanceOverride, setAppearanceOverride]
   );
 
   return (

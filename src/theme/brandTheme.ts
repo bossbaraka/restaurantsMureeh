@@ -742,7 +742,13 @@ export function useBrandTheme(
  * White-label preserved: no Mureeh branding injected.
  */
 
-const FONT_FAMILY_MAP: Record<string, string> = {
+/**
+ * Exported (not just module-private) so the semantic token builder can gate
+ * the OPTIONAL `--m-font-chosen` presence token on "does this key resolve to
+ * a real face" — an unknown legacy key must resolve to ABSENT, never to a
+ * silently-invented stack.
+ */
+export const FONT_FAMILY_MAP: Record<string, string> = {
   auto: 'Tajawal, Cairo, system-ui, -apple-system, sans-serif',
   tajawal: '"Tajawal", system-ui, sans-serif',
   cairo: '"Cairo", system-ui, sans-serif',
