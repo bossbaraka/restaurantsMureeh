@@ -482,7 +482,15 @@
   max-width: 100%;
   /* Same 40px rhythm as the chips and the toggle: one control system. */
   min-height: 40px;
-  padding: 0.4rem 1.6rem 0.4rem 0.7rem;
+  /* RTL-CORRECT PADDING (was `0.4rem 1.6rem 0.4rem 0.7rem`, LTR-authored).
+     The chevron below is painted at physical `left`, which is the INLINE-END
+     edge in this RTL menu; the old rule put the 1.6rem of clearance on the
+     inline-START side instead, leaving the arrow 8px of space where it needed
+     19px — so on the longest sort option («الأسرع تحضيراً») the chevron
+     overlapped the text. Swapping the two values gives the arrow its room on
+     the end edge and the label a tighter, still-breathing start edge, with an
+     identical total inline padding. */
+  padding: 0.4rem 0.7rem 0.4rem 1.6rem;
   /* radius.md → inputs (same scale slot as buttons). */
   border-radius: var(--m-radius-md, 10px);
   font-size: 11px;
@@ -904,7 +912,15 @@
 .menu-price__currency {
   font-size: 11px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--m-brand-on-surface) 75%, #ffffff);
+  /* De-emphasis is a mix toward the LOCAL INK, never toward white.
+     It used to be `color-mix(… 75%, #ffffff)`, which is correct on the night
+     canvas and backwards on the light one: it pushed an already
+     contrast-marginal brand hue (#A88924 on #FFFFFF ≈ 3.4:1) down to 2.4:1 —
+     the currency glyph became the least readable thing in the price.
+     Mixing toward `--m-text` keeps the hierarchy (the number stays brighter)
+     while inheriting the surface's own contrast direction: near-black on the
+     light face (≈4.9:1), near-white on the night face (unchanged look). */
+  color: color-mix(in srgb, var(--m-brand-on-surface) 78%, var(--m-text));
 }
 
 .menu-actions {
@@ -2773,8 +2789,24 @@ input[type='range'].saas-range::-moz-range-thumb {
     --m-gutter: 0.75rem;
     padding-inline: var(--m-gutter);
   }
+  /* `.menu-rail` is deliberately ABSENT from this list.
+     The rail is full-bleed on narrow screens: it cancels `main`'s gutter with
+     `margin-inline: calc(-1 * var(--m-gutter))` and pads the same amount back
+     in, so its background spans the whole viewport and its contents align with
+     the page gutter. `max-width: 100%` clamped that back to the CONTENT width
+     and made the box equation over-constrained, so the browser silently DROPPED
+     one of the two negative margins (in RTL: `margin-inline-end`). Measured
+     consequences at 390px, all three confirmed by rendering:
+       1. the rail's opaque background stopped 24px short of one screen edge —
+          cards scrolled visibly through the gap beside the sticky bar;
+       2. the rail's contents were inset 24px on one side and 0 on the other,
+          misaligned with every other section on the page;
+       3. the toolbar lost 24px of line budget, which forced it to wrap to two
+          rows at 320px (rail 165px instead of 119px).
+     The rail is exactly viewport-wide by construction, so it needs no clamp —
+     and the horizontal scroller inside it is bounded by `overflow-x: auto`
+     plus `min-width: 0`, so no child can push it wider. */
   .menu-grid,
-  .menu-rail,
   .menu-cats,
   .menu-section-head,
   .menu-card {

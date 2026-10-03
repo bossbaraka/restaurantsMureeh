@@ -384,17 +384,58 @@ export function clampLightness(color: Rgb, min: number, max: number): string {
 }
 
 /**
+ * The white-label light canvas every light-mode role is measured against.
+ *
+ * `relativeLuminance` / `contrastRatio` above are the module's existing,
+ * already-tested WCAG helpers (the CTA fill-vs-ink contract is asserted with
+ * them) — the floor below reuses them rather than re-deriving luminance.
+ */
+const LIGHT_CANVAS: Rgb = { r: 255, g: 255, b: 255 };
+
+/**
  * Light-mode counterpart of `liftForDark`: keeps the tenant hue but DARKENS
  * it into a foreground-safe range, so brand-colored text/icons/borders stay
  * readable on white surfaces (gold on white fails contrast; deep gold works).
  * Achromatic picks are darkened without inventing a hue.
+ *
+ * CONTRAST FLOOR (`minContrast`, light canvas only)
+ * ------------------------------------------------
+ * Clamping lightness alone does NOT make a hue readable: the platform's own
+ * default gold (#D4AF37) lands on #A88924 at L=0.42, which is only 3.35:1 on
+ * white — and `--m-brand-on-surface` is TEXT ink, not decoration. It paints the
+ * dish price (17px/800), the table pill in the header, the resting "add"
+ * button label and the meta icons, so a failing ratio there is a failing
+ * primary decision surface, not a trim colour.
+ *
+ * The floor therefore keeps darkening (hue and saturation untouched, achromatic
+ * picks included) until the result clears `minContrast` against the light
+ * canvas, bounded by `floorLightness` so a hue that cannot get there
+ * (pure yellow, for instance) degrades gracefully instead of collapsing to
+ * black. Values that already pass are returned untouched, so every colour that
+ * was compliant before still is.
  */
-export function deepenForLight(color: Rgb, maxLightness = 0.42, minSaturation = 0.3): string {
+export function deepenForLight(
+  color: Rgb,
+  maxLightness = 0.42,
+  minSaturation = 0.3,
+  minContrast = 4.5,
+  floorLightness = 0.12
+): string {
   const hsl = rgbToHsl(color);
   const achromatic = hsl.s < 0.06;
-  const l = Math.min(hsl.l, maxLightness);
+  const capped = Math.min(hsl.l, maxLightness);
   const s = achromatic ? hsl.s : Math.max(hsl.s, minSaturation);
-  return rgbToHex(hslToRgb({ h: hsl.h, s, l }));
+
+  let l = capped;
+  let rgb = hslToRgb({ h: hsl.h, s, l });
+  // ~1.5% lightness steps: fine enough to land just inside the target instead
+  // of overshooting into a visibly different shade.
+  while (l > floorLightness && contrastRatio(rgb, LIGHT_CANVAS) < minContrast) {
+    l = Math.max(floorLightness, l - 0.015);
+    rgb = hslToRgb({ h: hsl.h, s, l });
+    if (l === floorLightness) break;
+  }
+  return rgbToHex(rgb);
 }
 
 /** Linear mix of two colors, `t = 0` -> a, `t = 1` -> b. */

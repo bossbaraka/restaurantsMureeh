@@ -218,19 +218,48 @@ export const StickyStackProvider: React.FC<{ children?: React.ReactNode }> = ({ 
  *                           Consumed by CustomerHeader's `top`.
  *   --m-stack-h             every band above the category rail.
  *                           Consumed by `.menu-rail`'s `top`.
+ *   --m-stack-safe-top      the notch/status-bar inset the stack has NOT
+ *                           already absorbed. Consumed by the TOPMOST sticky
+ *                           band only.
  *
- * Both are composed from MEASURED heights here, so no component reconstructs
- * the stack with arithmetic of its own, and an absent band contributes 0.
+ * The first two are composed from MEASURED heights here, so no component
+ * reconstructs the stack with arithmetic of its own, and an absent band
+ * contributes 0.
+ *
+ * WHY A SAFE-AREA VARIABLE IS PART OF THE STACK
+ * ---------------------------------------------
+ * The stack already claims safe-area ownership: the topmost band absorbs
+ * `env(safe-area-inset-top)` into its own padding, its MEASURED height
+ * therefore includes the inset, and no `env()` arithmetic appears anywhere
+ * else — which is what makes double-compensation structurally impossible.
+ *
+ * That guarantee silently depended on the topmost band always being the
+ * platform ViewSwitcher. It is not: the public QR route
+ * (`/r/:slug?qr=…`, i.e. every real guest) unmounts ViewSwitcher entirely
+ * (App.tsx → `isPublicCustomer`), so nothing absorbed the inset and the
+ * customer header parked at `top: 0` — under the notch, on the one route the
+ * product exists for.
+ *
+ * Publishing the UN-absorbed remainder from the same owner that knows which
+ * bands are present restores the guarantee instead of special-casing a route:
+ * when the toolbar is registered it has already swallowed the inset, so the
+ * remainder is 0; when it is absent the header — the topmost band — takes it
+ * exactly once. Because the header is measured too, the inset then flows into
+ * `--m-stack-h` automatically and the rail still parks flush below it.
  */
 export function useStickyStackVars(): Record<string, string> {
   const ctx = useContext(StickyStackContext);
   const toolbar = ctx?.heights.toolbar ?? 0;
   const header = ctx?.heights.header ?? 0;
+  // `heights.toolbar` is only present while the ViewSwitcher band is
+  // registered, so it is the exact "has the top inset been absorbed" signal.
+  const toolbarPresent = toolbar > 0;
   return useMemo(
     () => ({
       '--m-stack-above-header': `${toolbar}px`,
       '--m-stack-h': `${toolbar + header}px`,
+      '--m-stack-safe-top': toolbarPresent ? '0px' : 'env(safe-area-inset-top, 0px)',
     }),
-    [toolbar, header]
+    [toolbar, header, toolbarPresent]
   );
 }

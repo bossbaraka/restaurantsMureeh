@@ -69,7 +69,16 @@ export const CustomerHeader: React.FC = () => {
           // header and the rail can never disagree about the stack, and the
           // toolbar's safe-area padding is counted exactly once (it is part of
           // the toolbar's MEASURED height).
-          top: 'var(--m-stack-above-header, 0px)',
+          //
+          // + --m-stack-safe-top: the notch inset the stack has NOT already
+          //   absorbed. It is `0px` whenever the platform toolbar is mounted
+          //   (that band swallows the inset into its own padding, and its
+          //   measured height carries it), and the real `env()` value when the
+          //   toolbar is absent — which is precisely the public QR route, the
+          //   one every real guest lands on. The header is the topmost band
+          //   there, so it is the one that must take the inset; because it is
+          //   measured, --m-stack-h inherits it and the rail follows.
+          top: 'calc(var(--m-stack-above-header, 0px) + var(--m-stack-safe-top, 0px))',
         }}
       >
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
