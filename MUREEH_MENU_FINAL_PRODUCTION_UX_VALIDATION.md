@@ -496,35 +496,35 @@ byte-for-byte before and after the baseline stash: **PATCH IDENTICAL ✓**).
 ## 12. Git State
 
 ```
-Branch:      arena/01a10307-restaurantsMureeh
-HEAD:        d0c9768  Merge pull request #63 from bossbaraka/arena/01a0f870-restaurantsmureeh
-Working tree: 13 modified, 3 untracked, clean otherwise
-Commits this phase: none (validation only)
+Branch:       arena/01a10307-restaurantsMureeh
+HEAD:         707c052  fix(customer): finalize menu theme and responsive UX
+Working tree: CLEAN
+Pushed:       9a6994e..707c052  (fast-forward, no force-push)
+PR:           https://github.com/bossbaraka/restaurantsMureeh/pull/64
 ```
 
 ```
- M src/components/customer/CustomerHeader.tsx
- M src/components/customer/CustomerHero.tsx
- M src/components/customer/CustomerLayout.tsx
- M src/components/customer/CustomerOrderLiveNotifier.tsx
- M src/components/customer/MenuToolbar.tsx
- M src/components/customer/OrderCompletedModal.tsx
- M src/components/customer/OrderTrackingDrawer.tsx
- M src/index.css
- M src/tests/menuStyles.test.ts
- M src/theme/StickyStack.tsx
- M src/theme/brandTheme.ts
- M src/theme/semanticTokens.ts
- M src/utils/formatting.ts
-?? MUREEH_MENU_FINAL_PRODUCTION_UX_VALIDATION.md
-?? MUREEH_MENU_FINAL_VERIFICATION_REPORT.md
-?? MUREEH_MENU_UI_SYSTEM_AUDIT.md
-?? src/tests/statusPaletteContract.test.ts
+707c052 fix(customer): finalize menu theme and responsive UX
+9a6994e docs: MUREEH MENU — UI SYSTEM AUDIT (18 sections)
+3f36c40 fix(menu): rail bleed, RTL control padding, mode-aware status ink, brand contrast floor
+d0c9768 Merge pull request #63 from bossbaraka/arena/01a0f870-restaurantsMureeh
 ```
 
-**Note:** the earlier audit commits (`3f36c40`, `9a6994e`) are no longer on this
-branch — the branch now sits at the base `d0c9768`. **All work is present in the
-working tree and uncommitted.** Recommend committing and opening a PR before release.
+The consolidation commit touched 17 files (12 production, 2 test files, 3
+documentation reports), staged explicitly by name — never `git add .`.
+
+**History note.** The two earlier audit commits (`3f36c40`, `9a6994e`) survived
+on the remote but were absent from the local clone after a sandbox reset, so the
+local branch sat directly on `d0c9768` with the implementation carried as
+uncommitted files. Rather than force-push — which would have destroyed those two
+commits — the consolidation commit was **rebased** onto
+`origin/arena/01a10307-restaurantsmureeh`. The resulting tree was verified
+**byte-identical** to the pre-rebase tree (`b076bbc73b02af8ab6ca66bf7904b81e9b9c085a`),
+proving no work was lost or altered, and the push was a clean fast-forward.
+
+One conflict arose during the rebase: `src/tests/statusPaletteContract.test.ts`
+existed on both sides. The verified local version (229 lines, a superset of the
+remote's 152) was kept — the version the 173/173 guard run exercises.
 
 Measurement harness lives outside the repo (`/home/user/.audit/`,
 `/home/user/.browser/`) and is deliberately **not committed**.
