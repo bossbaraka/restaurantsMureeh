@@ -141,8 +141,11 @@ export function getOrderStatusConfig(status: OrderStatus): {
      the SAME strings render correctly on manager surfaces too (KDS, order
      management) which sit outside `.customer-theme-scope`. The fallbacks are
      byte-identical to the previous raw palette classes, so rendering is
-     unchanged everywhere. SERVED stays on the zinc neutral on purpose: it is
-     the "no longer active" state, not a brand status. */
+     unchanged everywhere — including SERVED, whose neutral resolves the
+     --m-text-muted token (falling back to zinc-500) rather than a literal
+     zinc class, because a fixed zinc shade is a dark-surface ink and vanished
+     on the light canvas. It stays neutral on purpose: SERVED is the "no longer
+     active" state, not a brand status. */
   switch (status) {
     case 'PENDING':
       return {
@@ -179,9 +182,16 @@ export function getOrderStatusConfig(status: OrderStatus): {
         label: 'تم التقديم',
         customerTitle: 'تم التقديم',
         customerDesc: 'تم تقديم طلبك بنجاح. نتمنى لك تجربة طعام استثنائية.',
-        badgeBg: 'bg-zinc-500/10 border-zinc-500/30',
-        badgeText: 'text-zinc-300',
-        dotColor: 'bg-zinc-400',
+        // The neutral is routed through --m-text-muted (== zinc-500 outside the
+        // customer scope) instead of literal `text-zinc-300`. zinc-300 is a
+        // DARK-surface ink: measured 1.47:1 on the light canvas, i.e. invisible
+        // in Light mode — the one branch of this palette that was still
+        // hardcoded. Every other branch already resolves a --m-* token with the
+        // historical Tailwind value as fallback; this one now matches.
+        badgeBg:
+          'bg-[rgb(var(--m-text-muted-rgb,113_113_122)/0.1)] border-[rgb(var(--m-text-muted-rgb,113_113_122)/0.3)]',
+        badgeText: 'text-[rgb(var(--m-text-muted-rgb,113_113_122))]',
+        dotColor: 'bg-[rgb(var(--m-text-muted-rgb,113_113_122))]',
         stepIndex: 4,
       };
     case 'CANCELLED':

@@ -41,6 +41,20 @@ const DEFAULT_GALLERY = [
   'https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=1200&q=85',
 ];
 
+/**
+ * The order-lifecycle stepper, declared as DATA.
+ *
+ * Each entry names the `OrderStatus` it represents, so its label, icon and
+ * colour all resolve through `getOrderStatusConfig(status)` — the single owner
+ * of the lifecycle model. Nothing here picks a colour.
+ */
+const ORDER_STEPS: { status: OrderStatus; label: string; Icon: typeof Clock }[] = [
+  { status: 'PENDING', label: 'استقبال', Icon: Clock },
+  { status: 'PREPARING', label: 'تحضير', Icon: ChefHat },
+  { status: 'READY', label: 'جاهز', Icon: Sparkles },
+  { status: 'SERVED', label: 'تم التقديم', Icon: UtensilsCrossed },
+];
+
 export const CustomerHero: React.FC = () => {
   const { searchQuery, setSearchQuery, offers, currentRestaurant, activeTableOrders, setIsOrderTrackingOpen } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
@@ -116,22 +130,11 @@ export const CustomerHero: React.FC = () => {
   const latestOrder = activeTableOrders.length > 0 ? activeTableOrders[0] : null;
   const statusCfg = latestOrder ? getOrderStatusConfig(latestOrder.status) : null;
 
-  const getStepIndex = (status: OrderStatus) => {
-    switch (status) {
-      case 'PENDING':
-        return 1;
-      case 'PREPARING':
-        return 2;
-      case 'READY':
-        return 3;
-      case 'SERVED':
-        return 4;
-      default:
-        return 0;
-    }
-  };
-
-  const currentStep = latestOrder ? getStepIndex(latestOrder.status) : 0;
+  // The step index comes from `getOrderStatusConfig`, the ONE owner of the
+  // order-lifecycle model. This component used to carry a private copy of the
+  // same switch, which is how the stepper could drift from the tracker — see
+  // the note on the stepper markup below.
+  const currentStep = latestOrder ? getOrderStatusConfig(latestOrder.status).stepIndex : 0;
   const isAwaitingPayment = latestOrder ? isAwaitingGuestPayment(latestOrder) : false;
   const isVerificationPending = latestOrder ? isPaymentVerificationPending(latestOrder) : false;
 
@@ -164,7 +167,7 @@ export const CustomerHero: React.FC = () => {
   return (
     <div className="relative overflow-hidden mb-6">
       {/* Background Editorial Hero Image & Video Container */}
-      <div className="relative h-64 sm:h-80 w-full overflow-hidden rounded-2xl border border-m-hairline shadow-2xl mx-auto group">
+      <div className="relative h-52 sm:h-80 w-full overflow-hidden rounded-2xl border border-m-hairline shadow-2xl mx-auto group">
         {isPlayingVideo && promoVideo ? (
           <div
             role="dialog"
@@ -243,6 +246,35 @@ export const CustomerHero: React.FC = () => {
               <p className="text-xs sm:text-sm text-m-text-muted leading-relaxed max-w-md line-clamp-2">
                 {restDesc}
               </p>
+
+              {/* Find-first CTA.
+                  Measured on a real build, the first dish card sits 1.4–2.5
+                  viewports below the fold on every phone width (320px: 1417px
+                  into a 568px viewport) because the hero is ~1200px of
+                  atmosphere before any food appears. A QR guest's first intent
+                  is FIND, so the hero now offers a one-tap route to the
+                  category rail instead of asking for 2–3 full-page swipes.
+                  Hidden from md up, where the rail is already within ~1.3
+                  viewports. Anchors on #menu-rail in CustomerLayout. */}
+              <button
+                type="button"
+                onClick={() => {
+                  document
+                    .getElementById('menu-rail')
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="mt-3 md:hidden inline-flex items-center gap-1.5 self-start px-4 py-2 rounded-full text-xs font-bold touch-target transition-transform active:scale-95 cursor-pointer"
+                style={{
+                  backgroundColor: 'rgb(var(--m-brand-on-surface-rgb) / 0.15)',
+                  borderColor: 'rgb(var(--m-brand-on-surface-rgb) / 0.5)',
+                  color: 'var(--m-brand-on-surface)',
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                }}
+              >
+                <span>استكشف القائمة</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </>
         )}
@@ -421,55 +453,39 @@ export const CustomerHero: React.FC = () => {
             </button>
           </div>
 
-          {/* Stepper Progress Bar */}
+          {/* Stepper Progress Bar.
+
+              Every step reads its colour from getOrderStatusConfig(status) — the
+              SAME owner the order tracker renders from. This block previously
+              carried its own hardcoded palette, which broke two things at once:
+              (a) the colours were SHIFTED one step relative to the canonical
+              mapping (PREPARING painted amber, which is PENDING's colour;
+              SERVED painted blue, which is PREPARING's), so the hero and the
+              tracker told the guest two different stories about the same order,
+              and (b) being raw Tailwind-300 classes they were theme-blind —
+              amber-300 on the light canvas measures ~1.7:1. */}
           <div className="grid grid-cols-4 gap-1 sm:gap-2 pt-1 text-center">
-            {/* Step 1: Received */}
-            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
-              currentStep >= 1
-                ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.15)] border-[rgb(var(--m-brand-on-surface-rgb)/0.5)] text-[var(--m-brand-on-surface)]'
-                : 'bg-m-bg border-m-hairline text-m-text-subtle'
-            }`}>
-              <div className="flex items-center justify-center mb-1">
-                <Clock className={`w-3.5 h-3.5 ${currentStep >= 1 ? 'text-[var(--m-brand-on-surface)]' : 'text-m-text-subtle'}`} />
-              </div>
-              <span className="block text-[10px]">استقبال</span>
-            </div>
-
-            {/* Step 2: Kitchen Preparing */}
-            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
-              currentStep >= 2
-                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 animate-pulse'
-                : 'bg-m-bg border-m-hairline text-m-text-subtle'
-            }`}>
-              <div className="flex items-center justify-center mb-1">
-                <ChefHat className={`w-3.5 h-3.5 ${currentStep >= 2 ? 'text-amber-400' : 'text-m-text-subtle'}`} />
-              </div>
-              <span className="block text-[10px]">تحضير</span>
-            </div>
-
-            {/* Step 3: Ready */}
-            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
-              currentStep >= 3
-                ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
-                : 'bg-m-bg border-m-hairline text-m-text-subtle'
-            }`}>
-              <div className="flex items-center justify-center mb-1">
-                <Sparkles className={`w-3.5 h-3.5 ${currentStep >= 3 ? 'text-emerald-400' : 'text-m-text-subtle'}`} />
-              </div>
-              <span className="block text-[10px]">جاهز</span>
-            </div>
-
-            {/* Step 4: Served */}
-            <div className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
-              currentStep >= 4
-                ? 'bg-blue-500/15 border-blue-500/50 text-blue-300'
-                : 'bg-m-bg border-m-hairline text-m-text-subtle'
-            }`}>
-              <div className="flex items-center justify-center mb-1">
-                <UtensilsCrossed className={`w-3.5 h-3.5 ${currentStep >= 4 ? 'text-blue-400' : 'text-m-text-subtle'}`} />
-              </div>
-              <span className="block text-[10px]">تم التقديم</span>
-            </div>
+            {ORDER_STEPS.map((step) => {
+              const cfg = getOrderStatusConfig(step.status);
+              const reached = currentStep >= cfg.stepIndex;
+              return (
+                <div
+                  key={step.status}
+                  className={`p-2 rounded-xl border text-[11px] font-semibold transition-all ${
+                    reached
+                      ? `${cfg.badgeBg} ${cfg.badgeText}${
+                          cfg.stepIndex === currentStep ? ' animate-pulse' : ''
+                        }`
+                      : 'bg-m-bg border-m-hairline text-m-text-subtle'
+                  }`}
+                >
+                  <div className="flex items-center justify-center mb-1">
+                    <step.Icon className={`w-3.5 h-3.5 ${reached ? cfg.badgeText : 'text-m-text-subtle'}`} />
+                  </div>
+                  <span className="block text-[10px]">{step.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

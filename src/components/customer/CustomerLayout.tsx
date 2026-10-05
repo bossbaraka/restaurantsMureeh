@@ -419,8 +419,13 @@ const CustomerLayoutContent: React.FC = () => {
         {/* Editorial Hero & Search & Offers */}
         <CustomerHero />
 
-        {/* Sticky rail: categories + menu controls */}
-        <div className="menu-rail mb-5">
+        {/* Sticky rail: categories + menu controls.
+            `id` is the scroll anchor the hero's "استكشف القائمة" CTA jumps to.
+            It lives here, on the rail itself, rather than on a wrapper further
+            up, so the jump lands ON the category rail — the guest arrives at
+            the restaurant's own menu navigation, not at the marketing copy
+            above it. */}
+        <div id="menu-rail" className="menu-rail mb-5">
           <CategoryScrollNav />
           <MenuToolbar
             shownCount={visibleProducts.length}

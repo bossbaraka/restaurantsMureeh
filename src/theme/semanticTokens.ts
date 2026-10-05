@@ -37,11 +37,14 @@
 
 import {
   parseColor,
+  rgbToHex,
+  contrastRatio,
   buildBrandTokens,
   buildEffectiveThemeVars,
   resolveThemeMode,
   FONT_FAMILY_MAP,
   type BrandTokens,
+  type Rgb,
   type SurfaceMode,
 } from './brandTheme';
 import { toEffectiveThemeShape, type NormalizedTheme } from './normalizeTheme';
@@ -256,13 +259,14 @@ export function stripGenericFaces(stack: string): string {
  *    rendered «قيد التحضير» in Tailwind's blue-500; this token gives that
  *    existing colour a canonical name instead of a raw palette class.
  *  - `--m-*-strong` are the lighter -400 shades the status TEXT and STATUS
- *    DOTS have always used. They are the dark-surface contrast companions of
- *    the DEFAULT status palette — chosen once (like --m-success's default),
- *    not derived from a tenant override, so a custom success colour cannot
+ *    DOTS have always used. They are the surface's contrast companions of the
+ *    DEFAULT status palette — chosen once (like --m-success's default), not
+ *    derived from a tenant override, so a custom success colour cannot
  *    silently change its text companion's contrast.
  *
  * Values are byte-identical to the Tailwind classes the UI used before
- * (emerald/amber/red/blue 500 and 400), so consuming them is a pure refactor.
+ * (emerald/amber/red/blue 500 and 400) ON THE DARK CANVAS, so consuming them
+ * is a pure refactor there.
  */
 const STATUS_INFO = '#3B82F6'; // = Tailwind blue-500
 const STATUS_STRONG: Record<'success' | 'warning' | 'error' | 'info', string> = {
@@ -271,24 +275,118 @@ const STATUS_STRONG: Record<'success' | 'warning' | 'error' | 'info', string> = 
   error: '#F87171', // = Tailwind red-400
   info: '#60A5FA', // = Tailwind blue-400
 };
+/** Canonical 500 defaults — the tint the strong ink is painted ON TOP of. */
+const STATUS_BASE: Record<'success' | 'warning' | 'error' | 'info', string> = {
+  success: '#10B981', // = Tailwind emerald-500
+  warning: '#F59E0B', // = Tailwind amber-500
+  error: '#EF4444', // = Tailwind red-500
+  info: '#3B82F6', // = Tailwind blue-500
+};
 
-function statusExtensionTokens(): TokenMap {
+/**
+ * How much WCAG contrast a status ink must keep against its badge tint.
+ *
+ * 4.5 is the WCAG AA floor for body text, and these tokens exist for exactly
+ * one job: being the readable ink of a status pill. See `strongInkForSurface`.
+ */
+const STATUS_STRONG_MIN_CONTRAST = 4.5;
+/**
+ * The alpha `getOrderStatusConfig()` paints behind every status badge.
+ *
+ * Exported on purpose: this is a CONTRACT between two files. The engine uses it
+ * to decide how far to darken a status ink, and the palette (plus its tests)
+ * must measure against the same backdrop, or the floor is computed against a
+ * tint the UI never renders. If `badgeBg`'s alpha changes, change it here.
+ */
+export const STATUS_BADGE_TINT_ALPHA = 0.1;
+
+/**
+ * Resolves the readable status ink for the ACTIVE surface mode.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * `--m-*-strong` was authored as a dark-surface companion: a -400 shade reads
+ * beautifully on the near-black canvas (emerald-400 on #0A0B0D measures 9.5:1)
+ * and catastrophically on the light one (amber-400 on white measures 1.7:1 —
+ * the «قيد التحضير» / «تم الاستلام» pills were effectively invisible in Light
+ * mode). The token's own contract says it is "the surface's contrast
+ * companion", so the missing half is the surface, not a new palette.
+ *
+ * WHY IT IS NOT A NEW TOKEN
+ * -------------------------
+ * The name and the dark-canvas value are unchanged, so every existing consumer
+ * (the order tracker, the live-order banner, the hero stepper) is repaired
+ * without touching its markup. Only the light-canvas VALUE moves.
+ *
+ * WHY THE BACKDROP IS A COMPOSITE
+ * -------------------------------
+ * A status badge paints the status colour at 15% alpha over the canvas, so the
+ * ink never sits on the canvas itself. Measuring against the canvas would
+ * under-correct; this measures against the tint as composited.
+ *
+ * (Spelled out rather than quoted: Tailwind's content scanner reads COMMENTS,
+ * and a literal arbitrary-value class here would be emitted as real CSS —
+ * `var(--m-*-rgb)` is not a legal custom property, which is exactly how this
+ * file broke `vite build` once already.)
+ */
+function strongInkForSurface(
+  key: 'success' | 'warning' | 'error' | 'info',
+  surfaceMode: SurfaceMode,
+): string {
+  const ink = parseColor(STATUS_STRONG[key]);
+  // Unparseable input is a programming error, not a theme state: fall back to
+  // the authored value rather than inventing a colour at runtime.
+  if (!ink) return STATUS_STRONG[key];
+  // Dark canvas: byte-identical to the historical value.
+  if (surfaceMode !== 'light') return STATUS_STRONG[key];
+
+  const tint = parseColor(STATUS_BASE[key]);
+  const backdrop: Rgb = tint
+    ? {
+        r: tint.r * STATUS_BADGE_TINT_ALPHA + 255 * (1 - STATUS_BADGE_TINT_ALPHA),
+        g: tint.g * STATUS_BADGE_TINT_ALPHA + 255 * (1 - STATUS_BADGE_TINT_ALPHA),
+        b: tint.b * STATUS_BADGE_TINT_ALPHA + 255 * (1 - STATUS_BADGE_TINT_ALPHA),
+      }
+    : { r: 255, g: 255, b: 255 };
+
+  if (contrastRatio(ink, backdrop) >= STATUS_STRONG_MIN_CONTRAST) return STATUS_STRONG[key];
+
+  // Multiplicative darkening: scales r/g/b together, so hue and saturation are
+  // preserved — the light-mode ink is recognisably the same amber/emerald/red,
+  // just legible. Same technique as `deepenForLight` in the brand engine.
+  for (let step = 1; step <= 24; step += 1) {
+    const scale = Math.pow(0.9, step);
+    const candidate: Rgb = { r: ink.r * scale, g: ink.g * scale, b: ink.b * scale };
+    if (contrastRatio(candidate, backdrop) >= STATUS_STRONG_MIN_CONTRAST) {
+      return rgbToHex(candidate);
+    }
+  }
+  return rgbToHex({ r: 0, g: 0, b: 0 });
+}
+
+function statusExtensionTokens(surfaceMode: SurfaceMode): TokenMap {
   const channels = (value: string): string => {
     const rgb = parseColor(value);
     if (!rgb) return '0 0 0';
     return `${Math.round(rgb.r)} ${Math.round(rgb.g)} ${Math.round(rgb.b)}`;
   };
+  const strong = {
+    success: strongInkForSurface('success', surfaceMode),
+    warning: strongInkForSurface('warning', surfaceMode),
+    error: strongInkForSurface('error', surfaceMode),
+    info: strongInkForSurface('info', surfaceMode),
+  };
   return {
     '--m-info': STATUS_INFO,
     '--m-info-rgb': channels(STATUS_INFO),
-    '--m-success-strong': STATUS_STRONG.success,
-    '--m-warning-strong': STATUS_STRONG.warning,
-    '--m-error-strong': STATUS_STRONG.error,
-    '--m-info-strong': STATUS_STRONG.info,
-    '--m-success-strong-rgb': channels(STATUS_STRONG.success),
-    '--m-warning-strong-rgb': channels(STATUS_STRONG.warning),
-    '--m-error-strong-rgb': channels(STATUS_STRONG.error),
-    '--m-info-strong-rgb': channels(STATUS_STRONG.info),
+    '--m-success-strong': strong.success,
+    '--m-warning-strong': strong.warning,
+    '--m-error-strong': strong.error,
+    '--m-info-strong': strong.info,
+    '--m-success-strong-rgb': channels(strong.success),
+    '--m-warning-strong-rgb': channels(strong.warning),
+    '--m-error-strong-rgb': channels(strong.error),
+    '--m-info-strong-rgb': channels(strong.info),
   };
 }
 
@@ -386,8 +484,8 @@ export function buildSemanticTokens(
   // Channel triplets for opacity-modified utilities (see channelTokens).
   Object.assign(tokens, channelTokens(tokens, brand, surfaceMode));
 
-  // Platform-fixed status extension (info + dark-surface strong shades).
-  Object.assign(tokens, statusExtensionTokens());
+  // Platform-fixed status extension (info + the surface's strong shades).
+  Object.assign(tokens, statusExtensionTokens(surfaceMode));
 
   // ---- Component layer --------------------------------------------------
   // Thin semantic aliases over identity/surface, with the stored per-component
