@@ -55,7 +55,19 @@ export const MenuToolbar: React.FC<MenuToolbarProps> = ({
           title="إظهار الأطباق المتوفرة فقط"
         >
           <ChefHat className="w-3.5 h-3.5" aria-hidden="true" />
-          <span className="hidden xs:inline sm:inline">المتوفر فقط</span>
+          {/* The label turns on at `sm` (640px), NOT at the shared `xs` (400px).
+              Measured, not aesthetic: with the label hidden the control group
+              needs 310px; with it shown it needs 428px. `xs: 400px` therefore
+              switched the label on 52px BEFORE the group could afford it
+              (available width is 376px at 400 and 406px at 430), which wrapped
+              the toolbar to two rows at 412px and 430px — two of the most
+              common phone widths — inflating the sticky rail from 119px to
+              165px on a screen where food already sits 1.4–2.3 viewports down.
+              `sm` is an EXISTING scale step: the shared `xs` breakpoint is
+              deliberately left untouched for its other three consumers.
+              The control keeps its aria-label, title and pressed state, so it
+              is still identified and operable while icon-only. */}
+          <span className="hidden sm:inline">المتوفر فقط</span>
         </button>
 
         <label className="relative inline-flex items-center">

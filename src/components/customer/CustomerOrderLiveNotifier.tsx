@@ -106,22 +106,13 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
       ? formatTableNumber(activeTableId) || '—'
       : '—';
 
-  const getStepProgress = (status: OrderStatus) => {
-    switch (status) {
-      case 'PENDING':
-        return 1;
-      case 'PREPARING':
-        return 2;
-      case 'READY':
-        return 3;
-      case 'SERVED':
-        return 4;
-      default:
-        return 1;
-    }
-  };
-
-  const currentStep = getStepProgress(activeNotification.status);
+  // The step index comes from `getOrderStatusConfig`, the ONE owner of the
+  // order-lifecycle model. This component used to carry a private copy of the
+  // same switch, and the copy drifted in the one place that matters: its
+  // `default` returned 1, so a CANCELLED order lit up step 1 («received»)
+  // instead of showing no progress at all. The canonical map returns 0 for
+  // every non-progressing status, which is what the timeline below expects.
+  const currentStep = statusCfg.stepIndex;
 
   return (
     <div className="fixed top-28 sm:top-24 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-40 animate-in fade-in slide-in-from-top-3 duration-300 select-none">
@@ -150,8 +141,8 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
 
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono text-m-text-muted">{activeNotification.updatedAt}</span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[rgb(var(--m-success-rgb,16_185_129)/0.2)] text-[rgb(var(--m-success-strong-rgb,52_211_153))] text-[10px] font-bold border border-[rgb(var(--m-success-rgb,16_185_129)/0.3)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--m-success-strong-rgb,52_211_153))] animate-ping" />
               تحديث حي
             </span>
           </div>
@@ -159,15 +150,18 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
 
         {/* Main Status Banner */}
         <div className="flex items-start gap-3">
+          {/* The status tile is painted from `statusCfg` — the same canonical
+              config the order tracker and the hero stepper render from.
+              It used to carry a THIRD, independent palette here, and that
+              palette was shifted one step relative to canonical (PREPARING
+              painted amber, which is PENDING's colour; SERVED painted sky,
+              which is PREPARING's), so a guest could read two different
+              colours for the same order on the same screen. It was also
+              theme-blind — those -400 shades are dark-surface inks and fall
+              to ~1.9:1 on the light canvas, which is this menu's default. */}
           <div
-            className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border shadow-lg ${
-              activeNotification.status === 'READY'
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 animate-bounce'
-                : activeNotification.status === 'PREPARING'
-                ? 'bg-amber-500/15 border-amber-500/40 text-amber-400'
-                : activeNotification.status === 'SERVED'
-                ? 'bg-sky-500/15 border-sky-500/40 text-sky-400'
-                : 'bg-m-brand/15 border-m-brand/40 text-m-brand-strong'
+            className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 border shadow-lg ${statusCfg.badgeBg} ${statusCfg.badgeText}${
+              activeNotification.status === 'READY' ? ' animate-bounce' : ''
             }`}
           >
             {activeNotification.status === 'PREPARING' ? (
@@ -213,27 +207,35 @@ export const CustomerOrderLiveNotifier: React.FC = () => {
         <div className="pt-2 border-t border-m-hairline/80">
           <div className="grid grid-cols-4 gap-1 text-center">
             {[
-              { label: 'المستلم', step: 1 },
-              { label: 'التحضير', step: 2 },
-              { label: 'جاهز', step: 3 },
-              { label: 'تم التقديم', step: 4 },
+              { label: 'المستلم', status: 'PENDING' as OrderStatus },
+              { label: 'التحضير', status: 'PREPARING' as OrderStatus },
+              { label: 'جاهز', status: 'READY' as OrderStatus },
+              { label: 'تم التقديم', status: 'SERVED' as OrderStatus },
             ].map((s) => {
-              const isActive = s.step <= currentStep;
-              const isCurrent = s.step === currentStep;
+              const step = getOrderStatusConfig(s.status).stepIndex;
+              const isActive = step > 0 && step <= currentStep;
+              const isCurrent = step === currentStep;
               return (
-                <div key={s.step} className="space-y-1">
+                <div key={s.status} className="space-y-1">
                   <div
                     className={`h-1.5 rounded-full transition-all duration-500 ${
                       isActive
                         ? isCurrent
                           ? 'bg-gradient-to-r from-m-brand to-[var(--m-success)] shadow-[0_0_8px_rgb(var(--m-success-rgb)/0.6)]'
-                          : 'bg-emerald-500'
+                          : 'bg-[var(--m-success)]'
                         : 'bg-m-surface-raised'
                     }`}
                   />
+                  {/* "Completed" is a success state, not a per-status state, so
+                      it resolves --m-success/-strong rather than a literal
+                      palette shade — the -strong token is mode-aware, which
+                      the fixed -300 shade was not (~1.9:1 on the light
+                      canvas). */}
                   <span
                     className={`text-[11px] font-bold block transition-colors ${
-                      isActive ? 'text-emerald-300' : 'text-m-text-subtle'
+                      isActive
+                        ? 'text-[rgb(var(--m-success-strong-rgb,52_211_153))]'
+                        : 'text-m-text-subtle'
                     }`}
                   >
                     {s.label}

@@ -227,3 +227,72 @@ describe('customer menu consumes the Effective Theme tokens', () => {
     expect(outline).not.toContain('rgb(255 255 255');
   });
 });
+
+/**
+ * MODE-AWARE FALLBACKS FOR THE LEGACY TEXT VARS.
+ *
+ * `--theme-text-primary/-secondary` are a DELIBERATE legacy exception: the
+ * advanced theme editor persists them per tenant, so components must keep
+ * reading them rather than switching to the derived `--m-text` (which would
+ * drop the stored values). What they must NOT do is fall back to a hardcoded
+ * hex.
+ *
+ * Measured: `.menu-card__title` fell back to `#f4f6fa`. Any theme whose
+ * textPrimary is absent therefore rendered near-white text on a #FFFFFF card
+ * in LIGHT mode — ratio 1.04:1, i.e. invisible — and light is the default for
+ * this menu. The tenant value is still honoured verbatim when present; only
+ * the fallback had to become mode-aware.
+ */
+describe('legacy text vars fall back to mode-aware tokens, never to a hex', () => {
+  const HEX_FALLBACK = /var\(--theme-text-(primary|secondary),\s*#[0-9a-fA-F]{3,8}\s*\)/;
+
+  const LEGACY_USERS = [
+    '.menu-card__title',
+    '.menu-card__desc',
+    '.menu-meta',
+    '.menu-section-head__title',
+  ];
+
+  it.each(LEGACY_USERS)('%s still reads the tenant var first', (selector) => {
+    const color = value(selector, 'color');
+    expect(color).toMatch(/var\(--theme-text-(primary|secondary)/);
+  });
+
+  it.each(LEGACY_USERS)('%s falls back to an --m-* token, not a literal hex', (selector) => {
+    const color = value(selector, 'color');
+    expect(color, `${selector}: ${color}`).not.toMatch(HEX_FALLBACK);
+    // The fallback argument (after the comma) must be a var() reference.
+    const fallback = color.match(/var\(--theme-text-(?:primary|secondary),\s*([^)]+(?:\([^)]*\))?)\)/);
+    expect(fallback, `no fallback parsed from ${color}`).not.toBeNull();
+    expect(fallback![1].trim()).toMatch(/^var\(--m-text/);
+  });
+});
+
+/**
+ * The resting add-button ink sits on a 12% tint of ITSELF. A value tuned to
+ * clear 4.5:1 against the canvas only reached 3.96:1 against that tint. The
+ * fix mixes the ink toward --m-text so it tracks the mode; a plain
+ * var(--m-brand-on-surface) is the regression.
+ */
+describe('add control ink stays legible on its own tinted background', () => {
+  it('mixes the brand ink toward --m-text instead of using it raw', () => {
+    const color = value('.menu-add', 'color');
+    expect(color).toContain('color-mix');
+    expect(color).toContain('var(--m-text');
+    expect(color).toContain('var(--m-brand-on-surface');
+  });
+});
+
+/**
+ * MEASURED at 320px: the card is a 100px media column beside a 158px body, and
+ * a variant product's footer needs 186.6px (price + gap + «تخصيص»). With
+ * `nowrap` the surplus pushed the action button to left = -4.4px — outside the
+ * card and outside the page gutter. Wrapping is what keeps it inside.
+ */
+describe('card footer keeps its action inside the card at 320px', () => {
+  it('allows the footer row to wrap', () => {
+    const wrap = value('.menu-card__footer', 'flex-wrap');
+    expect(wrap).toContain('wrap');
+    expect(wrap).not.toContain('nowrap');
+  });
+});

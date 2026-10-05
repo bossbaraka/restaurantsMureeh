@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { getOrderStatusConfig } from '../../utils/formatting';
 import { soundFX } from '../../utils/audio';
 import { ChefHat, ChevronLeft, X } from 'lucide-react';
 
@@ -17,6 +18,15 @@ export function getDismissedCompletedOrderIds(): string[] {
 
 /** A ready-state announcement, not a modal: it never blocks browsing or cart
  * work, while the persistent active-order bar remains the long-term anchor. */
+/**
+ * This banner announces READY orders, so its palette comes from
+ * `getOrderStatusConfig('READY')` — the same canonical config the order
+ * tracker, the hero stepper and the live notifier render from. It previously
+ * hardcoded emerald-500/-400, a fourth independent status vocabulary that was
+ * also theme-blind on the light canvas.
+ */
+const READY_CFG = getOrderStatusConfig('READY');
+
 export const OrderCompletedModal: React.FC = () => {
   const { activeTableOrders, activeTableNumber, activeTable, isOrderTrackingOpen, setIsOrderTrackingOpen } = useRestaurant();
   const [dismissedOrderIds, setDismissedOrderIds] = useState<string[]>(getDismissedCompletedOrderIds);
@@ -52,10 +62,10 @@ export const OrderCompletedModal: React.FC = () => {
         role="status"
         aria-live="assertive"
         aria-atomic="true"
-        className="pointer-events-auto border border-emerald-500/50 backdrop-blur-md rounded-2xl p-3.5 flex items-center gap-3 text-right animate-in slide-in-from-top duration-300"
+        className={`pointer-events-auto border backdrop-blur-md rounded-2xl p-3.5 flex items-center gap-3 text-right animate-in slide-in-from-top duration-300 ${READY_CFG.badgeBg}`}
         style={{ backgroundColor: 'color-mix(in srgb, var(--m-surface) 95%, transparent)', boxShadow: 'var(--m-shadow-lg)' }}
       >
-        <span className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0" aria-hidden="true">
+        <span className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${READY_CFG.badgeBg} ${READY_CFG.badgeText}`} aria-hidden="true">
           <ChefHat className="w-5 h-5" />
         </span>
         <div className="min-w-0 flex-1">
@@ -73,7 +83,7 @@ export const OrderCompletedModal: React.FC = () => {
               dismissReadyOrders();
               setIsOrderTrackingOpen(true);
             }}
-            className="mt-2 text-xs font-bold text-emerald-400 inline-flex items-center gap-1 min-h-8"
+            className={`mt-2 text-xs font-bold inline-flex items-center gap-1 min-h-8 ${READY_CFG.badgeText}`}
           >
             عرض حالة الطلب <ChevronLeft className="w-3.5 h-3.5" />
           </button>

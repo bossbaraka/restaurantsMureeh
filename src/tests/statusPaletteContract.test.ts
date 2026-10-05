@@ -22,6 +22,8 @@
  * being the single source of truth.
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { getOrderStatusConfig } from '../utils/formatting';
 import {
   buildSemanticTokens,
@@ -148,5 +150,80 @@ describe('--m-*-strong — the surface contrast companion', () => {
       expect(light[`--m-${key}-strong`]).toBeTruthy();
       expect(light[`--m-${key}-strong-rgb`]).toMatch(/^\d{1,3} \d{1,3} \d{1,3}$/);
     }
+  });
+});
+
+/**
+ * THE SURFACES THAT RENDER A STATUS.
+ *
+ * `getOrderStatusConfig()` being correct is not enough: a component can ignore
+ * it and paint its own palette. That is exactly what happened — the live
+ * notifier carried a THIRD vocabulary, shifted one step from canonical
+ * (PREPARING painted amber = PENDING's colour, SERVED painted sky =
+ * PREPARING's), so a guest could see two different colours for one order on
+ * the same screen.
+ *
+ * These tests assert the surfaces are WIRED to the canonical config and carry
+ * no status palette of their own. They are deliberately scoped to files that
+ * render an order status — a destructive "remove item" red elsewhere is not a
+ * status colour and must not be swept up.
+ */
+describe('status surfaces render from the canonical config', () => {
+  const SURFACES = [
+    'CustomerOrderLiveNotifier.tsx',
+    'OrderCompletedModal.tsx',
+    'OrderTrackingDrawer.tsx',
+  ];
+  const dir = fileURLToPath(new URL('../components/customer/', import.meta.url));
+
+  /** Raw Tailwind palette utilities — a fixed shade, blind to the mode. */
+  const RAW_PALETTE =
+    /\b(?:bg|text|border|from|to|via|ring|fill|stroke|shadow)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/;
+
+  it.each(SURFACES)('%s resolves its status colours through the config', (file) => {
+    const src = readFileSync(`${dir}${file}`, 'utf8');
+    if (file === 'OrderCompletedModal.tsx') {
+      // Declares the READY palette once, from the config, at module scope.
+      expect(src).toMatch(/getOrderStatusConfig\(\s*'READY'\s*\)/);
+    } else {
+      expect(src).toMatch(/getOrderStatusConfig\(/);
+    }
+  });
+
+  // Scoped to the notifier: it renders a status tile, a timeline and a live
+  // badge, and all three are now canonical. The order tracker still carries
+  // unrelated success/emerald affordances (paid banners, a completion step)
+  // that are out of scope for this contract — see the audit's P2 list.
+  it('CustomerOrderLiveNotifier carries no independent status palette', () => {
+    const src = readFileSync(`${dir}CustomerOrderLiveNotifier.tsx`, 'utf8');
+    // A hit may legitimately survive inside a comment explaining the removal;
+    // only executable class strings are a violation.
+    const executable = src
+      .split('\n')
+      .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+      .join('\n');
+    expect(executable.match(RAW_PALETTE)?.[0] ?? null).toBeNull();
+  });
+
+  it('the "live" badge derives from --m-success wherever it is copied', () => {
+    // This badge markup is duplicated verbatim in the notifier and the
+    // tracker. Both must read the success tokens, or the two screens disagree
+    // about what "live" looks like — and both used to be unreadable on the
+    // light canvas (a fixed -400 green is ~1.9:1 there).
+    for (const file of ['CustomerOrderLiveNotifier.tsx', 'OrderTrackingDrawer.tsx']) {
+      const src = readFileSync(`${dir}${file}`, 'utf8');
+      expect(src, file).toContain('var(--m-success-strong-rgb');
+      // The old live-badge fill and its ping dot — both now token-driven.
+      expect(src, file).not.toContain('bg-emerald-500/20');
+      expect(src, file).not.toContain('bg-emerald-400 animate-ping');
+    }
+  });
+
+  it('the live notifier derives step progress from the config, not a private switch', () => {
+    const src = readFileSync(`${dir}CustomerOrderLiveNotifier.tsx`, 'utf8');
+    // The old `getStepProgress` switch returned 1 for CANCELLED, lighting up
+    // "received" for an order that had no progress at all.
+    expect(src).not.toMatch(/getStepProgress/);
+    expect(src).toMatch(/statusCfg\.stepIndex/);
   });
 });

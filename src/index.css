@@ -817,7 +817,13 @@
   font-size: 14.5px;
   font-weight: var(--m-font-heading-weight, 800);
   line-height: 1.35;
-  color: var(--theme-text-primary, #f4f6fa);
+  /* Tenant override first (the advanced editor persists --theme-text-*), but
+     the FALLBACK is the canonical mode-aware token, not a hardcoded near-white
+     hex. With `#f4f6fa` here, any theme whose textPrimary is absent rendered
+     #f4f6fa on a #FFFFFF card — measured 1.04:1, i.e. invisible — and light
+     mode is this menu's default. The tenant value is still used verbatim when
+     present; only the "unset" case is now mode-correct. */
+  color: var(--theme-text-primary, var(--m-text));
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -842,7 +848,7 @@
   font-size: 12px;
   font-weight: var(--m-font-body-weight, 400);
   line-height: 1.55;
-  color: var(--theme-text-secondary, #9aa3b2);
+  color: var(--theme-text-secondary, var(--m-text-muted));
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -866,7 +872,7 @@
   border-radius: 7px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--theme-text-secondary, #98a1b0);
+  color: var(--theme-text-secondary, var(--m-text-subtle));
   /* Ink-tinted overlay (was white-alpha, which vanished on a light surface).
      The text channel keeps the identical look in dark mode and gives the
      chip a visible hairline in light mode. */
@@ -887,6 +893,17 @@
   gap: 0.6rem;
   margin-top: auto;
   padding-top: 0.55rem;
+  /* MEASURED (320px): the card is a two-column grid there — a 100px media
+     column beside a 158px body. The footer has to fit price + gap + action
+     inside that 158px, and a product with variants («تخصيص», 90.7px) plus a
+     ranged price («يبدأ من 189.99ILS», 86.3px) needs 186.6px. The row is a
+     `space-between` flex whose items cannot shrink below their text, so the
+     28.6px of surplus pushed the action button OUT of the card entirely —
+     measured at left = -4.4px, i.e. outside the page gutter, breaking the
+     grid. `flex-wrap` is the smallest fix that keeps every element inside the
+     card: rows that fit are untouched, and only the overflowing ones drop the
+     action onto its own line. No content is removed and nothing is clipped. */
+  flex-wrap: wrap;
 }
 .menu-price {
   display: flex;
@@ -940,8 +957,14 @@
   font-size: 11.5px;
   font-weight: 800;
   /* colors.button.secondaryText/secondaryBg → the resting add-button role;
-     its hover stays the brand-fill CTA so the label contrast stays guaranteed. */
-  color: var(--button-secondary-text, var(--m-brand-on-surface));
+     its hover stays the brand-fill CTA so the label contrast stays guaranteed.
+     MEASURED: the resting ink sat on a 12% tint of ITSELF, so a value tuned to
+     clear 4.5:1 against the canvas only reached 3.96:1 against its own
+     background (light mode, the default). Mixing the ink 82% toward --m-text
+     recovers AA (≈4.6:1) while staying inside the brand hue — and because
+     --m-text is mode-aware the mix darkens on the light canvas and lightens on
+     the dark one, so no second constant is needed. No new token, no hex. */
+  color: var(--button-secondary-text, color-mix(in srgb, var(--m-brand-on-surface) 82%, var(--m-text)));
   background: var(--button-secondary-bg, rgb(var(--m-brand-on-surface-rgb) / 0.12));
   border: 1px solid rgb(var(--m-brand-on-surface-rgb) / 0.34);
   cursor: pointer;
@@ -1069,7 +1092,7 @@
 .menu-section-head__title {
   font-size: 19px;
   font-weight: var(--m-font-heading-weight, 800);
-  color: var(--theme-text-primary, #f6f8fb);
+  color: var(--theme-text-primary, var(--m-text));
   letter-spacing: -0.01em;
 }
 .menu-section-head__sub {

@@ -113,8 +113,8 @@ export const OrderTrackingDrawer: React.FC = () => {
             <div className="text-right">
               <div className="flex items-center gap-2">
                 <h3 id="order-tracking-title" className="text-base font-bold text-m-text font-serif">المطبخ الحي ومتابعة الطلب</h3>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[rgb(var(--m-success-rgb,16_185_129)/0.2)] text-[rgb(var(--m-success-strong-rgb,52_211_153))] text-[10px] font-bold border border-[rgb(var(--m-success-rgb,16_185_129)/0.3)]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[rgb(var(--m-success-strong-rgb,52_211_153))] animate-ping" />
                   مباشر
                 </span>
               </div>
