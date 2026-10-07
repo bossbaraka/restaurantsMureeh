@@ -2,7 +2,6 @@
 #
 # Public, indexable surface:
 #   /                       platform landing page
-#   /r/{slug}?view=display  public read-only venue menu board
 # Everything else on this origin is either an authenticated console route or a
 # single-table session, and no Googlebot-specific rule is needed for those: the
 # app gates them behind authentication, not behind a URL.

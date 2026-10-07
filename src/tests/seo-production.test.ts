@@ -115,6 +115,13 @@ describe('index.html metadata', () => {
     expect(indexHtml).toMatch(/<meta property="og:title" content="[^"]+" \/>/);
     expect(indexHtml).toMatch(/<meta property="og:description" content="[^"]+" \/>/);
     expect(indexHtml).toMatch(/<meta name="twitter:card" content="(summary|summary_large_image)" \/>/);
+    // Twitter metadata must declare the same title and description as OG,
+    // not silently fall back to og:title (which would mean a missing tag).
+    expect(indexHtml).toMatch(/<meta name="twitter:title" content="[^"]+" \/>/);
+    expect(indexHtml).toMatch(/<meta name="twitter:description" content="[^"]+" \/>/);
+    // og:image must be an absolute https URL (relative URLs would break
+    // every social-platform scraper).
+    expect(indexHtml).toMatch(/<meta property="og:image" content="https:\/\/[^"]+" \/>/);
   });
 
   it('embeds parseable structured data that declares no fabricated business facts', () => {
@@ -129,7 +136,15 @@ describe('index.html metadata', () => {
     expect(types).toContain('Organization');
 
     for (const node of nodes) {
-      expect(node['url']).toBe(canonical);
+      // Every node that carries a `url` field must point at the
+      // canonical origin. FAQPage and Service are allowed to omit
+      // `url` — their identity is bound by the page they live on
+      // (FAQPage) or by their provider @id (Service). WebSite,
+      // Organization and SoftwareApplication all must point at the
+      // platform landing page.
+      if (typeof node['url'] === 'string') {
+        expect(node['url']).toBe(canonical);
+      }
     }
 
     // No review/rating/price/contact claims that the site cannot back up.

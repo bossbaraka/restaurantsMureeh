@@ -1,1 +1,8 @@
+# Static assets / SEO-critical files first — these MUST be served as files,
+# never as the SPA fallback (returning the SPA shell for /sitemap.xml or
+# /robots.txt is the exact bug seo-production.test.ts locks down).
+/sitemap.xml   /sitemap.xml   200
+/robots.txt    /robots.txt    200
+
+# SPA fallback for every other extension-less app route.
 /*    /index.html   200
