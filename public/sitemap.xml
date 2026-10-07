@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mureeh — https://mureehmenu.com/sitemap.xml
+
+  Only genuinely public, crawlable pages are listed.
+
+  "/" is the platform landing page (the SaaS marketing surface) and the only
+  URL this repository can enumerate at build time. It is deliberately the only
+  entry, because:
+
+    * /r/{slug} (public restaurant menu) resolves from a slug that exists only
+      in the database — a build-time sitemap cannot enumerate real slugs, and
+      inventing URLs is not an option;
+    * opening /r/{slug} directly (no table token) intentionally renders the
+      "scan the table QR" screen rather than a browsable venue page, so it is
+      not indexable content;
+    * /r/{slug}?qr=… (and ?table=/?t=/?tableId=/?sessionToken=) carries a
+      per-table capability token — a private, session-scoped URL that must
+      never be listed or crawled (see robots.txt).
+
+  Excluded on purpose: /api/*, manager/admin views, login, onboarding,
+  dashboard and every other authenticated or user-specific view.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://mureehmenu.com/</loc>
+  </url>
+</urlset>
