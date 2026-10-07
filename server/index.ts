@@ -17,6 +17,8 @@ import managerRoutes from './routes/manager';
 import adminRoutes from './routes/admin';
 import uploadRoutes from './routes/uploads';
 import { verifyStorageReady, verifyPrivateStorageReady } from './services/storage';
+import { handlePlatformSitemap, handlePlatformRobots } from './seo/platformSeo';
+import { handlePlatformOgImage } from './seo/ogImage';
 
 /** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
 async function verifyStorageReadyWithRetry(
@@ -251,6 +253,29 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ============================================================
+// SEO INFRASTRUCTURE — platform-only dynamic sitemap, robots, OG image
+// ============================================================
+//
+// These handlers serve PLATFORM-LEVEL SEO surfaces (the marketing
+// landing page and any future public documentation pages). They do NOT
+// enumerate or render per-venue content — venue indexing lives in the
+// SPA at /r/{slug} via the public API.
+//
+// Mounted at the root before the static-file fallback so they win
+// against the shipped `public/sitemap.xml` and `public/robots.txt`.
+// The static files are still in the build as a deployment-time safety
+// net (Netlify static-only deploys, Render static-only deploys), but
+// in the production node process the dynamic handlers own these URLs.
+//
+// /api/og sits under /api/* so the upstream X-Robots-Tag: noindex
+// applies (it serves a redirect to an image, never a page, and must
+// never surface in search results).
+
+app.get('/sitemap.xml', handlePlatformSitemap);
+app.get('/robots.txt', handlePlatformRobots);
+app.get('/api/og', handlePlatformOgImage);
+
+// ============================================================
 // REACT FRONTEND
 // ============================================================
 
@@ -262,7 +287,9 @@ const frontendDistPath = path.resolve(
 // A URL whose final path segment carries a file extension is a static-asset
 // request, never an app route: every real app route here is either "/" or
 // "/r/{slug}" (the slug charset is [a-zA-Z0-9_-], so it can never contain a
-// dot). Used by the SPA fallback below to keep 404s honest.
+// dot). "/r/{slug}" is an application route (the customer-facing menu
+// surface) — it has no SEO infrastructure attached to it, only the SPA
+// fallback. Used by the SPA fallback below to keep 404s honest.
 const SPA_ASSET_FILE = /\.[a-zA-Z0-9]+$/;
 
 // API misses must remain machine-readable 404s. Without this guard, the SPA
