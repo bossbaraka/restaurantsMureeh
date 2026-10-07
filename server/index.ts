@@ -200,6 +200,16 @@ app.use(
 // PUBLIC API ROUTES
 // ============================================================
 
+// Googlebot must stay able to FETCH /api/* while rendering the SPA, so API
+// responses are kept crawlable (never blocked in robots.txt) but are marked
+// non-indexable here: a JSON payload is data, never a page, and must never
+// surface in search results. The header covers every response below
+// (including the 404 guard further down) because it is set before routing.
+app.use('/api', (_req, res, next) => {
+  res.setHeader('X-Robots-Tag', 'noindex');
+  next();
+});
+
 app.use('/api/auth', authenticateToken, authRoutes);
 
 app.use('/api/public', publicRoutes);
@@ -249,6 +259,12 @@ const frontendDistPath = path.resolve(
   'dist'
 );
 
+// A URL whose final path segment carries a file extension is a static-asset
+// request, never an app route: every real app route here is either "/" or
+// "/r/{slug}" (the slug charset is [a-zA-Z0-9_-], so it can never contain a
+// dot). Used by the SPA fallback below to keep 404s honest.
+const SPA_ASSET_FILE = /\.[a-zA-Z0-9]+$/;
+
 // API misses must remain machine-readable 404s. Without this guard, the SPA
 // fallback below returns index.html with HTTP 200 for an unknown GET /api/*.
 app.use('/api', (_req, res) => {
@@ -266,8 +282,25 @@ if (fs.existsSync(frontendDistPath)) {
     })
   );
 
-  // Express 5 SPA fallback
-  app.get('/{*splat}', (_req, res) => {
+  // SPA fallback (Express 5 syntax). Only extension-less app routes ("/",
+  // "/r/{slug}") may fall through to index.html.
+  //
+  // Requests that name a FILE (any path whose last segment carries an
+  // extension) are answered from dist/ by express.static above; if the file
+  // does not exist it MUST NOT be answered with index.html. Returning the
+  // homepage with HTTP 200 for a missing /sitemap.xml, /robots.txt or
+  // /favicon.ico is what turned every missing static asset into an HTML
+  // "soft 404" — and made a missing sitemap look exactly like the site itself.
+  app.get('/{*splat}', (req, res) => {
+    if (SPA_ASSET_FILE.test(req.path)) {
+      res.status(404).json({
+        success: false,
+        error: 'Endpoint Not Found',
+        statusCode: 404,
+      });
+      return;
+    }
+
     res.sendFile(
       path.join(
         frontendDistPath,

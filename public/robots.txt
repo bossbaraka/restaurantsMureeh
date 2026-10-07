@@ -1,0 +1,27 @@
+# robots.txt — https://mureehmenu.com/robots.txt
+#
+# Public, indexable surface:
+#   /                       platform landing page
+#   /r/{slug}?view=display  public read-only venue menu board
+# Everything else on this origin is either an authenticated console route or a
+# single-table session, and no Googlebot-specific rule is needed for those: the
+# app gates them behind authentication, not behind a URL.
+
+User-agent: *
+Allow: /
+
+# Table-session capability URLs. Every parameter below carries (or accompanies)
+# a per-table secret that authorises ordering on that table for a limited time,
+# so these URLs must never be crawled, cached or indexed.
+Disallow: /*?qr=
+Disallow: /*?sessionToken=
+Disallow: /*?table=
+Disallow: /*?tableId=
+Disallow: /*?t=
+
+# /api/* is intentionally NOT disallowed: Googlebot must stay able to fetch it
+# while rendering the SPA (blocking it would break rendering of JS-driven
+# pages). API responses are JSON, never pages, and the server marks them with
+# "X-Robots-Tag: noindex" instead.
+
+Sitemap: https://mureehmenu.com/sitemap.xml
