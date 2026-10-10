@@ -17,8 +17,16 @@ import managerRoutes from './routes/manager';
 import adminRoutes from './routes/admin';
 import uploadRoutes from './routes/uploads';
 import { verifyStorageReady, verifyPrivateStorageReady } from './services/storage';
-import { handlePlatformSitemap, handlePlatformRobots } from './seo/platformSeo';
+import { handlePlatformRobots } from './seo/platformSeo';
 import { handlePlatformOgImage } from './seo/ogImage';
+import {
+  configurePublicPages,
+  handleCanonicalHostRedirect,
+  handleDirectoryPage,
+  handleSitemap,
+  handleUnknownAppRoute,
+  handleVenuePage,
+} from './seo/publicHandlers';
 
 /** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
 async function verifyStorageReadyWithRetry(
@@ -253,25 +261,29 @@ app.get('/api/health', (_req, res) => {
 });
 
 // ============================================================
-// SEO INFRASTRUCTURE — platform-only dynamic sitemap, robots, OG image
+// SEO INFRASTRUCTURE — sitemap, robots, OG image, public pages
 // ============================================================
 //
-// These handlers serve PLATFORM-LEVEL SEO surfaces (the marketing
-// landing page and any future public documentation pages). They do NOT
-// enumerate or render per-venue content — venue indexing lives in the
-// SPA at /r/{slug} via the public API.
+// The public, indexable surface of this origin is:
+//   /                 the SaaS landing page (SPA shell, static head)
+//   /restaurants      public directory of published venues (server HTML)
+//   /r/{slug}         a venue's public menu: the SPA shell with the venue's
+//                     own <head> (title, description, canonical, OG, JSON-LD)
+//                     and a server-rendered snapshot of the menu inside #root,
+//                     which React replaces on mount. Same HTML for every
+//                     client — no user-agent detection.
 //
-// Mounted at the root before the static-file fallback so they win
-// against the shipped `public/sitemap.xml` and `public/robots.txt`.
-// The static files are still in the build as a deployment-time safety
-// net (Netlify static-only deploys, Render static-only deploys), but
-// in the production node process the dynamic handlers own these URLs.
+// Mounted at the root before the static-file fallback so they win against
+// the shipped `public/sitemap.xml` / `public/robots.txt` (kept in the build
+// as a static-host safety net) and before express.static so `/restaurants`
+// and `/r/{slug}` never resolve to a file.
 //
 // /api/og sits under /api/* so the upstream X-Robots-Tag: noindex
 // applies (it serves a redirect to an image, never a page, and must
 // never surface in search results).
 
-app.get('/sitemap.xml', handlePlatformSitemap);
+app.use(handleCanonicalHostRedirect);
+app.get('/sitemap.xml', handleSitemap);
 app.get('/robots.txt', handlePlatformRobots);
 app.get('/api/og', handlePlatformOgImage);
 
@@ -287,9 +299,9 @@ const frontendDistPath = path.resolve(
 // A URL whose final path segment carries a file extension is a static-asset
 // request, never an app route: every real app route here is either "/" or
 // "/r/{slug}" (the slug charset is [a-zA-Z0-9_-], so it can never contain a
-// dot). "/r/{slug}" is an application route (the customer-facing menu
-// surface) — it has no SEO infrastructure attached to it, only the SPA
-// fallback. Used by the SPA fallback below to keep 404s honest.
+// dot). "/r/{slug}" is served by handleVenuePage (SPA shell + venue head +
+// menu snapshot); "/" by the plain shell. Used by the SPA fallback below to
+// keep 404s honest.
 const SPA_ASSET_FILE = /\.[a-zA-Z0-9]+$/;
 
 // API misses must remain machine-readable 404s. Without this guard, the SPA
@@ -302,6 +314,12 @@ if (fs.existsSync(frontendDistPath)) {
   console.log(
     `📦 React frontend found at: ${frontendDistPath}`
   );
+
+  configurePublicPages({ shellPath: path.join(frontendDistPath, 'index.html') });
+
+  // Public pages rendered from the shell + live catalog (see server/seo/).
+  app.get('/restaurants', handleDirectoryPage);
+  app.get('/r/:slug', handleVenuePage);
 
   app.use(
     express.static(frontendDistPath, {
@@ -318,13 +336,22 @@ if (fs.existsSync(frontendDistPath)) {
   // homepage with HTTP 200 for a missing /sitemap.xml, /robots.txt or
   // /favicon.ico is what turned every missing static asset into an HTML
   // "soft 404" — and made a missing sitemap look exactly like the site itself.
-  app.get('/{*splat}', (req, res) => {
+  //
+  // Any other extension-less path is not an application route either: the
+  // shell is still served (so the client renders), but with HTTP 404 and a
+  // noindex head instead of a 200 that would read as a soft 404.
+  app.get('/{*splat}', (req, res, next) => {
     if (SPA_ASSET_FILE.test(req.path)) {
       res.status(404).json({
         success: false,
         error: 'Endpoint Not Found',
         statusCode: 404,
       });
+      return;
+    }
+
+    if (req.path !== '/') {
+      handleUnknownAppRoute(req, res, next);
       return;
     }
 

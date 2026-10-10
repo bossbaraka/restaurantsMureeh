@@ -10,10 +10,13 @@
  *
  * Scope: platform only
  * ====================
- * This endpoint serves the PLATFORM OG image (`/favicon.svg` or any
- * future platform marketing image). Per-venue social previews are
- * intentionally out of scope — the SPA's per-venue `og:image`
- * resolution belongs with the SPA's other social-share concerns.
+ * This endpoint serves the PLATFORM OG image: `/og-image.png`, a real
+ * 1200×630 PNG shipped from `public/` (composed from the brand mark in
+ * `favicon.svg` and the platform palette). The homepage declares that
+ * PNG directly; this redirector only remains so links that were shared
+ * with the older `/api/og?type=platform` URL keep resolving to an image.
+ * Per-venue social previews are rendered by server/seo/publicPages.ts
+ * from the venue's own cover/logo, never by this endpoint.
  *
  * Status code
  * ===========
@@ -31,7 +34,9 @@ import type { Request, Response } from 'express';
 import { PUBLIC_ORIGIN } from './platformSeo';
 
 const ALLOWED_TYPES = new Set(['platform']);
-const DEFAULT_PLATFORM_OG = `${PUBLIC_ORIGIN}/favicon.svg`;
+/** Stable public path of the platform social card (see public/og-image.png). */
+export const PLATFORM_OG_IMAGE_PATH = '/og-image.png';
+const DEFAULT_PLATFORM_OG = `${PUBLIC_ORIGIN}${PLATFORM_OG_IMAGE_PATH}`;
 
 /**
  * Express handler:

@@ -2,21 +2,30 @@
 #
 # Public, indexable surface:
 #   /                       platform landing page
-# Everything else on this origin is either an authenticated console route or a
-# single-table session, and no Googlebot-specific rule is needed for those: the
-# app gates them behind authentication, not behind a URL.
+#   /restaurants            public directory of published venues
+#   /r/{slug}               a venue's public digital menu
+# Console/admin screens are not URLs on this origin (the app gates them behind
+# authentication, not behind a path), so no Disallow rule is needed for them.
 
 User-agent: *
 Allow: /
 
 # Table-session capability URLs. Every parameter below carries (or accompanies)
 # a per-table secret that authorises ordering on that table for a limited time,
-# so these URLs must never be crawled, cached or indexed.
+# so these URLs must never be crawled, cached or indexed. Each parameter is
+# listed twice because a robots.txt pattern is literal: "/*?qr=" only matches
+# the token in FIRST position, "/*&qr=" covers it after another parameter
+# (e.g. a tracking tag added to a shared QR link).
 Disallow: /*?qr=
+Disallow: /*&qr=
 Disallow: /*?sessionToken=
+Disallow: /*&sessionToken=
 Disallow: /*?table=
+Disallow: /*&table=
 Disallow: /*?tableId=
+Disallow: /*&tableId=
 Disallow: /*?t=
+Disallow: /*&t=
 
 # /api/* is intentionally NOT disallowed: Googlebot must stay able to fetch it
 # while rendering the SPA (blocking it would break rendering of JS-driven
