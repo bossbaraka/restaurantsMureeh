@@ -1,206 +1,246 @@
-# Mureeh Menu — Platform SEO Architecture
+# Mureeh Menu — SEO Architecture
 
-> Living document. Authoritative for how the **PLATFORM** (the SaaS
-> marketing surface at `https://mureehmenu.com/`) is surfaced to Google
-> and other well-known crawlers.
+> Living document. Authoritative for how `https://mureehmenu.com` — the
+> SaaS landing page **and** every venue's public digital menu — is surfaced
+> to Google and other crawlers. For the audit that led to this design and the
+> validation evidence, see `../SEO_IMPLEMENTATION_REPORT.md`.
 
 ## Scope
 
-This document covers the **platform-only** SEO surface. Per-venue
-content lives in the SPA at `/r/{slug}` (driven by the public API at
-`/api/public/restaurants/:slug`); the SEO engine intentionally does
-NOT index or render per-venue data — that would either duplicate the
-public API or require the SEO engine to read the database directly,
-which the SPA does not.
+The site is a Vite + React single-page application served by the Express
+API process (one origin, one Node service). It has exactly two
+extension-less application routes — `/` and `/r/{slug}` — plus one
+server-rendered page, `/restaurants`.
 
-| Surface                  | Owner                                |
-| ------------------------ | ------------------------------------ |
-| `/`                      | Platform SEO engine (this doc)       |
-| `/sitemap.xml`           | Platform SEO engine + static file    |
-| `/robots.txt`            | Platform SEO engine + static file    |
-| `/api/og`                | Platform SEO engine (redirector)     |
-| `/r/{slug}`              | SPA (via `/api/public/restaurants/:slug`) |
-| `/r/{slug}?qr=…`         | SPA, gated by `robots.txt`           |
+| Surface               | Indexable? | Owner                                                                |
+| --------------------- | ---------- | -------------------------------------------------------------------- |
+| `/`                   | yes        | `index.html` (static head + JSON-LD) → SPA landing page              |
+| `/restaurants`        | yes¹       | `server/seo/publicHandlers.ts` → standalone HTML directory           |
+| `/r/{slug}`           | yes²       | `publicHandlers.ts` → SPA shell + venue head + menu snapshot in `#root` |
+| `/r/{slug}?qr=…`      | no (canonical → `/r/{slug}`, `robots.txt` Disallow) | same handler; the token is only read by the client |
+| `/r/{slug}?view=display` | no (canonical → `/r/{slug}`) | same handler; the SPA renders the TV board           |
+| `/sitemap.xml`        | —          | `publicHandlers.handleSitemap` (database-backed)                     |
+| `/robots.txt`         | —          | `platformSeo.handlePlatformRobots`                                   |
+| `/og-image.png`       | —          | static 1200×630 PNG in `public/` — the platform social card          |
+| `/api/og`             | —          | `ogImage.ts` (legacy: 302 to `/og-image.png`, `X-Robots-Tag: noindex`) |
+| `/api/*`              | no         | JSON, `X-Robots-Tag: noindex`, never blocked in robots.txt           |
+| any other path        | no         | 404 + SPA shell with `noindex` (was: soft 200)                       |
 
-## Public origin
+¹ `noindex` while no venue is publishable (honest empty state).
+² Index policy below.
 
-`PUBLIC_ORIGIN` is hardcoded to `https://mureehmenu.com` in
-`server/seo/platformSeo.ts`. Every canonical, OG, sitemap and JSON-LD
-URL is derived from it. The `APP_URL` env var is a per-deploy
-override for non-production hosts only; in production it must remain
-unset so the canonical does not deindex the real domain.
+Console screens (manager, kitchen, admin, login) are **not URLs** — they are
+client state under `/` behind authentication — so there is nothing to
+`Disallow` and nothing that can leak into the sitemap.
 
-## Homepage metadata (`index.html`)
+## One HTML for everyone
 
-The shipped HTML carries:
+There is **no user-agent detection** anywhere. A guest's browser and
+Googlebot receive byte-identical HTML for `/r/{slug}`: the production shell
+(`dist/index.html`) with two regions replaced per request:
 
-- `<title>` and `<meta name="description">` in Arabic (the SaaS is
-  Arabic-first).
-- `<link rel="canonical" href="https://mureehmenu.com/" />`.
-- `<meta name="robots" content="index, follow, max-image-preview:large" />`.
-- Open Graph: `og:type=website`, `og:url`, `og:title`,
-  `og:description`, `og:locale=ar_AR`, `og:image` (1200×630,
-  served via `/api/og?type=platform`).
-- Twitter: `twitter:card=summary_large_image`, `twitter:title`,
-  `twitter:description`, `twitter:image`.
+1. **`<head>`** — the block between `<!-- seo:head:start -->` and
+   `<!-- seo:head:end -->` (title, description, canonical, robots, Open
+   Graph, Twitter, JSON-LD) is swapped for the venue's own metadata, and
+   `<html lang dir>` follows the venue language.
+2. **`#root`** — a semantic snapshot of the menu (logo, `h1` name, English
+   name, description, address · phone, section nav, `h2` sections, `h3`
+   items with descriptions and prices) is placed inside the React root.
+   `createRoot().render()` replaces it when the application mounts and
+   renders the same menu interactively, so there is no hydration contract
+   to maintain.
 
-## Structured data
+The SPA's own behaviour is untouched: the module script, assets and the QR
+session flow are exactly what Vite built. The server never reads the value
+of `?qr=`; it only checks for the *presence* of session/kiosk keys (`qr`,
+`sessionToken`, `table`, `tableId`, `t`, `view`) to skip the `#root`
+snapshot on those URLs — the head is identical, the canonical still points
+at `/r/{slug}`, and the scanned-QR flow keeps today's exact boot sequence
+(no interim content flash). That rule is per URL, never per client.
 
-The `<script type="application/ld+json">` block declares five
-top-level `@graph` nodes:
+## Index policy for venue pages
 
-| Node | `@type`           | Purpose                                 |
-| ---- | ----------------- | --------------------------------------- |
-| 1    | `WebSite`         | Site-level identity (`#website`)        |
-| 2    | `Organization`    | Owner identity (`#organization`)        |
-| 3    | `SoftwareApplication` | Product identity, `applicationCategory: BusinessApplication`, `applicationSubCategory: Restaurant Management Software` |
-| 4    | `Service`         | What the platform delivers — `serviceType`, `provider.@id` → `#organization`, `audience`, `areaServed` |
-| 5    | `FAQPage`         | Six Question/answer pairs mirroring `SaaSLandingPage.tsx`'s `FAQS` array verbatim |
+Defined once in `server/seo/publicCatalog.ts` (`isVenueIndexable`) and used
+by the page, the directory and the sitemap, so they can never disagree:
 
-### Why these and nothing else
+```
+indexable = status === 'ACTIVE'
+         && at least one ACTIVE category containing an available product
+         && at least MIN_INDEXABLE_PRODUCTS (3) available products in ACTIVE categories
+```
 
-We **never** add (because no real value is published at the platform
-origin):
+| Venue state                         | HTTP | `<meta name="robots">` | Snapshot | Sitemap / directory |
+| ----------------------------------- | ---- | ---------------------- | -------- | ------------------- |
+| ACTIVE, publishable                 | 200  | `index, follow, max-image-preview:large` | yes | yes |
+| ACTIVE, thin / empty menu           | 200  | `noindex, follow`      | yes      | no                  |
+| SUSPENDED / ONBOARDING              | 404  | `noindex, follow`      | no       | no                  |
+| MAINTENANCE                         | 503 + `Retry-After` | `noindex, follow` | no    | no                  |
+| unknown slug / bad charset          | 404  | `noindex, nofollow`    | no       | no                  |
+| catalog read failed                 | 503 + `Retry-After`, `no-store` | `noindex, nofollow` | no | — |
 
-- `aggregateRating` / `Review` — the platform has no reviews yet.
-- `LocalBusiness` — the platform is a SaaS, not a physical
-  restaurant.
-- `telephone`, `address`, `priceRange` on the platform landing —
-  would imply a real physical presence that does not exist.
+Flipping a venue out of `ACTIVE`, or emptying its menu, removes it from the
+sitemap, the directory and the index policy on the next request (60 s page
+cache, 120 s listing cache).
 
-`Service` is the right type for what Mureeh actually delivers: a
-"QR menu and digital ordering service for restaurants". The
-`provider.@id` link to `Organization` joins both nodes in Google's
-knowledge graph.
+## Canonicalisation
+
+- Public origin: `PRODUCTION_ORIGIN = 'https://mureehmenu.com'` in
+  `server/seo/platformSeo.ts`; `APP_URL` is a non-production override.
+- `www.` → apex is handled upstream (verified: `www.mureehmenu.com` already
+  301s). The Render alias `*.onrender.com` serves the same app, so
+  `handleCanonicalHostRedirect` 301s **page** requests on it to the public
+  origin (API, uploads and health checks are left alone).
+- `/r/{SLUG}` → 301 `/r/{slug}`; `/r/{slug}/` → 301 `/r/{slug}`;
+  `/restaurants/` → 301 `/restaurants`. Query strings are preserved.
+- `rel=canonical` on a venue page is always `https://mureehmenu.com/r/{slug}`
+  regardless of `?qr=`, `?view=display` or tracking parameters.
+- No `hreflang`: there are no per-language URLs. A venue page declares the
+  single language of its content (`lang="ar" dir="rtl"` or `lang="en"
+  dir="ltr"`) from the venue's `language` field.
+
+## Per-venue metadata (`server/seo/publicPages.ts`)
+
+Every value is derived from the venue row; missing fields are omitted, never
+rendered as `undefined`:
+
+- **Title** — `{name} ({nameEn}) — المنيو الإلكتروني والأسعار` (English
+  variant for `language = en`), de-duplicated when `nameEn` already appears
+  in `name`, kept ≤ 70 characters.
+- **Description** — the venue's own description trimmed to ~160 characters
+  on a word boundary; short descriptions get a factual suffix (item/section
+  counts with correct Arabic number agreement); venues without one get a
+  description generated from counts and the first section names.
+- **Open Graph / Twitter** — `og:type=website`, `og:locale` (`ar_AR` /
+  `en_US`), `og:image` = cover → logo → platform card
+  (`https://mureehmenu.com/og-image.png`, a real 1200×630 PNG), so every
+  page always has a large-image card (`twitter:card=summary_large_image`).
+- **JSON-LD** — `@graph` of a `Restaurant` / `CafeOrCoffeeShop` / `Bakery`
+  node (by `businessType`) plus a `WebPage` node linked to the site's
+  `#website`. The venue node carries `telephone`, `address`
+  (`PostalAddress.streetAddress`), `geo` and `sameAs` **only when the venue
+  entered them**, `image`/`logo` from its real assets, and `hasMenu` →
+  `MenuSection` → `MenuItem` with `offers` only when the stored currency
+  marker maps to ISO-4217 (`₪`→ILS, `$`→USD, `€`→EUR, `SAR`, …). Never:
+  `aggregateRating`, `Review`, `openingHours`, `priceRange`, `servesCuisine`.
+- JSON-LD is serialised with `<`, `>` and `&` as unicode escapes so venue
+  text can never terminate the `<script>` element; all HTML is escaped.
 
 ## Sitemap
 
-`/sitemap.xml` is generated by `handlePlatformSitemap`
-(`server/seo/platformSeo.ts`) and is also shipped as a static file
-in `public/sitemap.xml` (Vite copies it to `dist/`). Both contain
-**only the platform landing page** — per-venue URLs are not
-enumerated here on purpose.
+`/sitemap.xml` is built per request (5-minute cache header) from
+`listPublishableVenues()`:
+
+```
+/                      (no lastmod — nothing real to derive it from)
+/restaurants           lastmod = newest venue change   (only when ≥ 1 venue)
+/r/{slug} × N          lastmod = max(restaurant.updatedAt, category.updatedAt, product.updatedAt)
+```
+
+No `changefreq`/`priority`, no query strings, no duplicates, HTTPS canonical
+URLs only. If the database read fails the handler logs the error and serves
+the platform entries with `Cache-Control: no-store` — a valid sitemap,
+never a 500 and never a stale venue list.
+
+`public/sitemap.xml` (copied into `dist/` by Vite) stays platform-only: it
+is the fallback for static-only hosts that cannot know which venues are
+published today.
+
+## Internal linking
+
+Venue pages are reachable through plain `<a href>` links, not only through
+the sitemap:
+
+- `SaaSLandingPage.tsx` — "ما هو مُريح؟" (`#about`) definition block right
+  under the hero: plain-text answers to *for whom / which problem / how it
+  works*, with anchors to `/restaurants` and `#pricing`; the "منيوهات حيّة"
+  section listing the ACTIVE venues the public API returns (hidden when
+  empty); and a footer link to `/restaurants`.
+  `landing-crawlable-content.test.tsx` server-renders the real component and
+  checks the heading outline, the wording and these anchors.
+- `/restaurants` — server-rendered directory (visible breadcrumb +
+  `BreadcrumbList`, `CollectionPage`/`ItemList`) linking every publishable
+  venue and back to `/`.
+
+Venue pages themselves are white-label (the customer UI shows only the
+venue's identity), so they intentionally carry no platform link.
 
 ## robots.txt
 
-`/robots.txt` is generated by `handlePlatformRobots` and is also
-shipped as a static file. It:
+```
+User-agent: *
+Allow: /
+Disallow: /*?qr=            # per-table capability tokens — never crawl/cache
+Disallow: /*?sessionToken=
+Disallow: /*?table=
+Disallow: /*?tableId=
+Disallow: /*?t=
+Disallow: /*&qr=            # same keys when they are not the first parameter
+Disallow: /*&sessionToken=
+Disallow: /*&table=
+Disallow: /*&tableId=
+Disallow: /*&t=
+Sitemap: https://mureehmenu.com/sitemap.xml
+```
 
-- Allows `/`.
-- Disallows every table-session query parameter (`?qr=`,
-  `?sessionToken=`, `?table=`, `?tableId=`, `?t=`).
-- References the production sitemap URL.
+robots patterns are literal: `/*?qr=` does not match `/r/x?lang=en&qr=…`,
+hence the `&` twins. `public/robots.txt` must stay byte-identical to
+`buildRobotsTxt()` (`seo-platform.test.ts` enforces it).
 
-What we **never** disallow:
+`/api/*` is deliberately **not** disallowed (Googlebot must be able to fetch
+it while rendering the SPA); API responses carry `X-Robots-Tag: noindex`.
+No page relies on both a robots block and a `noindex` — private states use
+`noindex` on a crawlable URL.
 
-- `/api/*` — Googlebot needs to fetch the API while rendering the
-  SPA. The server marks these responses `X-Robots-Tag: noindex`.
-- `/assets/*`, `/uploads/*` — required for Google to render the
-  page and to see images.
+## Social card (`public/og-image.png`)
 
-## OG image redirector (`/api/og`)
-
-`/api/og?type=platform` answers with a **302 redirect** to the
-platform OG image (`/favicon.svg` today; a dedicated 1200×630 social
-PNG will replace it when one ships). 302 (temporary) on purpose — a
-future redesign of the social card must not require invalidating a
-CDN cache of a pre-rendered PNG.
-
-### Status: placeholder, not production-quality
-
-The current OG image is `/favicon.svg` (the platform logo, square
-viewBox 0 0 200 200). It is **reachable**, served at an absolute
-URL, and the redirect chain (`/api/og?type=platform` →
-`/favicon.svg`) is correct. However, it is **not** a real social
-preview, and social platforms will render a small icon rather than
-a wide card.
-
-A dedicated 1200×630 PNG social image must replace this placeholder
-before launch. The redirector's `DEFAULT_PLATFORM_OG` constant is
-the single edit point — change the path there, ship the PNG in
-`public/`, and every page that references `og:image` (the homepage
-today, plus any future platform surface) picks it up automatically.
-
-The endpoint always sets `X-Robots-Tag: noindex`. It whitelists only
-the `type=platform` value — any other value is silently rewritten to
-the platform default. No per-venue `type=restaurant` exists at this
-origin; that concern belongs to the SPA, which already handles its
-own per-venue social metadata.
-
-## Deployment
-
-### Render
-
-`render.yaml` ships two services:
-
-- `restaurant-api` (Node) — the Express backend; owns the dynamic
-  `/sitemap.xml`, `/robots.txt`, and `/api/og` handlers.
-- `restaurant-frontend` (static) — Vite output served from `dist/`.
-  Applies a `rewrite /* -> /index.html` so any unknown path returns
-  the SPA shell.
-
-Because the static frontend **serves files before applying the
-rewrite rule**, the prerendered `dist/sitemap.xml`,
-`dist/robots.txt` and `dist/favicon.svg` are returned as files
-wherever they exist.
-
-### Netlify
-
-`public/_redirects` and `netlify.toml` are kept in sync with the
-runtime policy: SEO-critical paths (`/sitemap.xml`, `/robots.txt`)
-are listed **before** the SPA catch-all so they win on static
-deploys too.
-
-## CSP (`server/index.ts`) and SEO compatibility
-
-The platform SEO surface is compatible with the existing CSP:
-
-- `img-src 'self' data: blob: https:` — allows the OG image
-  redirector (`https://mureehmenu.com/api/og?type=platform` → a
-  same-origin file).
-- `connect-src 'self'` — `/sitemap.xml`, `/robots.txt`, `/api/og`
-  are all same-origin, so crawlers can fetch them.
-- `frame-ancestors` — denies embedding, has no impact on crawler
-  indexing.
-
-No CSP change is required for the platform SEO surface.
+A real 1200×630 PNG (≈200 kB) composed only from the repository's own brand
+assets: the falcon mark from `favicon.svg`, the wordmark "مُريح" and
+"Mureeh Menu" in Tajawal, and the homepage title as the tagline. It was
+rendered once at development time with `@resvg/resvg-js` (SVG → PNG) and
+committed; neither the renderer nor the font package is a project
+dependency. `index.html`, `publicPages.ts` (fallback for venues without
+cover/logo, the directory and the error shells) and the legacy `/api/og`
+redirector all point at the same `PLATFORM_OG_IMAGE_PATH`.
 
 ## Files
 
-| File                                        | Role                                  |
-| ------------------------------------------- | ------------------------------------- |
-| `index.html`                                | Homepage metadata + JSON-LD           |
-| `public/sitemap.xml`                        | Build-time sitemap artefact            |
-| `public/robots.txt`                         | Build-time robots artefact             |
-| `public/_redirects`                         | Netlify rewrite rules                  |
-| `netlify.toml`                              | Netlify config                         |
-| `server/seo/platformSeo.ts`                 | Dynamic `/sitemap.xml` + `/robots.txt` |
-| `server/seo/ogImage.ts`                     | `/api/og` redirector                   |
-| `server/index.ts`                           | Mounts the SEO routes                  |
-| `src/tests/seo-production.test.ts`          | Existing release gate                  |
-| `src/tests/seo-platform.test.ts`            | Platform-specific release gate         |
+| File                                   | Role                                                        |
+| -------------------------------------- | ----------------------------------------------------------- |
+| `index.html`                           | Homepage head + JSON-LD, `seo:head` markers, SPA shell      |
+| `server/seo/platformSeo.ts`            | Origin, `canonicalUrl`, XML escaping, sitemap serialiser, robots.txt (Prisma-free) |
+| `server/seo/publicCatalog.ts`          | The only database read path: venue page / publishable list, index policy, TTL cache |
+| `server/seo/publicPages.ts`            | Pure HTML renderers: head tags, JSON-LD, menu snapshot, directory, 404/503 shells |
+| `server/seo/publicHandlers.ts`         | Express handlers: `/r/:slug`, `/restaurants`, `/sitemap.xml`, unknown-route 404, host redirect |
+| `server/seo/ogImage.ts`                | `PLATFORM_OG_IMAGE_PATH` (`/og-image.png`) + legacy `/api/og` redirector |
+| `public/og-image.png`                  | Platform social card (1200×630 PNG; see "Social card" below) |
+| `server/index.ts`                      | Mount order: host redirect → sitemap/robots/og → `/restaurants`, `/r/:slug` → static → fallback |
+| `public/robots.txt`, `public/sitemap.xml` | Static fallbacks for static-only hosts                   |
+| `src/components/customer/CustomerLayout.tsx` | Browse-only menu for bare `/r/{slug}` (ordering still table-bound) |
+| `src/components/common/SaaSLandingPage.tsx`  | Live venues section + directory link                  |
+| `src/tests/seo-public-pages.test.ts`   | HTTP-level coverage of the public surface (Prisma mocked)   |
+| `src/tests/seo-host-redirect.test.ts`  | Host canonicalisation                                       |
+| `src/tests/seo-platform.test.ts`, `seo-production.test.ts` | Static release gates                    |
+
+## Local development
+
+The Vite dev server (`npm run dev`) serves `index.html` itself, so the
+venue head/snapshot are only observable against a build:
+`npm run build && npm run server`, then `curl -s localhost:3001/r/{slug} | head -60`.
 
 ## How to extend
 
-To add a new public platform page:
-
-1. Add the URL to `STATIC_ENTRIES` in
-   `server/seo/platformSeo.ts` (and to `public/sitemap.xml`).
-2. Update `index.html`'s structured data if the new page needs
-   `@id` linkage (`Service`, `FAQPage`, etc).
-3. Add a `seo-platform.test.ts` case covering the new entry.
-4. Add a Netlify redirect rule in `public/_redirects` and
-   `netlify.toml` (specific routes BEFORE the catch-all).
-
-## Future work
-
-- **Dedicated 1200×630 social PNG** — replace `/favicon.svg` with a
-  proper social card when the design team produces one.
-- **Per-region landing pages** — a future Arabic/English split would
-  add `<link rel="alternate" hreflang="ar|en" ...>` and a second
-  sitemap entry, NOT a new platform SEO engine.
-- **Press / changelog** — a `/blog/` cluster is the right home for
-  long-form content. Out of scope here.
-- **Real reviews** — when customer reviews exist, add
-  `aggregateRating` to the relevant `@graph` node (likely
-  `SoftwareApplication` or `Service`). Never fabricated.
+- **New public platform page** (e.g. `/pricing` as its own URL): add the
+  handler next to `handleDirectoryPage`, mount it before `express.static`,
+  add it to `buildSitemapEntries()`, and add a `seo-public-pages.test.ts`
+  case. Do not add it to the SPA fallback — unknown paths must stay 404.
+- **New venue field in metadata**: add it to the `select` in
+  `publicCatalog.getPublicVenue`, to `PublicVenue`, and render it in
+  `publicPages.ts` with an explicit empty-value guard.
+- **Replacing the social card**: overwrite `public/og-image.png` (keep
+  1200×630 — `seo-platform.test.ts` reads the PNG header and compares it with
+  `og:image:width/height` in `index.html`; keep it under 300 kB so WhatsApp
+  still previews it). The path is a single constant, `PLATFORM_OG_IMAGE_PATH`
+  in `ogImage.ts`, used by `index.html` (literal), `publicPages.ts` and the
+  `/api/og` redirector. After deploying a new card, re-scrape the URL in the
+  Facebook Sharing Debugger / LinkedIn Post Inspector — social networks cache
+  the old image by URL.

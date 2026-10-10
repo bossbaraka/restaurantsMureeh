@@ -51,7 +51,10 @@ describe('sitemap.xml', () => {
     expect(sitemap.trimEnd().endsWith('</urlset>')).toBe(true);
   });
 
-  it('lists the landing page on the production origin and nothing else', () => {
+  it('static fallback lists the landing page on the production origin and nothing else', () => {
+    // The static file cannot know which venues are published today, so it
+    // stays platform-only; the node server answers /sitemap.xml from the
+    // database (see seo-public-pages.test.ts for that surface).
     const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
     expect(locs).toEqual([`${ORIGIN}/`]);
     // No duplicates.
@@ -164,9 +167,13 @@ describe('server-side fallback keeps static files honest', () => {
   });
 
   it('keeps SPA routing intact for extension-less app routes', () => {
-    // The fallback still serves the shell for "/" and "/r/{slug}".
+    // "/" is served from the shell by the fallback; "/r/{slug}" by the venue
+    // handler (same shell, venue head + snapshot injected); any other
+    // extension-less path is a 404 shell rather than a soft 200.
     expect(server).toContain("app.get('/{*splat}'");
     expect(server).toContain("'index.html'");
+    expect(server).toContain("app.get('/r/:slug', handleVenuePage)");
+    expect(server).toContain('handleUnknownAppRoute(req, res, next)');
   });
 
   it('marks API responses noindex without blocking Googlebot from fetching them', () => {

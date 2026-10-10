@@ -2,15 +2,21 @@
 <!--
   Mureeh — https://mureehmenu.com/sitemap.xml
 
-  Only the platform-level public surface is listed here. The platform
-  SEO engine (server/seo/platformSeo.ts) owns /sitemap.xml and emits
-  the same content at runtime, so this file is the build-time
-  artefact Vite copies into dist/ for static-host deploys.
+  Build-time FALLBACK only. In production /sitemap.xml is answered by the
+  Express server (server/seo/publicHandlers.ts), which enumerates the public
+  surface from the database on every request:
 
-  Excluded on purpose: /api/*, manager/admin views, login, onboarding,
-  dashboard, /r/{slug} (private, session-scoped surface — the venue
-  QR scan URLs are excluded from indexing by robots.txt), and every
-  other authenticated or user-specific view.
+    /                 platform landing page
+    /restaurants      public directory (only when at least one venue is published)
+    /r/{slug}         every ACTIVE venue with a non-empty public menu,
+                      with <lastmod> taken from the real updatedAt timestamps
+
+  This static copy is what Vite ships into dist/ for hosts that cannot run the
+  server; it lists only the platform landing because a static file cannot know
+  which venues are published today, and a stale venue list is worse than none.
+
+  Never listed anywhere: /api/*, manager/admin views, login, onboarding, QR /
+  table-session URLs (/r/{slug}?qr=…) and every authenticated or user-specific view.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>

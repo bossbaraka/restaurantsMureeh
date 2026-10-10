@@ -113,6 +113,7 @@ const PLANS: PlanDef[] = [
 ];
 
 const NAV_LINKS = [
+  { href: '#about', label: 'ما هو مُريح' },
   { href: '#how', label: 'كيف يعمل' },
   { href: '#features', label: 'المزايا' },
   { href: '#video', label: 'الفيديو' },
@@ -130,6 +131,34 @@ const MARQUEE_ITEMS = [
   'فواتير مرقمة',
   'هوية بصرية كاملة',
   'دعم واتساب مباشر',
+];
+
+/**
+ * "What is Mureeh" — the three questions a first visit must answer before the
+ * feature tour. Keep every sentence tied to a shipped capability: business
+ * types = the BusinessType enum (restaurant / café / bakery), menu management
+ * = the manager console, QR per table + bare venue link = /r/{slug}, kitchen
+ * screen = KDS, Arabic/English names = the nameEn fields.
+ */
+const ABOUT_POINTS = [
+  {
+    icon: Store,
+    title: 'لمن صُمّم مُريح؟',
+    body:
+      'للمطاعم والكافيهات والمخابز، من المحل الواحد إلى سلسلة الفروع، التي تريد قائمة طعام رقمية يديرها فريقها بنفسه من لوحة التحكم — بلا تطبيق يحمّله الزبون، وبلا تسجيل.',
+  },
+  {
+    icon: Receipt,
+    title: 'ما المشكلة التي يحلّها؟',
+    body:
+      'المنيو الورقي يتقادم مع كل تغيير في سعر أو صنف ويكلّف إعادة طباعة، والطلب الشفهي يعني انتظاراً وأخطاء نقل. مع مُريح تُحدَّث القائمة فوراً من لوحة التحكم، ويصل طلب الزبون إلى شاشة المطبخ لحظياً.',
+  },
+  {
+    icon: QrCode,
+    title: 'كيف يعمل المنيو الرقمي؟',
+    body:
+      'أنشئ الأقسام والأصناف والأسعار والصور من لوحة التحكم، ثم اطبع رمز QR لكل طاولة. يمسح الزبون رمز طاولته بهاتفه فيتصفح القائمة ويطلب مباشرة، أو يفتح رابط منيو مطعمك العام لتصفّح الأصناف والأسعار قبل الزيارة.',
+  },
 ];
 
 const STEPS = [
@@ -260,8 +289,17 @@ const FAQS = [
 
 /* ============================== Page ============================== */
 
+const BUSINESS_TYPE_LABEL: Record<string, string> = {
+  RESTAURANT: 'مطعم',
+  CAFE: 'كافيه',
+  BAKERY: 'مخبز',
+};
+
+/** How many live venues the landing page previews before pointing at /restaurants. */
+const LIVE_MENUS_PREVIEW_LIMIT = 8;
+
 export const SaaSLandingPage: FC = () => {
-  const { setViewMode } = useRestaurant();
+  const { setViewMode, tenantsList } = useRestaurant();
   const { currentUser, isSuperAdmin, setIsLoginModalOpen } = useAuth();
   const [tablesInput, setTablesInput] = useState(20);
   const [billingPeriod, setBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
@@ -567,6 +605,71 @@ export const SaaSLandingPage: FC = () => {
         <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-[#020A14] to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#020A14] to-transparent" />
       </div>
+
+      {/* ================= What is Mureeh (plain-language definition) ================= */}
+      {/* The hero and the sections below it are written as taglines. This block
+          states, in plain crawlable text, what the product is, who it is for,
+          the problem it solves and how the digital menu works — the questions a
+          first-time visitor (or a search engine) needs answered before the
+          feature tour. Every claim maps to a shipped capability; nothing here
+          is aspirational copy. */}
+      <section id="about" aria-labelledby="about-title" className="relative py-16 sm:py-24 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto">
+          <Reveal className="text-center max-w-3xl mx-auto space-y-4 mb-12 sm:mb-16">
+            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0072BC]/10 border border-[#0072BC]/30 text-[#38BDF8] text-[11px] font-bold tracking-wide">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#38BDF8] animate-saas-blink" />
+              ما هو مُريح؟
+            </span>
+            <h2 id="about-title" className="text-2xl sm:text-4xl font-black text-white leading-snug text-balance">
+              منصة منيو إلكتروني QR للمطاعم والكافيهات
+            </h2>
+            <p className="text-sm sm:text-base text-slate-300/90 leading-relaxed">
+              مُريح <span lang="en">(Mureeh Menu)</span> منصة سحابية تحوّل قائمة طعام مطعمك إلى منيو إلكتروني يُفتح من أي
+              هاتف عبر رابط الويب أو رمز QR على الطاولة: أقسام وأصناف بالصور والأسعار المحدّثة، بأسماء عربية وإنجليزية
+              وواجهة من اليمين إلى اليسار، مع طلب مباشر من الطاولة يصل إلى شاشة المطبخ لحظياً.
+            </p>
+          </Reveal>
+
+          <div className="grid md:grid-cols-3 gap-5">
+            {ABOUT_POINTS.map((point, i) => (
+              <Reveal key={point.title} delay={i * 120} className="h-full">
+                <article className="h-full rounded-3xl bg-[#081B33]/60 border border-[#004B87]/40 hover:border-[#0072BC]/60 p-7 space-y-3 transition-colors">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#003865] to-[#0072BC] border border-[#38BDF8]/30 flex items-center justify-center text-white">
+                    <point.icon className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-lg font-black text-white">{point.title}</h3>
+                  <p className="text-[13px] text-slate-300 leading-relaxed">{point.body}</p>
+                </article>
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <a
+              href="/restaurants"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 text-sm font-bold text-white transition-colors"
+            >
+              تصفح منيوهات مطاعم حقيقية على مُريح
+              <ArrowLeft className="w-4 h-4" />
+            </a>
+            <a
+              href="#pricing"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/15 text-sm font-bold text-white transition-colors"
+            >
+              الباقات والأسعار
+              <ArrowLeft className="w-4 h-4" />
+            </a>
+            <button
+              type="button"
+              onClick={openManagerConsole}
+              className="btn-shine w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-sm font-bold text-white transition-all cursor-pointer active:scale-[0.98]"
+            >
+              <Rocket className="w-4 h-4" />
+              أنشئ منيو مطعمك الآن
+            </button>
+          </Reveal>
+        </div>
+      </section>
 
       {/* ================= How it works ================= */}
       <section id="how" className="relative py-16 sm:py-24 px-4 sm:px-6">
@@ -1242,6 +1345,81 @@ export const SaaSLandingPage: FC = () => {
         </div>
       </section>
 
+      {/* ================= LIVE MENUS (real venues, crawlable links) ================= */}
+      {/* Lists the venues the public catalog API reports as ACTIVE. Every card is
+          a plain <a href="/r/{slug}"> so the public menus are reachable through
+          HTML links (not only through the sitemap); the full list lives at
+          /restaurants, which the server renders. Hidden when there is nothing
+          real to show — never a placeholder. */}
+      {tenantsList.length > 0 && (
+        <section id="live-menus" className="relative py-16 sm:py-24 px-4 sm:px-6">
+          <div className="max-w-6xl mx-auto">
+            <SectionHeading
+              eyebrow="منيوهات حيّة"
+              title={<>مطاعم وكافيهات تعمل الآن على مُريح</>}
+              sub="قوائم طعام إلكترونية حقيقية يديرها أصحابها من لوحة التحكم — افتح أي منيو وتصفحه كما يراه الزبون."
+            />
+            <ul className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 list-none p-0 m-0">
+              {tenantsList
+                .filter((r) => r.status === 'ACTIVE' && !!r.slug)
+                .slice(0, LIVE_MENUS_PREVIEW_LIMIT)
+                .map((r, i) => (
+                  <li key={r.slug} className="h-full">
+                    <Reveal delay={i * 80} className="h-full">
+                      <a
+                        href={`/r/${encodeURIComponent(r.slug)}`}
+                        className="group flex h-full flex-col gap-3 rounded-3xl bg-[#081B33]/60 border border-[#004B87]/40 hover:border-[#0072BC]/60 p-5 transition-all duration-300 hover:-translate-y-1"
+                      >
+                        <span className="flex items-center gap-3">
+                          {r.logo ? (
+                            <img
+                              src={r.logo}
+                              alt={`شعار ${r.name}`}
+                              width={48}
+                              height={48}
+                              loading="lazy"
+                              decoding="async"
+                              className="w-12 h-12 rounded-full object-cover border border-white/10 bg-[#0B2240] shrink-0"
+                            />
+                          ) : (
+                            <span className="w-12 h-12 rounded-full bg-gradient-to-br from-[#0072BC] to-[#003865] flex items-center justify-center text-white font-black shrink-0">
+                              {(r.nameEn || r.name).charAt(0)}
+                            </span>
+                          )}
+                          <span className="min-w-0">
+                            <span className="block text-sm font-black text-white truncate">{r.name}</span>
+                            {r.nameEn && r.nameEn !== r.name && (
+                              <span className="block text-[11px] text-slate-400 truncate" lang="en">
+                                {r.nameEn}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                        {BUSINESS_TYPE_LABEL[r.businessType] && (
+                          <span className="text-[11px] font-bold text-[#38BDF8]">{BUSINESS_TYPE_LABEL[r.businessType]}</span>
+                        )}
+                        <span className="mt-auto inline-flex items-center gap-1.5 text-xs font-bold text-slate-300 group-hover:text-white transition-colors">
+                          عرض المنيو
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        </span>
+                      </a>
+                    </Reveal>
+                  </li>
+                ))}
+            </ul>
+            <Reveal className="text-center mt-8">
+              <a
+                href="/restaurants"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm font-bold text-white transition-colors"
+              >
+                دليل كل المطاعم والكافيهات على مُريح
+                <ArrowLeft className="w-4 h-4" />
+              </a>
+            </Reveal>
+          </div>
+        </section>
+      )}
+
       {/* ================= FAQ ================= */}
       <section id="faq" className="relative py-16 sm:py-24 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto">
@@ -1379,6 +1557,11 @@ export const SaaSLandingPage: FC = () => {
                     </a>
                   </li>
                 ))}
+                <li>
+                  <a href="/restaurants" className="hover:text-[#38BDF8] transition-colors">
+                    دليل المطاعم والكافيهات
+                  </a>
+                </li>
               </ul>
             </nav>
             <nav aria-label="الباقات">

@@ -1,19 +1,47 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { RestaurantProvider, useRestaurant } from './context/RestaurantContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ViewSwitcher } from './components/common/ViewSwitcher';
 import { CustomerLayout } from './components/customer/CustomerLayout';
-import { ManagerLayout } from './components/manager/ManagerLayout';
-import { SplitPreviewLayout } from './components/common/SplitPreviewLayout';
-import { PlatformAdminPortal } from './components/admin/PlatformAdminPortal';
-import { KitchenDisplaySystem } from './components/manager/KitchenDisplaySystem';
-import { LiveRestaurantScreen } from './components/manager/LiveRestaurantScreen';
 import { SaaSLandingPage } from './components/common/SaaSLandingPage';
 import { RestaurantOnboardingModal } from './components/onboarding/RestaurantOnboardingModal';
 import { LoginModal } from './components/auth/LoginModal';
 import { ToastContainer } from './components/common/Toast';
 import { PlatformAppearanceProvider } from './theme/PlatformAppearanceProvider';
 import { StickyStackProvider } from './theme/StickyStack';
+
+// Console surfaces are code-split: a guest opening a public menu (/r/{slug})
+// or the landing page never downloads the manager / admin / kitchen / live
+// screen bundles. Only signed-in console users reach these views, and the
+// chunk is fetched the first time such a view is switched to.
+const ManagerLayout = lazy(() =>
+  import('./components/manager/ManagerLayout').then((m) => ({ default: m.ManagerLayout }))
+);
+const SplitPreviewLayout = lazy(() =>
+  import('./components/common/SplitPreviewLayout').then((m) => ({ default: m.SplitPreviewLayout }))
+);
+const PlatformAdminPortal = lazy(() =>
+  import('./components/admin/PlatformAdminPortal').then((m) => ({ default: m.PlatformAdminPortal }))
+);
+const KitchenDisplaySystem = lazy(() =>
+  import('./components/manager/KitchenDisplaySystem').then((m) => ({ default: m.KitchenDisplaySystem }))
+);
+const LiveRestaurantScreen = lazy(() =>
+  import('./components/manager/LiveRestaurantScreen').then((m) => ({ default: m.LiveRestaurantScreen }))
+);
+
+/** Neutral placeholder while a console chunk loads (platform surface tokens). */
+const ConsoleChunkFallback: React.FC = () => (
+  <div
+    className="flex-1 min-h-[50vh] flex items-center justify-center"
+    role="status"
+    aria-live="polite"
+    aria-busy="true"
+    style={{ color: 'var(--mureeh-text-muted, #94A3B8)' }}
+  >
+    <span className="text-sm font-bold">جارٍ تحميل لوحة التحكم…</span>
+  </div>
+);
 
 const AppContent: React.FC = () => {
   const { viewMode, isOnboardingOpen, setIsOnboardingOpen } = useRestaurant();
@@ -92,12 +120,14 @@ const AppContent: React.FC = () => {
       {/* Dynamic View Mode Router */}
       <div className="flex-1">
         {safeViewMode === 'CUSTOMER' && <CustomerLayout />}
-        {safeViewMode === 'MANAGER' && <ManagerLayout />}
-        {safeViewMode === 'KITCHEN_KDS' && <KitchenDisplaySystem />}
-        {safeViewMode === 'LIVE_SCREEN' && <LiveRestaurantScreen />}
         {safeViewMode === 'SAAS_LANDING' && <SaaSLandingPage />}
-        {safeViewMode === 'PLATFORM_ADMIN' && <PlatformAdminPortal />}
-        {safeViewMode === 'SPLIT_PREVIEW' && <SplitPreviewLayout />}
+        <Suspense fallback={<ConsoleChunkFallback />}>
+          {safeViewMode === 'MANAGER' && <ManagerLayout />}
+          {safeViewMode === 'KITCHEN_KDS' && <KitchenDisplaySystem />}
+          {safeViewMode === 'LIVE_SCREEN' && <LiveRestaurantScreen />}
+          {safeViewMode === 'PLATFORM_ADMIN' && <PlatformAdminPortal />}
+          {safeViewMode === 'SPLIT_PREVIEW' && <SplitPreviewLayout />}
+        </Suspense>
       </div>
 
       {/* Onboarding Wizard Modal */}

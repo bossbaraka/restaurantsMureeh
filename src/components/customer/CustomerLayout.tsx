@@ -123,7 +123,6 @@ const CustomerLayoutContent: React.FC = () => {
     addToCart,
     updateCartItemQuantity,
     currentRestaurant,
-    activeTableId,
     setViewMode,
     displayMode,
     entryPhase,
@@ -359,18 +358,15 @@ const CustomerLayoutContent: React.FC = () => {
     );
   }
 
-  const isPublicRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/r/');
-  if (isPublicRoute && !activeTableId) {
-    return (
-      <div className="min-h-screen bg-m-bg text-m-text flex items-center justify-center p-6 text-center" dir="rtl">
-        <div className="max-w-md p-8 rounded-3xl bg-m-surface border border-amber-500/40 space-y-4">
-          <div className="text-4xl">QR</div>
-          <h2 className="text-xl font-bold font-serif text-m-text">افتح القائمة عبر رمز QR</h2>
-          <p className="text-xs text-m-text-muted leading-relaxed">هذا الرابط غير صالح للدخول المباشر. امسح رمز QR الموجود على طاولة المطعم.</p>
-        </div>
-      </div>
-    );
-  }
+  // Browse-only mode: a bare `/r/{slug}` link (shared on social media, found
+  // in search, or typed from a QR tent card) renders the full public menu
+  // without a table. Ordering stays table-bound exactly as before — the
+  // header pill asks the guest to scan the table QR, the cart drawer opens
+  // the QR-only table prompt on checkout, and `createOrder` refuses to submit
+  // without a validated table session (the server enforces the session token
+  // as well). The old "scan the QR first" dead-end card made the public menu
+  // invisible to anyone — guests and search engines alike — who did not
+  // arrive through a QR scan (UX audit F-29).
 
   if (currentRestaurant?.status === 'SUSPENDED') {
     return (
