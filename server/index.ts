@@ -17,7 +17,7 @@ import managerRoutes from './routes/manager';
 import adminRoutes from './routes/admin';
 import uploadRoutes from './routes/uploads';
 import { verifyStorageReady, verifyPrivateStorageReady } from './services/storage';
-import { handlePlatformSitemap, handlePlatformRobots } from './seo/platformSeo';
+import { handlePlatformSitemap, handlePlatformRobots, handleCanonicalRedirect } from './seo/platformSeo';
 import { handlePlatformOgImage } from './seo/ogImage';
 
 /** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
@@ -268,9 +268,10 @@ app.get('/api/health', (_req, res) => {
 // in the production node process the dynamic handlers own these URLs.
 //
 // /api/og sits under /api/* so the upstream X-Robots-Tag: noindex
-// applies (it serves a redirect to an image, never a page, and must
-// never surface in search results).
+// applies (it serves the social preview PNG directly with 200 OK, never
+// a page, and must never surface in search results).
 
+app.use(handleCanonicalRedirect);
 app.get('/sitemap.xml', handlePlatformSitemap);
 app.get('/robots.txt', handlePlatformRobots);
 app.get('/api/og', handlePlatformOgImage);

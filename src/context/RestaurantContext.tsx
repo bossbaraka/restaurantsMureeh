@@ -887,6 +887,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (typeof window === 'undefined' || !currentRestaurant || viewMode !== 'CUSTOMER') return;
     if (displayMode) return; // never rewrite the shareable display link
+    const isBareRoot =
+      (window.location.pathname === '/' || window.location.pathname === '') &&
+      !new URLSearchParams(window.location.search).has('qr');
+    if (isBareRoot) return; // never rewrite the canonical root landing URL "/"
     if (activeTableId && currentTableSession) {
       const table = tables.find((t) => t.id === activeTableId);
       const qrToken = table?.qrToken || readTableBinding()?.qrToken;

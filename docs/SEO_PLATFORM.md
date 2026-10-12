@@ -39,8 +39,8 @@ The shipped HTML carries:
 - `<link rel="canonical" href="https://mureehmenu.com/" />`.
 - `<meta name="robots" content="index, follow, max-image-preview:large" />`.
 - Open Graph: `og:type=website`, `og:url`, `og:title`,
-  `og:description`, `og:locale=ar_AR`, `og:image` (1200×630,
-  served via `/api/og?type=platform`).
+  `og:description`, `og:locale=ar_AR`, `og:image` (1200×630 PNG,
+  served directly at `https://mureehmenu.com/og-image.png` with HTTP 200).
 - Twitter: `twitter:card=summary_large_image`, `twitter:title`,
   `twitter:description`, `twitter:image`.
 
@@ -98,34 +98,32 @@ What we **never** disallow:
 - `/assets/*`, `/uploads/*` — required for Google to render the
   page and to see images.
 
-## OG image redirector (`/api/og`)
+## Social Preview Image (`/og-image.png` and `/api/og`)
 
-`/api/og?type=platform` answers with a **302 redirect** to the
-platform OG image (`/favicon.svg` today; a dedicated 1200×630 social
-PNG will replace it when one ships). 302 (temporary) on purpose — a
-future redesign of the social card must not require invalidating a
-CDN cache of a pre-rendered PNG.
+`index.html` declares `https://mureehmenu.com/og-image.png` directly in
+`og:image` and `twitter:image` (a real 1200×630 PNG in `public/og-image.png`
+served with HTTP 200 and zero redirect hops).
 
-### Status: placeholder, not production-quality
+`/api/og?type=platform` also serves the exact same `public/og-image.png`
+bytes directly with **HTTP 200 (`Content-Type: image/png`)** and
+`X-Robots-Tag: noindex` (rather than a 302 redirect) so crawlers and
+Google Search Console never classify `/api/og?type=platform` under
+"Page with redirect" (`صفحة تتضمن إعادة توجيه`).
 
-The current OG image is `/favicon.svg` (the platform logo, square
-viewBox 0 0 200 200). It is **reachable**, served at an absolute
-URL, and the redirect chain (`/api/og?type=platform` →
-`/favicon.svg`) is correct. However, it is **not** a real social
-preview, and social platforms will render a small icon rather than
-a wide card.
+## Canonical URL Normalisation (`handleCanonicalRedirect`)
 
-A dedicated 1200×630 PNG social image must replace this placeholder
-before launch. The redirector's `DEFAULT_PLATFORM_OG` constant is
-the single edit point — change the path there, ship the PNG in
-`public/`, and every page that references `og:image` (the homepage
-today, plus any future platform surface) picks it up automatically.
+`server/seo/platformSeo.ts` exports `handleCanonicalRedirect`, mounted
+before the SEO and static handlers in `server/index.ts`:
 
-The endpoint always sets `X-Robots-Tag: noindex`. It whitelists only
-the `type=platform` value — any other value is silently rewritten to
-the platform default. No per-venue `type=restaurant` exists at this
-origin; that concern belongs to the SPA, which already handles its
-own per-venue social metadata.
+- Requests to `/index.html` are permanently redirected (`301`) to `/`
+  so `/index.html` is never indexed as a duplicate of `/`.
+- In production, requests arriving on `www.mureehmenu.com` or a
+  `*.onrender.com` service hostname are permanently redirected (`301`)
+  in a single hop to `https://mureehmenu.com/`, keeping the live host
+  aligned with `<link rel="canonical" href="https://mureehmenu.com/" />`
+  and `sitemap.xml`.
+- Direct requests to `https://mureehmenu.com/` always answer with
+  **HTTP 200 OK** (never a redirect).
 
 ## Deployment
 

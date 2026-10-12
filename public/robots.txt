@@ -11,12 +11,18 @@ Allow: /
 
 # Table-session capability URLs. Every parameter below carries (or accompanies)
 # a per-table secret that authorises ordering on that table for a limited time,
-# so these URLs must never be crawled, cached or indexed.
+# so these URLs must never be crawled, cached or indexed. Each parameter is
+# listed for both "?" (first query parameter) and "&" (subsequent parameter).
 Disallow: /*?qr=
+Disallow: /*&qr=
 Disallow: /*?sessionToken=
+Disallow: /*&sessionToken=
 Disallow: /*?table=
+Disallow: /*&table=
 Disallow: /*?tableId=
+Disallow: /*&tableId=
 Disallow: /*?t=
+Disallow: /*&t=
 
 # /api/* is intentionally NOT disallowed: Googlebot must stay able to fetch it
 # while rendering the SPA (blocking it would break rendering of JS-driven
