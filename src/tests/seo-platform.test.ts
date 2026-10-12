@@ -290,6 +290,17 @@ describe('canonical URL and redirect normalisation (handleCanonicalRedirect)', (
     }
   });
 
+  it('readPublicOrigin normalises http://, www., localhost and *.onrender.com to https://mureehmenu.com so /sitemap.xml never lists a redirecting URL', async () => {
+    const { readPublicOrigin } = await import('../../server/seo/platformSeo');
+    expect(readPublicOrigin(undefined)).toBe(ORIGIN);
+    expect(readPublicOrigin('http://mureehmenu.com')).toBe(ORIGIN);
+    expect(readPublicOrigin('http://mureehmenu.com/')).toBe(ORIGIN);
+    expect(readPublicOrigin('https://www.mureehmenu.com')).toBe(ORIGIN);
+    expect(readPublicOrigin('https://www.mureehmenu.com/')).toBe(ORIGIN);
+    expect(readPublicOrigin('https://restaurantsmureeh-2.onrender.com')).toBe(ORIGIN);
+    expect(readPublicOrigin('http://localhost:3001')).toBe(ORIGIN);
+  });
+
   it('handlePlatformOgImage responds with 200 image/png and X-Robots-Tag: noindex', async () => {
     const { handlePlatformOgImage } = await import('../../server/seo/ogImage');
     const headers: Record<string, string> = {};

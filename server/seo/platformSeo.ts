@@ -51,10 +51,33 @@ import type { NextFunction, Request, Response } from 'express';
  */
 const PRODUCTION_ORIGIN = 'https://mureehmenu.com';
 
-export function readPublicOrigin(): string {
-  const raw = process.env.APP_URL?.replace(/\/+$/, '');
-  if (raw && /^https?:\/\//i.test(raw)) return raw;
-  return PRODUCTION_ORIGIN;
+export function readPublicOrigin(envUrl: string | undefined = process.env.APP_URL): string {
+  const raw = envUrl?.trim().replace(/\/+$/, '');
+  if (!raw || !/^https?:\/\//i.test(raw)) return PRODUCTION_ORIGIN;
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    // Never let localhost, preview/service hosts, HTTP, or the www alias
+    // override the canonical origin — emitting http://mureehmenu.com/,
+    // https://www.mureehmenu.com/ or https://*.onrender.com/ in /sitemap.xml
+    // causes Google Search Console to reject the sitemap URL with
+    // "Page with redirect" ("صفحة تتضمن إعادة توجيه").
+    if (
+      parsed.protocol !== 'https:' ||
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === 'mureehmenu.com' ||
+      host === 'www.mureehmenu.com' ||
+      host.endsWith('.onrender.com') ||
+      host.endsWith('.vercel.app') ||
+      host.endsWith('.netlify.app')
+    ) {
+      return PRODUCTION_ORIGIN;
+    }
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return PRODUCTION_ORIGIN;
+  }
 }
 
 export const PUBLIC_ORIGIN: string = readPublicOrigin();
