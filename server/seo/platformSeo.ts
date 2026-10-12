@@ -38,7 +38,7 @@
  * script, and the production handler alike.
  */
 
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 // =====================================================================
 // ORIGIN + PUBLIC URL HELPERS
@@ -51,10 +51,33 @@ import type { Request, Response } from 'express';
  */
 const PRODUCTION_ORIGIN = 'https://mureehmenu.com';
 
-export function readPublicOrigin(): string {
-  const raw = process.env.APP_URL?.replace(/\/+$/, '');
-  if (raw && /^https?:\/\//i.test(raw)) return raw;
-  return PRODUCTION_ORIGIN;
+export function readPublicOrigin(envUrl: string | undefined = process.env.APP_URL): string {
+  const raw = envUrl?.trim().replace(/\/+$/, '');
+  if (!raw || !/^https?:\/\//i.test(raw)) return PRODUCTION_ORIGIN;
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    // Never let localhost, preview/service hosts, HTTP, or the www alias
+    // override the canonical origin — emitting http://mureehmenu.com/,
+    // https://www.mureehmenu.com/ or https://*.onrender.com/ in /sitemap.xml
+    // causes Google Search Console to reject the sitemap URL with
+    // "Page with redirect" ("صفحة تتضمن إعادة توجيه").
+    if (
+      parsed.protocol !== 'https:' ||
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === 'mureehmenu.com' ||
+      host === 'www.mureehmenu.com' ||
+      host.endsWith('.onrender.com') ||
+      host.endsWith('.vercel.app') ||
+      host.endsWith('.netlify.app')
+    ) {
+      return PRODUCTION_ORIGIN;
+    }
+    return `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    return PRODUCTION_ORIGIN;
+  }
 }
 
 export const PUBLIC_ORIGIN: string = readPublicOrigin();
@@ -62,6 +85,65 @@ export const PUBLIC_ORIGIN: string = readPublicOrigin();
 export function canonicalUrl(pathname: string): string {
   const cleanPath = pathname.startsWith('/') ? pathname : `/${pathname}`;
   return `${PUBLIC_ORIGIN}${cleanPath}`;
+}
+
+const CANONICAL_HOST = (() => {
+  try {
+    return new URL(PUBLIC_ORIGIN).host.toLowerCase();
+  } catch {
+    return 'mureehmenu.com';
+  }
+})();
+
+/**
+ * Canonical URL normaliser for page requests:
+ *   1. `/index.html` → `301` to `/` (so `/index.html` is never indexed as a
+ *      duplicate of `/` or left out of sync with `<link rel="canonical">`).
+ *   2. In production, requests arriving on `www.<canonicalHost>` or a
+ *      `*.onrender.com` service alias redirect (`301`) in a single hop to
+ *      `${PUBLIC_ORIGIN}${cleanPath}${query}` so the live response origin
+ *      always matches the hardcoded canonical (`https://mureehmenu.com/`).
+ *
+ * `/api/*` and `/uploads/*` are never redirected so health checks, keep-alive
+ * probes and API calls work regardless of host.
+ */
+export function handleCanonicalRedirect(req: Request, res: Response, next: NextFunction): void {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    next();
+    return;
+  }
+  if (req.path.startsWith('/api/') || req.path === '/api' || req.path.startsWith('/uploads/') || req.path === '/uploads') {
+    next();
+    return;
+  }
+
+  const rawUrl = req.originalUrl || req.url || '/';
+  const qIndex = rawUrl.indexOf('?');
+  const querySuffix = qIndex === -1 ? '' : rawUrl.slice(qIndex);
+  const isIndexHtml = req.path === '/index.html';
+  const targetPath = isIndexHtml ? '/' : req.path;
+
+  const isProdEnv = process.env.NODE_ENV === 'production';
+  const host = String(req.hostname ?? '').toLowerCase();
+  const isAliasHost =
+    isProdEnv &&
+    Boolean(host) &&
+    host !== CANONICAL_HOST &&
+    (host === `www.${CANONICAL_HOST}` || /\.onrender\.com$/.test(host));
+
+  if (isAliasHost) {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.redirect(301, `${PUBLIC_ORIGIN}${targetPath}${querySuffix}`);
+    return;
+  }
+
+  if (isIndexHtml) {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.redirect(301, `/${querySuffix}`);
+    return;
+  }
+
+  next();
 }
 
 // =====================================================================
@@ -154,12 +236,18 @@ Allow: /
 
 # Table-session capability URLs. Every parameter below carries (or accompanies)
 # a per-table secret that authorises ordering on that table for a limited time,
-# so these URLs must never be crawled, cached or indexed.
+# so these URLs must never be crawled, cached or indexed. Each parameter is
+# listed for both "?" (first query parameter) and "&" (subsequent parameter).
 Disallow: /*?qr=
+Disallow: /*&qr=
 Disallow: /*?sessionToken=
+Disallow: /*&sessionToken=
 Disallow: /*?table=
+Disallow: /*&table=
 Disallow: /*?tableId=
+Disallow: /*&tableId=
 Disallow: /*?t=
+Disallow: /*&t=
 
 # /api/* is intentionally NOT disallowed: Googlebot must stay able to fetch it
 # while rendering the SPA (blocking it would break rendering of JS-driven

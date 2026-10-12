@@ -53,18 +53,33 @@ describe('index.html — platform metadata', () => {
     expect(indexHtml).not.toMatch(/rel="canonical" href="[^"]*(localhost|127\.0\.0\.1|onrender\.com)/);
   });
 
-  it('exposes crawl directives plus Open Graph / Twitter cards with a real social image', () => {
+  it('exposes crawl directives plus Open Graph / Twitter cards with a direct static social image (no redirect URL)', () => {
     expect(indexHtml).toContain('<meta name="robots" content="index, follow, max-image-preview:large" />');
     expect(indexHtml).toContain('<meta property="og:type" content="website" />');
     expect(indexHtml).toContain(`<meta property="og:url" content="${ORIGIN}/" />`);
     expect(indexHtml).toMatch(/<meta property="og:title" content="[^"]+" \/>/);
     expect(indexHtml).toMatch(/<meta property="og:description" content="[^"]+" \/>/);
-    // OG image must point at a stable URL on the platform origin
-    // (the dynamic /api/og redirector is fine).
-    expect(indexHtml).toMatch(/<meta property="og:image" content="https:\/\/mureehmenu\.com\/[^"]+" \/>/);
+    // OG and Twitter images must point directly at the static 1200x630 PNG
+    // (never a /api/og redirect endpoint, which causes Google Search Console
+    // to report "Page with redirect" / "صفحة تتضمن إعادة توجيه").
+    expect(indexHtml).toContain(`<meta property="og:image" content="${ORIGIN}/og-image.png" />`);
+    expect(indexHtml).toContain(`<meta name="twitter:image" content="${ORIGIN}/og-image.png" />`);
+    expect(indexHtml).not.toContain('/api/og');
+    expect(indexHtml).toContain('<meta property="og:image:type" content="image/png" />');
     expect(indexHtml).toContain('<meta property="og:image:width" content="1200" />');
     expect(indexHtml).toContain('<meta property="og:image:height" content="630" />');
     expect(indexHtml).toMatch(/<meta name="twitter:card" content="(summary|summary_large_image)" \/>/);
+  });
+
+  it('ships a valid 1200x630 PNG social card in public/og-image.png matching the declared dimensions', () => {
+    const ogPngPath = filePath('../../public/og-image.png');
+    expect(existsSync(ogPngPath)).toBe(true);
+    const bytes = readFileSync(ogPngPath);
+    // PNG magic header
+    expect(bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true);
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    expect([width, height]).toEqual([1200, 630]);
   });
 });
 
@@ -191,7 +206,7 @@ describe('server/seo/platformSeo.ts — platform-only engine', () => {
   });
 });
 
-describe('server/seo/ogImage.ts — platform-only redirector', () => {
+describe('server/seo/ogImage.ts — platform-only OG image endpoint', () => {
   it('whitelists only the `platform` type', () => {
     expect(ogImageSource).toContain('ALLOWED_TYPES');
     expect(ogImageSource).toContain("'platform'");
@@ -199,9 +214,118 @@ describe('server/seo/ogImage.ts — platform-only redirector', () => {
     expect(ogImageSource).not.toMatch(/'restaurant'/);
   });
 
-  it('always returns a 302 redirect and sets X-Robots-Tag: noindex', () => {
-    expect(ogImageSource).toContain("res.redirect(302");
+  it('serves the PNG directly with HTTP 200 and X-Robots-Tag: noindex (no 302 redirect)', () => {
+    expect(ogImageSource).toContain("res.status(200)");
+    expect(ogImageSource).toContain("res.setHeader('Content-Type', 'image/png')");
     expect(ogImageSource).toContain("res.setHeader('X-Robots-Tag', 'noindex')");
+    expect(ogImageSource).not.toContain('res.redirect(');
+  });
+});
+
+describe('canonical URL and redirect normalisation (handleCanonicalRedirect)', () => {
+  it('leaves the canonical homepage "/" as a direct 200 route (no redirect)', async () => {
+    const { handleCanonicalRedirect } = await import('../../server/seo/platformSeo');
+    let nextCalled = false;
+    let redirectedStatus = 0;
+    const req: any = {
+      method: 'GET',
+      path: '/',
+      originalUrl: '/',
+      hostname: 'mureehmenu.com',
+    };
+    const res: any = {
+      setHeader: () => {},
+      redirect: (status: number) => {
+        redirectedStatus = status;
+      },
+    };
+    handleCanonicalRedirect(req, res, () => {
+      nextCalled = true;
+    });
+    expect(nextCalled).toBe(true);
+    expect(redirectedStatus).toBe(0);
+  });
+
+  it('redirects /index.html to / with 301 so it is never indexed as a duplicate page', async () => {
+    const { handleCanonicalRedirect } = await import('../../server/seo/platformSeo');
+    let redirectCall: { status: number; target: string } | null = null;
+    const req: any = {
+      method: 'GET',
+      path: '/index.html',
+      originalUrl: '/index.html',
+      hostname: 'mureehmenu.com',
+    };
+    const res: any = {
+      setHeader: () => {},
+      redirect: (status: number, target: string) => {
+        redirectCall = { status, target };
+      },
+    };
+    handleCanonicalRedirect(req, res, () => {});
+    expect(redirectCall).toEqual({ status: 301, target: '/' });
+  });
+
+  it('redirects www.mureehmenu.com and *.onrender.com aliases in a single 301 hop in production', async () => {
+    const { handleCanonicalRedirect } = await import('../../server/seo/platformSeo');
+    const prevEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      let redirectCall: { status: number; target: string } | null = null;
+      const req: any = {
+        method: 'GET',
+        path: '/index.html',
+        originalUrl: '/index.html',
+        hostname: 'www.mureehmenu.com',
+      };
+      const res: any = {
+        setHeader: () => {},
+        redirect: (status: number, target: string) => {
+          redirectCall = { status, target };
+        },
+      };
+      handleCanonicalRedirect(req, res, () => {});
+      expect(redirectCall).toEqual({ status: 301, target: `${ORIGIN}/` });
+    } finally {
+      process.env.NODE_ENV = prevEnv;
+    }
+  });
+
+  it('readPublicOrigin normalises http://, www., localhost and *.onrender.com to https://mureehmenu.com so /sitemap.xml never lists a redirecting URL', async () => {
+    const { readPublicOrigin } = await import('../../server/seo/platformSeo');
+    expect(readPublicOrigin(undefined)).toBe(ORIGIN);
+    expect(readPublicOrigin('http://mureehmenu.com')).toBe(ORIGIN);
+    expect(readPublicOrigin('http://mureehmenu.com/')).toBe(ORIGIN);
+    expect(readPublicOrigin('https://www.mureehmenu.com')).toBe(ORIGIN);
+    expect(readPublicOrigin('https://www.mureehmenu.com/')).toBe(ORIGIN);
+    expect(readPublicOrigin('https://restaurantsmureeh-2.onrender.com')).toBe(ORIGIN);
+    expect(readPublicOrigin('http://localhost:3001')).toBe(ORIGIN);
+  });
+
+  it('handlePlatformOgImage responds with 200 image/png and X-Robots-Tag: noindex', async () => {
+    const { handlePlatformOgImage } = await import('../../server/seo/ogImage');
+    const headers: Record<string, string> = {};
+    let statusCode = 0;
+    let body: unknown = null;
+    const req: any = { query: { type: 'platform' } };
+    const res: any = {
+      setHeader: (k: string, v: string) => {
+        headers[k.toLowerCase()] = v;
+      },
+      status: (code: number) => {
+        statusCode = code;
+        return res;
+      },
+      send: (payload: unknown) => {
+        body = payload;
+        return res;
+      },
+      end: () => res,
+    };
+    handlePlatformOgImage(req, res);
+    expect(statusCode).toBe(200);
+    expect(headers['content-type']).toBe('image/png');
+    expect(headers['x-robots-tag']).toBe('noindex');
+    expect(Buffer.isBuffer(body)).toBe(true);
   });
 });
 
@@ -239,12 +363,13 @@ describe('public/robots.txt', () => {
     expect(robots).toContain(`Sitemap: ${ORIGIN}/sitemap.xml`);
   });
 
-  it('keeps table-session capability URLs out of the index', () => {
-    expect(robots).toContain('Disallow: /*?qr=');
-    expect(robots).toContain('Disallow: /*?sessionToken=');
-    expect(robots).toContain('Disallow: /*?table=');
-    expect(robots).toContain('Disallow: /*?tableId=');
-    expect(robots).toContain('Disallow: /*?t=');
+  it('keeps table-session capability URLs out of the index in any query position', async () => {
+    for (const key of ['qr', 'sessionToken', 'table', 'tableId', 't']) {
+      expect(robots).toContain(`Disallow: /*?${key}=`);
+      expect(robots).toContain(`Disallow: /*&${key}=`);
+    }
+    const { buildRobotsTxt } = await import('../../server/seo/platformSeo');
+    expect(buildRobotsTxt()).toBe(robots);
   });
 
   it('never disallows the whole site or the assets Googlebot needs to render', () => {

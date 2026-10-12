@@ -14,6 +14,16 @@
   to = "/robots.txt"
   status = 200
 
+[[redirects]]
+  from = "/og-image.png"
+  to = "/og-image.png"
+  status = 200
+
+[[redirects]]
+  from = "/favicon.svg"
+  to = "/favicon.svg"
+  status = 200
+
 # SPA fallback for every other extension-less app route. Status 200
 # (rewrite, not redirect) so the URL bar stays clean.
 [[redirects]]
