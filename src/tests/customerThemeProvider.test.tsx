@@ -29,7 +29,12 @@ import {
   buildCustomerThemeStyle,
   ALL_SEMANTIC_TOKEN_NAMES,
 } from '../theme/semanticTokens';
-import { applyEffectiveTheme, contrastRatio, parseColor } from '../theme/brandTheme';
+import {
+  applyEffectiveTheme,
+  buildBrandTokens,
+  contrastRatio,
+  parseColor,
+} from '../theme/brandTheme';
 import { CustomerThemeProvider } from '../theme/CustomerThemeProvider';
 import type { EffectiveTheme } from '../types/restaurant';
 
@@ -96,38 +101,32 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('semantic equivalence — new pipeline matches the legacy engine', () => {
-  /** The visual properties that must agree, by legacy alias name. */
-  const SEMANTIC_KEYS = [
-    '--theme-bg',
-    '--theme-surface',
-    '--theme-text-primary',
-    '--theme-text-secondary',
-    '--theme-border',
-    '--brand-primary',
-    '--brand-accent',
-    '--brand-primary-strong',
-    '--brand-accent-strong',
-    '--brand-fill',
-    '--brand-ink',
-    '--brand-muted',
-    '--radius-sm',
-    '--radius-md',
-    '--radius-lg',
-    '--shadow-md',
-    '--card-radius',
-    '--card-shadow',
-    '--font-family',
-    '--font-heading-weight',
-    '--font-body-weight',
-    '--bg-current',
-    '--bg-scrim',
-  ];
+  /**
+   * The visual properties that must agree. The legacy writer
+   * (applyEffectiveTheme) still emits the server-contract keys
+   * (--theme-*, --radius-*, …); the canonical pipeline emits the
+   * SAME derivations under --m-* names. Brand derivations are
+   * compared against buildBrandTokens directly — the one math
+   * both sides share.
+   */
+  const CONTRACT_KEY_MAP: Record<string, string> = {
+    '--theme-bg': '--m-bg',
+    '--radius-sm': '--m-radius-sm',
+    '--radius-md': '--m-radius-md',
+    '--radius-lg': '--m-radius-lg',
+    '--shadow-md': '--m-shadow-md',
+    '--card-radius': '--m-card-radius',
+    '--card-shadow': '--m-card-shadow',
+    '--font-family': '--m-font',
+    '--font-heading-weight': '--m-font-heading-weight',
+    '--font-body-weight': '--m-font-body-weight',
+  };
 
   const legacyOutput = (theme: EffectiveTheme, prefersDark: boolean): Record<string, string> => {
     document.documentElement.removeAttribute('style');
     applyEffectiveTheme(theme, null, { prefersDark });
     const out: Record<string, string> = {};
-    for (const key of SEMANTIC_KEYS) {
+    for (const key of Object.keys(CONTRACT_KEY_MAP)) {
       out[key] = document.documentElement.style.getPropertyValue(key);
     }
     return out;
@@ -147,8 +146,37 @@ describe('semantic equivalence — new pipeline matches the legacy engine', () =
       const surfaceMode = mode === 'auto' ? (prefersDark ? 'dark' : 'light') : mode;
       const next = buildCustomerThemeStyle(normalized, surfaceMode);
 
-      for (const key of SEMANTIC_KEYS) {
-        expect(next[key], `${key} must match the legacy engine in ${label}`).toBe(legacy[key]);
+      for (const [legacyKey, canonicalKey] of Object.entries(CONTRACT_KEY_MAP)) {
+        expect(next[canonicalKey], `${canonicalKey} must match ${legacyKey} in ${label}`).toBe(
+          legacy[legacyKey]
+        );
+      }
+
+      // Brand derivations — the same buildBrandTokens math both
+      // engines share, under the canonical names.
+      const brand = buildBrandTokens(
+        theme.colors.primary,
+        theme.colors.accent,
+        surfaceMode
+      );
+      const brandExpectations: Record<string, string> = {
+        '--m-brand': brand.primary,
+        '--m-brand-accent': brand.accent,
+        '--m-brand-on-surface': brand.primaryStrong,
+        '--m-brand-accent-on-surface': brand.accentStrong,
+        '--m-brand-fill': brand.fill,
+        '--m-brand-ink': brand.ink,
+        '--m-text-subtle': brand.muted,
+        '--m-brand-soft': brand.soft,
+        '--m-brand-soft-strong': brand.softStrong,
+        '--m-brand-line': brand.line,
+        '--m-hairline-strong': brand.lineStrong,
+        '--m-brand-glow': brand.glow,
+      };
+      for (const [canonicalKey, expected] of Object.entries(brandExpectations)) {
+        expect(next[canonicalKey], `${canonicalKey} must match the brand engine in ${label}`).toBe(
+          expected
+        );
       }
     });
   }
@@ -355,14 +383,19 @@ describe('CustomerThemeProvider — DOM behaviour', () => {
     expect(scope.getAttribute('data-appearance')).toBe('dark');
   });
 
-  it('emits the legacy aliases so unmigrated components keep working', () => {
+  it('emits NO legacy family — the migration bridge is deleted', () => {
     const scope = renderScope(
       <CustomerThemeProvider restaurant={{ theme: effectiveTheme() }}>
         <span>menu</span>
       </CustomerThemeProvider>
     );
-    for (const alias of ['--brand-primary', '--theme-bg', '--menu-surface', '--card-radius']) {
-      expect(scope.style.getPropertyValue(alias), `${alias} alias must be emitted`).not.toBe('');
+    // Every custom property on the scope must be canonical.
+    for (let i = 0; i < scope.style.length; i++) {
+      const name = scope.style.item(i);
+      expect(
+        name.startsWith('--brand-') || name.startsWith('--menu-'),
+        `${name} is a retired legacy family`
+      ).toBe(false);
     }
   });
 });

@@ -48,7 +48,9 @@ describe('every kitchen-facing surface derives from the payment gate', () => {
       'orders.filter((order) => isOrderOperational(order) || order.status === \'CANCELLED\')'
     );
     // …and the grid/filters/counts all read that set, never the raw list.
-    expect(orderManagement).toContain('return gateVisibleOrders.filter((order) => {');
+    // (The filter may sit inside a ranking helper — what matters is
+    // that the gate-released set is the input, not the raw order list.)
+    expect(orderManagement).toContain('gateVisibleOrders.filter((order) => {');
     expect(orderManagement).toContain('ALL: gateVisibleOrders.length');
     expect(orderManagement).toContain("PENDING: gateVisibleOrders.filter((o) => o.status === 'PENDING').length");
   });

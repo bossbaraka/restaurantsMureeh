@@ -31,7 +31,6 @@ import {
   type GuestAppearanceOverride,
 } from '../theme/guestAppearance';
 import { PLATFORM_APPEARANCE_STORAGE_KEY } from '../theme/PlatformAppearanceProvider';
-import { BRAND_THEME_STORAGE_KEY } from '../theme/brandTheme';
 import { CustomerModeToggle } from '../components/customer/CustomerModeToggle';
 import type { EffectiveTheme } from '../types/restaurant';
 import { readFileSync } from 'node:fs';
@@ -143,10 +142,11 @@ describe('guest override storage', () => {
     expect(readGuestAppearanceOverride()).toBe('auto');
   });
 
-  it('never touches the platform or brand-cache keys', () => {
+  it('never touches the platform key', () => {
     writeGuestAppearanceOverride('light');
     expect(window.localStorage.getItem(PLATFORM_APPEARANCE_STORAGE_KEY)).toBeNull();
-    expect(window.localStorage.getItem(BRAND_THEME_STORAGE_KEY)).toBeNull();
+    // (The brand-theme cache key no longer exists — deleted with the
+    // --brand-* family; first paint belongs to CustomerThemeProvider.)
   });
 
   it('degrades invalid stored values to auto', () => {
@@ -235,8 +235,8 @@ describe('provider applies the guest override through the single writer', () => 
     );
     // Surface and text tokens genuinely invert between the two faces —
     // the toggle drives the SAME token pipeline, so everything moves together.
-    const lightSurface = (light as HTMLElement).style.getPropertyValue('--menu-surface');
-    const darkSurface = (dark as HTMLElement).style.getPropertyValue('--menu-surface');
+    const lightSurface = (light as HTMLElement).style.getPropertyValue('--m-surface');
+    const darkSurface = (dark as HTMLElement).style.getPropertyValue('--m-surface');
     expect(lightSurface).not.toBe('');
     expect(lightSurface).not.toBe(darkSurface);
     expect((light as HTMLElement).style.getPropertyValue('--m-text')).not.toBe(

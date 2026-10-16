@@ -218,7 +218,7 @@ export const CustomerHero: React.FC = () => {
                 <div
                   className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-m-surface/90 border backdrop-blur-md text-xs font-bold shadow-lg"
                   style={{
-                    // Brand identity via the resolved --brand-* tokens
+                    // Brand identity via the resolved --m-brand* tokens
                     // (theme-first), not the legacy color columns.
                     borderColor: 'rgb(var(--m-brand-on-surface-rgb) / 0.5)',
                     color: 'var(--m-brand-on-surface)',

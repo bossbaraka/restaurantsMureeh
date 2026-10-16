@@ -545,7 +545,8 @@ const CustomerLayoutContent: React.FC = () => {
       </main>
 
       {/* Customer Footer — White-label: only venue identity. Colours come from
-          the Effective Theme CSS tokens (set on <html> by useEffectiveTheme). */}
+          the Effective Theme CSS tokens (set on the theme scope by
+          CustomerThemeProvider). */}
       <footer
         className="mt-16 border-t py-8 px-4 text-center text-xs bg-transparent"
         style={{

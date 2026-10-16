@@ -169,22 +169,33 @@ describe('contrast — WCAG AA on the pairs the UI actually renders', () => {
   }
 });
 
-describe('compatibility aliases still resolve', () => {
-  it('legacy families remain emitted for unmigrated consumers', () => {
-    const tokens = build('#D4AF37', 'dark');
-    // Phase 4 does not remove aliases; CSS and non-customer code still use them.
-    for (const legacy of ['--brand-primary', '--theme-bg', '--menu-surface']) {
-      expect(tokens[legacy], legacy).toBeTruthy();
+describe('legacy token families are retired', () => {
+  it('emits no --brand-* or --menu-* alias any more', () => {
+    // The migration bridge was deleted with the migration's
+    // completion: one canonical family means one answer to
+    // "what colour is this", never "which family won".
+    for (const mode of ['light', 'dark'] as const) {
+      const t = build('#D4AF37', mode);
+      for (const name of Object.keys(t)) {
+        expect(name.startsWith('--brand-'), `${name} in ${mode}`).toBe(false);
+        expect(name.startsWith('--menu-'), `${name} in ${mode}`).toBe(false);
+      }
     }
   });
 
-  it('aliases agree with the semantic tokens they mirror', () => {
+  it('promotes every former brand derivation into the canonical set', () => {
     for (const mode of ['light', 'dark'] as const) {
       const t = build('#1C64F2', mode);
-      // Same derivation, so they cannot drift.
-      expect(t['--brand-primary-strong']).toBe(t['--m-brand-on-surface']);
-      expect(t['--menu-surface']).toBe(t['--m-surface']);
-      expect(t['--theme-bg']).toBe(t['--m-bg']);
+      for (const name of [
+        '--m-brand-soft',
+        '--m-brand-soft-strong',
+        '--m-brand-line',
+        '--m-brand-fill',
+        '--m-brand-ink',
+        '--m-brand-glow',
+      ]) {
+        expect(t[name], `${name} in ${mode}`).toBeTruthy();
+      }
     }
   });
 });

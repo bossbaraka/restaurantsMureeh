@@ -357,9 +357,11 @@ describe('Theme runtime — tokens reach the DOM', () => {
       expect(written[name], `${name} must be applied`).toBeDefined();
     }
     expect(written['--card-radius']).toBe('22px');
-    // Legacy brand tokens remain applied for backward compatibility
-    expect(written['--brand-primary']).toBeDefined();
-    expect(written['--brand-accent']).toBeDefined();
+    // The legacy --brand-* family is retired: the writer emits
+    // the server contract only; brand derivations live in the
+    // canonical --m-* set built by buildSemanticTokens.
+    expect(written['--brand-primary']).toBeUndefined();
+    expect(written['--brand-accent']).toBeUndefined();
   });
 });
 

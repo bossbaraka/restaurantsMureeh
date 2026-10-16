@@ -88,8 +88,8 @@ export const CustomerHeader: React.FC = () => {
               className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden text-m-bg font-serif font-bold text-xl shadow-[0_0_22px_-6px_var(--m-brand-glow)] shrink-0 border border-m-hairline/60"
               style={{
                 // Identity comes from the resolved theme (theme-first, legacy
-                // fallback) via the --brand-* tokens — never the legacy
-                // columns directly, which drift once a Theme row exists.
+                // fallback) via the canonical --m-brand* tokens — never the
+                // legacy columns directly, which drift once a Theme row exists.
                 background: currentRestaurant?.logo ? 'transparent' : 'var(--m-brand-fill)',
               }}
             >

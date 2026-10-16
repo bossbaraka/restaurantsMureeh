@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   BRAND_FALLBACK,
-  BRAND_VAR_NAMES,
-  applyBrandTheme,
   buildBrandTokens,
   clampLightness,
   contrastRatio,
@@ -136,24 +134,4 @@ describe('buildBrandTokens', () => {
   });
 });
 
-describe('applyBrandTheme', () => {
-  it('writes every brand variable it declares', () => {
-    const written = new Map<string, string>();
-    const fakeStyle = { setProperty: (name: string, value: string) => void written.set(name, value) };
 
-    applyBrandTheme('#0F766E', '#F59E0B', fakeStyle);
-
-    expect(written.size).toBe(BRAND_VAR_NAMES.length);
-    for (const name of BRAND_VAR_NAMES) {
-      expect(written.has(name), `missing css var ${name}`).toBe(true);
-      expect(written.get(name)?.length, `empty css var ${name}`).toBeGreaterThan(0);
-    }
-    expect(written.get('--brand-primary')).toBe('#0F766E');
-    expect(written.get('--brand-ink')).toMatch(/^#(0A0B0D|FFFFFF)$/);
-  });
-
-  it('returns the tokens even without a DOM target', () => {
-    const tokens = applyBrandTheme('#D4AF37', '#C5A880', null);
-    expect(tokens.primary).toBe('#D4AF37');
-  });
-});

@@ -9,7 +9,7 @@
     "start": "tsx server/db/deploy-migrations.ts && tsx server/index.ts",
     "start:server": "tsx server/db/deploy-migrations.ts && tsx server/index.ts",
     "postinstall": "prisma generate",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && tsx server/scripts/prerender.ts",
     "preview": "vite preview",
     "db:migrate": "tsx server/db/deploy-migrations.ts",
     "db:push": "prisma db push",
