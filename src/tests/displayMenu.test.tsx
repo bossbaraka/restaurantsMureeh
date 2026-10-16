@@ -149,7 +149,7 @@ describe('DisplayMenu (read-only signage)', () => {
     expect(html).toContain('--lm-title-face:');
     expect(html).toContain('--lm-ken-burns:');
     // ...and the CSS keeps brand-token fallbacks for the pre-profile paint.
-    expect(cssText).toContain('--lm-brand: var(--brand-primary-strong');
+    expect(cssText).toContain('--lm-brand: var(--m-brand-on-surface');
   });
 
   it('offers no way to order: no cart, no add button, no quantity stepper', () => {
@@ -251,7 +251,7 @@ describe('display menu styles', () => {
     cssRoot.walkRules((rule) => {
       if (!rule.selectors?.some((s) => s.trim() === '.display-menu')) return;
       rule.walkDecls((decl) => {
-        if (decl.value.includes('--brand-')) boardUsesBrand = true;
+        if (decl.value.includes('--m-brand')) boardUsesBrand = true;
       });
     });
     expect(boardUsesBrand).toBe(true);

@@ -9,26 +9,23 @@
  *     → a flat { '--m-…': value } object
  *     → CustomerThemeProvider applies it to ONE scope element
  *
- * WHY A NEW PREFIX
- * ----------------
- * The repository currently carries three overlapping families:
+ * ONE FAMILY ONLY
+ * ---------------
+ * This module used to also emit `buildCompatibilityAliases()`: the
+ * legacy `--brand-*` (tenant identity engine), `--theme-*` (server
+ * wire contract, minus the per-component override groups) and
+ * `--menu-*` (a CSS-side derivation) families, re-emitted from the
+ * same computation so old consumers kept working during migration.
  *
- *   --brand-*  tenant identity + derived surfaces (legacy engine)
- *   --theme-*  the server EffectiveTheme contract
- *   --menu-*   a THIRD derivation, re-computed in CSS from --brand-*
- *
- * The same visual property is reachable through all three, so the rendered
- * result depended on which family happened to be populated. `--m-*` is a new,
- * unambiguous namespace: everything below is canonical, and the legacy names
- * are emitted alongside as ALIASES pointing at the same values.
- *
- * NO BIG-BANG RENAME
- * ------------------
- * `buildCompatibilityAliases()` re-emits the full legacy `--brand-*`,
- * `--theme-*` and `--menu-*` sets. Existing customer components keep working
- * untouched while they migrate one at a time. The aliases are DERIVED FROM the
- * same computation as the semantic tokens, so the two can never drift — and
- * they are deleted only once a lint guard proves no consumer remains.
+ * That migration COMPLETED on 2026-10-16: every consumer now reads
+ * `--m-*` (index.css included), so the alias layer was deleted —
+ * three of the four overlapping families no longer exist, and the
+ * rendered result can no longer depend on which family happened to
+ * be populated. The `--theme-*` / `--button-*` / `--card-*` /
+ * `--badge-*` / `--category-*` names SURVIVE inside
+ * `buildEffectiveThemeVars` on purpose: they are the advanced
+ * editor's explicit-override channel, layered on top of the derived
+ * `--m-*` values by index.css (`var(--theme-text-primary, var(--m-text))`).
  *
  * PURITY CONTRACT
  * ---------------
@@ -73,6 +70,16 @@ export const SEMANTIC_TOKEN_NAMES = {
     '--m-brand-fill',
     '--m-brand-ink',
     '--m-brand-glow',
+    // Brand-tinted surfaces and hairlines. These three completed the
+    // canonical vocabulary on 2026-10-16: until then they existed only
+    // under the legacy `--brand-soft` / `--brand-soft-strong` /
+    // `--brand-line` names, which kept index.css hooked on the old
+    // family. They are mode-aware (brand hue tinted near-black on the
+    // dark canvas, near-white on the light one) and derived here from
+    // the same BrandTokens the aliases used to re-emit.
+    '--m-brand-soft',
+    '--m-brand-soft-strong',
+    '--m-brand-line',
   ],
   surface: [
     '--m-bg',
@@ -434,6 +441,9 @@ export function buildSemanticTokens(
     '--m-brand-fill': brand.fill,
     '--m-brand-ink': brand.ink,
     '--m-brand-glow': brand.glow,
+    '--m-brand-soft': brand.soft,
+    '--m-brand-soft-strong': brand.softStrong,
+    '--m-brand-line': brand.line,
 
     // ---- Surface --------------------------------------------------------
     '--m-bg': themeVars['--theme-bg'],
@@ -529,63 +539,20 @@ export function buildSemanticTokens(
 }
 
 /**
- * COMPATIBILITY ALIASES — temporary, deleted when migration completes.
+ * The complete style payload for the customer scope element.
  *
- * Re-emits every legacy token name (`--brand-*`, `--theme-*`, `--menu-*`,
- * `--bg-*`, `--radius-*`, `--shadow-*`, `--card-*`, `--category-*`, …) so that
- * customer components which have not yet migrated keep rendering byte-
- * identically. Values come from the SAME derivation as the semantic tokens, so
- * an alias can never disagree with its canonical counterpart.
+ * TWO layers, in precedence order:
+ *   1. the server-contract keys (--theme-*, --bg-*, --radius-*,
+ *      --shadow-*, --card-*, --font-*, --button-*, --badge-*,
+ *      --category-*) — the advanced editor's explicit-override
+ *      channel. index.css layers them ON TOP of the derived
+ *      values (`var(--theme-text-primary, var(--m-text))`), so a
+ *      stored tenant scalar must still reach the DOM here.
+ *   2. the canonical `--m-*` semantic tokens, spread second so
+ *      the two families can never collide on a name.
  *
- * Note the `--menu-*` family: `index.css` currently derives it in CSS from
- * `--brand-*`. Emitting it explicitly here means the scope element no longer
- * depends on those `:root` / `[data-theme='light']` CSS blocks being present,
- * which is what allows the theme to be scoped to a subtree in Phase 2.
- */
-export function buildCompatibilityAliases(
-  theme: NormalizedTheme,
-  surfaceMode: SurfaceMode
-): TokenMap {
-  const brand = buildBrandTokens(theme.brand.primary, theme.brand.accent, surfaceMode);
-  const effective = toEffectiveThemeShape(theme);
-  const themeVars = buildEffectiveThemeVars(effective, surfaceMode === 'dark');
-  const surfaces = surfaceTokens(brand, surfaceMode);
-
-  return {
-    // Legacy tenant identity family.
-    '--brand-primary': brand.primary,
-    '--brand-accent': brand.accent,
-    '--brand-primary-rgb': brand.primaryRgb,
-    '--brand-accent-rgb': brand.accentRgb,
-    '--brand-primary-strong': brand.primaryStrong,
-    '--brand-accent-strong': brand.accentStrong,
-    '--brand-primary-strong-rgb': brand.primaryStrongRgb,
-    '--brand-ink': brand.ink,
-    '--brand-fill': brand.fill,
-    '--brand-soft': brand.soft,
-    '--brand-soft-strong': brand.softStrong,
-    '--brand-line': brand.line,
-    '--brand-line-strong': brand.lineStrong,
-    '--brand-glow': brand.glow,
-    '--brand-muted': brand.muted,
-
-    // The CSS-derived menu chrome family, now emitted explicitly so the scope
-    // element is self-sufficient.
-    '--menu-surface': surfaces['--m-surface'],
-    '--menu-surface-raised': surfaces['--m-surface-raised'],
-    '--menu-hairline': surfaces['--m-hairline'],
-    '--menu-text-base': surfaces['--m-text-muted'],
-    '--menu-text-strong': surfaces['--m-text'],
-    '--menu-media-end': surfaces['--m-media-end'],
-
-    // The full server-contract family (--theme-*, --bg-*, --radius-*, … ).
-    ...themeVars,
-  };
-}
-
-/**
- * The complete style payload for the customer scope element: canonical
- * semantic tokens plus the temporary aliases.
+ * The DERIVED legacy families (--brand-*, --menu-*) were deleted
+ * with the migration's completion: every consumer reads `--m-*`.
  *
  * One object, applied once, by one owner.
  */
@@ -593,8 +560,13 @@ export function buildCustomerThemeStyle(
   theme: NormalizedTheme,
   surfaceMode: SurfaceMode
 ): TokenMap {
+  const effective = toEffectiveThemeShape(theme);
+  const themeVars = buildEffectiveThemeVars(
+    effective,
+    surfaceMode === 'dark'
+  );
   return {
-    ...buildCompatibilityAliases(theme, surfaceMode),
+    ...themeVars,
     ...buildSemanticTokens(theme, surfaceMode),
   };
 }

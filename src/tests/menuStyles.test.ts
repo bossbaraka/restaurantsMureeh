@@ -104,16 +104,24 @@ describe('menu grid layout cannot overlap itself', () => {
     expect((rootVars.get('--m-stack-above-header') || []).join(' ')).toBe('0px');
   });
 
-  it('declares a resolved light appearance keyed on data-theme (never "auto")', () => {
+  it('derives the light face in JS — no CSS-side re-derivation keyed on data-theme', () => {
+    // The light surface ladder moved INTO the theme engine
+    // (semanticTokens surfaceTokens), emitted inline per RESOLVED
+    // mode by CustomerThemeProvider. A CSS block keyed on the
+    // legacy attribute selector would be doubly wrong: nothing
+    // writes data-theme in product code any more (dead rule), and
+    // it could not follow the guest override the way the inline
+    // tokens do. Guard: the dead derivation stays deleted.
     const lightBlock = root.nodes.find(
       (node) =>
         node.type === 'rule' &&
-        (node as { selectors?: string[] }).selectors?.some((s) => s.trim() === ":root[data-theme='light']")
+        (node as { selectors?: string[] }).selectors?.some((s) =>
+          s.includes("data-theme='light'")
+        )
     );
-    expect(lightBlock).toBeTruthy();
-    const vars = declarations(":root[data-theme='light']");
-    expect((vars.get('--menu-surface') || []).join(' ')).toContain('color-mix');
-    expect((vars.get('--menu-text-base') || []).join(' ')).toBeTruthy();
+    expect(lightBlock).toBeUndefined();
+    // The resolved-mode contract itself (never the literal "auto")
+    // is pinned by the CustomerThemeProvider suite.
   });
 
   it('renders the theme background through ONE token-consuming layer', () => {
@@ -128,10 +136,10 @@ describe('menu grid layout cannot overlap itself', () => {
 
   it('builds the rail surface from opaque brand tokens', () => {
     const rootVars = declarations(':root');
-    const surface = (rootVars.get('--menu-surface') || []).join(' ');
+    const surface = (rootVars.get('--m-surface') || []).join(' ');
     expect(surface).toContain('color-mix');
     expect(surface).not.toContain('transparent');
-    expect((rootVars.get('--brand-soft') || []).join(' ')).not.toContain('/');
+    expect((rootVars.get('--m-brand-soft') || []).join(' ')).not.toContain('/');
   });
 });
 
@@ -223,7 +231,7 @@ describe('customer menu consumes the Effective Theme tokens', () => {
     // A fixed `rgb(255 255 255 / 0.8)` ring was invisible on the light face.
     // The ring must read the scoped strong-ink token, which inverts per mode.
     const outline = value('.menu-qty button:focus-visible', 'outline');
-    expect(outline).toContain('var(--menu-text-strong');
+    expect(outline).toContain('var(--m-text');
     expect(outline).not.toContain('rgb(255 255 255');
   });
 });

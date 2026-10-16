@@ -31,6 +31,8 @@ import {
   rgbToHsl,
   type EffectiveTheme,
 } from '../theme/brandTheme';
+import { buildSemanticTokens } from '../theme/semanticTokens';
+import { normalizeTheme } from '../theme/normalizeTheme';
 
 const hslOf = (hex: string) => rgbToHsl(parseColor(hex)!);
 
@@ -243,12 +245,14 @@ describe('applyEffectiveTheme — data-theme carries the RESOLVED mode', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 
-  it('re-derives the brand foreground per surface on <html>', () => {
-    applyEffectiveTheme(effectiveTheme({ mode: 'dark', colors: { ...darkServerColors() } as EffectiveTheme['colors'] }), null, { prefersDark: true });
-    const darkStrong = document.documentElement.style.getPropertyValue('--brand-primary-strong');
-
-    applyEffectiveTheme(effectiveTheme({ mode: 'light', colors: { ...darkServerColors() } as EffectiveTheme['colors'] }), null, { prefersDark: false });
-    const lightStrong = document.documentElement.style.getPropertyValue('--brand-primary-strong');
+  it('re-derives the brand foreground per surface', () => {
+    // The canonical pipeline (buildSemanticTokens) owns the
+    // mode-aware derivation now — the legacy <html> writer no
+    // longer emits brand tokens at all.
+    const theme = effectiveTheme({ mode: 'dark', colors: { ...darkServerColors() } as EffectiveTheme['colors'] });
+    const normalized = normalizeTheme({ theme });
+    const darkStrong = buildSemanticTokens(normalized, 'dark')['--m-brand-on-surface'];
+    const lightStrong = buildSemanticTokens(normalized, 'light')['--m-brand-on-surface'];
 
     // Same brand, different contrast role per surface.
     expect(darkStrong).not.toBe(lightStrong);

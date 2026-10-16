@@ -1,4 +1,3 @@
-import { useEffect, useMemo } from 'react';
 import type { EffectiveTheme, ResolvedBackground } from '../types/restaurant';
 
 /**
@@ -51,53 +50,6 @@ export const BRAND_FALLBACK = {
   accent: '#C5A880',
 } as const;
 
-export const BRAND_THEME_STORAGE_KEY = 'merar_brand_theme';
-
-export interface CachedBrandTheme {
-  primary: string;
-  accent: string;
-  presetId?: string;
-  restaurantId?: string;
-  slug?: string;
-}
-
-export function getCachedBrandTheme(): CachedBrandTheme | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(BRAND_THEME_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.primary === 'string' && typeof parsed.accent === 'string') {
-      return parsed;
-    }
-  } catch {}
-  return null;
-}
-
-export function setCachedBrandTheme(theme: CachedBrandTheme): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(BRAND_THEME_STORAGE_KEY, JSON.stringify(theme));
-  } catch {}
-}
-
-export const BRAND_VAR_NAMES = [
-  '--brand-primary',
-  '--brand-accent',
-  '--brand-primary-rgb',
-  '--brand-accent-rgb',
-  '--brand-primary-strong',
-  '--brand-accent-strong',
-  '--brand-primary-strong-rgb',
-  '--brand-ink',
-  '--brand-fill',
-  '--brand-soft',
-  '--brand-soft-strong',
-  '--brand-line',
-  '--brand-line-strong',
-  '--brand-glow',
-  '--brand-muted',
-] as const;
 
 /**
  * The surface the brand palette is painted on. Brand IDENTITY (primary /
@@ -525,7 +477,7 @@ export function buildBrandTokens(
 
   // Derived surfaces. Dark canvas: brand-tinted near-black. Light canvas:
   // brand-tinted near-white (the *-soft inputs themselves flip below through
-  // the same tokens, and index.css re-derives --menu-* from them per mode).
+  // the same tokens; buildSemanticTokens re-derives them per surfaceMode).
   const light = surfaceMode === 'light';
   return {
     primary: primaryHex,
@@ -612,8 +564,9 @@ export function resolveModeAwareColors(
  * Single source of the tenant brand identity used by every surface: the
  * effective theme's colors when the tenant carries one, with the legacy
  * `primaryColor`/`accentColor` columns as the fallback. Components must read
- * identity through this (or the `--brand-*` tokens it paints) — never straight
- * off the legacy columns, which silently diverge once a Theme row exists.
+ * identity through this (or the `--m-brand*` tokens it paints) — never
+ * straight off the legacy columns, which silently diverge once a Theme row
+ * exists.
  */
 export function resolveBrandIdentity(
   restaurant:
@@ -635,7 +588,7 @@ export function resolveBrandIdentity(
 /**
  * Particle-field palette for the QR splash.
  *
- * The canvas API cannot consume `var(--brand-*)`, so the tenant colours are
+ * The canvas API cannot consume `var(--m-brand*)`, so the tenant colours are
  * mixed here into a small luminance ramp. It is derived from
  * `primaryStrong`/`accentStrong` — not the raw brand hexes — so a tenant that
  * picks something as dark as `#111111` still gets a visible particle field
@@ -668,112 +621,8 @@ export function buildSplashPalette(tokens: BrandTokens): SplashPalette {
   };
 }
 
-function tokensToCssVars(tokens: BrandTokens): Record<string, string> {
-  return {
-    '--brand-primary': tokens.primary,
-    '--brand-accent': tokens.accent,
-    '--brand-primary-rgb': tokens.primaryRgb,
-    '--brand-accent-rgb': tokens.accentRgb,
-    '--brand-primary-strong': tokens.primaryStrong,
-    '--brand-accent-strong': tokens.accentStrong,
-    '--brand-primary-strong-rgb': tokens.primaryStrongRgb,
-    '--brand-ink': tokens.ink,
-    '--brand-fill': tokens.fill,
-    '--brand-soft': tokens.soft,
-    '--brand-soft-strong': tokens.softStrong,
-    '--brand-line': tokens.line,
-    '--brand-line-strong': tokens.lineStrong,
-    '--brand-glow': tokens.glow,
-    '--brand-muted': tokens.muted,
-  };
-}
 
-/**
- * Writes the tenant palette onto <html> so every themed class updates at once.
- * Safe to call during render effects and from the server (no-op without DOM).
- */
-export function applyBrandTheme(
-  primary?: string | null,
-  accent?: string | null,
-  styleTarget?: { setProperty(name: string, value: string): void } | null,
-  options?: {
-    presetId?: string;
-    restaurantId?: string;
-    slug?: string;
-    /** Surface the tokens are contrast-adapted to (defaults to the dark canvas). */
-    surfaceMode?: SurfaceMode;
-    /**
-     * Set false for TRANSIENT paints (no server theme loaded yet): the CSS
-     * variables are applied for immediate styling, but nothing is written to
-     * localStorage — a fallback/default palette must never be persisted
-     * before the server theme has arrived to replace it.
-     */
-    persist?: boolean;
-  }
-): BrandTokens {
-  const cached = getCachedBrandTheme();
-  const effectivePrimary = primary || (primary === undefined && cached?.primary) || BRAND_FALLBACK.primary;
-  const effectiveAccent = accent || (accent === undefined && cached?.accent) || BRAND_FALLBACK.accent;
 
-  const tokens = buildBrandTokens(effectivePrimary, effectiveAccent, options?.surfaceMode ?? 'dark');
-  const target =
-    styleTarget ?? (typeof document !== 'undefined' ? document.documentElement.style : null);
-  if (target && typeof target.setProperty === 'function') {
-    const vars = tokensToCssVars(tokens);
-    for (const name of BRAND_VAR_NAMES) {
-      target.setProperty(name, vars[name]);
-    }
-  }
-
-  // Persist to local storage only for REAL colors (a server theme or an
-  // explicit user pick) — never for the fallback palette used while no
-  // server theme has loaded yet.
-  if ((primary || accent) && options?.persist !== false) {
-    setCachedBrandTheme({
-      primary: tokens.primary,
-      accent: tokens.accent,
-      presetId: options?.presetId ?? cached?.presetId,
-      restaurantId: options?.restaurantId ?? cached?.restaurantId,
-      slug: options?.slug ?? cached?.slug,
-    });
-  }
-
-  return tokens;
-}
-
-/**
- * React binding: memoizes the palette for a tenant and keeps <html> in sync.
- * Returns the tokens so components that need inline styles (e.g. `ink` on a
- * brand-filled button) can read them without touching the DOM.
- */
-export function useBrandTheme(
-  primary?: string | null,
-  accent?: string | null,
-  options?: { presetId?: string; restaurantId?: string; slug?: string; surfaceMode?: SurfaceMode }
-): BrandTokens {
-  const cached = useMemo(() => getCachedBrandTheme(), []);
-  const resolvedPrimary = primary || (primary === undefined && cached?.primary) || BRAND_FALLBACK.primary;
-  const resolvedAccent = accent || (accent === undefined && cached?.accent) || BRAND_FALLBACK.accent;
-
-  const tokens = useMemo(
-    () => buildBrandTokens(resolvedPrimary, resolvedAccent, options?.surfaceMode ?? 'dark'),
-    [resolvedPrimary, resolvedAccent, options?.surfaceMode]
-  );
-
-  // LOADING-STATE RULE: while the server theme has not loaded (both props
-  // undefined — UNINITIALIZED), the paint is transient: CSS variables only,
-  // no localStorage write. Only a real (server-provided) theme persists, so
-  // a fresh render can never be stuck on a persisted default.
-  const hasServerTheme = Boolean(primary || accent);
-  useEffect(() => {
-    applyBrandTheme(resolvedPrimary, resolvedAccent, null, {
-      ...options,
-      persist: hasServerTheme,
-    });
-  }, [resolvedPrimary, resolvedAccent, options?.presetId, options?.restaurantId, options?.slug, options?.surfaceMode, hasServerTheme]);
-
-  return tokens;
-}
 
 /**
  * Central Theme — EffectiveTheme -> CSS variables
@@ -926,8 +775,8 @@ export function buildEffectiveThemeVars(
     // Per-component colour groups (colors.button/card/badge/category). These
     // are OPTIONAL overrides: an absent group emits an empty value, which
     // `setProperty` treats as a removal — so the CSS consumers keep their
-    // `var(--token, <current visual>)` fallbacks (the derived --brand-*
-    // palette) until a theme explicitly sets the group.
+    // `var(--token, <current visual>)` fallbacks (the canonical
+    // derived palette) until a theme explicitly sets the group.
     '--button-bg': theme.colors.button?.primaryBg || '',
     '--button-text': theme.colors.button?.primaryText || '',
     '--button-secondary-bg': theme.colors.button?.secondaryBg || '',
@@ -1017,14 +866,6 @@ export function applyEffectiveTheme(
     (target as any).setProperty(k, v);
   }
 
-  // Also apply legacy brand tokens for backward compat — contrast-adapted to
-  // the resolved surface, not always to the dark canvas.
-  const brandTokens = buildBrandTokens(theme.colors.primary, theme.colors.accent, surfaceMode);
-  const brandVars = tokensToCssVars(brandTokens);
-  for (const [k, v] of Object.entries(brandVars)) {
-    (target as any).setProperty(k, v);
-  }
-
   // Set data-theme attribute for CSS selectors (RESOLVED mode, plus the raw
   // configured mode for introspection/debugging).
   if (typeof document !== 'undefined') {
@@ -1036,22 +877,6 @@ export function applyEffectiveTheme(
   }
 }
 
-export function useEffectiveTheme(
-  theme: EffectiveTheme | null | undefined
-): void {
-  useEffect(() => {
-    if (!theme) return;
-    applyEffectiveTheme(theme);
-
-    // Re-apply on system theme change when mode is auto
-    if (theme.mode === 'auto' && typeof window !== 'undefined' && window.matchMedia) {
-      const mq = window.matchMedia('(prefers-color-scheme: dark)');
-      const handler = () => applyEffectiveTheme(theme, null, { prefersDark: mq.matches });
-      mq.addEventListener?.('change', handler);
-      return () => mq.removeEventListener?.('change', handler);
-    }
-  }, [theme]);
-}
 
 /**
  * MODULE-LOAD SIDE EFFECT REMOVED (theme single-writer foundation).
@@ -1066,8 +891,8 @@ export function useEffectiveTheme(
  * platform shell where no tenant theme applies at all.
  *
  * First paint is now owned by `CustomerThemeProvider`, which resolves the mode
- * first and applies tokens to the customer scope only. The cache helpers
- * (`getCachedBrandTheme` / `setCachedBrandTheme`) remain exported for that
- * provider and for backward compatibility; they are data accessors, not
- * writers.
+ * first and applies tokens to the customer scope only. The legacy writer
+ * (applyBrandTheme), its React binding (useBrandTheme) and the localStorage
+ * cache helpers were deleted with the --brand-* family on 2026-10-16: the
+ * canonical --m-* tokens are the only palette channel now.
  */

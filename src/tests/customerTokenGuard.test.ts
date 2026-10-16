@@ -77,8 +77,9 @@ describe('customer layer consumes canonical semantic tokens', () => {
   });
 
   it('no customer component consumes legacy token families', () => {
-    // --brand-* / --theme-* / --menu-* remain defined as compatibility
-    // aliases, but nothing in the customer layer may read them any more.
+    // The --brand-* / --menu-* families are deleted outright; the
+    // --theme-* / per-component names survive only as the advanced
+    // editor's override channel, never as a customer-layer read.
     const offenders = tsxFiles
       .map(
         (f) =>

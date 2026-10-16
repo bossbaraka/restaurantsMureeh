@@ -119,8 +119,9 @@ export interface BackgroundConfig {
 /**
  * Per-component colour groups — the optional `colors.button/card/badge/category`
  * sub-objects of the server contract (validated by `themeColorsSchema`). They
- * are explicit overrides layered on top of the derived `--brand-*` palette and
- * must survive the API → frontend mapping untouched.
+ * are explicit overrides layered on top of the derived canonical palette
+ * (emitted as `--button-*` / `--card-*` / … vars) and must survive the
+ * API → frontend mapping untouched.
  */
 export interface ThemeButtonColors {
   primaryBg?: string;

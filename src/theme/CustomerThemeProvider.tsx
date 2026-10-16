@@ -151,8 +151,9 @@ export interface CustomerThemeProviderProps {
  * The customer theme scope.
  *
  * Renders a single element carrying:
- *   • the canonical `--m-*` semantic tokens
- *   • the temporary legacy aliases (`--brand-*`, `--theme-*`, `--menu-*`, …)
+ *   • the canonical `--m-*` semantic tokens (the only palette
+ *     channel — the legacy `--brand-*` / `--menu-*` families
+ *     were deleted with the migration's completion)
  *   • `data-appearance` = the RESOLVED mode
  *
  * `data-appearance` never holds the literal "auto". A `data-theme="auto"`

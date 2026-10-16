@@ -65,8 +65,8 @@ import { optimizeImageUrl } from './ProductImage';
  * LIGHT / DARK
  * ------------
  * The canvas stays dark on purpose. The tenant palette is DERIVED for a dark
- * surface (`--brand-soft`, `--brand-line`, `--brand-muted`, `--brand-ink` in
- * theme/brandTheme), the menu behind this layer is `#0A0B0D`, and the hand-off
+ * surface (`--m-brand-soft`, `--m-brand-line`, `--m-text-subtle`, `--m-brand-ink`
+ * in theme/brandTheme), the menu behind this layer is `#0A0B0D`, and the hand-off
  * must not flash from one canvas to another. What adapts per restaurant is
  * ATMOSPHERE — hue, glow, metal, depth — which is exactly what the tokens
  * already carry: a bright brand gets a bright room on a dark canvas, it does

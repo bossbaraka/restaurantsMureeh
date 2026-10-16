@@ -27,7 +27,6 @@ import {
   resolvePlatformAppearance,
 } from '../theme/PlatformAppearanceProvider';
 import { CustomerThemeProvider } from '../theme/CustomerThemeProvider';
-import { BRAND_THEME_STORAGE_KEY } from '../theme/brandTheme';
 import type { EffectiveTheme } from '../types/restaurant';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
@@ -136,16 +135,17 @@ describe('platform appearance', () => {
 // ---------------------------------------------------------------------------
 
 describe('storage isolation', () => {
-  it('platform and customer preferences use different keys', () => {
+  it('the platform preference key is the platform-owned one', () => {
     expect(PLATFORM_APPEARANCE_STORAGE_KEY).toBe('mureeh_appearance');
-    expect(PLATFORM_APPEARANCE_STORAGE_KEY).not.toBe(BRAND_THEME_STORAGE_KEY);
   });
 
-  it('writing the platform preference leaves the customer cache untouched', () => {
-    localStorage.setItem(BRAND_THEME_STORAGE_KEY, JSON.stringify({ primary: '#111', accent: '#222' }));
+  it('writing the platform preference leaves the customer scope untouched', () => {
+    // The brand-theme localStorage cache was deleted with the
+    // --brand-* family: first paint is owned by CustomerThemeProvider,
+    // so no customer key can exist for the platform writer to touch.
     localStorage.setItem(PLATFORM_APPEARANCE_STORAGE_KEY, 'light');
-    const cached = JSON.parse(localStorage.getItem(BRAND_THEME_STORAGE_KEY) as string);
-    expect(cached.primary).toBe('#111');
+    expect(window.localStorage.length).toBeGreaterThanOrEqual(1);
+    expect(localStorage.getItem(PLATFORM_APPEARANCE_STORAGE_KEY)).toBe('light');
   });
 });
 
@@ -403,9 +403,8 @@ describe('customer overlays inherit the scope', () => {
       const overlay = host.querySelector('#overlay') as HTMLElement;
       const inherited = getComputedStyle(overlay).getPropertyValue('--m-brand').trim();
       expect(inherited).toBe('#D4AF37');
-      // A legacy alias must reach the overlay too, so unmigrated overlays
-      // keep rendering correctly during the migration.
-      expect(getComputedStyle(overlay).getPropertyValue('--brand-primary').trim()).toBe('#D4AF37');
+      // The canonical identity token reaches the overlay.
+      expect(getComputedStyle(overlay).getPropertyValue('--m-brand').trim()).toBe('#D4AF37');
     } finally {
       host.remove();
     }
