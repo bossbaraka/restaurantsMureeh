@@ -19,6 +19,7 @@ import uploadRoutes from './routes/uploads';
 import { verifyStorageReady, verifyPrivateStorageReady } from './services/storage';
 import { handlePlatformSitemap, handlePlatformRobots, handleCanonicalRedirect } from './seo/platformSeo';
 import { handlePlatformOgImage } from './seo/ogImage';
+import { handlePrerenderedLanding } from './seo/landingPrerender';
 
 /** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
 async function verifyStorageReadyWithRetry(
@@ -275,6 +276,12 @@ app.use(handleCanonicalRedirect);
 app.get('/sitemap.xml', handlePlatformSitemap);
 app.get('/robots.txt', handlePlatformRobots);
 app.get('/api/og', handlePlatformOgImage);
+
+// Landing prerender: the SPA shell alone carries an empty #root, so a
+// crawler that never executes JS saw a blank page. GET / re-emits the
+// shell with the static marketing mirror inside #root (byte-identical
+// to what server/scripts/prerender.ts writes into dist/ at build time).
+app.get('/', handlePrerenderedLanding);
 
 // ============================================================
 // REACT FRONTEND

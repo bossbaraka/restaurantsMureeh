@@ -6,6 +6,10 @@ export default {
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
+    // The landing prerender mirror is a static HTML string inside
+    // this .ts module — its classes must be compiled into the CSS
+    // bundle exactly like the React source's are.
+    "./server/seo/**/*.ts",
   ],
   theme: {
     extend: {
