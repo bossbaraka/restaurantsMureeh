@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { Product, Category } from '../../types/restaurant';
 import { formatPrice } from '../../utils/formatting';
+import { rankByQuery } from '../../utils/arabicSearch';
 import { ProductFormModal } from './ProductFormModal';
 import { PrintMenuModal } from './PrintMenuModal';
 import {
@@ -41,14 +42,17 @@ export const MenuManagement: React.FC = () => {
   const [newCatName, setNewCatName] = useState('');
   const [newCatNameEn, setNewCatNameEn] = useState('');
 
-  const filteredProducts = products.filter((p) => {
-    if (selectedCatId !== 'ALL' && p.categoryId !== selectedCatId) return false;
-    if (searchDish.trim()) {
-      const q = searchDish.toLowerCase().trim();
-      return p.name.toLowerCase().includes(q) || p.nameEn.toLowerCase().includes(q) || p.description.toLowerCase().includes(q);
-    }
-    return true;
-  });
+  // Arabic-aware search with relevance ranking — the dish
+  // whose name is the query itself always tops the list.
+  const filteredProducts = rankByQuery(
+    products.filter((p) => selectedCatId === 'ALL' || p.categoryId === selectedCatId),
+    searchDish,
+    [
+      (p) => p.name,
+      (p) => p.nameEn,
+      (p) => p.description,
+    ],
+  );
 
   const handleOpenAddProduct = () => {
     setEditingProduct(null);

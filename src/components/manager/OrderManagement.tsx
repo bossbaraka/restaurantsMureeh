@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { Order, OrderStatus } from '../../types/restaurant';
 import { escapeHtml, formatPrice, formatTime, formatRelativeMinutes, getOrderStatusConfig, formatTableNumber } from '../../utils/formatting';
+import { rankByQuery } from '../../utils/arabicSearch';
 import { isOrderHeldForPayment, isOrderOperational, isOrderCancellableByStaff, canRoleCancelOrders } from '../../utils/orderLifecycle';
 import { TableAggregationModal } from './TableAggregationModal';
 import {
@@ -77,25 +78,24 @@ export const OrderManagement: React.FC = () => {
 
   // Filter orders
   const filteredOrders = useMemo(() => {
-    return gateVisibleOrders.filter((order) => {
-      // Status filter
-      if (statusFilter !== 'ALL' && order.status !== statusFilter) {
-        return false;
-      }
-      // Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesId = order.id.toLowerCase().includes(q);
-        const matchesTable =
-          order.tableId.toLowerCase().includes(q) ||
-          (order.tableNumber != null && String(order.tableNumber).includes(q)) ||
-          (order.tableName != null && order.tableName.toLowerCase().includes(q)) ||
-          order.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة ').includes(q);
-        const matchesItems = order.items.some((i) => i.productName.toLowerCase().includes(q));
-        return matchesId || matchesTable || matchesItems;
-      }
-      return true;
-    });
+    // Status filter first, then an Arabic-aware ranked
+    // search across id, table and item names — the best
+    // match (exact > prefix > word > substring) leads.
+    return rankByQuery(
+      gateVisibleOrders.filter((order) => {
+        // Status filter
+        return statusFilter === 'ALL' || order.status === statusFilter;
+      }),
+      searchQuery,
+      [
+        (o) => o.id,
+        (o) => o.tableId,
+        (o) => o.tableName ?? null,
+        (o) => (o.tableNumber != null ? String(o.tableNumber) : null),
+        (o) => o.tableId.replace(/^(?:TABLE-|.*-T)/, 'طاولة '),
+        (o) => o.items.map((i) => i.productName).join(' '),
+      ],
+    );
   }, [gateVisibleOrders, statusFilter, searchQuery]);
 
   // Status Counts — over the gate-visible set only. A held order is not a

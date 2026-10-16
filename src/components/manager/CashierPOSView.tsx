@@ -5,6 +5,7 @@ import { isAwaitingGuestPayment } from '../../utils/orderLifecycle';
 import { useAuth } from '../../context/AuthContext';
 import { api, newClientRequestId } from '../../services/api';
 import { escapeHtml, formatPrice, formatTableNumber } from '../../utils/formatting';
+import { rankByQuery } from '../../utils/arabicSearch';
 import {
   PaymentRecord,
   Order,
@@ -133,10 +134,14 @@ export const CashierPOSView: React.FC = () => {
     let list = products;
     if (activeCategory) list = list.filter((p) => p.categoryId === activeCategory);
     if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      list = list.filter(
-        (p) => p.name.toLowerCase().includes(q) || (p.nameEn || '').toLowerCase().includes(q)
-      );
+      // Arabic-aware match + relevance ranking, so the
+      // dish the cashier means is always the first row
+      // (exact name > prefix > word > substring).
+      list = rankByQuery(list, searchQuery, [
+        (p) => p.name,
+        (p) => p.nameEn,
+        (p) => p.description,
+      ]);
     }
     return list.filter((p) => p.isAvailable).slice(0, 60);
   }, [products, activeCategory, searchQuery]);
