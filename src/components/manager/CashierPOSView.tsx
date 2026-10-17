@@ -10,6 +10,9 @@ import {
   PaymentRecord,
   Order,
   OrderItem,
+  Product,
+  ProductSize,
+  ProductAddOn,
 } from '../../types/restaurant';
 import { computeSalesKpis, METHOD_LABELS, ZONE_LABELS } from '../../services/analytics';
 import { PaymentVerificationPanel } from './PaymentVerificationPanel';
@@ -31,14 +34,42 @@ import {
   Store,
   Lock,
   Ban,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface CartLine {
+  lineKey: string;
   productId: string;
   name: string;
   unitPrice: number;
   quantity: number;
   totalPrice: number;
+  selectedSize?: ProductSize;
+  selectedAddOns?: ProductAddOn[];
+  removedIngredients?: string[];
+  specialInstructions?: string;
+}
+
+function buildCartLineKey(
+  productId: string,
+  size?: ProductSize,
+  addOns?: ProductAddOn[],
+  removed?: string[],
+  instructions?: string
+): string {
+  const sizeKey = size?.id || size?.name || '';
+  const addOnsKey = (addOns || []).map((a) => a.id || a.name).sort().join(',');
+  const removedKey = (removed || []).slice().sort().join(',');
+  const noteKey = (instructions || '').trim();
+  return `${productId}::${sizeKey}::${addOnsKey}::${removedKey}::${noteKey}`;
+}
+
+function hasProductCustomizations(product: Product): boolean {
+  return Boolean(
+    (product.sizes && product.sizes.length > 0) ||
+    (product.addOns && product.addOns.some((a) => a.isAvailable !== false)) ||
+    (product.removableIngredients && product.removableIngredients.length > 0)
+  );
 }
 
 const PAY_METHODS = [
@@ -86,9 +117,18 @@ export const CashierPOSView: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const checkoutRequestRef = useRef<{ fingerprint: string; id: string } | null>(null);
 
+  // POS Dish Customization Modal State
+  const [customizingProduct, setCustomizingProduct] = useState<Product | null>(null);
+  const [customSize, setCustomSize] = useState<ProductSize | undefined>(undefined);
+  const [customAddOns, setCustomAddOns] = useState<ProductAddOn[]>([]);
+  const [customRemoved, setCustomRemoved] = useState<string[]>([]);
+  const [customInstructions, setCustomInstructions] = useState<string>('');
+  const [customQty, setCustomQty] = useState<number>(1);
+
   // Checkout dialog and the receipt success dialog: Escape/scroll-lock/focus.
   useDialog({ isOpen: checkoutOpen, onClose: () => setCheckoutOpen(false) });
   useDialog({ isOpen: !!receipt, onClose: () => setReceipt(null) });
+  useDialog({ isOpen: !!customizingProduct, onClose: () => setCustomizingProduct(null) });
 
   // --- Derived data ---
   const branchTables = useMemo(() => {
@@ -163,27 +203,94 @@ export const CashierPOSView: React.FC = () => {
     setCart([]);
   };
 
-  const addToCart = (productId: string) => {
-    const product = products.find((p) => p.id === productId);
-    if (!product) return;
+  const openCustomizationModal = (product: Product) => {
+    setCustomizingProduct(product);
+    setCustomSize(product.sizes && product.sizes.length > 0 ? product.sizes[0] : undefined);
+    setCustomAddOns([]);
+    setCustomRemoved([]);
+    setCustomInstructions('');
+    setCustomQty(1);
+  };
+
+  const insertCartLine = (
+    product: Product,
+    opts?: {
+      quantity?: number;
+      selectedSize?: ProductSize;
+      selectedAddOns?: ProductAddOn[];
+      removedIngredients?: string[];
+      specialInstructions?: string;
+    }
+  ) => {
+    const qty = Math.max(1, opts?.quantity || 1);
+    const size = opts?.selectedSize;
+    const addOns = opts?.selectedAddOns || [];
+    const removed = opts?.removedIngredients || [];
+    const instructions = (opts?.specialInstructions || '').trim() || undefined;
+    const sizeMod = size ? (size.priceModifier ?? size.price ?? 0) : 0;
+    const addOnsMod = addOns.reduce((sum, a) => sum + (a.price || 0), 0);
+    const unitPrice = Math.round((product.price + sizeMod + addOnsMod) * 100) / 100;
+    const lineKey = buildCartLineKey(product.id, size, addOns, removed, instructions);
+
     setCart((prev) => {
-      const existing = prev.find((l) => l.productId === productId);
+      const existing = prev.find((l) => l.lineKey === lineKey);
       if (existing) {
+        const nextQty = existing.quantity + qty;
         return prev.map((l) =>
-          l.productId === productId
-            ? { ...l, quantity: l.quantity + 1, totalPrice: Math.round((l.quantity + 1) * l.unitPrice * 100) / 100 }
+          l.lineKey === lineKey
+            ? {
+                ...l,
+                quantity: nextQty,
+                totalPrice: Math.round(nextQty * l.unitPrice * 100) / 100,
+              }
             : l
         );
       }
-      return [...prev, { productId, name: product.name, unitPrice: product.price, quantity: 1, totalPrice: product.price }];
+      return [
+        ...prev,
+        {
+          lineKey,
+          productId: product.id,
+          name: product.name,
+          unitPrice,
+          quantity: qty,
+          totalPrice: Math.round(qty * unitPrice * 100) / 100,
+          selectedSize: size,
+          selectedAddOns: addOns.length > 0 ? addOns : undefined,
+          removedIngredients: removed.length > 0 ? removed : undefined,
+          specialInstructions: instructions,
+        },
+      ];
     });
   };
 
-  const changeQty = (productId: string, delta: number) => {
+  const addToCart = (productId: string, forceCustomize = false) => {
+    const product = products.find((p) => p.id === productId);
+    if (!product) return;
+    if (forceCustomize || hasProductCustomizations(product)) {
+      openCustomizationModal(product);
+      return;
+    }
+    insertCartLine(product);
+  };
+
+  const handleConfirmCustomizedItem = () => {
+    if (!customizingProduct) return;
+    insertCartLine(customizingProduct, {
+      quantity: customQty,
+      selectedSize: customSize,
+      selectedAddOns: customAddOns,
+      removedIngredients: customRemoved,
+      specialInstructions: customInstructions,
+    });
+    setCustomizingProduct(null);
+  };
+
+  const changeQty = (lineKey: string, delta: number) => {
     setCart((prev) =>
       prev
         .map((l) =>
-          l.productId === productId
+          l.lineKey === lineKey
             ? { ...l, quantity: Math.max(0, l.quantity + delta), totalPrice: Math.round(Math.max(0, l.quantity + delta) * l.unitPrice * 100) / 100 }
             : l
         )
@@ -192,13 +299,19 @@ export const CashierPOSView: React.FC = () => {
   };
 
   const buildOrderItems = (): OrderItem[] =>
-    cart.map((l) => ({
-      id: `pos-item-${Date.now()}-${l.productId}`,
+    cart.map((l, idx) => ({
+      id: `pos-item-${Date.now()}-${idx}-${l.productId}`,
       productId: l.productId,
       productName: l.name,
       unitPrice: l.unitPrice,
       quantity: l.quantity,
       totalPrice: l.totalPrice,
+      selectedSize: l.selectedSize?.name,
+      selectedSizeId: l.selectedSize?.id,
+      selectedAddOnIds: l.selectedAddOns?.map((a) => a.id).filter(Boolean),
+      selectedAddOns: l.selectedAddOns?.map((a) => a.name),
+      removedIngredients: l.removedIngredients,
+      specialInstructions: l.specialInstructions,
     }));
 
   const openCheckout = () => {
@@ -457,8 +570,15 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {activeTableOrders.map((o) => (
                   <div key={o.id} className="bg-luxury-950 rounded-lg p-2 text-[11px]">
-                    <div className="flex justify-between text-luxury-300">
-                      <span className="font-bold font-mono">{o.id}</span>
+                    <div className="flex justify-between items-center text-luxury-300">
+                      <span className="font-bold font-mono flex items-center gap-1.5">
+                        <span>{o.id}</span>
+                        {o.customerName && (
+                          <span className="text-[10px] font-sans font-bold text-gold-300 bg-gold-500/15 px-1.5 py-0.5 rounded">
+                            {o.customerName}
+                          </span>
+                        )}
+                      </span>
                       <span>{formatPrice(o.total || 0)}</span>
                     </div>
                     <div className="text-luxury-500 truncate mt-0.5">
@@ -480,15 +600,31 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
 
             {/* Cart lines */}
             {cart.length > 0 && (
-              <div className="mt-2 border-t border-luxury-800 pt-2 space-y-1">
+              <div className="mt-2 border-t border-luxury-800 pt-2 space-y-1.5">
                 {cart.map((l) => (
-                  <div key={l.productId} className="flex items-center justify-between text-[11px] gap-1">
-                    <span className="text-luxury-200 truncate flex-1">{l.name}</span>
-                    <button onClick={() => changeQty(l.productId, -1)} className="text-luxury-500 hover:text-red-400 cursor-pointer"><Minus className="w-3 h-3" /></button>
-                    <span className="font-bold w-5 text-center">{l.quantity}</span>
-                    <button onClick={() => changeQty(l.productId, 1)} className="text-luxury-500 hover:text-gold-400 cursor-pointer"><Plus className="w-3 h-3" /></button>
-                    <span className="font-mono font-bold text-gold-300 w-14 text-left">{formatPrice(l.totalPrice)}</span>
-                    <button onClick={() => setCart((prev) => prev.filter((x) => x.productId !== l.productId))} className="text-luxury-600 hover:text-red-400 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                  <div key={l.lineKey} className="bg-luxury-950/60 rounded-lg p-1.5 space-y-0.5">
+                    <div className="flex items-center justify-between text-[11px] gap-1">
+                      <span className="text-luxury-200 truncate flex-1 font-medium">{l.name}</span>
+                      <button onClick={() => changeQty(l.lineKey, -1)} className="text-luxury-500 hover:text-red-400 cursor-pointer"><Minus className="w-3 h-3" /></button>
+                      <span className="font-bold w-5 text-center">{l.quantity}</span>
+                      <button onClick={() => changeQty(l.lineKey, 1)} className="text-luxury-500 hover:text-gold-400 cursor-pointer"><Plus className="w-3 h-3" /></button>
+                      <span className="font-mono font-bold text-gold-300 w-14 text-left">{formatPrice(l.totalPrice)}</span>
+                      <button onClick={() => setCart((prev) => prev.filter((x) => x.lineKey !== l.lineKey))} className="text-luxury-600 hover:text-red-400 cursor-pointer"><Trash2 className="w-3 h-3" /></button>
+                    </div>
+                    {(l.selectedSize || (l.selectedAddOns && l.selectedAddOns.length > 0) || (l.removedIngredients && l.removedIngredients.length > 0) || l.specialInstructions) && (
+                      <div className="text-[10px] text-luxury-400 space-y-0.5 pr-1">
+                        {l.selectedSize && <div className="text-gold-400">الحجم: {l.selectedSize.name}</div>}
+                        {l.selectedAddOns && l.selectedAddOns.length > 0 && (
+                          <div className="text-emerald-400">+ {l.selectedAddOns.map((a) => a.name).join('، ')}</div>
+                        )}
+                        {l.removedIngredients && l.removedIngredients.length > 0 && (
+                          <div className="text-red-400">- بدون: {l.removedIngredients.join('، ')}</div>
+                        )}
+                        {l.specialInstructions && (
+                          <div className="text-amber-300 italic">"{l.specialInstructions}"</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -557,22 +693,46 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
           </div>
           <div className="grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-5 gap-2 max-h-[560px] overflow-y-auto pl-1">
             {visibleProducts.map((p) => {
-              const inCart = cart.find((l) => l.productId === p.id);
+              const totalQtyInCart = cart
+                .filter((l) => l.productId === p.id)
+                .reduce((sum, l) => sum + l.quantity, 0);
+              const hasOptions = hasProductCustomizations(p);
               return (
-                <button
+                <div
                   key={p.id}
-                  onClick={() => addToCart(p.id)}
-                  className="relative rounded-xl bg-luxury-950 border border-luxury-800 hover:border-gold-500/60 p-2 text-right transition-colors cursor-pointer group"
+                  className="relative rounded-xl bg-luxury-950 border border-luxury-800 hover:border-gold-500/60 p-2 text-right transition-colors group flex flex-col justify-between"
                 >
-                  <div className="h-14 rounded-lg bg-cover bg-center mb-1.5" style={{ backgroundImage: p.image ? `url(${p.image})` : undefined }} />
-                  <div className="text-[10px] leading-tight text-luxury-200 line-clamp-2 min-h-6">{p.name}</div>
-                  <div className="text-[11px] font-bold text-gold-400 mt-1">{formatPrice(p.price)}</div>
-                  {inCart && (
+                  <button
+                    type="button"
+                    onClick={() => addToCart(p.id)}
+                    className="w-full text-right cursor-pointer"
+                  >
+                    <div className="h-14 rounded-lg bg-cover bg-center mb-1.5" style={{ backgroundImage: p.image ? `url(${p.image})` : undefined }} />
+                    <div className="text-[10px] leading-tight text-luxury-200 line-clamp-2 min-h-6">{p.name}</div>
+                  </button>
+                  <div className="flex items-center justify-between mt-1 pt-1 border-t border-luxury-900">
+                    <span className="text-[11px] font-bold text-gold-400">{formatPrice(p.price)}</span>
+                    <button
+                      type="button"
+                      onClick={() => openCustomizationModal(p)}
+                      title="تخصيص الحجم أو الإضافات أو الملاحظات"
+                      aria-label={`تخصيص ${p.name}`}
+                      className={`p-1 rounded-md border text-[10px] flex items-center gap-0.5 transition-colors cursor-pointer ${
+                        hasOptions
+                          ? 'bg-gold-500/15 border-gold-500/40 text-gold-300 hover:bg-gold-500/25'
+                          : 'bg-luxury-900 border-luxury-800 text-luxury-400 hover:text-luxury-200'
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-3 h-3" />
+                      {hasOptions && <span>خيارات</span>}
+                    </button>
+                  </div>
+                  {totalQtyInCart > 0 && (
                     <span className="absolute top-1.5 left-1.5 bg-gold-500 text-luxury-950 text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                      {inCart.quantity}
+                      {totalQtyInCart}
                     </span>
                   )}
-                </button>
+                </div>
               );
             })}
             {visibleProducts.length === 0 && (
@@ -708,7 +868,14 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                   className="w-full bg-luxury-950 border border-luxury-750 rounded-xl px-3 py-2 text-sm text-luxury-100 outline-none focus:border-gold-500/60 mb-2"
                 />
                 <div className="flex gap-1.5 flex-wrap">
-                  {[50, 100, 200, 500].map((amount) => (
+                  <button
+                    type="button"
+                    onClick={() => setCashReceived(String(grandTotal))}
+                    className="px-2.5 py-1 rounded-lg bg-gold-500/15 border border-gold-500/40 text-[11px] font-bold text-gold-300 hover:bg-gold-500/25 cursor-pointer"
+                  >
+                    مطابق ({formatPrice(grandTotal)})
+                  </button>
+                  {[20, 50, 100, 200, 500].map((amount) => (
                     <button
                       key={amount}
                       onClick={() => setCashReceived(String(amount))}
@@ -803,6 +970,186 @@ ${receipt.changeDue ? `<tr><td>الباقي</td><td style="text-align:left">${es
                 className="bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold py-2.5 rounded-xl text-xs transition-colors cursor-pointer"
               >
                 فاتورة جديدة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ POS DISH CUSTOMIZATION MODAL ============ */}
+      {customizingProduct && (
+        <div className="fixed inset-0 z-[85] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pos-customize-title"
+            className="bg-luxury-900 border border-luxury-750 rounded-2xl w-full max-w-md shadow-2xl p-5 max-h-[90vh] overflow-y-auto space-y-4"
+            dir="rtl"
+          >
+            <div className="flex items-center justify-between border-b border-luxury-800 pb-3">
+              <div>
+                <h3 id="pos-customize-title" className="font-bold text-luxury-50 text-sm">
+                  تخصيص: {customizingProduct.name}
+                </h3>
+                <p className="text-[11px] text-luxury-400">
+                  السعر الأساسي: {formatPrice(customizingProduct.price)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCustomizingProduct(null)}
+                aria-label="إغلاق"
+                className="p-1.5 text-luxury-400 hover:text-luxury-100 rounded-lg hover:bg-luxury-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Sizes */}
+            {customizingProduct.sizes && customizingProduct.sizes.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-luxury-200 block">اختر الحجم:</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {customizingProduct.sizes.map((s) => {
+                    const active = (customSize?.id || customSize?.name) === (s.id || s.name);
+                    const mod = s.priceModifier ?? s.price ?? 0;
+                    return (
+                      <button
+                        key={s.id || s.name}
+                        type="button"
+                        onClick={() => setCustomSize(s)}
+                        className={`p-2.5 rounded-xl border text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-gold-500/20 border-gold-400 text-gold-300'
+                            : 'bg-luxury-950 border-luxury-800 text-luxury-300 hover:border-gold-500/40'
+                        }`}
+                      >
+                        <span>{s.name}</span>
+                        <span className="font-mono text-[11px]">
+                          {mod > 0 ? `+${formatPrice(mod)}` : mod < 0 ? formatPrice(mod) : 'أساسي'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Paid Add-ons */}
+            {customizingProduct.addOns && customizingProduct.addOns.some((a) => a.isAvailable !== false) && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-luxury-200 block">إضافات اختيارية:</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {customizingProduct.addOns
+                    .filter((a) => a.isAvailable !== false)
+                    .map((addon) => {
+                      const active = customAddOns.some((a) => (a.id || a.name) === (addon.id || addon.name));
+                      return (
+                        <button
+                          key={addon.id || addon.name}
+                          type="button"
+                          onClick={() =>
+                            setCustomAddOns((prev) =>
+                              active
+                                ? prev.filter((a) => (a.id || a.name) !== (addon.id || addon.name))
+                                : [...prev, addon]
+                            )
+                          }
+                          className={`p-2 rounded-xl border text-xs font-bold flex items-center justify-between transition-colors cursor-pointer ${
+                            active
+                              ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                              : 'bg-luxury-950 border-luxury-800 text-luxury-300 hover:border-emerald-500/40'
+                          }`}
+                        >
+                          <span className="truncate">{addon.name}</span>
+                          <span className="font-mono text-[10px] shrink-0">+{formatPrice(addon.price)}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Removable Ingredients */}
+            {customizingProduct.removableIngredients && customizingProduct.removableIngredients.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="text-xs font-bold text-luxury-200 block">استبعاد مكونات (بدون):</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {customizingProduct.removableIngredients.map((ing) => {
+                    const removed = customRemoved.includes(ing);
+                    return (
+                      <button
+                        key={ing}
+                        type="button"
+                        onClick={() =>
+                          setCustomRemoved((prev) =>
+                            removed ? prev.filter((x) => x !== ing) : [...prev, ing]
+                          )
+                        }
+                        className={`px-2.5 py-1 rounded-full border text-[11px] font-bold transition-colors cursor-pointer ${
+                          removed
+                            ? 'bg-red-500/20 border-red-400 text-red-300'
+                            : 'bg-luxury-950 border-luxury-800 text-luxury-300 hover:border-red-500/40'
+                        }`}
+                      >
+                        {removed ? `بدون ${ing} ✕` : ing}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Special Instructions */}
+            <div className="space-y-1">
+              <label htmlFor="pos-custom-instructions" className="text-xs font-bold text-luxury-200 block">
+                ملاحظات تحضير الطبق (اختياري):
+              </label>
+              <input
+                id="pos-custom-instructions"
+                type="text"
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                placeholder="مثال: بدون ملح، مطهو جيداً، صوص خارجي..."
+                className="w-full bg-luxury-950 border border-luxury-750 rounded-xl px-3 py-2 text-xs text-luxury-100 outline-none focus:border-gold-500/60"
+              />
+            </div>
+
+            {/* Quantity & Confirm */}
+            <div className="flex items-center justify-between pt-2 border-t border-luxury-800 gap-3">
+              <div className="flex items-center gap-2 bg-luxury-950 border border-luxury-800 rounded-xl p-1">
+                <button
+                  type="button"
+                  onClick={() => setCustomQty((q) => Math.max(1, q - 1))}
+                  className="w-7 h-7 rounded-lg bg-luxury-900 text-luxury-300 flex items-center justify-center cursor-pointer"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <span className="w-6 text-center font-mono font-bold text-xs text-luxury-100">{customQty}</span>
+                <button
+                  type="button"
+                  onClick={() => setCustomQty((q) => Math.min(50, q + 1))}
+                  className="w-7 h-7 rounded-lg bg-gold-500 text-luxury-950 flex items-center justify-center cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleConfirmCustomizedItem}
+                className="flex-1 bg-gold-500 hover:bg-gold-400 text-luxury-950 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>
+                  إضافة للفاتورة —{' '}
+                  {formatPrice(
+                    (customizingProduct.price +
+                      (customSize ? (customSize.priceModifier ?? customSize.price ?? 0) : 0) +
+                      customAddOns.reduce((s, a) => s + (a.price || 0), 0)) *
+                      customQty
+                  )}
+                </span>
               </button>
             </div>
           </div>

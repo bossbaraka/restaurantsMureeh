@@ -159,13 +159,18 @@ export const KitchenDisplaySystem: React.FC = () => {
                       : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-base font-extrabold font-serif">
                       طاولة {order.tableNumber ? order.tableNumber : (order.tableName || formatTableNumber(order.tableId))}
                     </span>
                     <span className="text-[10px] bg-black/40 px-2 py-0.5 rounded font-mono font-bold">
                       {order.id}
                     </span>
+                    {order.customerName && (
+                      <span className="text-[10px] bg-black/35 px-2 py-0.5 rounded font-bold">
+                        {order.customerName}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs font-mono font-bold">

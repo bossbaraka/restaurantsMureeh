@@ -435,6 +435,7 @@ function formatManagerOrderRow(o: ManagerOrderRow) {
     // 'TABLE' (QR/table service) or 'COUNTER' (POS walk-in, tableId NULL).
     orderSource: o.orderSource,
     sessionId: o.sessionId || undefined,
+    customerName: o.customerName || undefined,
     subtotal: o.subtotal,
     total: o.total,
     status: o.status,
@@ -609,6 +610,10 @@ router.post(
         items: Array<{
           productId: string;
           quantity?: number;
+          selectedSizeId?: string;
+          selectedSize?: unknown;
+          selectedAddOnIds?: string[];
+          selectedAddOns?: unknown;
           removedIngredients?: string[];
           specialInstructions?: string;
           notes?: string;
@@ -636,6 +641,7 @@ router.post(
       const productIds = [...new Set(items.map((item) => item.productId))];
       const products = await prisma.product.findMany({
         where: { restaurantId, id: { in: productIds } },
+        include: { options: true, addOns: true },
       });
       if (products.length !== productIds.length) {
         return res.status(400).json({ success: false, error: 'يحتوي الطلب على طبق غير صالح لهذا المطعم', statusCode: 400 });
@@ -648,18 +654,75 @@ router.post(
 
       const pricedItems = items.map((item) => {
         const product = productMap.get(item.productId)!;
+        const options = Array.isArray((product as { options?: unknown[] }).options)
+          ? ((product as unknown as { options: Array<{ id: string; name: string; priceModifier: number | null; price: number | null }> }).options)
+          : [];
+        const addOns = Array.isArray((product as { addOns?: unknown[] }).addOns)
+          ? ((product as unknown as { addOns: Array<{ id: string; name: string; price: number; isAvailable: boolean }> }).addOns)
+          : [];
         const quantity =
           Number.isInteger(item.quantity) && (item.quantity as number) > 0
             ? Math.min(item.quantity as number, 50)
             : 1;
-        const unitPrice = roundMoney(product.price);
+        let unitPrice = roundMoney(product.price);
+        let sizeSnapshot: string | undefined;
+
+        if (item.selectedSizeId) {
+          const opt = options.find((o) => o.id === item.selectedSizeId);
+          if (opt) {
+            unitPrice = roundMoney(unitPrice + (opt.priceModifier ?? opt.price ?? 0));
+            sizeSnapshot = opt.name;
+          }
+        } else if (item.selectedSize) {
+          const wanted =
+            typeof item.selectedSize === 'string'
+              ? item.selectedSize
+              : (item.selectedSize as { name?: unknown }).name;
+          if (typeof wanted === 'string' && wanted) {
+            const opt = options.find((o) => o.name === wanted);
+            if (opt) {
+              unitPrice = roundMoney(unitPrice + (opt.priceModifier ?? opt.price ?? 0));
+              sizeSnapshot = opt.name;
+            } else {
+              sizeSnapshot = wanted;
+            }
+          }
+        }
+
+        const addOnSnapshots: string[] = [];
+        if (item.selectedAddOnIds && item.selectedAddOnIds.length > 0) {
+          for (const addOnId of item.selectedAddOnIds) {
+            const addOn = addOns.find((a) => a.id === addOnId && a.isAvailable !== false);
+            if (addOn) {
+              unitPrice = roundMoney(unitPrice + addOn.price);
+              addOnSnapshots.push(addOn.name);
+            }
+          }
+        } else if (Array.isArray(item.selectedAddOns)) {
+          for (const rawAddOn of item.selectedAddOns as unknown[]) {
+            const wantedName =
+              typeof rawAddOn === 'string'
+                ? rawAddOn.replace(/\s*\(\+.*$/, '').trim()
+                : typeof (rawAddOn as { name?: unknown })?.name === 'string'
+                  ? String((rawAddOn as { name: string }).name)
+                  : '';
+            if (!wantedName) continue;
+            const addOn = addOns.find((a) => a.name === wantedName && a.isAvailable !== false);
+            if (addOn) {
+              unitPrice = roundMoney(unitPrice + addOn.price);
+              addOnSnapshots.push(addOn.name);
+            }
+          }
+        }
+
         return {
           productId: product.id,
           productNameSnapshot: product.name,
           productNameEnSnapshot: product.nameEn || undefined,
           priceSnapshot: unitPrice,
           quantity,
-          selectedAddOns: [] as string[],
+          selectedSize: sizeSnapshot,
+          selectedAddOns: addOnSnapshots,
           removedIngredients: item.removedIngredients || [],
           specialInstructions: item.specialInstructions || item.notes || undefined,
           totalPrice: roundMoney(unitPrice * quantity),

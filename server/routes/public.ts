@@ -894,6 +894,7 @@ router.get(
         restaurantId: o.restaurantId,
         tableId: o.tableId,
         sessionId: o.sessionId || undefined,
+        customerName: o.customerName || undefined,
         subtotal: o.subtotal,
         total: o.total,
         status: o.status,
@@ -947,7 +948,7 @@ router.post(
   validateBody(publicOrderSchema),
   async (req: Request, res: Response) => {
     try {
-      const { restaurantId, tableId, sessionToken, clientRequestId, items, notes } = req.body as {
+      const { restaurantId, tableId, sessionToken, clientRequestId, items, notes, customerName } = req.body as {
         restaurantId: string;
         tableId: string;
         sessionToken: string;
@@ -964,6 +965,7 @@ router.post(
           notes?: string;
         }>;
         notes?: string;
+        customerName?: string;
       };
 
       const restaurant = await prisma.restaurant.findUnique({ where: { id: restaurantId } });
@@ -1203,6 +1205,7 @@ router.post(
               subtotal,
               total: subtotal,
               notes: notes || undefined,
+              customerName: customerName?.trim() || undefined,
               items: { create: pricedItems },
             },
             include: { items: true },
@@ -1251,6 +1254,7 @@ router.post(
               subtotal,
               total: subtotal,
               notes: notes || undefined,
+              customerName: customerName?.trim() || undefined,
               items: { create: pricedItems },
             },
             include: { items: true },

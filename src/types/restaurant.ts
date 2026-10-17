@@ -552,6 +552,8 @@ export interface Order {
   tableNumber?: number;
   tableName?: string;
   sessionId?: string;
+  /** Guest name attributed to this specific order on the table session. */
+  customerName?: string;
   items: OrderItem[];
   subtotal: number;
   tax?: number;

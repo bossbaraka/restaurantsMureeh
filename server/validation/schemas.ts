@@ -667,6 +667,7 @@ export const publicOrderSchema = z
     clientRequestId: z.string().uuid('معرّف إرسال الطلب غير صالح').optional(),
     items: z.array(orderItemSchema).min(1).max(50),
     notes: optionalText(1000),
+    customerName: optionalText(120),
   })
   .strict();
 
@@ -681,6 +682,9 @@ export const posOrderSchema = z
           .object({
             productId: idSchema,
             quantity: z.number().int().min(1).max(50).optional().default(1),
+            selectedSizeId: idSchema.optional(),
+            selectedSize: z.unknown().optional(),
+            selectedAddOnIds: z.array(idSchema).max(50).optional(),
             selectedAddOns: z.unknown().optional(),
             removedIngredients: z
               .array(z.string().trim().max(80))

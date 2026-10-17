@@ -228,7 +228,7 @@ export const OrderManagement: React.FC = () => {
               >
                 {/* Header */}
                 <div className="p-4 bg-luxury-850/70 border-b border-luxury-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       onClick={() => setSelectedAggregateTableId(order.tableId)}
                       className="text-xs font-bold text-gold-400 hover:underline flex items-center gap-1"
@@ -238,6 +238,11 @@ export const OrderManagement: React.FC = () => {
                       <Layers className="w-3.5 h-3.5" />
                     </button>
                     <span className="text-[11px] text-luxury-400 font-mono">({order.id})</span>
+                    {order.customerName && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gold-500/15 border border-gold-500/30 text-gold-300">
+                        {order.customerName}
+                      </span>
+                    )}
                   </div>
 
                   <span

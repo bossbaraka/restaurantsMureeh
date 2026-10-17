@@ -9,6 +9,7 @@ import {
   isPaymentRejected,
   isPaymentVerificationPending,
 } from '../../utils/orderLifecycle';
+import { isGuestOwnOrder } from '../../utils/guestOrderOwnership';
 import { useDialog } from '../../hooks/useDialog';
 import { buildMureehWhatsAppUrl, MUREEH_WHATSAPP_DISPLAY } from '../../../shared/mureeh-contact';
 import {
@@ -29,6 +30,7 @@ import {
   Clock,
   AlertTriangle,
   MessageCircle,
+  User,
 } from 'lucide-react';
 
 export const OrderTrackingDrawer: React.FC = () => {
@@ -183,7 +185,8 @@ export const OrderTrackingDrawer: React.FC = () => {
 
               {activeTableOrders.map((order) => {
                 const statusCfg = getOrderStatusConfig(order.status);
-                const isExpanded = expandedOrderId === order.id || activeTableOrders.length === 1;
+                const isOwnOrder = isGuestOwnOrder(order, activeTableOrders);
+                const isExpanded = isOwnOrder && (expandedOrderId === order.id || activeTableOrders.length === 1);
                 const isPending = order.status === 'PENDING';
                 const isPreparing = order.status === 'PREPARING';
                 const isReady = order.status === 'READY';
@@ -196,10 +199,16 @@ export const OrderTrackingDrawer: React.FC = () => {
                   >
                     {/* Order Card Header */}
                     <div className="p-4 bg-m-surface-raised/50 border-b border-m-hairline flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-bold text-[var(--m-brand-on-surface)] font-mono">
                           طلب {order.id}
                         </span>
+                        {order.customerName && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[rgb(var(--m-brand-on-surface-rgb)/0.12)] border border-[rgb(var(--m-brand-on-surface-rgb)/0.3)] text-[11px] font-bold text-m-text">
+                            <User className="w-3 h-3 text-[var(--m-brand-on-surface)]" />
+                            <span>صاحب الطلب: {order.customerName}</span>
+                          </span>
+                        )}
                         <span className="text-[11px] text-m-text-muted">
                           {formatTime(order.createdAt)}
                         </span>
@@ -213,23 +222,37 @@ export const OrderTrackingDrawer: React.FC = () => {
                           {statusCfg.label}
                         </span>
 
-                        <button
-                          onClick={() =>
-                            setExpandedOrderId(isExpanded ? null : order.id)
-                          }
-                          aria-expanded={isExpanded}
-                          aria-label={isExpanded ? `طي تفاصيل الطلب ${order.id}` : `عرض تفاصيل الطلب ${order.id}`}
-                          className="touch-target p-1.5 text-m-text-muted hover:text-m-text cursor-pointer"
-                        >
-                          {isExpanded ? (
-                            <ChevronUp className="w-4 h-4" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4" />
-                          )}
-                        </button>
+                        {isOwnOrder && (
+                          <button
+                            onClick={() =>
+                              setExpandedOrderId(isExpanded ? null : order.id)
+                            }
+                            aria-expanded={isExpanded}
+                            aria-label={isExpanded ? `طي تفاصيل الطلب ${order.id}` : `عرض تفاصيل الطلب ${order.id}`}
+                            className="touch-target p-1.5 text-m-text-muted hover:text-m-text cursor-pointer"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                       </div>
                     </div>
 
+                    {!isOwnOrder ? (
+                      <div className="p-4 bg-m-bg/40 flex items-center justify-between gap-2 text-xs text-m-text-muted">
+                        <div className="flex items-center gap-2">
+                          <Lock className="w-3.5 h-3.5 text-[var(--m-brand-on-surface)] shrink-0" />
+                          <span>
+                            طلب مستقل على نفس الطاولة باسم{' '}
+                            <strong className="text-m-text">{order.customerName || 'ضيف على الطاولة'}</strong> — يظهر اسم صاحب الطلب وحالة التحضير فقط حفاظاً على الخصوصية.
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
                     {/* Payment authorization boundary, guest side. The guest can
                         always tell WHERE the order is without opening any other
                         screen:
@@ -546,6 +569,8 @@ export const OrderTrackingDrawer: React.FC = () => {
                       </div>
                     </div>
                   )}
+                      </>
+                    )}
                 </div>
               );
             })}

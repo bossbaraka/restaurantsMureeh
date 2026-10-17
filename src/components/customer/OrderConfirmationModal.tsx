@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDialog } from '../../hooks/useDialog';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { formatPrice, formatTableNumber } from '../../utils/formatting';
-import { X, Check, ShoppingBag, Receipt, AlertCircle, Clock } from 'lucide-react';
+import { getSavedGuestName, saveGuestName } from '../../utils/guestOrderOwnership';
+import { X, Check, ShoppingBag, AlertCircle, Banknote, CreditCard, User } from 'lucide-react';
 
 interface OrderConfirmationModalProps {
   isOpen: boolean;
@@ -26,6 +27,18 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   } = useRestaurant();
   const currency = currentRestaurant?.currency || '₪';
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customerName, setCustomerName] = useState<string>(() => getSavedGuestName());
+  const [paymentMethod, setPaymentMethod] = useState<'CASHIER' | 'TRANSFER'>('CASHIER');
+
+  useEffect(() => {
+    if (isOpen) {
+      const saved = getSavedGuestName();
+      if (saved && !customerName) {
+        setCustomerName(saved);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   useDialog({ isOpen: isOpen, onClose: onClose });
 
@@ -34,7 +47,14 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
   const handleConfirmOrder = async () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
-    const result = await createOrder(orderNotes);
+    const trimmedName = customerName.trim();
+    if (trimmedName) {
+      saveGuestName(trimmedName);
+    }
+    const result = await createOrder(orderNotes, {
+      customerName: trimmedName || undefined,
+      paymentMethod,
+    });
     setIsSubmitting(false);
 
     if (result.success) {
@@ -55,7 +75,7 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="order-confirmation-title"
-        className="relative w-full max-w-lg bg-m-surface border border-m-hairline rounded-3xl p-6 z-10 shadow-2xl space-y-5 animate-fade-in text-right"
+        className="relative w-full max-w-lg bg-m-surface border border-m-hairline rounded-3xl p-6 z-10 shadow-2xl space-y-4 animate-fade-in text-right max-h-[92vh] overflow-y-auto"
         dir="rtl"
       >
         {/* Header */}
@@ -75,14 +95,15 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors"
+            aria-label="إغلاق"
+            className="p-2 rounded-xl text-m-text-muted hover:text-m-text hover:bg-m-surface-raised transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Order Items Preview */}
-        <div className="space-y-3 max-h-56 overflow-y-auto p-1 custom-scrollbar">
+        <div className="space-y-2 max-h-44 overflow-y-auto p-1 custom-scrollbar">
           <label className="block text-xs font-bold text-m-text-muted mb-1">ملخص الأصناف:</label>
           <div className="space-y-2">
             {cartItems.map((item) => (
@@ -121,6 +142,72 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
           </div>
         )}
 
+        {/* Guest Name Attribution (for multi-guest table sessions) */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor="order-confirm-guest-name"
+            className="flex items-center gap-1.5 text-xs font-bold text-m-text"
+          >
+            <User className="w-3.5 h-3.5 text-[var(--m-brand-on-surface)]" />
+            <span>اسم صاحب الطلب (لتمييز طلبك على الطاولة)</span>
+          </label>
+          <input
+            id="order-confirm-guest-name"
+            type="text"
+            maxLength={60}
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            placeholder="مثال: أحمد، سارة (يظهر اسمك فقط لزملائك على الطاولة)"
+            className="w-full bg-m-bg border border-m-hairline rounded-xl px-3.5 py-2.5 text-xs text-m-text placeholder:text-m-text-subtle focus:outline-none focus:border-[rgb(var(--m-brand-on-surface-rgb)/0.6)]"
+          />
+        </div>
+
+        {/* Upfront Payment Method Selection */}
+        <div className="space-y-2">
+          <span className="block text-xs font-bold text-m-text">اختر طريقة الدفع:</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5" role="radiogroup" aria-label="طريقة الدفع">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={paymentMethod === 'CASHIER'}
+              onClick={() => setPaymentMethod('CASHIER')}
+              className={`p-3 rounded-2xl border text-right transition-all cursor-pointer flex items-start gap-2.5 ${
+                paymentMethod === 'CASHIER'
+                  ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.14)] border-[var(--m-brand-on-surface)] text-m-text shadow-sm'
+                  : 'bg-m-bg border-m-hairline text-m-text-muted hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.4)]'
+              }`}
+            >
+              <Banknote className="w-4 h-4 mt-0.5 shrink-0 text-[var(--m-brand-on-surface)]" />
+              <div>
+                <div className="text-xs font-bold text-m-text">نقداً أو بطاقة عند الكاشير</div>
+                <div className="text-[10px] text-m-text-muted mt-0.5 leading-relaxed">
+                  ادفع مباشرة لدى الكاشير لتأكيد الطلب وإرساله للمطبخ
+                </div>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              role="radio"
+              aria-checked={paymentMethod === 'TRANSFER'}
+              onClick={() => setPaymentMethod('TRANSFER')}
+              className={`p-3 rounded-2xl border text-right transition-all cursor-pointer flex items-start gap-2.5 ${
+                paymentMethod === 'TRANSFER'
+                  ? 'bg-[rgb(var(--m-brand-on-surface-rgb)/0.14)] border-[var(--m-brand-on-surface)] text-m-text shadow-sm'
+                  : 'bg-m-bg border-m-hairline text-m-text-muted hover:border-[rgb(var(--m-brand-on-surface-rgb)/0.4)]'
+              }`}
+            >
+              <CreditCard className="w-4 h-4 mt-0.5 shrink-0 text-[var(--m-brand-on-surface)]" />
+              <div>
+                <div className="text-xs font-bold text-m-text">حوالة بنكية أو محفظة</div>
+                <div className="text-[10px] text-m-text-muted mt-0.5 leading-relaxed">
+                  حوّل المبلغ وأرفق صورة الإشعار في الخطوة التالية
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+
         {/* Total and Rules */}
         <div className="p-4 rounded-2xl bg-m-bg border border-m-hairline space-y-2">
           <div className="flex justify-between items-center text-sm font-bold">
@@ -135,11 +222,11 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
         </div>
 
         {/* Submit CTA */}
-        <div className="flex gap-3 pt-2">
+        <div className="flex gap-3 pt-1">
           <button
             type="button"
             onClick={onClose}
-            className="w-1/3 py-3 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted font-bold text-xs transition-colors"
+            className="w-1/3 py-3 rounded-xl bg-m-surface-raised hover:bg-m-surface-raised text-m-text-muted font-bold text-xs transition-colors cursor-pointer"
           >
             تعديل الطلب
           </button>
@@ -150,7 +237,13 @@ export const OrderConfirmationModal: React.FC<OrderConfirmationModalProps> = ({
             className="flex-1 py-3 rounded-xl brand-cta font-bold text-xs shadow-[0_0_22px_-6px_var(--m-brand-glow)] flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
-            <span>{isSubmitting ? 'جاري التأكيد...' : 'تأكيد الطلب'}</span>
+            <span>
+              {isSubmitting
+                ? 'جاري التأكيد...'
+                : paymentMethod === 'TRANSFER'
+                  ? 'تأكيد والمتابعة لإرفاق الحوالة'
+                  : 'تأكيد الطلب'}
+            </span>
           </button>
         </div>
       </div>
