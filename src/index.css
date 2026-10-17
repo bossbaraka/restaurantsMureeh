@@ -179,20 +179,19 @@
    the same brand hue in JS (semanticTokens surfaceTokens), so the
    two faces can never disagree.
 
-   NOTE (still true, still load-bearing): no `color-scheme` anywhere.
-   That property is PLATFORM state, owned by PlatformAppearanceProvider
-   on <html>. A restaurant choosing a light menu must not restyle the
-   browser chrome of the whole product — that was part of the
-   platform/customer coupling.
+   `color-scheme` on <html> remains platform-owned. CustomerThemeProvider may
+   set it only on this scope so native menu controls match the restaurant face;
+   it never changes the browser chrome or platform appearance.
    ========================================================================== */
 
 /* ==========================================================================
    CUSTOMER THEME SCOPE
    --------------------------------------------------------------------------
    The single element CustomerThemeProvider applies tenant tokens to. It
-   carries the canonical `--m-*` semantic tokens (the ONLY token family
-   written here) and `data-appearance` with the RESOLVED surface mode
-   ('light' | 'dark' — never 'auto').
+   carries the canonical `--m-*` semantic tokens (the only customer palette)
+   and `data-appearance` with the fixed restaurant mode ('light' | 'dark').
+   A local color-scheme value keeps native customer controls in the same face
+   without mutating <html>.
 
    `display: contents` is deliberate: the scope must introduce NO box of its
    own. It generates no layout, so the existing sticky stack, flex/grid
@@ -205,6 +204,12 @@
    ========================================================================== */
 .customer-theme-scope {
   display: contents;
+}
+
+/* Customer-facing headings use the same Arabic-first face as body copy; the
+   platform's own serif typography remains untouched outside this scope. */
+.customer-theme-scope .font-serif {
+  font-family: var(--m-font);
 }
 
 /* Shared brand primitives used across the customer experience */
@@ -245,28 +250,11 @@
 /* ==========================================================================
    CUSTOMER MENU — professional, tenant-themed, performance-first
    ==========================================================================
-   TOKEN MIGRATION (completed 2026-10-16): every var() in this section
-   reads the canonical `--m-*` tokens ONLY. The legacy `--brand-*` and
-   `--menu-*` families were deleted — their values were DERIVED from
-   the same buildSemanticTokens computation, so the swap was
-   value-identical, and `--m-brand-soft` / `--m-brand-soft-strong` /
-   `--m-brand-line` were promoted into the canonical vocabulary so no
-   consumer was left behind.
-
-   Deliberate legacy exceptions that REMAIN (no identical canonical
-   counterpart — swapping would change rendered values):
-     --theme-text-primary/-secondary/-border   the advanced editor persists
-                              these per tenant; the canonical text/border
-                              tokens are derived-only and would drop the
-                              stored values
-     --badge-text/-bg         canonical defaults are opaque; this badge's
-                              fallback material is translucent dark
-     --button-secondary-bg/-text  canonical defaults (surface-raised/text)
-                              diverge from the brand-tint resting material
-   The `--theme-*` / `--button-*` / `--card-*` / `--badge-*` /
-   `--category-*` names survive inside buildEffectiveThemeVars on
-   purpose: they are the advanced editor's explicit-override channel,
-   layered on top of the derived `--m-*` values.
+   CUSTOMER COLOR CONTRACT: every rendered color in this section reads the
+   canonical `--m-*` tokens. Legacy `--brand-*` / `--menu-*` aliases and
+   advanced scalar/component color channels are not consumed here; old saved
+   values remain intact for compatibility but no longer override the brand-
+   derived surface, text, button, card, badge, or category palette.
    ========================================================================== */
 
 /* Sticky filter/category rail ------------------------------------------------ */
@@ -366,7 +354,7 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
-  /* colors.category.text/bg → --category-text/--category-bg (optional overrides). */
+  /* Identity-derived semantic chip colors. */
   color: var(--m-chip-text, color-mix(in srgb, var(--m-text-subtle) 70%, var(--m-text-muted)));
   background: var(--m-chip-bg, var(--m-surface-raised));
   border: 1px solid var(--m-hairline);
@@ -380,9 +368,7 @@
   transform: scale(0.97);
 }
 .menu-chip[data-active='true'] {
-  /* colors.category.activeBg/activeText → the selected chip. When an explicit
-     activeBg color is provided the engine also emits --category-active-image:
-     none, so the color — not the brand gradient — paints. */
+  /* The selected chip uses the same brand fill and contrast-safe ink as CTAs. */
   color: var(--m-chip-active-text, var(--m-brand-ink));
   background-color: var(--m-chip-active-bg, transparent);
   background-image: var(--m-chip-active-image, var(--m-brand-fill));
@@ -618,12 +604,10 @@
   grid-template-columns: 100px minmax(0, 1fr);
   gap: 0.85rem;
   padding: 0.7rem;
-  /* Theme-driven card geometry: radius.card → --card-radius (falls back to
-     radius.lg at runtime), colors.card.shadow / shadows.* → --card-shadow.
-     The inset highlight is a fixed material of this card, not themeable. */
+  /* Shape remains manager-customizable; card color follows the brand-derived tokens. */
   border-radius: var(--m-card-radius, 20px);
   text-align: start;
-  /* colors.card.bg/border → --card-bg/--card-border (optional overrides). */
+  /* Derived from the unified customer palette. */
   background: var(--m-card-bg, linear-gradient(160deg, var(--m-surface-raised) 0%, var(--m-surface) 100%));
   border: 1px solid var(--m-card-border, var(--m-hairline));
   box-shadow:
@@ -790,10 +774,10 @@
   background-image: var(--m-brand-fill);
 }
 .menu-badge--dark {
-  /* colors.badge.text/bg → --badge-text/--badge-bg (optional overrides). */
-  color: var(--badge-text, #e7ebf2);
-  background: var(--badge-bg, rgb(8 9 12 / 0.72));
-  border: 1px solid var(--theme-border, rgb(255 255 255 / 0.12));
+  /* Neutral badge roles are derived from the restaurant brand/surface tokens. */
+  color: var(--m-badge-text);
+  background: var(--m-badge-bg);
+  border: 1px solid var(--m-hairline);
 }
 .menu-badge--danger {
   color: #fff1f1;
@@ -815,13 +799,9 @@
   font-size: 14.5px;
   font-weight: var(--m-font-heading-weight, 800);
   line-height: 1.35;
-  /* Tenant override first (the advanced editor persists --theme-text-*), but
-     the FALLBACK is the canonical mode-aware token, not a hardcoded near-white
-     hex. With `#f4f6fa` here, any theme whose textPrimary is absent rendered
-     #f4f6fa on a #FFFFFF card — measured 1.04:1, i.e. invisible — and light
-     mode is this menu's default. The tenant value is still used verbatim when
-     present; only the "unset" case is now mode-correct. */
-  color: var(--theme-text-primary, var(--m-text));
+  /* Text color is derived from the fixed restaurant face, never a stale
+     scalar override from an older advanced theme. */
+  color: var(--m-text);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -833,8 +813,8 @@
 }
 .menu-card__title-en {
   margin-top: 1px;
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-style: italic;
+  font-family: var(--m-font);
+  font-style: normal;
   font-size: 11.5px;
   color: var(--m-text-subtle);
   white-space: nowrap;
@@ -846,7 +826,7 @@
   font-size: 12px;
   font-weight: var(--m-font-body-weight, 400);
   line-height: 1.55;
-  color: var(--theme-text-secondary, var(--m-text-muted));
+  color: var(--m-text-muted);
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -870,7 +850,7 @@
   border-radius: 7px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--theme-text-secondary, var(--m-text-subtle));
+  color: var(--m-text-subtle);
   /* Ink-tinted overlay (was white-alpha, which vanished on a light surface).
      The text channel keeps the identical look in dark mode and gives the
      chip a visible hairline in light mode. */
@@ -954,16 +934,9 @@
   border-radius: var(--m-radius-md, 12px);
   font-size: 11.5px;
   font-weight: 800;
-  /* colors.button.secondaryText/secondaryBg → the resting add-button role;
-     its hover stays the brand-fill CTA so the label contrast stays guaranteed.
-     MEASURED: the resting ink sat on a 12% tint of ITSELF, so a value tuned to
-     clear 4.5:1 against the canvas only reached 3.96:1 against its own
-     background (light mode, the default). Mixing the ink 82% toward --m-text
-     recovers AA (≈4.6:1) while staying inside the brand hue — and because
-     --m-text is mode-aware the mix darkens on the light canvas and lightens on
-     the dark one, so no second constant is needed. No new token, no hex. */
-  color: var(--button-secondary-text, color-mix(in srgb, var(--m-brand-on-surface) 82%, var(--m-text)));
-  background: var(--button-secondary-bg, rgb(var(--m-brand-on-surface-rgb) / 0.12));
+  /* Secondary add-button colors are brand-derived semantic roles. */
+  color: var(--m-button-secondary-text);
+  background: var(--m-button-secondary-bg);
   border: 1px solid rgb(var(--m-brand-on-surface-rgb) / 0.34);
   cursor: pointer;
   transition: color 0.2s ease, background-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
@@ -1090,13 +1063,13 @@
 .menu-section-head__title {
   font-size: 19px;
   font-weight: var(--m-font-heading-weight, 800);
-  color: var(--theme-text-primary, var(--m-text));
+  color: var(--m-text);
   letter-spacing: -0.01em;
 }
 .menu-section-head__sub {
   margin-top: 2px;
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-style: italic;
+  font-family: var(--m-font);
+  font-style: normal;
   font-size: 12px;
   color: var(--m-text-subtle);
 }
@@ -1430,34 +1403,31 @@ input[type='range'].saas-range::-moz-range-thumb {
    → category title card → full-frame hero dish → priced boards → closing
    card, on a loop, fullscreen.
 
-   IDENTITY FIRST — nothing here is hardcoded to a look. Every colour, radius,
-   display face and motion value is a `--lm-*` custom property written on
-   `.display-menu` by `resolveLiveProfile()` from the venue's own two brand
-   colours, its photography ratio and the shape of its catalog. The values
-   below are FALLBACKS that read the tenant `--m-brand-*` tokens, so the screen
-   is on-brand even before the profile lands.
+   IDENTITY FIRST — the screen inherits its colors and font from the same
+   restaurant `--m-*` tokens as the QR menu. `resolveLiveProfile()` controls
+   layout and motion, not a separate palette or display-only font choice.
 
    Sized for distance, not for a browser: type scales in `vmin` so a 55" panel
    and a landscape phone recording both stay composed. Animation is limited to
    opacity/transform (compositor-only) and honours `prefers-reduced-motion`.
    ========================================================================== */
 .display-menu {
-  /* Fallbacks — the profile overrides all of these inline. */
-  --lm-bg-0: #07080a;
-  --lm-bg-1: #0d0f13;
-  --lm-bg-2: #14181f;
-  --lm-ink: #f7f2e7;
-  --lm-ink-soft: rgb(247 242 231 / 0.72);
-  --lm-ink-faint: rgb(247 242 231 / 0.46);
-  --lm-brand: var(--m-brand-on-surface, #e6c86e);
+  /* Fallbacks also follow the restaurant's mode even before the profile lands. */
+  --lm-bg-0: var(--m-bg, #0A0B0D);
+  --lm-bg-1: var(--m-surface, #15171A);
+  --lm-bg-2: var(--m-surface-raised, #20232A);
+  --lm-ink: var(--m-text, #F3F5F9);
+  --lm-ink-soft: var(--m-text-muted, #CFD6E2);
+  --lm-ink-faint: var(--m-text-subtle, #A0A0A0);
+  --lm-brand: var(--m-brand-on-surface, #E6C86E);
   --lm-brand-rgb: var(--m-brand-on-surface-rgb, 230 200 110);
-  --lm-accent: var(--m-brand-accent-on-surface, #d9c3a3);
-  --lm-fill: var(--m-brand-fill, linear-gradient(135deg, #d4af37 0%, #c5a880 100%));
-  --lm-ink-on-fill: var(--m-brand-ink, #0a0b0d);
-  --lm-glow-a: rgb(var(--m-brand-on-surface-rgb, 230 200 110) / 0.34);
+  --lm-accent: var(--m-brand-accent-on-surface, #D9C3A3);
+  --lm-fill: var(--m-brand-fill, linear-gradient(135deg, #D4AF37 0%, #C5A880 100%));
+  --lm-ink-on-fill: var(--m-brand-ink, #0A0B0D);
+  --lm-glow-a: var(--m-brand-glow, rgb(230 200 110 / 0.28));
   --lm-glow-b: rgb(var(--m-brand-accent-rgb, 197 168 128) / 0.26);
-  --lm-hairline: rgb(var(--m-brand-on-surface-rgb, 230 200 110) / 0.24);
-  --lm-hairline-soft: rgb(var(--m-brand-on-surface-rgb, 230 200 110) / 0.12);
+  --lm-hairline: var(--m-hairline, rgb(230 200 110 / 0.24));
+  --lm-hairline-soft: color-mix(in srgb, var(--lm-hairline) 55%, transparent);
   --lm-radius: 16px;
   --lm-radius-sm: 10px;
   --lm-title-face: 'Tajawal', 'Cairo', sans-serif;
@@ -1474,8 +1444,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   overflow: hidden;
   background-color: var(--lm-bg-0);
   color: var(--lm-ink);
-  /* The running text uses the display face the venue picked in «شاشة العرض»
-     (`--lm-body-face`); the fallback is the product's own Arabic body font. */
+  /* The running text shares the restaurant-selected menu face (`--m-font`). */
   font-family: var(--lm-body-face, 'Tajawal', 'Cairo', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
@@ -1542,6 +1511,21 @@ input[type='range'].saas-range::-moz-range-thumb {
   background:
     linear-gradient(to bottom, rgb(0 0 0 / 0.5), rgb(0 0 0 / 0.28) 40%, rgb(0 0 0 / 0.66)),
     radial-gradient(120% 90% at 50% 45%, transparent 40%, rgb(0 0 0 / 0.5) 100%);
+}
+/* A light restaurant theme keeps dark text legible over the same optional photo. */
+.customer-theme-scope[data-appearance='light'] .display-menu__ambient-vignette {
+  opacity: 0.1;
+}
+.customer-theme-scope[data-appearance='light'] .display-menu__ambient-grain {
+  background-image: radial-gradient(rgb(0 0 0 / 0.12) 0.5px, transparent 0.6px);
+}
+.customer-theme-scope[data-appearance='light'] .display-menu__wallpaper {
+  opacity: 0.36;
+}
+.customer-theme-scope[data-appearance='light'] .display-menu__wallpaper::after {
+  background:
+    linear-gradient(to bottom, rgb(255 255 255 / 0.72), rgb(255 255 255 / 0.62) 40%, rgb(255 255 255 / 0.84)),
+    radial-gradient(120% 90% at 50% 45%, transparent 40%, rgb(255 255 255 / 0.48) 100%);
 }
 @keyframes lm-drift-a {
   from { transform: translate3d(0, 0, 0) scale(1); }
@@ -2776,9 +2760,9 @@ input[type='range'].saas-range::-moz-range-thumb {
 /* --------------------------------------------------------------------------
    Central theme background layer — the SINGLE consumer of the --bg-* tokens
    the theme engine writes (solid / gradient / image / image+overlay / scrim).
-   One writer (applyEffectiveTheme → backgroundToCssVars), one reader (this
-   rule): mode switches and prefers-color-scheme changes repaint with no
-   React re-render and no duplicated inline background math in components.
+   One writer (CustomerThemeProvider → backgroundToCssVars), one reader (this
+   rule): restaurant mode changes repaint consistently with no duplicated
+   inline background math in components.
    -------------------------------------------------------------------------- */
 .customer-bg-layer {
   position: absolute;
@@ -3647,19 +3631,9 @@ input[type='range'].saas-range::-moz-range-thumb {
    Fully isolated: every selector below is `.entry-*`, nothing existing is
    redefined, overridden or depended upon, and no layout outside the entry
    layer can be affected by this block.
-   Palette is the tenant's own `--m-brand-*` tokens (written by the theme
-   engine),
-   with a neutral canvas that matches the customer menu behind it so the
-   hand-off produces no colour or brightness jump.
-
-   TYPOGRAPHY is the theme's as well: `--font-serif` (display) and `--font-sans`
-   (text) are the only type knobs the theme system owns, so the layer reads them
-   verbatim and never names a family of its own. A tenant that re-types its
-   theme re-types this page; nothing here assumes one restaurant's fonts. The
-   dark canvas is likewise an architectural constant, not a style choice — the
-   `--m-brand-*` set is derived FOR a dark surface (see theme/brandTheme), so what
-   varies per restaurant is atmosphere (hue, glow, metal, depth), while the
-   surface the guest is handed to stays the same dark menu.
+   The entire surface follows the restaurant's canonical `--m-*` palette and
+   Arabic font. The same mode-aware canvas, ink and photo scrim are used by the
+   menu behind it, so light and dark hand-offs stay consistent.
 
    Sized mobile-first (360px) with clamp() caps so 1920px stays composed, and
    all fixed edges respect env(safe-area-inset-*).
@@ -3670,25 +3644,11 @@ input[type='range'].saas-range::-moz-range-thumb {
   inset: 0;
   z-index: 60;
   overflow: hidden;
-  background: #0a0b0d; /* identical to the customer menu canvas */
-  color: #f6f8fb;
-  /* Theme typography, never this layer's own: the theme token is first, so a
-     theme that swaps its display face re-types this page. The trailing family
-     is the platform's OWN Arabic face (the one index.html sets on <body>) — a
-     script-coverage fallback, never an identity: when a theme supplies a
-     Latin-only display face, Arabic still renders in the app's Arabic type
-     instead of in whatever the device happens to pick. */
-  /* FONT PROPAGATION — theme-first, fallback-safe.
-     `--m-font-chosen` is the tenant's face ONLY when a font was explicitly
-     chosen in the theme editor (emitted by buildSemanticTokens; absent for
-     'auto'). Chaining it first means an explicit font decision now re-types
-     this page too — the entry experience moves together with the menu —
-     while a tenant that never picked a font falls through to the exact
-     values this rule shipped with (zero change). `--m-font-chosen` carries
-     no generic keywords (they are stripped), so the trailing 'Tajawal' in
-     each consumer stays in charge of Arabic glyph coverage. */
-  --entry-font-display: var(--m-font-chosen, var(--font-serif, Georgia, serif));
-  --entry-font-text: var(--m-font-chosen, var(--font-sans, system-ui, -apple-system, sans-serif));
+  background: var(--m-bg, #0A0B0D);
+  color: var(--m-text, #F3F5F9);
+  /* The theme's one Arabic-first family covers the entry and the menu. */
+  --entry-font-display: var(--m-font-chosen, 'Tajawal', sans-serif);
+  --entry-font-text: var(--m-font-chosen, 'Tajawal', sans-serif);
   font-family: var(--entry-font-text), 'Tajawal', sans-serif;
   overscroll-behavior: contain;
   -webkit-tap-highlight-color: transparent;
@@ -3739,7 +3699,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #0a0b0d;
+  background: var(--m-bg, #0A0B0D);
   /* The reveal's resting state, spelled out so the one-shot animation ends on
      an identical value — no pop when the keyframes are released. */
   transform: scale(1);
@@ -3778,7 +3738,7 @@ input[type='range'].saas-range::-moz-range-thumb {
      fades up. It is one-shot and lives on the image (a GPU shader) rather
      than on a wrapper, and it is the only blur in this layer with a full
      viewport to cover — everything else stays on opacity and transform. */
-  filter: blur(12px) saturate(1.04) contrast(1.02) brightness(0.9);
+  filter: blur(12px) saturate(1.04) contrast(1.02);
   transition:
     opacity 1100ms ease-out,
     filter 900ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -3786,7 +3746,7 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 .entry-cover__img--ready {
   opacity: 1;
-  filter: blur(0px) saturate(1.04) contrast(1.02) brightness(0.94);
+  filter: blur(0px) saturate(1.04) contrast(1.02);
   animation: entry-cover-drift 30s cubic-bezier(0.45, 0, 0.55, 1) infinite alternate;
 }
 
@@ -3798,7 +3758,7 @@ input[type='range'].saas-range::-moz-range-thumb {
    looking at a permanently soft photograph. */
 @media (max-width: 640px) {
   .entry-cover .entry-cover__img:not(.entry-cover__img--ready) {
-    filter: blur(7px) saturate(1.04) contrast(1.02) brightness(0.9);
+    filter: blur(7px) saturate(1.04) contrast(1.02);
   }
 }
 
@@ -3810,32 +3770,33 @@ input[type='range'].saas-range::-moz-range-thumb {
   background:
     radial-gradient(118% 88% at 20% 10%, rgb(var(--m-brand-rgb) / 0.5) 0%, transparent 62%),
     radial-gradient(104% 78% at 84% 88%, rgb(var(--m-brand-accent-rgb) / 0.38) 0%, transparent 60%),
-    linear-gradient(158deg, #101319 0%, #0a0b0d 54%, #0d1016 100%);
+    linear-gradient(
+      158deg,
+      color-mix(in srgb, var(--m-surface, #15171A) 82%, var(--m-brand-soft-strong, #20232A)) 0%,
+      var(--m-bg, #0A0B0D) 54%,
+      color-mix(in srgb, var(--m-surface, #15171A) 72%, var(--m-brand-soft, #17191E)) 100%
+    );
 }
 
-/* Legibility for the identity sitting on top of an unknown photograph.
-   The top pass is a touch stronger than the bottom because the persistent
-   context bar (brand / table / skip) lives up there on every stage. The
-   centre pass is a soft cinematic pool of dark that the content column
-   sits inside — the photo stays present around it but never competes with
-   the text. */
+/* Mode-aware legibility for text on the venue's photograph. The scrim uses
+   the same canvas token as the menu: dark in dark mode, light in light mode. */
 .entry-cover__scrim {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(72% 55% at 50% 58%, rgb(10 11 13 / 0.58) 0%, transparent 72%),
+    radial-gradient(72% 55% at 50% 58%, rgb(var(--m-bg-rgb, 10 11 13) / 0.58) 0%, transparent 72%),
     linear-gradient(
       to top,
-      #0a0b0d 0%,
-      rgb(10 11 13 / 0.9) 26%,
-      rgb(10 11 13 / 0.36) 58%,
-      rgb(10 11 13 / 0.06) 80%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 1) 0%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 0.9) 26%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 0.36) 58%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 0.06) 80%,
       transparent 100%
     ),
     linear-gradient(
       to bottom,
-      rgb(10 11 13 / 0.74) 0%,
-      rgb(10 11 13 / 0.22) 24%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 0.74) 0%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 0.22) 24%,
       transparent 48%
     );
   /* The room dims a half-step when the identity arrives — the photograph
@@ -3850,7 +3811,7 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-cover__vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(118% 88% at 50% 44%, transparent 36%, rgb(0 0 0 / 0.52) 100%);
+  background: radial-gradient(118% 88% at 50% 44%, transparent 36%, rgb(var(--m-bg-rgb, 10 11 13) / 0.52) 100%);
 }
 
 /* A single slow light pass — atmosphere, not a spotlight effect. The second
@@ -3863,9 +3824,9 @@ input[type='range'].saas-range::-moz-range-thumb {
   background: linear-gradient(
     104deg,
     transparent 36%,
-    rgb(255 255 255 / 0.055) 46%,
+    rgb(var(--m-brand-on-surface-rgb, 230 200 110) / 0.055) 46%,
     rgb(var(--m-brand-accent-rgb) / 0.07) 52%,
-    rgb(255 255 255 / 0.03) 57%,
+    rgb(var(--m-brand-on-surface-rgb, 230 200 110) / 0.03) 57%,
     transparent 66%
   );
   animation: entry-sweep 9s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -3881,7 +3842,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   opacity: 0;
   background: radial-gradient(
     82% 54% at 50% 42%,
-    rgb(255 255 255 / 0.14) 0%,
+    rgb(var(--m-brand-on-surface-rgb, 230 200 110) / 0.14) 0%,
     rgb(var(--m-brand-rgb) / 0.08) 34%,
     transparent 68%
   );
@@ -3910,7 +3871,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: rgb(255 255 255 / 0.6);
+  background: rgb(var(--m-brand-on-surface-rgb, 230 200 110) / 0.6);
   box-shadow: 0 0 10px 2px rgb(var(--m-brand-rgb) / 0.35);
   animation-name: entry-mote;
   animation-timing-function: ease-in-out;
@@ -3926,7 +3887,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   width: 100%;
   height: 100%;
   overflow: visible;
-  color: rgb(255 255 255 / 0.82);
+  color: rgb(var(--m-text-rgb, 243 245 249) / 0.82);
   animation-name: entry-glint;
   animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
   animation-iteration-count: infinite;
@@ -3960,7 +3921,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   border: 1px solid var(--m-brand-line);
   /* The room falls away towards its corners, so the photograph reads as a lit
      space behind glass rather than as a flat fill. */
-  box-shadow: inset 0 0 120px -46px rgb(0 0 0 / 0.75);
+  box-shadow: inset 0 0 120px -46px rgb(var(--m-bg-rgb, 10 11 13) / 0.55);
   /* Four corner brackets, two hairlines each — the classic laurel-mark
      geometry, painted as backgrounds so the frame costs no extra DOM. */
   background-image:
@@ -4099,8 +4060,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   flex: none;
   overflow: hidden;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--m-brand-soft-strong, #1b1f27) 60%, #12141a);
-  border: 1px solid rgb(255 255 255 / 0.22);
+  background: color-mix(in srgb, var(--m-surface, #15171A) 82%, var(--m-brand-soft-strong, #20232A));
+  border: 1px solid var(--m-hairline-strong, rgb(230 200 110 / 0.45));
   box-shadow:
     0 8px 20px rgb(0 0 0 / 0.45),
     inset 0 1px 0 rgb(255 255 255 / 0.16);
@@ -4111,10 +4072,10 @@ input[type='range'].saas-range::-moz-range-thumb {
   user-select: none;
 }
 .entry-topbar__monogram {
-  font-family: var(--entry-font-display), 'Tajawal', Georgia, serif;
+  font-family: var(--entry-font-display), 'Tajawal', sans-serif;
   font-size: 0.95rem;
   line-height: 1;
-  color: #fff;
+  color: var(--m-text, #F3F5F9);
 }
 
 .entry-topbar__name {
@@ -4124,8 +4085,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: var(--entry-ls, 0em);
-  color: rgb(255 255 255 / 0.88);
-  text-shadow: 0 1px 12px rgb(0 0 0 / 0.65);
+  color: rgb(var(--m-text-rgb, 243 245 249) / 0.88);
+  text-shadow: 0 1px 12px rgb(var(--m-bg-rgb, 10 11 13) / 0.65);
 }
 
 .entry-topbar__actions {
@@ -4139,15 +4100,15 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-topbar__table {
   padding: 0.32rem 0.72rem;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.18);
-  background: rgb(255 255 255 / 0.08);
+  border: 1px solid var(--m-hairline-strong, rgb(230 200 110 / 0.45));
+  background: rgb(var(--m-bg-rgb, 10 11 13) / 0.08);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+  box-shadow: 0 6px 18px rgb(var(--m-bg-rgb, 10 11 13) / 0.35);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: var(--entry-ls, 0em);
-  color: rgb(255 255 255 / 0.82);
+  color: rgb(var(--m-text-rgb, 243 245 249) / 0.82);
   white-space: nowrap;
 }
 
@@ -4161,14 +4122,14 @@ input[type='range'].saas-range::-moz-range-thumb {
   padding: 0.42rem 0.95rem;
   min-height: 38px;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 0.18);
-  background: rgb(255 255 255 / 0.07);
+  border: 1px solid var(--m-hairline-strong, rgb(230 200 110 / 0.45));
+  background: rgb(var(--m-bg-rgb, 10 11 13) / 0.07);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 700;
-  color: rgb(255 255 255 / 0.78);
+  color: rgb(var(--m-text-rgb, 243 245 249) / 0.78);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition:
@@ -4192,9 +4153,9 @@ input[type='range'].saas-range::-moz-range-thumb {
   transform: scaleX(var(--entry-dir, 1));
 }
 .entry-topbar__skip:hover {
-  background: rgb(255 255 255 / 0.14);
-  border-color: rgb(255 255 255 / 0.32);
-  color: #fff;
+  background: rgb(var(--m-bg-rgb, 10 11 13) / 0.14);
+  border-color: var(--m-hairline-strong, rgb(230 200 110 / 0.45));
+  color: var(--m-text, #F3F5F9);
 }
 .entry-topbar__skip:active {
   transform: scale(0.96);
@@ -4236,7 +4197,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: var(--entry-ls, 0em);
-  color: rgb(255 255 255 / 0.38);
+  color: rgb(var(--m-text-muted-rgb, 207 214 226) / 0.7);
   pointer-events: none;
   /* Fades in last of all — by the time it is visible, the cover is calm. */
   animation: entry-fade 900ms ease 640ms backwards;
@@ -4246,7 +4207,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.18em;
-  color: rgb(255 255 255 / 0.35);
+  color: rgb(var(--m-text-muted-rgb, 207 214 226) / 0.58);
   font-variant-numeric: tabular-nums;
 }
 .entry-progress__seg {
@@ -4254,7 +4215,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   width: 26px;
   height: 3px;
   border-radius: 999px;
-  background-color: rgb(255 255 255 / 0.14);
+  background-color: rgb(var(--m-text-rgb, 243 245 249) / 0.14);
 }
 .entry-progress__seg::after {
   content: '';
@@ -4284,7 +4245,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-weight: 700;
   letter-spacing: var(--entry-ls, 0em);
   color: var(--m-brand-accent-on-surface);
-  text-shadow: 0 1px 12px rgb(0 0 0 / 0.55);
+  text-shadow: 0 1px 12px rgb(var(--m-bg-rgb, 10 11 13) / 0.55);
 }
 .entry-eyebrow::before,
 .entry-eyebrow::after {
@@ -4368,7 +4329,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   inset: -13%;
   z-index: 1;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.12);
+  border: 1px solid var(--m-hairline, rgb(230 200 110 / 0.24));
   border-top-color: rgb(var(--m-brand-rgb) / 0.85);
   animation: entry-spin 9.5s linear infinite;
 }
@@ -4382,8 +4343,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   height: 100%;
   overflow: hidden;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--m-brand-soft-strong, #1b1f27) 55%, #12141a);
-  border: 1px solid rgb(255 255 255 / 0.16);
+  background: color-mix(in srgb, var(--m-surface, #15171A) 82%, var(--m-brand-soft-strong, #20232A));
+  border: 1px solid var(--m-hairline-strong, rgb(230 200 110 / 0.45));
   box-shadow:
     0 20px 48px rgb(0 0 0 / 0.55),
     0 0 0 1px rgb(var(--m-brand-rgb) / 0.22),
@@ -4418,17 +4379,17 @@ input[type='range'].saas-range::-moz-range-thumb {
   user-select: none;
 }
 .entry-logo__monogram {
-  font-family: var(--entry-font-display), 'Tajawal', Georgia, serif;
+  font-family: var(--entry-font-display), 'Tajawal', sans-serif;
   font-size: clamp(2.4rem, 8vw, 3.2rem);
   line-height: 1;
-  color: #fff;
+  color: var(--m-text, #F3F5F9);
 }
 
 .entry-invite__hint {
   margin: 0;
   font-size: clamp(0.76rem, 3.4vw, 0.92rem);
   letter-spacing: var(--entry-ls, 0em);
-  color: rgb(246 248 251 / 0.6);
+  color: var(--m-text-muted, #CFD6E2);
 }
 
 /* --------------------------------------------------------------------------
@@ -4504,8 +4465,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--m-brand-soft-strong, #1b1f27) 55%, #12141a);
-  border: 1px solid rgb(255 255 255 / 0.18);
+  background: color-mix(in srgb, var(--m-surface, #15171A) 82%, var(--m-brand-soft-strong, #20232A));
+  border: 1px solid var(--m-hairline-strong, rgb(230 200 110 / 0.45));
   box-shadow:
     0 14px 34px rgb(0 0 0 / 0.5),
     0 0 26px -8px var(--m-brand-glow),
@@ -4518,21 +4479,20 @@ input[type='range'].saas-range::-moz-range-thumb {
 }
 .entry-identity__name {
   margin: 0;
-  /* Display face straight from the theme, with the platform's Arabic family
-     behind it for the glyphs a Latin-only display face cannot draw. This is
-     the strongest textual element of the layer: ~34px on a 375px phone, up to
-     64px on a wide desktop viewport. */
-  font-family: var(--entry-font-display), 'Tajawal', Georgia, serif;
+  /* The restaurant's shared Arabic-first face is used for this wordmark too.
+     It is the strongest textual element of the layer: ~34px on a 375px phone,
+     up to 64px on a wide desktop viewport. */
+  font-family: var(--entry-font-display), 'Tajawal', sans-serif;
   font-size: clamp(2rem, 9vw, 4rem);
   font-weight: 700;
   line-height: 1.14;
   /* Negative tracking is a Latin refinement; Arabic keeps its natural fit. */
   letter-spacing: 0;
-  color: #ffffff;
+  color: var(--m-text, #F3F5F9);
   text-wrap: balance;
   /* A very long single-word tenant name breaks instead of overflowing. */
   overflow-wrap: break-word;
-  text-shadow: 0 2px 26px rgb(0 0 0 / 0.6);
+  text-shadow: 0 2px 26px rgb(var(--m-bg-rgb, 10 11 13) / 0.6);
 }
 .entry-root[dir='ltr'] .entry-identity__name {
   letter-spacing: -0.015em;
@@ -4558,7 +4518,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   text-indent: 0.17em;
   color: var(--m-brand-on-surface);
   overflow-wrap: break-word;
-  text-shadow: 0 2px 18px rgb(0 0 0 / 0.55);
+  text-shadow: 0 2px 18px rgb(var(--m-bg-rgb, 10 11 13) / 0.55);
 }
 
 /* Ornament as structure: one hairline rule through a diamond node. Both are
@@ -4602,7 +4562,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-family: var(--entry-font-text), 'Tajawal', sans-serif;
   font-size: clamp(0.82rem, 3.5vw, 1rem);
   line-height: 1.8;
-  color: rgb(246 248 251 / 0.72);
+  color: var(--m-text-muted, #CFD6E2);
   /* A long tenant description must never push the CTA off a small screen —
      the full text is one tap away in the menu hero anyway. */
   overflow: hidden;
@@ -4670,7 +4630,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   font-weight: 600;
   line-height: 1.4;
   letter-spacing: var(--entry-ls, 0em);
-  color: rgb(246 248 251 / 0.74);
+  color: var(--m-text-muted, #CFD6E2);
   text-wrap: balance;
 }
 
@@ -4804,7 +4764,7 @@ input[type='range'].saas-range::-moz-range-thumb {
 .entry-arrow__hand {
   width: clamp(15px, 4vw, 18px);
   height: auto;
-  color: rgb(246 248 251 / 0.5);
+  color: var(--m-text-muted, #CFD6E2);
   animation: entry-hand-drag 3.4s ease-in-out infinite;
 }
 .entry-arrow__float {
@@ -4860,7 +4820,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   margin: 0;
   font-size: clamp(0.72rem, 3vw, 0.82rem);
   letter-spacing: var(--entry-ls, 0em);
-  color: rgb(246 248 251 / 0.58);
+  color: var(--m-text-muted, #CFD6E2);
 }
 .entry-action__button {
   position: relative;
@@ -5143,7 +5103,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   }
 }
 
-/* The photograph resolves out of a soft white: the reveal's opening beat. */
+/* The brand-tinted photograph resolves in with the reveal's opening beat. */
 @keyframes entry-flash {
   0% {
     opacity: 0.9;
@@ -5264,15 +5224,14 @@ input[type='range'].saas-range::-moz-range-thumb {
   z-index: 6;
   pointer-events: none;
   opacity: 0;
-  /* Deliberately quiet: at its peak the curtain is a soft dark shoulder on
-     the edge the guest just left, plus a breath of brand light. It never
-     blacks the menu out — the seam is hidden, not the destination. */
+  /* Deliberately quiet: the curtain uses the restaurant's current canvas tone
+     plus a breath of brand light. It never hides the destination. */
   background:
     radial-gradient(88% 62% at 50% 50%, rgb(var(--m-brand-rgb) / 0.12) 0%, transparent 62%),
     linear-gradient(
       calc(var(--entry-dir, 1) * 90deg),
-      rgb(10 11 13 / 0.66) 0%,
-      rgb(10 11 13 / 0.08) 54%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 0.66) 0%,
+      rgb(var(--m-bg-rgb, 10 11 13) / 0.08) 54%,
       rgb(var(--m-brand-accent-rgb) / 0.1) 100%
     );
 }

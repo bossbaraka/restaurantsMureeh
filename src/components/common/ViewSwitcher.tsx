@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { BrandMark } from '../brand/BrandLogo';
@@ -10,18 +10,14 @@ import {
   Volume2,
   VolumeX,
   RotateCcw,
-  Zap,
   QrCode,
   ShieldCheck,
   ChefHat,
   MonitorPlay,
-  Sparkles,
   User,
   Globe,
-  Plus,
   Sun,
   Moon,
-  MonitorCog,
 } from 'lucide-react';
 import { formatTableNumber } from '../../utils/formatting';
 import { useStickyBand } from '../../theme/StickyStack';
@@ -33,7 +29,6 @@ import {
 const APPEARANCE_LABEL: Record<PlatformAppearance, string> = {
   light: 'فاتح',
   dark: 'داكن',
-  system: 'حسب النظام',
 };
 
 export const ViewSwitcher: React.FC = () => {
@@ -231,14 +226,12 @@ export const ViewSwitcher: React.FC = () => {
             </span>
           </button>
 
-          {/* PLATFORM appearance switch (light → dark → system).
-              Affects ONLY the Mureeh product chrome. It never touches the
-              restaurant menu theme, which a venue controls separately. */}
+          {/* Explicit PLATFORM appearance switch. It only affects Mureeh
+              product chrome and remains isolated from the restaurant menu. */}
           {platformAppearance && (
             <button
               onClick={() => {
-                const order: PlatformAppearance[] = ['light', 'dark', 'system'];
-                const next = order[(order.indexOf(platformAppearance.appearance) + 1) % order.length];
+                const next: PlatformAppearance = platformAppearance.appearance === 'light' ? 'dark' : 'light';
                 platformAppearance.setAppearance(next);
               }}
               className="p-2 rounded-lg border transition-colors cursor-pointer"
@@ -252,10 +245,8 @@ export const ViewSwitcher: React.FC = () => {
             >
               {platformAppearance.appearance === 'light' ? (
                 <Sun className="w-3.5 h-3.5" />
-              ) : platformAppearance.appearance === 'dark' ? (
-                <Moon className="w-3.5 h-3.5" />
               ) : (
-                <MonitorCog className="w-3.5 h-3.5" />
+                <Moon className="w-3.5 h-3.5" />
               )}
             </button>
           )}

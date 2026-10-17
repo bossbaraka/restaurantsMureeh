@@ -170,8 +170,12 @@ describe('resolveLiveProfile — the screen is derived from the venue', () => {
     expect(parseInt(vivid.vars['--lm-radius'], 10)).toBeGreaterThan(
       parseInt(muted.vars['--lm-radius'], 10)
     );
-    // Different brands → different canvases (never one fixed template colour).
-    expect(vivid.vars['--lm-bg-0']).not.toBe(muted.vars['--lm-bg-0']);
+    // The screen shares the restaurant's canonical palette: layout personality
+    // may respond to brand characteristics, but it must not mint a second color.
+    expect(vivid.vars['--lm-bg-0']).toBe('var(--m-bg, #0A0B0D)');
+    expect(muted.vars['--lm-bg-0']).toBe(vivid.vars['--lm-bg-0']);
+    expect(vivid.vars['--lm-fill']).toContain('var(--m-brand-fill');
+    expect(muted.vars['--lm-fill']).toBe(vivid.vars['--lm-fill']);
   });
 
   it('switches to type-led boards when the venue has no photography', () => {

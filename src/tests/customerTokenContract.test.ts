@@ -128,11 +128,13 @@ describe('light/dark correctness', () => {
     }
   });
 
-  it('auto resolves through the same pipeline, not a separate branch', () => {
-    const auto = buildSemanticTokens(theme('#D4AF37', 'auto'), 'light') as Tokens;
-    const explicit = buildSemanticTokens(theme('#D4AF37', 'light'), 'light') as Tokens;
-    expect(auto['--m-surface']).toBe(explicit['--m-surface']);
-    expect(auto['--m-text']).toBe(explicit['--m-text']);
+  it('normalizes a legacy auto record to dark before customer rendering', () => {
+    const legacy = theme('#D4AF37', 'auto');
+    expect(legacy.mode).toBe('dark');
+    const legacyTokens = buildSemanticTokens(legacy, 'dark') as Tokens;
+    const explicit = buildSemanticTokens(theme('#D4AF37', 'dark'), 'dark') as Tokens;
+    expect(legacyTokens['--m-surface']).toBe(explicit['--m-surface']);
+    expect(legacyTokens['--m-text']).toBe(explicit['--m-text']);
   });
 });
 

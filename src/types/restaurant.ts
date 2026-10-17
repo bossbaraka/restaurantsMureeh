@@ -86,15 +86,16 @@ export interface RestaurantSocials {
 // ============================================
 // Central Theme Management — Branding & Menu Appearance
 // ============================================
-export type ThemeMode = 'light' | 'dark' | 'auto';
+export type ThemeMode = 'light' | 'dark';
+/** Legacy persisted value; normalized to dark at the API boundary. */
+export type LegacyThemeMode = ThemeMode | 'auto';
 export type BackgroundType = 'solid' | 'gradient' | 'image' | 'image+overlay';
 export type BackgroundSize = 'cover' | 'contain' | 'auto';
 export type BackgroundPosition = 'center' | 'top' | 'bottom' | 'left' | 'right';
 /**
- * Exactly the faces the server contract persists (`THEME_FONT_KEYS`). The
- * picker must not offer anything outside this set: the fonts are only ever
- * loaded for these five families, and an unsupported key would be rejected by
- * the strict `themeConfigSchema` on save.
+ * Persisted font keys. The restaurant editor offers only Cairo and Tajawal;
+ * `auto`, Amiri and Cormorant remain accepted for legacy records and are
+ * normalized to the Tajawal-first menu stack at runtime.
  */
 export type ThemeFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
 
@@ -263,19 +264,18 @@ export interface ThemeRow {
 export type DisplayBackgroundMode = 'theme' | 'image';
 
 /**
- * The display face of the board. `auto` keeps the derived identity (the
- * `resolveLiveProfile()` choice from the venue's own colours/photography);
- * every other key is an explicit font the venue picked in
- * «الإعدادات ← شاشة العرض».
+ * Legacy display-font values retained for stored/API payload compatibility.
+ * The board now uses the restaurant's shared menu font; these values no longer
+ * override its typography and are not offered as a separate display setting.
  */
 export type DisplayFontKey = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
 
 /**
- * The venue's display-screen settings — edited once in the manager's
- * «شاشة العرض» section and applied on every screen that opens the board
- * (`/r/{slug}?view=display`), on the TV as well as on the phone/tablet static
- * preview. Additive and optional: absent on tenants that configured nothing
- * and on legacy/cached payloads, where the board keeps its existing look.
+ * The venue's display-screen settings — backdrop plus a legacy, optional font
+ * value retained for stored/API compatibility. The board applies the same
+ * restaurant theme and menu font on every screen (`/r/{slug}?view=display`).
+ * Additive and optional: absent on tenants that configured no backdrop and on
+ * legacy/cached payloads.
  */
 export interface RestaurantDisplaySettings {
   backgroundMode: DisplayBackgroundMode;
@@ -283,7 +283,8 @@ export interface RestaurantDisplaySettings {
   backgroundImage?: string;
   /** Stable storage path persisted for the backdrop (additive). */
   backgroundStoragePath?: string;
-  font: DisplayFontKey;
+  /** Legacy field; ignored by the display board. */
+  font?: DisplayFontKey;
 }
 
 // Restaurant / Tenant Entity
@@ -353,10 +354,9 @@ export interface Restaurant {
    */
   whatsappNumber?: string;
   /**
-   * شاشة العرض (read-only board) settings: the background source and the
-   * display face. Additive and optional: `undefined` means "nothing was
-   * configured", so the board renders exactly as it did before this setting
-   * existed (themed brand canvas + derived identity font).
+   * شاشة العرض (read-only board) backdrop settings. Legacy display-font data
+   * may also be present for compatibility but is ignored; the board follows
+   * the shared restaurant theme and menu font.
    */
   display?: RestaurantDisplaySettings;
   theme?: EffectiveTheme;

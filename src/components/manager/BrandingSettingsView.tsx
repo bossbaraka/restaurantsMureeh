@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api, isEmbeddedImage, uiThemeConfigFromServer } from '../../services/api';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { buildEffectiveThemeVars, parseColor, rgbToHex, resolveThemeShadow, themeShadowKey } from '../../theme/brandTheme';
+import { parseColor, rgbToHex, resolveThemeShadow, themeShadowKey } from '../../theme/brandTheme';
 import { ThemeColorField } from './ThemeColorField';
 import {
   THEME_PRESETS,
@@ -16,7 +16,7 @@ import {
   toThemeConfig,
   type ThemeDraft,
 } from '../../theme/editorModel';
-import { ThemePreview, ThemeTokensScope, ButtonTokensSample, CardTokensSample, BadgeTokensSample, CategoryTokensSample, TemplateMenuSample } from './ThemePreview';
+import { ThemePreview, ThemeTokensScope, CardTokensSample, TemplateMenuSample } from './ThemePreview';
 import { THEME_TEMPLATES, TEMPLATE_DRAFTS, type ThemeTemplate } from '../../theme/themeTemplates';
 
 import {
@@ -32,11 +32,9 @@ import {
   Star,
   Loader2,
   Wand2,
-  RefreshCcw,
   Check,
   Plus,
   UtensilsCrossed,
-  Clock,
   Video,
   Film,
   Camera,
@@ -52,13 +50,12 @@ import {
   RotateCcw,
   Layers,
   Type,
-  Square,
   Sparkles,
   Eye,
   ChevronDown,
   Eraser,
 } from 'lucide-react';
-import type { BusinessType, ThemeConfig, EffectiveTheme, ThemeRow, BackgroundConfig, ThemeMode, BackgroundType, ThemeFontKey, ThemeColors, ResolvedBackground } from '../../types/restaurant';
+import type { BusinessType, ThemeConfig, EffectiveTheme, ThemeRow, BackgroundConfig, ThemeMode, BackgroundType, ThemeFontKey, ThemeColors } from '../../types/restaurant';
 
 const BUSINESS_TYPES: Array<{
   id: BusinessType;
@@ -92,16 +89,10 @@ const SOCIAL_FIELDS: Array<{
 const asDraft = (cfg: ThemeConfig, presetId: string | null): ThemeDraft => toDraft(cfg, presetId);
 
 
-// Exactly the five faces the server contract persists (THEME_FONT_KEYS) and
-// the five the document actually loads — a picker option outside this set
-// could never survive a save (strict schema) and would render as a fallback
-// stack anyway, so it must not be offered.
+// The guest-facing menu uses one modern Arabic face from end to end.
 const FONT_OPTIONS: Array<{ id: ThemeFontKey; label: string; family: string }> = [
-  { id: 'auto', label: 'تلقائي', family: 'system-ui' },
   { id: 'tajawal', label: 'Tajawal', family: 'Tajawal' },
   { id: 'cairo', label: 'Cairo', family: 'Cairo' },
-  { id: 'amiri', label: 'Amiri', family: 'Amiri' },
-  { id: 'cormorant', label: 'Cormorant', family: 'Cormorant Garamond' },
 ];
 
 const BG_TYPES: Array<{ id: BackgroundType; label: string }> = [
@@ -124,7 +115,7 @@ const LOGO_POSITION_GRID: Array<{ label: string; value: string }> = [
 ];
 
 const DEFAULT_THEME_FALLBACK: ThemeConfig = {
-  mode: 'auto',
+  mode: 'dark',
   colors: {
     primary: '#D4AF37',
     secondary: '#94A3B8',
@@ -157,7 +148,8 @@ const DEFAULT_THEME_FALLBACK: ThemeConfig = {
 // weights are numeric, and `colors.card.shadow` is a raw CSS shadow resolved
 // from the scale at save time. The per-component colour groups
 // (`colors.button/card/badge/category`) are modelled identically on both
-// sides and pass through verbatim.
+// sides and pass through verbatim for compatibility. The customer token layer
+// no longer consumes those colors, so existing records stay stored but inert.
 // `toServerThemePayload` below is the SINGLE explicit conversion point between
 // the two models (the reverse lives in `uiThemeConfigFromServer` in
 // `services/api`). It whitelists every key it emits, so the strict schema
@@ -238,11 +230,11 @@ function isTenantThemeStoragePath(value: string): boolean {
 }
 
 /**
- * Per-component colour groups (`colors.button/card/badge/category`) are
- * modelled identically on both sides and pass through VERBATIM — every field
- * is whitelisted here (hex-normalized where the schema expects a hex colour),
- * so values set through the API or an earlier save are never dropped on
- * re-save. Unparseable/overlong fields are omitted instead of sent.
+ * Legacy per-component colour groups (`colors.button/card/badge/category`) are
+ * retained VERBATIM — every field is whitelisted here (hex-normalized where
+ * the schema expects a hex colour), so old/API-set values are not deleted on a
+ * re-save. They no longer feed the customer palette. Unparseable/overlong
+ * fields are omitted instead of sent.
  */
 function copyGroupFields(
   src: unknown,
@@ -391,9 +383,8 @@ export function toServerThemePayload(
 
   const payload: ServerThemePayload = { colors };
 
-  if (ui.mode === 'light' || ui.mode === 'dark' || ui.mode === 'auto') {
-    payload.mode = ui.mode;
-  }
+  // Always persist a concrete mode. Missing/legacy auto settings migrate dark.
+  payload.mode = ui.mode === 'light' ? 'light' : 'dark';
 
   const RADIUS_KEYS = ['sm', 'md', 'lg', 'xl', 'full'] as const;
   if (ui.radius) {
@@ -647,8 +638,8 @@ export const BrandingSettingsView: React.FC = () => {
   const [previewDevice, setPreviewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
   const [bgUploading, setBgUploading] = useState<'light' | 'dark' | null>(null);
   // Which surface the LIVE PREVIEW renders. Independent of the saved mode:
-  // the manager must be able to inspect the light AND the dark look of the
-  // same theme before saving (auto follows this toggle for preview purposes).
+  // the manager can inspect the light AND dark rendering of the same saved
+  // restaurant theme without changing the mode guests will receive.
   const [previewSurface, setPreviewSurface] = useState<'light' | 'dark'>('dark');
   const bgLightInputRef = useRef<HTMLInputElement>(null);
   const bgDarkInputRef = useRef<HTMLInputElement>(null);
@@ -976,42 +967,14 @@ export const BrandingSettingsView: React.FC = () => {
   const logoPreview = logo || currentRestaurant?.logo || '';
 
   // ---------------------------------------------------------------------
-  // PER-COMPONENT OVERRIDE CONTROLS («تخصيص متقدم»).
+  // CARD SHAPE/SHADOW OVERRIDES («تخصيص متقدم»).
   //
-  // Everything below edits the EXISTING keys of `editConfig` (the single
-  // source of truth) and nothing else: colors.button/card/badge/category via
-  // `setGroupColor`, and the card's own radius/shadow via `setCardOverride`
-  // (the `cards` edit slot — the same server slot as colors.card.radius/shadow).
-  // The save path (colorGroupsToServer / toServerThemePayload) and the preview
-  // path (toDraft → toThemeConfig → CustomerThemeProvider) are untouched.
-  //
-  // CLEAR = delete the override so the value returns to inheritance. Group
-  // colours delete their key outright (nothing resurrects them downstream).
-  // The `cards` slot encodes «auto» as the EMPTY STRING — the engine's own
-  // absence encoding (buildEffectiveThemeVars emits '' for absent tokens and
-  // every consumer falls through to its derived value) — because toThemeConfig
-  // re-fills a *missing* cards.radius/shadow from the chosen styles on the next
-  // simple edit, which would silently re-pin a cleared override. An empty
-  // value is never persisted (toServerThemePayload skips it), so the override
-  // is truly gone from the saved theme.
+  // Legacy component color overrides remain in the saved theme for backward
+  // compatibility, but the customer palette deliberately ignores them. The
+  // only per-card controls still active here are radius and shadow. The `cards`
+  // slot encodes «auto» as an empty string so a simple edit cannot silently
+  // refill a cleared override from the selected style preset.
   // ---------------------------------------------------------------------
-  type GroupName = 'button' | 'card' | 'badge' | 'category';
-
-  const groupColor = (group: GroupName, key: string): string | undefined =>
-    ((editConfig.colors as any)?.[group] as Record<string, string> | undefined)?.[key];
-
-  const setGroupColor = (group: GroupName, key: string, hex: string | null) => {
-    setThemeConfig((p) => {
-      const colors = { ...((p.colors as any) || {}) } as Record<string, any>;
-      const next: Record<string, string> = { ...((colors[group] as Record<string, string>) || {}) };
-      if (hex === null) delete next[key];
-      else next[key] = hex;
-      if (Object.keys(next).length === 0) delete colors[group];
-      else colors[group] = next;
-      return { ...p, colors: colors as ThemeColors };
-    });
-  };
-
   /** Effective card radius/shadow override ('' or absent = «تلقائي»). */
   const cardOverride = (key: 'radius' | 'shadow'): string => (editConfig.cards?.[key] || '').trim();
   const hasCardRadius = cardOverride('radius') !== '';
@@ -1092,7 +1055,7 @@ export const BrandingSettingsView: React.FC = () => {
             )}
           </h2>
           <p className="text-xs text-luxury-400">
-            تحكم كامل بمظهر المنيو: Light/Dark/Auto، ألوان، خلفية احترافية، خطوط، أزرار، بطاقات — مع وراثة Platform → Restaurant → Branch
+            هوية موحدة للقائمة: وضع ثابت، ألوان مرتبطة بالعلامة، وخط عربي واضح — مع وراثة Platform → Restaurant → Branch
           </p>
 
         </div>
@@ -1196,12 +1159,11 @@ export const BrandingSettingsView: React.FC = () => {
                 <h3 className="font-bold text-luxury-100 text-sm flex items-center gap-2">
                   <Sun className="w-4 h-4 text-gold-400" /> اختر المظهر
                 </h3>
-                <p className="text-[11px] text-luxury-400">كيف تظهر قائمتك للعميل — «تلقائي» يتبع إعداد جهازه.</p>
-                <div className="grid grid-cols-3 gap-2" role="group" aria-label="مظهر القائمة">
+                <p className="text-[11px] text-luxury-400">وضع ثابت لكل واجهات المطعم؛ لا يتبع جهاز العميل ولا يوفّر تبديلًا للضيف.</p>
+                <div className="grid grid-cols-2 gap-2" role="group" aria-label="مظهر القائمة">
                   {[
                     { id: 'light', label: 'فاتح', icon: Sun },
                     { id: 'dark', label: 'داكن', icon: Moon },
-                    { id: 'auto', label: 'تلقائي', icon: Monitor },
                   ].map((m) => {
                     const Icon = m.icon;
                     const sel = themeDraft.appearance === m.id;
@@ -1373,7 +1335,9 @@ export const BrandingSettingsView: React.FC = () => {
                 </summary>
                 <div className="px-5 pb-5 space-y-3 border-t border-luxury-800 pt-5">
                   <p className="text-[11px] text-luxury-400 leading-relaxed">
-                    تجاوزات يدوية على الحسابات التلقائية، موزّعة على مجموعات واضحة. أي حقل على «تلقائي» يبقى محسوبًا/موروثًا من إعداداتك العامة — و«إزالة التخصيص» تحذف القيمة المخصّصة وتعيدها للوراثة. الإعدادات البسيطة أعلاه تغطي معظم الحالات.
+                    ألوان الأزرار والبطاقات والشارات والتصنيفات تتبع هوية المطعم تلقائياً. تبقى
+                    هنا إعدادات الألوان العامة والحالة، إضافةً إلى شكل البطاقة وظلّها؛ وأي قيم
+                    مكوّنات قديمة محفوظة تظلّ مخزنة للتوافق ولا تؤثر في ألوان القائمة.
                   </p>
 
                   {/* 1 — الألوان الأساسية (unchanged scalar behavior). */}
@@ -1391,39 +1355,10 @@ export const BrandingSettingsView: React.FC = () => {
                     </div>
                   </AdvancedSection>
 
-                  {/* 2 — الأزرار (colors.button.*). */}
-                  <AdvancedSection
-                    title="الأزرار"
-                    desc="خلفية ونص الزر الأساسي والثانوي — اتركها تلقائية لتتبع هوية مطعمك."
-                    preview={
-                      <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
-                        <ButtonTokensSample />
-                      </ThemeTokensScope>
-                    }
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {([
-                        ['primaryBg', 'خلفية الزر الأساسي'],
-                        ['primaryText', 'لون نص الزر الأساسي'],
-                        ['secondaryBg', 'خلفية الزر الثانوي'],
-                        ['secondaryText', 'لون نص الزر الثانوي'],
-                      ] as const).map(([fieldKey, label]) => (
-                        <ThemeColorField
-                          key={fieldKey}
-                          clearable
-                          label={label}
-                          value={groupColor('button', fieldKey)}
-                          onChange={(hex) => setGroupColor('button', fieldKey, hex)}
-                          onClear={() => setGroupColor('button', fieldKey, null)}
-                        />
-                      ))}
-                    </div>
-                  </AdvancedSection>
-
-                  {/* 3 — البطاقات (colors.card.* + cards.radius/shadow overrides). */}
+                  {/* The color is identity-derived; only shape and shadow remain customizable. */}
                   <AdvancedSection
                     title="البطاقات"
-                    desc="خلفية وزاوية وظل بطاقة الطبق — بطاقة العينة بالأسفل تعكسها مباشرة."
+                    desc="لون البطاقة يتبع هوية المطعم؛ الزاوية والظل قابلان للتخصيص."
                     preview={
                       <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
                         <CardTokensSample />
@@ -1433,22 +1368,6 @@ export const BrandingSettingsView: React.FC = () => {
                     <p className="text-[10px] text-luxury-500 leading-relaxed">
                       «شكل البطاقات» و«شكل الزوايا» أعلاه قوالب جاهزة تؤثر على مقاييس الظلال والزوايا. حقول الزاوية والظل أدناه تخصيص يدوي مباشر لبطاقة الطبق يتفوق على القالب — وعند «تلقائي» تتبع البطاقة القالب والإعداد الوراثي.
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <ThemeColorField
-                        clearable
-                        label="خلفية البطاقة"
-                        value={groupColor('card', 'bg')}
-                        onChange={(hex) => setGroupColor('card', 'bg', hex)}
-                        onClear={() => setGroupColor('card', 'bg', null)}
-                      />
-                      <ThemeColorField
-                        clearable
-                        label="لون حدود البطاقة"
-                        value={groupColor('card', 'border')}
-                        onChange={(hex) => setGroupColor('card', 'border', hex)}
-                        onClear={() => setGroupColor('card', 'border', null)}
-                      />
-                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <div className="flex items-center justify-between gap-2 mb-1">
@@ -1529,78 +1448,7 @@ export const BrandingSettingsView: React.FC = () => {
                     </div>
                   </AdvancedSection>
 
-                  {/* 4 — الشارات (colors.badge.*). */}
-                  <AdvancedSection
-                    title="الشارات"
-                    desc="شارات «الجديد» والتنبيهات الصغيرة على الأطباق."
-                    preview={
-                      <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
-                        <BadgeTokensSample />
-                      </ThemeTokensScope>
-                    }
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <ThemeColorField
-                        clearable
-                        label="خلفية الشارة"
-                        value={groupColor('badge', 'bg')}
-                        onChange={(hex) => setGroupColor('badge', 'bg', hex)}
-                        onClear={() => setGroupColor('badge', 'bg', null)}
-                      />
-                      <ThemeColorField
-                        clearable
-                        label="لون نص الشارة"
-                        value={groupColor('badge', 'text')}
-                        onChange={(hex) => setGroupColor('badge', 'text', hex)}
-                        onClear={() => setGroupColor('badge', 'text', null)}
-                      />
-                    </div>
-                  </AdvancedSection>
-
-                  {/* 5 — التصنيفات (colors.category.*). */}
-                  <AdvancedSection
-                    title="التصنيفات"
-                    desc="شرائط تصنيفات القائمة — العادي والنشط."
-                    preview={
-                      <ThemeTokensScope draft={themeDraft} forceMode={previewSurface}>
-                        <CategoryTokensSample />
-                      </ThemeTokensScope>
-                    }
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <ThemeColorField
-                        clearable
-                        label="خلفية التصنيف"
-                        value={groupColor('category', 'bg')}
-                        onChange={(hex) => setGroupColor('category', 'bg', hex)}
-                        onClear={() => setGroupColor('category', 'bg', null)}
-                      />
-                      <ThemeColorField
-                        clearable
-                        label="لون نص التصنيف"
-                        value={groupColor('category', 'text')}
-                        onChange={(hex) => setGroupColor('category', 'text', hex)}
-                        onClear={() => setGroupColor('category', 'text', null)}
-                      />
-                      <ThemeColorField
-                        clearable
-                        label="خلفية التصنيف النشط"
-                        hint="عند تحديدها تُطفأ صورة تدرّج الهوية تلقائيًا فيظهر اللون وحده."
-                        value={groupColor('category', 'activeBg')}
-                        onChange={(hex) => setGroupColor('category', 'activeBg', hex)}
-                        onClear={() => setGroupColor('category', 'activeBg', null)}
-                      />
-                      <ThemeColorField
-                        clearable
-                        label="لون نص التصنيف النشط"
-                        value={groupColor('category', 'activeText')}
-                        onChange={(hex) => setGroupColor('category', 'activeText', hex)}
-                        onClear={() => setGroupColor('category', 'activeText', null)}
-                      />
-                    </div>
-                  </AdvancedSection>
-
-                  {/* 6 — ألوان الحالة (unchanged scalar behavior). */}
+                  {/* ألوان الحالة (unchanged scalar behavior). */}
                   <AdvancedSection title="ألوان الحالة" desc="رسائل النجاح والتنبيه والخطأ.">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {statusColorFields.map((f) => (
@@ -1615,7 +1463,7 @@ export const BrandingSettingsView: React.FC = () => {
                     </div>
                   </AdvancedSection>
 
-                  {/* 7 — القياسات (exact corner/shadow scales — the derivation source). */}
+                  {/* القياسات (exact corner/shadow scales — the derivation source). */}
                   <AdvancedSection title="القياسات" desc="سُلّم الزوايا والظلال — مصدر القيم المشتقة للبطاقات والأزرار والشارات.">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>

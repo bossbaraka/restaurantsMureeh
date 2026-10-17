@@ -167,9 +167,10 @@ describe('Effective Theme mapping — no supported property disappears', () => {
     expect(mapped.background.dark.readabilityBoost).toBe(true);
   });
 
-  it('normalizes odd modes to auto (the documented default)', () => {
-    expect(mapEffectiveTheme({ ...(serverResolvedTheme() as any), mode: 'neon' })!.mode).toBe('auto');
-    expect(mapEffectiveTheme({ ...(serverResolvedTheme() as any), mode: undefined })!.mode).toBe('auto');
+  it('normalizes legacy or invalid modes to the fixed dark default', () => {
+    expect(mapEffectiveTheme({ ...(serverResolvedTheme() as any), mode: 'neon' })!.mode).toBe('dark');
+    expect(mapEffectiveTheme({ ...(serverResolvedTheme() as any), mode: 'auto' })!.mode).toBe('dark');
+    expect(mapEffectiveTheme({ ...(serverResolvedTheme() as any), mode: undefined })!.mode).toBe('dark');
     expect(mapEffectiveTheme({ ...(serverResolvedTheme() as any), mode: 'light' })!.mode).toBe('light');
   });
 

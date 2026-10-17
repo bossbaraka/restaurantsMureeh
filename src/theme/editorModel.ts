@@ -39,7 +39,7 @@ import type { ThemeConfig, ThemeMode } from '../types/restaurant';
 export type CardStyle = 'flat' | 'soft' | 'elevated';
 export type CornerStyle = 'sharp' | 'rounded' | 'pill';
 export type Density = 'compact' | 'comfortable' | 'spacious';
-export type EditorFont = 'auto' | 'tajawal' | 'cairo' | 'amiri' | 'cormorant';
+export type EditorFont = 'tajawal' | 'cairo';
 
 /** A real visual preset — not just a pair of colours. */
 export interface ThemePreset {
@@ -83,12 +83,12 @@ export interface ThemeDraft {
 }
 
 export const THEME_PRESETS: ThemePreset[] = [
-  { id: 'royal-gold', label: 'ذهبي ملكي', desc: 'كلاسيكي فاخر دافئ', primary: '#D4AF37', accent: '#8C6D1F', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'cormorant', appearance: 'dark' },
+  { id: 'royal-gold', label: 'ذهبي ملكي', desc: 'كلاسيكي فاخر دافئ', primary: '#D4AF37', accent: '#8C6D1F', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'cairo', appearance: 'dark' },
   { id: 'midnight-blue', label: 'أزرق ليلي', desc: 'هادئ وعصري وأنيق', primary: '#4F7CFF', accent: '#1E2F6E', cardStyle: 'soft', cornerStyle: 'rounded', font: 'tajawal', appearance: 'dark' },
   { id: 'emerald', label: 'زمردي ملكي', desc: 'انتعاش وثقة راقية', primary: '#10B981', accent: '#065F46', cardStyle: 'soft', cornerStyle: 'pill', font: 'cairo', appearance: 'light' },
   { id: 'amber', label: 'عنبري دافئ', desc: 'طاقة ودفء ترحيبي', primary: '#F59E0B', accent: '#92400E', cardStyle: 'elevated', cornerStyle: 'pill', font: 'cairo', appearance: 'light' },
   { id: 'rose', label: 'وردي فاخر', desc: 'ناعم للمقاهي والبوتيك', primary: '#EC4899', accent: '#831843', cardStyle: 'soft', cornerStyle: 'pill', font: 'tajawal', appearance: 'light' },
-  { id: 'wine', label: 'نبيذي داكن', desc: 'فخامة مطاعم اللحوم', primary: '#C0392B', accent: '#5C1A12', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'amiri', appearance: 'dark' },
+  { id: 'wine', label: 'نبيذي داكن', desc: 'فخامة مطاعم اللحوم', primary: '#C0392B', accent: '#5C1A12', cardStyle: 'elevated', cornerStyle: 'rounded', font: 'cairo', appearance: 'dark' },
   { id: 'silver', label: 'فضي معدني', desc: 'حديث بسيط نظيف', primary: '#94A3B8', accent: '#3E4A5B', cardStyle: 'flat', cornerStyle: 'sharp', font: 'tajawal', appearance: 'light' },
 ];
 
@@ -200,14 +200,16 @@ export function toDraft(config: ThemeConfig | null | undefined, presetId: string
   }
 
   return {
-    appearance: cfg.mode || 'auto',
+    // Legacy persisted `auto` (and missing/invalid values) now mean dark.
+    appearance: cfg.mode === 'light' ? 'light' : 'dark',
     primary: colors.primary || DEFAULT_PRIMARY,
     accent: colors.accent || DEFAULT_ACCENT,
     // NEVER inferred. Only an explicit selection in this editor sets it.
     presetId,
     cardStyle: card,
     cornerStyle: corner,
-    font: ((cfg.typography?.fontFamily as EditorFont) || 'auto'),
+    // Keep the modern Arabic faces only; legacy serif/auto values display as Tajawal.
+    font: cfg.typography?.fontFamily === 'cairo' ? 'cairo' : 'tajawal',
     density: densityFromWeights(cfg.typography),
     background: cfg.background,
     overrides,
@@ -270,11 +272,8 @@ export function detachPreset(draft: ThemeDraft): ThemeDraft {
 }
 
 export const EDITOR_FONTS: Array<{ id: EditorFont; label: string; family: string }> = [
-  { id: 'auto', label: 'تلقائي', family: 'system-ui' },
-  { id: 'tajawal', label: 'Tajawal', family: 'Tajawal' },
-  { id: 'cairo', label: 'Cairo', family: 'Cairo' },
-  { id: 'amiri', label: 'Amiri', family: 'Amiri' },
-  { id: 'cormorant', label: 'Cormorant', family: 'Cormorant Garamond' },
+  { id: 'tajawal', label: 'Tajawal — واضح ومريح', family: 'Tajawal' },
+  { id: 'cairo', label: 'Cairo — عصري', family: 'Cairo' },
 ];
 
 export const CARD_STYLE_OPTIONS: Array<{ id: CardStyle; label: string; desc: string }> = [

@@ -6,10 +6,10 @@
  * independent:
  *
  *   PLATFORM  — the Mureeh product itself: shell, toolbar, manager console,
- *               KDS, admin. Modes: light | dark | system.
+ *               KDS, admin. Modes: light | dark (explicit only).
  *               Owned by THIS provider.
  *
- *   CUSTOMER  — a restaurant's public menu. Modes: light | dark | auto.
+ *   CUSTOMER  — a restaurant's public menu. Modes: light | dark (restaurant-owned).
  *               Owned by CustomerThemeProvider, scoped to a DOM subtree.
  *
  * WHY THEY MUST BE SEPARATE
@@ -34,17 +34,15 @@
  *
  * DEFAULT = 'dark'
  * ----------------
- * The product ships dark today. Defaulting to dark makes this change visually
- * inert on first load: light becomes available, but nobody's UI changes until
- * they opt in.
+ * The product ships dark today. An old persisted `system` value is treated as
+ * the same dark default; the operating-system preference is never consulted.
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-/** What a user can choose. 'system' follows the OS. */
-export type PlatformAppearance = 'light' | 'dark' | 'system';
-/** What actually gets painted. 'system' has been resolved away. */
-export type ResolvedPlatformAppearance = 'light' | 'dark';
+/** Explicit platform faces. There is no device-following state. */
+export type PlatformAppearance = 'light' | 'dark';
+export type ResolvedPlatformAppearance = PlatformAppearance;
 
 /**
  * Platform-only storage key.
@@ -58,9 +56,9 @@ export const PLATFORM_APPEARANCE_STORAGE_KEY = 'mureeh_appearance';
 export const DEFAULT_PLATFORM_APPEARANCE: PlatformAppearance = 'dark';
 
 export interface PlatformAppearanceContextValue {
-  /** The user's choice, including 'system'. */
+  /** The explicit saved choice. */
   appearance: PlatformAppearance;
-  /** The painted mode — 'system' already resolved. */
+  /** The painted mode (always identical to `appearance`). */
   resolved: ResolvedPlatformAppearance;
   setAppearance: (next: PlatformAppearance) => void;
 }
@@ -73,7 +71,7 @@ export function usePlatformAppearance(): PlatformAppearanceContextValue | null {
 }
 
 function isAppearance(value: unknown): value is PlatformAppearance {
-  return value === 'light' || value === 'dark' || value === 'system';
+  return value === 'light' || value === 'dark';
 }
 
 /** The stored preference, or the default. Never throws (private-mode Safari). */
@@ -87,14 +85,9 @@ export function readStoredAppearance(): PlatformAppearance {
   }
 }
 
-/** Pure resolution: 'system' consults the device, explicit choices win. */
-export function resolvePlatformAppearance(
-  appearance: PlatformAppearance,
-  prefersDark: boolean
-): ResolvedPlatformAppearance {
-  if (appearance === 'light') return 'light';
-  if (appearance === 'dark') return 'dark';
-  return prefersDark ? 'dark' : 'light';
+/** Legacy-safe pure resolution: invalid/old `system` values become dark. */
+export function resolvePlatformAppearance(appearance: unknown): ResolvedPlatformAppearance {
+  return appearance === 'light' ? 'light' : 'dark';
 }
 
 export const PlatformAppearanceProvider: React.FC<{ children?: React.ReactNode }> = ({
@@ -103,24 +96,7 @@ export const PlatformAppearanceProvider: React.FC<{ children?: React.ReactNode }
   const [appearance, setAppearanceState] = useState<PlatformAppearance>(() =>
     readStoredAppearance()
   );
-  const [prefersDark, setPrefersDark] = useState<boolean>(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return true;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-
-  // Track the device preference ONLY while 'system' is selected: an explicit
-  // light/dark choice must not be disturbed by the OS changing.
-  useEffect(() => {
-    if (appearance !== 'system') return;
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (event: MediaQueryListEvent) => setPrefersDark(event.matches);
-    setPrefersDark(mq.matches);
-    mq.addEventListener?.('change', handler);
-    return () => mq.removeEventListener?.('change', handler);
-  }, [appearance]);
-
-  const resolved = resolvePlatformAppearance(appearance, prefersDark);
+  const resolved = resolvePlatformAppearance(appearance);
 
   // THE ONLY WRITE to <html> appearance in the application.
   useEffect(() => {
@@ -128,6 +104,10 @@ export const PlatformAppearanceProvider: React.FC<{ children?: React.ReactNode }
     const root = document.documentElement;
     root.classList.toggle('dark', resolved === 'dark');
     root.style.colorScheme = resolved;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute(
+      'content',
+      resolved === 'dark' ? '#020A14' : '#FFFFFF'
+    );
     // Introspection/debugging. Deliberately NOT `data-theme`: that attribute
     // belonged to the restaurant engine, and reusing the name here would
     // recreate the coupling this provider exists to remove.

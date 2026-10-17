@@ -3,16 +3,14 @@ import type { EffectiveTheme, ResolvedBackground } from '../types/restaurant';
 /**
  * Brand Theme Engine
  * ==================
- * Every tenant edits exactly two colors in "Branding Settings"
- * (`primaryColor` + `accentColor`). The customer menu is rendered on a dark
- * luxury canvas, so those two raw hex values are not enough on their own:
- * a restaurant that picks `#111111` would produce invisible buttons, and a
- * restaurant that picks `#FFF700` would produce unreadable white text.
+ * Every tenant edits exactly two identity colors in "Branding Settings"
+ * (`primaryColor` + `accentColor`). The restaurant's fixed light/dark mode
+ * selects the surface; brand colors are then adapted for readable foregrounds
+ * so a near-black pick cannot disappear and a bright pick cannot wash out text.
  *
- * This module turns the two brand colors into a complete, contrast-safe set of
- * CSS custom properties that the menu consumes through plain CSS classes.
- * Re-theming a restaurant is therefore a single style write on <html> —
- * no React re-render, no re-mount of the product grid.
+ * This module derives a complete, contrast-safe set of semantic values. The
+ * customer theme provider writes them to one scoped element, keeping restaurant
+ * appearance independent from the platform and avoiding a product-grid remount.
  */
 
 export interface Rgb {
@@ -60,15 +58,12 @@ export const BRAND_FALLBACK = {
 export type SurfaceMode = 'light' | 'dark';
 
 /**
- * Resolves the EFFECTIVE surface mode. `auto` follows the guest's device;
- * explicit `light`/`dark` win. This — not the raw configured mode — is what
- * `data-theme` and every mode-aware token must be keyed on (a `data-theme`
- * of "auto" can never be selected against in CSS).
+ * Resolve a configured restaurant mode to a paintable surface. New settings
+ * are explicit; legacy `auto`, missing, and invalid values safely fall back
+ * to dark instead of consulting the visitor's device.
  */
-export function resolveThemeMode(mode: string | undefined | null, prefersDark: boolean): SurfaceMode {
-  if (mode === 'light') return 'light';
-  if (mode === 'dark') return 'dark';
-  return prefersDark ? 'dark' : 'light';
+export function resolveThemeMode(mode: string | undefined | null): SurfaceMode {
+  return mode === 'light' ? 'light' : 'dark';
 }
 
 export const THEME_VAR_NAMES = [
@@ -633,21 +628,18 @@ export function buildSplashPalette(tokens: BrandTokens): SplashPalette {
  */
 
 /**
- * Exported (not just module-private) so the semantic token builder can gate
- * the OPTIONAL `--m-font-chosen` presence token on "does this key resolve to
- * a real face" — an unknown legacy key must resolve to ABSENT, never to a
- * silently-invented stack.
+ * One Arabic-first font family map for the restaurant menu. Legacy `auto`,
+ * Amiri, Cormorant, and pre-contract keys are retained as input aliases but
+ * deliberately render as Tajawal; Cairo remains the optional modern alternative.
  */
 export const FONT_FAMILY_MAP: Record<string, string> = {
-  auto: 'Tajawal, Cairo, system-ui, -apple-system, sans-serif',
-  tajawal: '"Tajawal", system-ui, sans-serif',
-  cairo: '"Cairo", system-ui, sans-serif',
-  amiri: '"Amiri", serif',
-  cormorant: '"Cormorant Garamond", serif',
-  // Not part of the persistable server contract (THEME_FONT_KEYS) — kept only
-  // so legacy raw rows that predate the strict schema still resolve a stack.
-  inter: '"Inter", system-ui, sans-serif',
-  poppins: '"Poppins", system-ui, sans-serif',
+  auto: '"Tajawal", "Cairo", system-ui, sans-serif',
+  tajawal: '"Tajawal", "Cairo", system-ui, sans-serif',
+  cairo: '"Cairo", "Tajawal", system-ui, sans-serif',
+  amiri: '"Tajawal", "Cairo", system-ui, sans-serif',
+  cormorant: '"Tajawal", "Cairo", system-ui, sans-serif',
+  inter: '"Tajawal", "Cairo", system-ui, sans-serif',
+  poppins: '"Tajawal", "Cairo", system-ui, sans-serif',
 };
 
 export type ThemeShadowKey = 'sm' | 'md' | 'lg';
@@ -690,11 +682,9 @@ export function themeShadowKey(
 
 export function resolveCurrentBackground(
   theme: EffectiveTheme,
-  prefersDark: boolean
+  surfaceMode: SurfaceMode = resolveThemeMode(theme.mode)
 ): ResolvedBackground {
-  if (theme.mode === 'light') return theme.background.light;
-  if (theme.mode === 'dark') return theme.background.dark;
-  return prefersDark ? theme.background.dark : theme.background.light;
+  return surfaceMode === 'light' ? theme.background.light : theme.background.dark;
 }
 
 /**
@@ -748,15 +738,15 @@ export function backgroundToCssVars(bg: ResolvedBackground, surfaceMode: Surface
 
 export function buildEffectiveThemeVars(
   theme: EffectiveTheme,
-  prefersDark = false
+  surfaceMode: SurfaceMode = resolveThemeMode(theme.mode)
 ): Record<string, string> {
-  const currentBg = resolveCurrentBackground(theme, prefersDark);
-  const bgVars = backgroundToCssVars(currentBg, resolveThemeMode(theme.mode, prefersDark));
-  // Mode-aware scalar colors: light mode must never render the platform's
-  // DARK fallback palette. Explicit tenant values pass through untouched.
+  const currentBg = resolveCurrentBackground(theme, surfaceMode);
+  const bgVars = backgroundToCssVars(currentBg, surfaceMode);
+  // Legacy scalar roles remain available to the manager's compatibility model;
+  // the customer scope now consumes only the canonical `--m-*` palette.
   const modeColors = resolveModeAwareColors(
     theme.colors as unknown as Record<string, string | undefined>,
-    resolveThemeMode(theme.mode, prefersDark)
+    surfaceMode
   );
 
   return {
@@ -843,37 +833,28 @@ export function buildEffectiveThemeVars(
 export function applyEffectiveTheme(
   theme: EffectiveTheme | null | undefined,
   styleTarget?: { setProperty(name: string, value: string): void } | null,
-  options?: { prefersDark?: boolean }
+  options?: { surfaceMode?: SurfaceMode }
 ): void {
   if (!theme) return;
   const target =
     styleTarget ?? (typeof document !== 'undefined' ? document.documentElement.style : null);
   if (!target || typeof (target as any).setProperty !== 'function') return;
 
-  const prefersDark =
-    options?.prefersDark ??
-    (typeof window !== 'undefined' && window.matchMedia
-      ? window.matchMedia('(prefers-color-scheme: dark)').matches
-      : false);
-
-  // The RESOLVED surface mode ('auto' collapses to the device preference).
-  // data-theme must never hold the literal value "auto": no CSS selector can
-  // key on it, which silently disabled every mode-aware token.
-  const surfaceMode = resolveThemeMode(theme.mode, prefersDark);
-
-  const vars = buildEffectiveThemeVars(theme, prefersDark);
+  // Optional explicit face is useful for isolated previews. Normal rendering
+  // always follows the stored restaurant mode; legacy `auto` falls back dark.
+  const surfaceMode = options?.surfaceMode ?? resolveThemeMode(theme.mode);
+  const vars = buildEffectiveThemeVars(theme, surfaceMode);
   for (const [k, v] of Object.entries(vars)) {
     (target as any).setProperty(k, v);
   }
 
-  // Set data-theme attribute for CSS selectors (RESOLVED mode, plus the raw
-  // configured mode for introspection/debugging).
+  // Set a concrete mode for legacy diagnostics; `auto` is never exposed.
   if (typeof document !== 'undefined') {
     document.documentElement.setAttribute('data-theme', surfaceMode);
-    document.documentElement.setAttribute('data-theme-config', theme.mode);
+    document.documentElement.setAttribute('data-theme-config', surfaceMode);
     document.documentElement.setAttribute('data-theme-source', theme.source);
     document.documentElement.style.setProperty('--theme-mode', surfaceMode);
-    document.documentElement.style.setProperty('--theme-mode-config', theme.mode);
+    document.documentElement.style.setProperty('--theme-mode-config', surfaceMode);
   }
 }
 

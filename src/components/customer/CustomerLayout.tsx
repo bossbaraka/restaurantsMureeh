@@ -124,7 +124,6 @@ const CustomerLayoutContent: React.FC = () => {
     updateCartItemQuantity,
     currentRestaurant,
     activeTableId,
-    setViewMode,
     displayMode,
     entryPhase,
     entryInvalidReason,
@@ -403,9 +402,8 @@ const CustomerLayoutContent: React.FC = () => {
       }}
     >
       {/* Central Theme Background Layer — the single consumer of the --bg-*
-          tokens (solid / gradient / image / overlay / scrim). The engine
-          resolves light vs dark and re-applies on prefers-color-scheme
-          changes, so no duplicated matchMedia math lives here. */}
+          tokens (solid / gradient / image / overlay / scrim), resolved from the
+          restaurant's fixed light/dark setting. */}
       {theme && <div aria-hidden="true" className="customer-bg-layer" />}
       {/* Entry experience shown right after a QR scan. Dismissing it hands the
           guest straight to the menu below, unchanged. */}
@@ -513,8 +511,8 @@ const CustomerLayoutContent: React.FC = () => {
                 style={{
                   // colors.button.primaryBg/primaryText → the primary action
                   // role; falls back to the brand identity fill.
-                  background: 'var(--button-bg, var(--m-brand))',
-                  color: 'var(--button-text, var(--m-brand-ink))',
+                  background: 'var(--m-button-bg)',
+                  color: 'var(--m-button-text)',
                 }}
               >
                 تصفح كامل القائمة

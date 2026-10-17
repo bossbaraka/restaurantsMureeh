@@ -3,13 +3,12 @@
  * brand identity contract.
  *
  * Pipeline under test:
- *   theme.mode + device preference → resolveThemeMode (RESOLVED surface mode)
+ *   fixed theme.mode → resolveThemeMode (RESOLVED surface mode)
  *     → resolveModeAwareColors (dark fallback palette never renders in light)
  *     → buildBrandTokens / buildEffectiveThemeVars → CSS variables + data-theme
  *
- * Guards the Part 5/6 invariants:
- *   1. `auto` collapses to a concrete surface mode (data-theme is never "auto"
- *      — no CSS selector could key on it);
+ * Guards the fixed-mode invariants:
+ *   1. missing, invalid, and legacy `auto` values resolve to dark;
  *   2. the platform's DARK fallback palette is remapped in light mode while
  *      tenant-chosen values pass through untouched (fallback never re-brands);
  *   3. brand identity adapts for contrast per surface without changing hue;
@@ -72,20 +71,16 @@ const effectiveTheme = (overrides: Partial<EffectiveTheme> = {}): EffectiveTheme
     ...overrides,
   }) as EffectiveTheme;
 
-describe('resolveThemeMode — auto collapses to a concrete surface', () => {
-  it('follows the device preference for auto', () => {
-    expect(resolveThemeMode('auto', true)).toBe('dark');
-    expect(resolveThemeMode('auto', false)).toBe('light');
+describe('resolveThemeMode — fixed restaurant mode with a dark fallback', () => {
+  it('returns explicit light and dark modes unchanged', () => {
+    expect(resolveThemeMode('light')).toBe('light');
+    expect(resolveThemeMode('dark')).toBe('dark');
   });
 
-  it('lets an explicit mode win over the device', () => {
-    expect(resolveThemeMode('light', true)).toBe('light');
-    expect(resolveThemeMode('dark', false)).toBe('dark');
-  });
-
-  it('treats missing/invalid modes as auto', () => {
-    expect(resolveThemeMode(undefined, false)).toBe('light');
-    expect(resolveThemeMode('neon', true)).toBe('dark');
+  it('treats missing, invalid, and legacy auto values as dark without device input', () => {
+    expect(resolveThemeMode(undefined)).toBe('dark');
+    expect(resolveThemeMode('neon')).toBe('dark');
+    expect(resolveThemeMode('auto')).toBe('dark');
   });
 });
 
@@ -172,22 +167,23 @@ describe('buildBrandTokens — identity adapts per surface without changing hue'
 
 describe('buildEffectiveThemeVars — mode flows into the emitted tokens', () => {
   it('dark mode emits the resolved dark values unchanged', () => {
-    const vars = buildEffectiveThemeVars(effectiveTheme(), true);
+    const vars = buildEffectiveThemeVars(effectiveTheme(), 'dark');
     expect(vars['--theme-bg']).toBe('#0A0B0D');
     expect(vars['--theme-text-primary']).toBe('#F5F5F0');
   });
 
   it('light mode remaps the dark fallback into the tokens', () => {
-    const vars = buildEffectiveThemeVars(effectiveTheme({ mode: 'light' }), false);
+    const vars = buildEffectiveThemeVars(effectiveTheme({ mode: 'light' }), 'light');
     expect(vars['--theme-bg']).toBe('#FFFFFF');
     expect(vars['--theme-text-primary']).toBe('#171B22');
     expect(vars['--theme-surface']).toBe('#F6F7F9');
     expect(vars['--theme-border']).toBe('#E3E7EE');
   });
 
-  it('auto + light device resolves the light tokens', () => {
-    const vars = buildEffectiveThemeVars(effectiveTheme({ mode: 'auto' }), false);
-    expect(vars['--theme-bg']).toBe('#FFFFFF');
+  it('legacy auto resolves to dark tokens even when a light surface would otherwise be requested', () => {
+    const legacyTheme = effectiveTheme({ mode: 'auto' as any });
+    const vars = buildEffectiveThemeVars(legacyTheme);
+    expect(vars['--theme-bg']).toBe('#0A0B0D');
   });
 
   it('emits the background-layer contract for the single CSS reader', () => {
@@ -204,7 +200,7 @@ describe('buildEffectiveThemeVars — mode flows into the emitted tokens', () =>
         },
       },
     });
-    const vars = buildEffectiveThemeVars(theme, true);
+    const vars = buildEffectiveThemeVars(theme, 'dark');
     expect(vars['--bg-current']).toContain('linear-gradient(rgba(0,0,0,0.6)');
     expect(vars['--bg-current']).toContain('bg.jpg');
     expect(vars['--bg-layer-opacity']).toBe('0.7');
@@ -224,24 +220,25 @@ describe('buildEffectiveThemeVars — mode flows into the emitted tokens', () =>
         dark: { type: 'solid', color: '#0A0B0D', url: null, storagePath: null },
       },
     });
-    const lightVars = buildEffectiveThemeVars(lightTheme, false);
+    const lightVars = buildEffectiveThemeVars(lightTheme, 'light');
     expect(lightVars['--bg-scrim']).toBe('rgba(255, 255, 255, 0.65)');
   });
 
   it('keeps the readability scrim off unless the tenant asked for it', () => {
-    const vars = buildEffectiveThemeVars(effectiveTheme(), true);
+    const vars = buildEffectiveThemeVars(effectiveTheme(), 'dark');
     expect(vars['--bg-scrim']).toBe('transparent');
   });
 });
 
-describe('applyEffectiveTheme — data-theme carries the RESOLVED mode', () => {
-  it('never writes the literal "auto" into data-theme', () => {
+describe('applyEffectiveTheme — legacy values resolve to the fixed dark default', () => {
+  it('never reads device preference or emits auto', () => {
     document.documentElement.removeAttribute('data-theme');
-    applyEffectiveTheme(effectiveTheme({ mode: 'auto' }), null, { prefersDark: true });
+    const legacyTheme = effectiveTheme({ mode: 'auto' as any });
+    applyEffectiveTheme(legacyTheme);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(document.documentElement.getAttribute('data-theme-config')).toBe('auto');
+    expect(document.documentElement.getAttribute('data-theme-config')).toBe('dark');
 
-    applyEffectiveTheme(effectiveTheme({ mode: 'auto' }), null, { prefersDark: false });
+    applyEffectiveTheme(effectiveTheme({ mode: 'light' }));
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
 

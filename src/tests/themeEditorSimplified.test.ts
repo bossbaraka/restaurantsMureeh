@@ -32,9 +32,12 @@ describe('the primary editor exposes only the simplified model', () => {
     return view.slice(start, advanced);
   };
 
-  it('offers the seven simple decisions', () => {
+  it('offers the fixed light/dark choice and the remaining simple decisions', () => {
     const s = primarySection();
-    expect(s).toContain('appearance:');   // light / dark / auto
+    expect(s).toContain('appearance:');
+    expect(s).toContain("id: 'light', label: 'فاتح'");
+    expect(s).toContain("id: 'dark', label: 'داكن'");
+    expect(s).not.toContain("id: 'auto'");
     expect(s).toContain('primary:');      // brand
     expect(s).toContain('accent:');
     expect(s).toContain('THEME_PRESETS'); // preset

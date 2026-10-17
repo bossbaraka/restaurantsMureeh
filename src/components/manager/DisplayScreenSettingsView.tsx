@@ -2,12 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { api, isEmbeddedImage } from '../../services/api';
 import { optimizeImageFile } from '../../utils/imageOptimize';
-import { DISPLAY_FONT_PRESETS, SIGNAGE_MIN_WIDTH } from '../display/liveMenuModel';
-import type {
-  DisplayBackgroundMode,
-  DisplayFontKey,
-  Restaurant,
-} from '../../types/restaurant';
+import { SIGNAGE_MIN_WIDTH } from '../display/liveMenuModel';
+import type { DisplayBackgroundMode, Restaurant } from '../../types/restaurant';
 import {
   Check,
   Copy,
@@ -21,7 +17,6 @@ import {
   Sparkles,
   Trash2,
   Tv,
-  Type,
   Upload,
 } from 'lucide-react';
 
@@ -29,22 +24,17 @@ import {
  * شاشة العرض — إعدادات القائمة للقراءة فقط (Display screen settings)
  * =================================================================
  * The venue's own board: the same read-only menu the guest sees on the TV, on
- * the phone and on the tablet. This screen edits exactly the two things the
- * venue owns about it and nothing else:
+ * the phone and on the tablet. This screen lets the venue choose its backdrop:
+ * the restaurant's own themed canvas or a photograph it uploads.
  *
- *   1. the BACKGROUND — «من الثيم» (the venue's own brand canvas, the default)
- *      or «صورة» (a photograph the venue uploads), and
- *   2. the FONT — the display face of the whole board.
- *
- * Everything else about the board is derived, not configured: the palette,
- * density, imagery and rhythm come from the venue's own identity, and the
+ * The board's palette and Arabic font follow the restaurant's shared menu theme;
+ * density, imagery and rhythm remain derived from the venue's identity. The
  * large-screen rule (automatic film on a TV/desktop, a static read-only menu on
  * a phone or tablet) is a property of the device, shown here as information —
  * never a switch the venue could use to allow ordering on the board.
  *
  * The write path is the existing branding save (`PUT /manager/branding`): the
- * backdrop goes through the same storage-reference contract as the logo and the
- * cover, and the font is one of the families the product ships.
+ * backdrop goes through the same storage-reference contract as the logo and cover.
  */
 
 const BACKGROUND_MODES: Array<{
@@ -67,27 +57,6 @@ const BACKGROUND_MODES: Array<{
   },
 ];
 
-const FONT_OPTIONS: Array<{
-  id: DisplayFontKey;
-  label: string;
-  desc: string;
-  /** CSS families used only for the live sample in this screen. */
-  titleFace: string;
-}> = [
-  {
-    id: 'auto',
-    label: 'خط الهوية (تلقائي)',
-    desc: 'يُختار من ألوان مطعمك وصوره — نفس هوية الشاشة الحالية.',
-    titleFace: "'Tajawal', 'Cairo', sans-serif",
-  },
-  ...Object.values(DISPLAY_FONT_PRESETS).map((preset) => ({
-    id: preset.key as DisplayFontKey,
-    label: preset.label,
-    desc: 'خط ثابت لكل الشاشة: العناوين والنصوص.',
-    titleFace: preset.titleFace,
-  })),
-];
-
 export const DisplayScreenSettingsView: React.FC = () => {
   const { currentRestaurant, setCurrentRestaurant, refreshTenantData, showToast } = useRestaurant();
 
@@ -96,7 +65,6 @@ export const DisplayScreenSettingsView: React.FC = () => {
     saved?.backgroundMode ?? 'theme'
   );
   const [backgroundImage, setBackgroundImage] = useState(saved?.backgroundImage ?? '');
-  const [font, setFont] = useState<DisplayFontKey>(saved?.font ?? 'auto');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -115,7 +83,6 @@ export const DisplayScreenSettingsView: React.FC = () => {
     const display = currentRestaurant.display;
     setBackgroundMode(display?.backgroundMode ?? 'theme');
     setBackgroundImage(display?.backgroundImage ?? '');
-    setFont(display?.font ?? 'auto');
   }, [currentRestaurant]);
 
   const displayUrl = useMemo(() => {
@@ -195,7 +162,6 @@ export const DisplayScreenSettingsView: React.FC = () => {
       display: {
         backgroundMode,
         backgroundImage: backgroundImage.trim(),
-        font,
       },
     };
     setIsSaving(true);
@@ -211,7 +177,7 @@ export const DisplayScreenSettingsView: React.FC = () => {
     showToast(
       'success',
       'تم حفظ إعدادات شاشة العرض',
-      'ستظهر الخلفية والخط على شاشة العرض مباشرة (تلفاز، هاتف أو آيباد).'
+      'ستظهر الخلفية على شاشة العرض مباشرة، مع ألوان المطعم وخطه المختار في إعدادات الهوية.'
     );
   };
 
@@ -227,8 +193,8 @@ export const DisplayScreenSettingsView: React.FC = () => {
             <div className="min-w-0">
               <h2 className="text-base font-bold text-luxury-50 font-serif">شاشة العرض (للقراءة فقط)</h2>
               <p className="text-xs text-luxury-400 mt-1 leading-relaxed">
-                خلفية القائمة وخطها كما تظهر على شاشة المطعم. الشاشة للعرض فقط: لا سلة ولا
-                طلب — الطلب يبقى عبر رمز QR على الطاولة.
+                خلفية القائمة كما تظهر على شاشة المطعم. ألوانها وخطها يتبعان هوية المطعم.
+                الشاشة للعرض فقط: لا سلة ولا طلب — الطلب يبقى عبر رمز QR على الطاولة.
               </p>
             </div>
           </div>
@@ -387,53 +353,12 @@ export const DisplayScreenSettingsView: React.FC = () => {
         )}
       </section>
 
-      {/* ===== Fonts ===== */}
-      <section className="rounded-2xl bg-luxury-900 border border-luxury-800 p-5 space-y-4">
-        <div className="flex items-center gap-2.5">
-          <Type className="w-4 h-4 text-gold-400" />
-          <h3 className="text-sm font-bold text-luxury-50">خط شاشة العرض</h3>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-          {FONT_OPTIONS.map((option) => {
-            const isActive = font === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={isActive}
-                onClick={() => {
-                  setFont(option.id);
-                  isDirtyRef.current = true;
-                }}
-                className={`p-3.5 rounded-2xl border text-right transition-all active:scale-[0.99] cursor-pointer ${
-                  isActive
-                    ? 'bg-gold-500/10 border-gold-500/50'
-                    : 'bg-luxury-850/60 border-luxury-800 hover:border-gold-500/30'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`text-xs font-bold ${isActive ? 'text-gold-200' : 'text-luxury-100'}`}>
-                    {option.label}
-                  </span>
-                  {isActive && <Check className="w-3.5 h-3.5 text-gold-400 shrink-0" />}
-                </div>
-                <span
-                  className="block mt-2 text-xl text-luxury-50 leading-snug"
-                  style={{ fontFamily: option.titleFace }}
-                >
-                  حمص بالصنوبر — ₪24
-                </span>
-                <p className="mt-1.5 text-[10px] text-luxury-400 leading-relaxed">{option.desc}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        <p className="text-[10px] text-luxury-500 leading-relaxed">
-          الخط يُطبَّق على عناوين الأقسام وأسماء الأطباق والأسعار في شاشة العرض فقط — منيو
-          الطلب عبر QR يبقى بخط النظام.
+      <section className="rounded-2xl bg-luxury-900 border border-luxury-800 p-4 flex items-start gap-3">
+        <Info className="w-4 h-4 text-gold-400 mt-0.5 shrink-0" />
+        <p className="text-[11px] text-luxury-300 leading-relaxed">
+          شاشة العرض تتبع وضع المطعم الثابت وخط القائمة نفسه (Cairo أو Tajawal)، لضمان
+          اتساق الألوان والقراءة بين قائمة QR وشاشة المطعم. غيّر الوضع أو الخط من إعدادات
+          الهوية والتصميم.
         </p>
       </section>
 

@@ -11,8 +11,8 @@ import type { Category, Product, Restaurant } from '../types/restaurant';
  *
  *  1. the automatic FILM is for the big panels only — a phone or a tablet (a
  *     coarse pointer, even in landscape) gets the static, read-only menu;
- *  2. the settings edited in «الإعدادات ← شاشة العرض» (background + font) are
- *     validated on the server, mapped on the client and actually painted.
+ *  2. the board's background is configurable, while its mode and Arabic font
+ *     are inherited from the restaurant's shared customer theme.
  */
 
 const restaurant: Restaurant = {
@@ -240,7 +240,7 @@ describe('«شاشة العرض» settings', () => {
     ).toBeUndefined();
   });
 
-  it('is validated on the server with the same font list the client offers', () => {
+  it('keeps the legacy displayFont API field validated without exposing a font picker', () => {
     expect(SERVER_FONT_KEYS).toEqual(CLIENT_FONT_KEYS);
 
     expect(
@@ -259,26 +259,14 @@ describe('«شاشة العرض» settings', () => {
     ).toBe(false);
   });
 
-  it('paints the chosen font and the image background on the board', () => {
+  it('uses the restaurant font even when an old displayFont value is stored', () => {
     const sections = buildLiveSections(categories, products);
-    const profile = resolveLiveProfile(restaurant, sections, {
-      backgroundMode: 'image',
-      font: 'amiri',
-    });
-    expect(profile.vars['--lm-title-face']).toContain('Amiri');
-    expect(profile.vars['--lm-body-face']).toContain('Amiri');
+    const profile = resolveLiveProfile(restaurant, sections);
+    expect(profile.vars['--lm-title-face']).toBe('var(--m-font, "Tajawal", "Cairo", sans-serif)');
+    expect(profile.vars['--lm-body-face']).toBe('var(--m-font, "Tajawal", "Cairo", system-ui, sans-serif)');
 
-    // `auto` keeps the derived identity — the pre-feature behaviour.
-    const auto = resolveLiveProfile(restaurant, sections, {
-      backgroundMode: 'theme',
-      font: 'auto',
-    });
-    expect(auto.vars['--lm-title-face']).not.toContain('Amiri');
-    expect(auto.vars['--lm-title-face']).toBe(
-      resolveLiveProfile(restaurant, sections).vars['--lm-title-face']
-    );
-
-    // The wallpaper replaces the ambient brand field only when a photo exists.
+    // Legacy displayFont values remain mapped for compatibility, but do not
+    // affect the board's shared mode or font tokens.
     restaurant.display = {
       backgroundMode: 'image',
       backgroundImage: 'https://example.test/bg.jpg',
@@ -288,17 +276,20 @@ describe('«شاشة العرض» settings', () => {
       const withPhoto = render(<DisplayMenu />);
       expect(withPhoto).toContain('display-menu__wallpaper');
       expect(withPhoto).not.toContain('display-menu__ambient-glow');
+      expect(withPhoto).not.toContain('Amiri');
+      expect(withPhoto).toContain('--lm-title-face:var(--m-font');
 
       restaurant.display = { backgroundMode: 'image', font: 'amiri' };
       const missingPhoto = render(<DisplayMenu />);
       expect(missingPhoto).not.toContain('display-menu__wallpaper');
       expect(missingPhoto).toContain('display-menu__ambient-glow');
+      expect(missingPhoto).not.toContain('Amiri');
     } finally {
       delete restaurant.display;
     }
   });
 
-  it('is editable from its own manager section (background + fonts)', () => {
+  it('edits only the display background and explains the shared mode/font', () => {
     const html = render(<DisplayScreenSettingsView />);
 
     expect(html).toContain('شاشة العرض (للقراءة فقط)');
@@ -308,10 +299,10 @@ describe('«شاشة العرض» settings', () => {
     expect(html).toContain('من الثيم');
     expect(html).toContain('خلفية الشاشة');
     expect(html).not.toContain('رفع صورة من الجهاز');
-    // Fonts, including the derived identity option.
-    expect(html).toContain('خط الهوية (تلقائي)');
+    expect(html).toContain('Cairo أو Tajawal');
+    expect(html).not.toContain('خط الهوية (تلقائي)');
     for (const preset of ['طجوال', 'القاهرة', 'أميري', 'كورمورانت']) {
-      expect(html).toContain(preset);
+      expect(html).not.toContain(preset);
     }
     expect(html).toContain('حفظ إعدادات الشاشة');
     // The device rule is explained, not offered as a switch: a venue must never

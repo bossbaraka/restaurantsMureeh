@@ -16,7 +16,7 @@
  *
  * DESIGN CONTRACT (enforced by src/tests/themeTemplates.test.ts)
  * --------------------------------------------------------------
- * • `mode` is always 'auto' — the guest's device picks the face.
+ * • New template settings are explicitly dark; legacy auto themes also render dark.
  * • The five surface scalars (background/surface/textPrimary/
  *   textSecondary/border) use the EXACT platform default values from
  *   brandTheme.ts (PLATFORM_DARK_DEFAULT_COLORS), which is what lets
@@ -48,7 +48,7 @@ export interface ThemeTemplate {
   density: Density;
   font: EditorFont;
   /**
-   * The full design. `mode: 'auto'`, eleven surface/identity scalars, named
+   * The full design. `mode: 'dark'`, eleven surface/identity scalars, named
    * radius/shadow scales, typography, and a light + dark background.
    * Never carries colour groups or a `cards` object.
    */
@@ -131,7 +131,7 @@ interface TemplateSpec {
 /** Builds the full ThemeConfig for a spec — the only place configs are shaped. */
 function buildTemplateConfig(spec: TemplateSpec): ThemeConfig {
   return {
-    mode: 'auto',
+    mode: 'dark',
     colors: {
       primary: spec.primary,
       // Legacy convention (themeResolver): the accent column maps to both
@@ -168,7 +168,7 @@ const SPECS: TemplateSpec[] = [
     corner: 'rounded',
     card: 'elevated',
     density: 'spacious',
-    font: 'cormorant',
+    font: 'cairo',
     surface: 'a',
     lightBg: solidLight(),
     darkBg: gradientDark('linear-gradient(180deg, #0A0B0D, #171204)'),
@@ -238,7 +238,7 @@ const SPECS: TemplateSpec[] = [
     corner: 'rounded',
     card: 'elevated',
     density: 'spacious',
-    font: 'amiri',
+    font: 'cairo',
     surface: 'a',
     lightBg: solidLight(),
     darkBg: gradientDark('linear-gradient(180deg, #0A0B0D, #1D0B09)'),
@@ -280,7 +280,7 @@ const SPECS: TemplateSpec[] = [
     corner: 'rounded',
     card: 'elevated',
     density: 'comfortable',
-    font: 'cormorant',
+    font: 'cairo',
     surface: 'a',
     lightBg: gradientLight('linear-gradient(180deg, #FFFFFF, #EFF4FA)'),
     darkBg: gradientDark('linear-gradient(180deg, #0A0B0D, #0B1322)'),

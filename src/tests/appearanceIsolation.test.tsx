@@ -112,11 +112,12 @@ describe('platform appearance', () => {
     expect(readStoredAppearance()).toBe('dark');
   });
 
-  it('resolves light / dark explicitly and system from the device', () => {
-    expect(resolvePlatformAppearance('light', true)).toBe('light');
-    expect(resolvePlatformAppearance('dark', false)).toBe('dark');
-    expect(resolvePlatformAppearance('system', true)).toBe('dark');
-    expect(resolvePlatformAppearance('system', false)).toBe('light');
+  it('accepts only explicit light/dark and resolves legacy or invalid values to dark', () => {
+    expect(resolvePlatformAppearance('light')).toBe('light');
+    expect(resolvePlatformAppearance('dark')).toBe('dark');
+    expect(resolvePlatformAppearance('system')).toBe('dark');
+    expect(resolvePlatformAppearance('auto')).toBe('dark');
+    expect(resolvePlatformAppearance(undefined)).toBe('dark');
   });
 
   it('persists the preference and reads it back', () => {
@@ -193,7 +194,7 @@ describe('customer theme never touches the platform world', () => {
   it('the provider source contains no <html> appearance mutation', () => {
     const src = readCode('../theme/CustomerThemeProvider.tsx');
     expect(src).not.toMatch(/documentElement\.classList/);
-    expect(src).not.toMatch(/colorScheme/);
+    expect(src).not.toMatch(/documentElement\.style\.colorScheme/);
     expect(src).not.toMatch(/setAttribute\(\s*'data-theme'/);
   });
 });
@@ -274,10 +275,11 @@ describe('single ownership of each appearance world', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the display board uses the shared pipeline via forceMode, not its own engine', () => {
+  it('the display board uses the shared pipeline and follows the restaurant mode', () => {
     const src = read('../components/display/LiveMenuStage.tsx');
     expect(src).toContain('<CustomerThemeProvider');
-    expect(src).toContain('forceMode="dark"');
+    expect(src).toContain('restaurant={props.restaurant}');
+    expect(src).not.toContain('forceMode=');
   });
 
   it('the manager editor saves state without applying theme to the document', () => {
@@ -297,15 +299,17 @@ describe('no static dark assumptions remain in the platform entry point', () => 
     expect(html).not.toMatch(/<html[^>]*class="[^"]*dark/);
   });
 
-  it('index.html initializes platform appearance before paint (no flash)', () => {
+  it('index.html initializes the explicit platform choice before paint without device detection', () => {
     const html = readRoot('../../index.html');
     expect(html).toContain("localStorage.getItem('mureeh_appearance')");
-    expect(html).toContain('prefers-color-scheme: dark');
-    // PLATFORM ONLY: the pre-hydration script must not read tenant theme data
-    // or write customer tokens.
+    expect(html).toContain("stored === 'light' ? 'light' : 'dark'");
+    // PLATFORM ONLY: the pre-hydration script must not read tenant theme data,
+    // consult the device, or write customer tokens.
     const script = html.slice(html.indexOf('<script>'), html.indexOf('</script>'));
     expect(script).not.toMatch(/--m-/);
     expect(script).not.toMatch(/merar_brand_theme/);
+    expect(script).not.toContain('matchMedia');
+    expect(script).not.toContain('prefers-color-scheme');
   });
 
   it('body colors come from platform tokens, not hardcoded dark hex', () => {
@@ -318,14 +322,11 @@ describe('no static dark assumptions remain in the platform entry point', () => 
     expect(css).toContain(':root:not(.dark)');
   });
 
-  it('the restaurant light block no longer sets platform color-scheme', () => {
+  it('keeps restaurant appearance selectors off the platform stylesheet', () => {
     const css = readRoot('../index.css');
-    const start = css.indexOf(":root[data-theme='light']");
-    // Strip comments: the block documents WHY color-scheme is absent.
-    const block = css
-      .slice(start, css.indexOf('}', start))
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(block).not.toMatch(/color-scheme/);
+    expect(css).not.toContain('data-theme');
+    expect(css).toContain(':root.dark');
+    expect(css).toContain(':root:not(.dark)');
   });
 });
 

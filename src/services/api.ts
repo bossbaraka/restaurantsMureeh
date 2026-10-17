@@ -655,8 +655,11 @@ export function uiThemeConfigFromServer(raw: any): ThemeConfig {
   const groups = mapColorGroups(colorsRaw);
   const shadows = { sm: '0 1px 2px rgba(0,0,0,0.2)', md: '0 4px 12px rgba(0,0,0,0.3)', lg: '0 12px 32px rgba(0,0,0,0.4)', ...(raw.shadows || {}) };
 
-  const config: ThemeConfig = {};
-  if (raw.mode === 'light' || raw.mode === 'dark' || raw.mode === 'auto') config.mode = raw.mode;
+  const config: ThemeConfig = {
+    // Historical `auto` data is migrated at the API boundary to the fixed
+    // dark default; explicit light/dark choices are preserved.
+    mode: raw.mode === 'light' ? 'light' : 'dark',
+  };
 
   if (raw.colors && typeof raw.colors === 'object') {
     config.colors = {
@@ -680,7 +683,7 @@ export function uiThemeConfigFromServer(raw: any): ThemeConfig {
 
   if (raw.typography && typeof raw.typography === 'object') {
     config.typography = {
-      fontFamily: raw.typography.fontFamily || 'auto',
+      fontFamily: raw.typography.fontFamily || 'tajawal',
       headingWeight: String(raw.typography.headingWeight || '700'),
       bodyWeight: String(raw.typography.bodyWeight || '400'),
     } as ThemeConfig['typography'];
@@ -772,7 +775,7 @@ export function mapEffectiveTheme(raw: any): EffectiveTheme | null {
   };
 
   return {
-    mode: raw.mode === 'light' || raw.mode === 'dark' ? raw.mode : 'auto',
+    mode: raw.mode === 'light' ? 'light' : 'dark',
     colors,
     radius,
     shadows,

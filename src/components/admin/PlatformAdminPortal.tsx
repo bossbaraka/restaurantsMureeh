@@ -484,7 +484,7 @@ export const PlatformAdminPortal: React.FC = () => {
                 <div className="pt-4 border-t border-luxury-800">
                   <span className="text-xs font-bold text-luxury-200">وضع الثيم الافتراضي</span>
                   <div className="flex gap-2 mt-2">
-                    {['light', 'dark', 'auto'].map((m) => (
+                    {['light', 'dark'].map((m) => (
                       <button key={m} onClick={() => setPlatformEditConfig((p) => ({ ...p, mode: m as any }))} className={`px-3 py-1.5 rounded-xl border text-xs font-bold ${platformEditConfig.mode === m ? 'bg-gold-500/15 border-gold-500/60 text-gold-300' : 'bg-luxury-950 border-luxury-800 text-luxury-400'}`}>{m}</button>
                     ))}
                   </div>
