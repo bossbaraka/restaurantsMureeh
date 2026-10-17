@@ -49,7 +49,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
 
       - name: Install dependencies
@@ -108,7 +108,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
 
       - name: Install dependencies
@@ -174,3 +174,44 @@ jobs:
           UPLOAD_DIR: ./uploads
           PR_NUMBER: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
+
+      # The employee suite above runs with NODE_ENV=development. Keep a separate
+      # Render-like production boot gate: use the exact Render startCommand
+      # (migrate deploy, then API) with production config and a real public DB
+      # query, without touching any production service or Supabase bucket.
+      - name: Render production boot smoke (disposable CI database)
+        env:
+          NODE_ENV: production
+          RENDER: 'true'
+          PORT: '3002'
+          TRUST_PROXY: '1'
+          KEEP_ALIVE: 'false'
+          STORAGE_DRIVER: supabase
+          # Deliberately unreachable CI-only values. Storage probes are
+          # non-fatal at boot; no real credentials or external writes are used.
+          SUPABASE_URL: http://127.0.0.1:9
+          SUPABASE_SERVICE_ROLE_KEY: ci-only-placeholder-not-a-real-key
+        run: |
+          export DATABASE_URL="postgres://${CI_DB_USER}:${CI_DB_PASSWORD}@localhost:5432/${CI_DB_NAME}"
+          npm run start:server > render-prod.log 2>&1 &
+          SERVER_PID=$!
+          on_exit() {
+            result=$?
+            kill "$SERVER_PID" 2>/dev/null || true
+            if [ "$result" -ne 0 ]; then
+              echo 'Render-like production boot failed. Server log tail:'
+              tail -n 70 render-prod.log
+            fi
+          }
+          trap on_exit EXIT
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -fsS --max-time 2 http://127.0.0.1:3002/api/health >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          node --input-type=module -e "const res = await fetch('http://127.0.0.1:3002/api/public/restaurants'); const body = await res.json(); if (!res.ok || body.success !== true || !Array.isArray(body.data?.restaurants)) process.exit(1);"
