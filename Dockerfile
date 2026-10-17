@@ -25,6 +25,10 @@ RUN npm ci --omit=dev
 
 COPY --from=frontend-builder /app/dist ./dist
 COPY --from=frontend-builder /app/server ./server
+# server/ imports runtime modules from shared/ (e.g. server/seo/landingPrerender.ts
+# -> ../../shared/plan-pricing and ../../shared/mureeh-contact). Without this copy
+# the container crashes at boot with ERR_MODULE_NOT_FOUND: /app/shared/plan-pricing.
+COPY --from=frontend-builder /app/shared ./shared
 COPY --from=frontend-builder /app/node_modules ./node_modules
 
 EXPOSE 3001

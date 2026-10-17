@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { FREE_TRIAL_PLAN } from '../services/plans';
-import { LAUNCH_OFFER, PLAN_PRICING } from '../../shared/plan-pricing';
+import { LAUNCH_OFFER, PLAN_PRICING } from '../../shared/plan-pricing.ts';
 import { seedShoqrahCafe } from './seed-shoqrah';
 import { seedGhosnCafe } from './seed-ghosn';
 import { assertStrongSeedPassword, isDemoSeedAllowed } from './seed-utils';
