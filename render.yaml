@@ -8,6 +8,10 @@ services:
     startCommand: npm run start:server
     healthCheckPath: /api/health
     envVars:
+      # Same Node major/minimum as CI and Docker. Vite 8 and the React plugin
+      # require Node >= 22.12 on the Node 22 line; pin to avoid Render drift.
+      - key: NODE_VERSION
+        value: "22.22.3"
       - key: NODE_ENV
         value: production
       # Render terminates TLS at exactly one reverse proxy in front of the
@@ -81,6 +85,8 @@ services:
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
     envVars:
+      - key: NODE_VERSION
+        value: "22.22.3"
       - key: VITE_API_URL
         sync: false
     routes:

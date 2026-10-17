@@ -34,7 +34,7 @@ npm run db:provision-admins
 قبل البدء في النشر، تأكد من توفر:
 - خادم سحابي VPS بنظام **Ubuntu 22.04 أو 24.04** (مثلاً: Hetzner, DigitalOcean, AWS EC2, Contabo).
 - اسم دومين (Domain Name) موجه إلى عنوان IP الخاص بالسيرفر (مثلاً `menu.yourdomain.com`).
-- Node.js إصدار **20.x** أو أحدث.
+- Node.js إصدار **22.12 على الأقل ضمن سلسلة 22** (المشروع مثبت على 22.22.3 في `.node-version` وRender؛ استخدم نفس الإصدار على الخادم).
 - قاعدة بيانات **PostgreSQL 16 أو 17**.
 
 ---
@@ -46,8 +46,8 @@ npm run db:provision-admins
 # تحديث المستودعات
 sudo apt update && sudo apt upgrade -y
 
-# تثبيت Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# تثبيت Node.js 22؛ تحقق بعد ذلك بـ node --version (يلزم >= 22.12)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs git nginx postgresql postgresql-contrib
 
 # تثبيت مدير العمليات PM2 عالمياً
@@ -99,17 +99,20 @@ JWT_SECRET="<GENERATE-YOUR-OWN-SECRET>"   # openssl rand -base64 48 — NEVER re
 
 ---
 
-### الخطوة 4: مزامنة قاعدة البيانات وبناء الواجهة
+### الخطوة 4: ترحيل قاعدة البيانات وبناء الواجهة
 ```bash
-# مزامنة جداول Prisma وتوليد الـ Client
-npx prisma db push
+# توليد Prisma Client وتطبيق الترحيلات الملتزم بها فقط (لا تستخدم db push في الإنتاج)
+npx prisma generate
+npm run db:migrate
 
-# بذر البيانات الأولية (أطباق مِيرار، 50 طاولة، المستخدمين)
+# مرة واحدة فقط عند إنشاء قاعدة جديدة وبإعداد كلمة مرور مدير المنصة؛ لا تُكرر عند كل نشر
 npm run db:seed
 
 # بناء واجهة العميل واللوحة (Frontend Build)
 npm run build
 ```
+
+> في النشرات اللاحقة، طبّق `npm run db:migrate` وابنِ الواجهة دون تشغيل `db:seed`؛ لا تستخدم `db push` أو `migrate reset` في قاعدة بيانات حية.
 
 ---
 
@@ -201,8 +204,8 @@ docker compose exec app npx tsx server/db/seed.ts
 
 - **قاعدة البيانات**: أنشئ مشروعاً على [Neon.tech](https://neon.tech) أو [Supabase](https://supabase.com) وانسخ الـ `DATABASE_URL`.
 - **الخادم الخلفي (Backend)**: ارفع المشروع على [Render.com](https://render.com) أو [Railway.app](https://railway.app):
-  - أمر البناء (Build Command): `npm install && npx prisma db push`
-  - أمر التشغيل (Start Command): `npm run start:server`
+  - أمر البناء (Build Command): `npm ci && npx prisma generate` — لا تغيّر قاعدة البيانات أثناء البناء.
+  - أمر التشغيل (Start Command): `npm run start:server` — يطبّق `prisma migrate deploy` قبل فتح المنفذ، دون بذر البيانات.
 - **الواجهة الأمامية (Frontend)**: ارفع على [Vercel](https://vercel.com) أو [Cloudflare Pages]:
   - Framework: `Vite`
   - Build Command: `npm run build`
@@ -211,17 +214,18 @@ docker compose exec app npx tsx server/db/seed.ts
 
 ### إعدادات Render و Vercel الجاهزة
 
-يوجد في جذر المشروع ملفا `render.yaml` و `vercel.json` لتطبيق إعدادات النشر تلقائيًا.
-إذا كان المستودع يحتوي على مجلد `restaurant-system`، اجعله **Root Directory** في إعدادات المنصة.
+يوجد في جذر المشروع ملفا `render.yaml` و `vercel.json`. **في هذا المستودع** `package.json` في الجذر، لذلك اترك **Root Directory فارغًا** في Render؛ الخدمة المنشأة يدويًا لا تتبنى تغييرات `render.yaml` تلقائيًا، ويجب مراجعة إعداداتها في لوحة Render.
 
 - **Render Static Site**: يستخدم `npm ci && npm run build` وينشر مجلد `dist`.
-- **Render Web Service**: يستخدم `npm ci && npx prisma generate && npx prisma db push` ثم `npm run start:server`.
-- لا تنشر الـ Backend كـ Static Site؛ ملف `render.yaml` ينشئ الخدمتين منفصلتين.
+- **Render Web Service (API)**: يستخدم `npm ci && npx prisma generate` ثم `npm run start:server`؛ يطبّق أمر التشغيل الترحيلات الملتزم بها (`prisma migrate deploy`) قبل إقلاع الخادم. لا تستخدم `db push` أو `db:seed` في Build/Start.
+- إصدار Node مضبوط على `22.22.3` في `.node-version` وBlueprint؛ للخدمة اليدوية تأكد أن `NODE_VERSION` في إعدادات Render ليس مثبتًا على إصدار أقدم (إعداد لوحة التحكم قد يتجاوز الملف).
+- فحص الصحة: `/api/health`. لا تنشر الـ Backend كـ Static Site؛ ملف `render.yaml` ينشئ الخدمتين منفصلتين.
 - في الواجهة، اضبط `VITE_API_URL` على رابط خدمة الـ API، مثل `https://restaurant-api.onrender.com`.
 - في خدمة الـ API، اضبط `DATABASE_URL` و `JWT_SECRET` و `CORS_ORIGIN` و `APP_URL`.
 - قبل تشغيل seed، اضبط أيضًا `PLATFORM_ADMIN_EMAIL` و `PLATFORM_ADMIN_PASSWORD`، بالإضافة إلى `MANAGER_1_NAME` و`MANAGER_1_EMAIL` و`MANAGER_1_PASSWORD`، ونفس الحقول للمديرين `2` و`3`.
 - لإنشاء الحسابات أو تحديث كلمات مرورها دون حذف بيانات المطاعم والطلبات، شغّل من **Render Shell**: `npm run db:provision-admins`. استخدم `npm run db:seed` مرة واحدة فقط عند تهيئة قاعدة جديدة تمامًا.
 - يجب أن تكون قيمة `CORS_ORIGIN` هي رابط الواجهة النهائي، مثل `https://restaurant-frontend.onrender.com` أو رابط Vercel.
+- لتشخيص فشل خدمة Web على Render حسب مرحلة البناء/الإقلاع، راجع [دليل فحص نشر Render](docs/RENDER_DEPLOYMENT_RUNBOOK.md). إشعار البريد وحده لا يتضمن سبب الفشل؛ اطلب أول خطأ من سجلات الخدمة.
 
 ---
 
