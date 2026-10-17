@@ -442,6 +442,7 @@ export function mapOrderRow(raw: any): Order {
     tableNumber: raw.tableNumber !== undefined ? Number(raw.tableNumber) : undefined,
     tableName: raw.tableName || undefined,
     sessionId: raw.sessionId || undefined,
+    customerName: raw.customerName || undefined,
     items,
     subtotal: Number(raw.subtotal) || 0,
     tax: raw.tax !== undefined ? Number(raw.tax) : undefined,
@@ -1169,6 +1170,7 @@ class RestaurantApiService {
     clientRequestId: string;
     items: Order['items'];
     notes?: string;
+    customerName?: string;
   }): Promise<ApiResponse<{ order: Order }>> {
     const res = await this.request<any>('POST', '/public/orders', {
       auth: false,

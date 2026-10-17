@@ -38,6 +38,7 @@ import { soundFX } from '../utils/audio';
 import { resolveTableDisplayNumber } from '../utils/formatting';
 import { openEventSourceWithBackoff } from '../utils/sse';
 import { isOrderOperational } from '../utils/orderLifecycle';
+import { getSavedGuestName, recordOwnedOrderId, saveGuestName } from '../utils/guestOrderOwnership';
 
 export type AppViewMode = 'CUSTOMER' | 'MANAGER' | 'ADMIN' | 'ONBOARDING' | 'PLATFORM_ADMIN' | 'SPLIT_PREVIEW' | 'KITCHEN_KDS' | 'SAAS_LANDING' | 'LIVE_SCREEN';
 
@@ -140,7 +141,10 @@ interface RestaurantContextType {
   setIsTableSelectorOpen: (open: boolean) => void;
 
   // Customer Ordering Lifecycle
-  createOrder: (notes?: string) => Promise<{ success: boolean; order?: Order; error?: string }>;
+  createOrder: (
+    notes?: string,
+    options?: { customerName?: string; paymentMethod?: 'CASHIER' | 'TRANSFER' }
+  ) => Promise<{ success: boolean; order?: Order; error?: string }>;
   cancelCustomerOrder: (orderId: string) => Promise<{ success: boolean; message: string }>;
   editCustomerOrderNotes: (orderId: string, notes: string) => Promise<{ success: boolean; message: string }>;
   callWaiter: (reasonOrTableId: WaiterRequest['reason'] | string, maybeReason?: WaiterRequest['reason'] | string, customText?: string) => Promise<{ success: boolean; error?: string }>;
@@ -883,7 +887,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the active QR token in the public URL without exposing table numbers.
+  // Security & anti-link-leak: once the QR token has been verified and stored
+  // in tab-scoped sessionStorage (`merar_table_binding`), scrub `?qr=...` from
+  // the browser address bar so copying/sharing the URL cannot leak the table's
+  // physical QR token to outside devices. Same-tab reloads still recover the
+  // session seamlessly via `readTableBinding()`.
   useEffect(() => {
     if (typeof window === 'undefined' || !currentRestaurant || viewMode !== 'CUSTOMER') return;
     if (displayMode) return; // never rewrite the shareable display link
@@ -892,16 +900,13 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       !new URLSearchParams(window.location.search).has('qr');
     if (isBareRoot) return; // never rewrite the canonical root landing URL "/"
     if (activeTableId && currentTableSession) {
-      const table = tables.find((t) => t.id === activeTableId);
-      const qrToken = table?.qrToken || readTableBinding()?.qrToken;
-      if (!qrToken) return;
-      const newUrl = `/r/${currentRestaurant.slug}?qr=${encodeURIComponent(qrToken)}`;
-      if (window.location.pathname + window.location.search !== newUrl) {
-        window.history.replaceState({ tableId: activeTableId, slug: currentRestaurant.slug }, '', newUrl);
+      const cleanUrl = `/r/${currentRestaurant.slug}`;
+      if (window.location.pathname + window.location.search !== cleanUrl) {
+        window.history.replaceState({ tableId: activeTableId, slug: currentRestaurant.slug }, '', cleanUrl);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRestaurant?.slug, activeTableId, viewMode]);
+  }, [currentRestaurant?.slug, activeTableId, currentTableSession?.id, viewMode]);
 
   // Ref to track previous status of customer orders for instant live notifications
   const prevOrderStatusMapRef = useRef<Record<string, string>>({});
@@ -1345,7 +1350,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Create order: POST to the public API bound to the QR session; the server
   // re-prices every item from the tenant's DB menu.
   const createOrder = useCallback(
-    async (notes?: string): Promise<{ success: boolean; order?: Order; error?: string }> => {
+    async (
+      notes?: string,
+      options?: { customerName?: string; paymentMethod?: 'CASHIER' | 'TRANSFER' }
+    ): Promise<{ success: boolean; order?: Order; error?: string }> => {
       if (!currentRestaurant) return { success: false, error: 'المطعم غير محدد' };
       if (!activeTableId || !currentTableSession?.sessionToken) {
         setIsTableSelectorOpen(true);
@@ -1354,6 +1362,11 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       if (cartItems.length === 0) {
         showToast('warning', 'السلة فارغة');
         return { success: false, error: 'السلة فارغة' };
+      }
+
+      const effectiveCustomerName = options?.customerName?.trim() || getSavedGuestName() || undefined;
+      if (effectiveCustomerName) {
+        saveGuestName(effectiveCustomerName);
       }
 
       const orderItems: OrderItem[] = cartItems.map((c) => {
@@ -1393,6 +1406,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         sessionId: currentTableSession.id,
         items: orderItems,
         notes: notes || '',
+        customerName: effectiveCustomerName || '',
       });
       if (orderSubmissionRef.current?.fingerprint !== fingerprint) {
         orderSubmissionRef.current = { fingerprint, clientRequestId: newClientRequestId() };
@@ -1405,6 +1419,7 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         clientRequestId: orderSubmissionRef.current.clientRequestId,
         items: orderItems,
         notes,
+        customerName: effectiveCustomerName,
       });
 
       // Session expired while the guest was browsing? Recover silently once.
@@ -1418,20 +1433,23 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             clientRequestId: orderSubmissionRef.current!.clientRequestId,
             items: orderItems,
             notes,
+            customerName: effectiveCustomerName,
           });
         }
       }
 
       if (res.success && res.data) {
         orderSubmissionRef.current = null;
+        recordOwnedOrderId(res.data.order.id);
         clearCart();
         refreshTenantData();
         soundFX.playChime();
         setIsCartOpen(false);
-        setIsOrderTrackingOpen(true);
-        // F-03 (UX-Audit): Open OrderTrackingDrawer only. Do NOT auto-open TransferPaymentModal.
-        // The transfer form is opened on demand from inside the tracking drawer.
-        // setPaymentStepOrder(res.data.order);
+        if (options?.paymentMethod === 'TRANSFER') {
+          setPaymentStepOrder(res.data.order);
+        } else {
+          setIsOrderTrackingOpen(true);
+        }
         showToast(
           'info',
           'تم إرسال طلبك، يرجى تأكيد عملية الدفع لإتمام الطلب.',
@@ -1478,6 +1496,8 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         onProgress
       );
       if (res.success) {
+        recordOwnedOrderId(orderId);
+        saveGuestName(details.customerName.trim());
         showToast(
           'success',
           'تم إرسال إشعار التحويل، الطلب بانتظار التحقق من الدفع.',

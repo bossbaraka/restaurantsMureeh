@@ -3,6 +3,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useDialog } from '../../hooks/useDialog';
 import { formatPrice } from '../../utils/formatting';
 import { optimizeImageFile } from '../../utils/imageOptimize';
+import { getSavedGuestName } from '../../utils/guestOrderOwnership';
 import { Order, TransferChannel } from '../../types/restaurant';
 import {
   X,
@@ -109,7 +110,9 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
   );
 
   const [channel, setChannel] = useState<TransferChannel>('BANK');
-  const [customerName, setCustomerName] = useState('');
+  const [customerName, setCustomerName] = useState(
+    () => order.customerName || getSavedGuestName() || ''
+  );
   const [phone, setPhone] = useState('');
   const [file, setFile] = useState<File | Blob | null>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -140,9 +143,13 @@ export const TransferPaymentModal: React.FC<TransferPaymentModalProps> = ({
     if (!isOpen) return;
     setProgress(0);
     setError('');
+    if (!customerName) {
+      const prefilled = order.customerName || getSavedGuestName();
+      if (prefilled) setCustomerName(prefilled);
+    }
     if (phase !== 'success') setPhase('idle');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen, order.id]);
 
   // Open on the channel the venue actually receives money through: a guest must
   // not land on «حوالة بنكية» and find no bank account, while a wallet is
