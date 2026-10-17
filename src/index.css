@@ -1241,6 +1241,20 @@ html {
   transform: translateY(0);
 }
 
+/* Animate the actual extracted brand bird: a visible flight arc, then a full return to rest. */
+@keyframes saas-bird-flight-return {
+  0%, 17%, 100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  34% { transform: translate3d(18px, -22px, 0) rotate(8deg) scale(1.06); }
+  49% { transform: translate3d(25px, -14px, 0) rotate(2deg) scale(1.08); }
+  66% { transform: translate3d(8px, -28px, 0) rotate(-7deg) scale(1.04); }
+  82% { transform: translate3d(-8px, -10px, 0) rotate(-3deg) scale(1.02); }
+  92% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+}
+.saas-bird-return {
+  transform-origin: 50% 78%;
+  animation: saas-bird-flight-return 4.4s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+}
+
 /* Ambient aurora blobs */
 @keyframes saas-drift-a {
   0%, 100% { transform: translate(0, 0) scale(1); }
@@ -1357,6 +1371,24 @@ input[type='range'].saas-range::-moz-range-thumb {
   cursor: grab;
 }
 
+/* SaaS landing page: consistent keyboard focus and restrained card interaction. */
+#top :is(a, button, input, select, textarea):focus-visible {
+  outline: 3px solid #0072bc;
+  outline-offset: 3px;
+  border-radius: 0.75rem;
+}
+
+#top .saas-plan-card {
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #top .saas-plan-card:hover {
+    border-color: rgb(56 189 248 / 0.55);
+    box-shadow: 0 18px 48px -28px rgb(56 189 248 / 0.38);
+  }
+}
+
 /* Respect users who prefer reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .menu-img,
@@ -1375,6 +1407,7 @@ input[type='range'].saas-range::-moz-range-thumb {
   .menu-cats__track {
     scroll-behavior: auto;
   }
+  .saas-bird-return,
   .animate-saas-drift-a,
   .animate-saas-drift-b,
   .animate-saas-float,
@@ -1386,7 +1419,8 @@ input[type='range'].saas-range::-moz-range-thumb {
   .animate-saas-blink {
     animation: none;
   }
-  .saas-reveal {
+  .saas-reveal,
+  #top .saas-plan-card {
     opacity: 1;
     transform: none;
     transition: none;

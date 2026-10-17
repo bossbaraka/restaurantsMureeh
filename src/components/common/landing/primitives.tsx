@@ -157,15 +157,15 @@ export const SectionHeading: FC<{
   sub?: string;
 }> = ({ eyebrow, title, sub }) => (
   <Reveal className="text-center max-w-2xl mx-auto space-y-4 mb-12 sm:mb-16">
-    <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0072BC]/10 border border-[#0072BC]/30 text-[#38BDF8] text-[11px] font-bold tracking-wide">
-      <span className="w-1.5 h-1.5 rounded-full bg-[#38BDF8] animate-saas-blink" />
+    <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0072BC]/10 border border-[#0072BC]/30 text-[#004B87] text-[11px] font-bold tracking-wide">
+      <span className="w-1.5 h-1.5 rounded-full bg-[#00649C] animate-saas-blink" />
       {eyebrow}
     </span>
-    <h2 className="text-2xl sm:text-4xl font-black text-white leading-snug text-balance">
+    <h2 className="text-2xl sm:text-4xl font-black text-[#1D3548] leading-snug text-balance">
       {title}
     </h2>
     {sub && (
-      <p className="text-sm sm:text-base text-slate-300/90 leading-relaxed">{sub}</p>
+      <p className="text-sm sm:text-base text-[#536879] leading-relaxed">{sub}</p>
     )}
   </Reveal>
 );
