@@ -19,6 +19,7 @@ import {
   evaluatePlanChange,
   effectiveSubscriptionState,
 } from '../services/plans';
+import { withCurrentPlanPricing } from '../services/planPricing';
 import { logAuditEvent } from '../services/audit';
 import {
   getStorage,
@@ -3078,6 +3079,14 @@ router.get('/subscription', requireManager(), async (req: Request, res: Response
     const subscriptionWithState = subscription
       ? {
           ...subscription,
+          plan: subscription.plan
+            ? {
+                ...subscription.plan,
+                standardPriceMonthly: subscription.plan.priceMonthly,
+                standardPriceYearly: subscription.plan.priceYearly,
+                isPromotionActive: false,
+              }
+            : subscription.plan,
           effectiveStatus: effective.effectiveStatus,
           entitlementActive: effective.entitled,
           daysRemaining: effective.daysRemaining,
@@ -3085,7 +3094,7 @@ router.get('/subscription', requireManager(), async (req: Request, res: Response
         }
       : subscription;
     // trialDays is derived server-side so no client hardcodes the trial length.
-    return res.json({ success: true, data: { subscription: subscriptionWithState, plans: plans.map(withTrialMeta) }, statusCode: 200 });
+    return res.json({ success: true, data: { subscription: subscriptionWithState, plans: plans.map((plan) => withTrialMeta(withCurrentPlanPricing(plan))) }, statusCode: 200 });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'تعذر استرجاع الاشتراك', statusCode: 500 });
   }
@@ -3111,6 +3120,9 @@ router.put(
         where: { restaurantId },
         include: { plan: true },
       });
+      // Keep the self-service security decision on regular catalog prices;
+      // a temporary offer must not turn a paid entitlement upgrade into a free one.
+      const targetQuote = withCurrentPlanPricing(plan);
       const verdict = evaluatePlanChange({
         current: currentSubscription?.plan ?? null,
         target: plan,
@@ -3137,7 +3149,7 @@ router.put(
             metadata: {
               targetPlanId: plan.id,
               targetPlanName: plan.name,
-              targetPriceMonthly: plan.priceMonthly,
+              targetPriceMonthly: targetQuote.priceMonthly,
               requestedAt: new Date().toISOString(),
             },
             ipAddress: req.ip,

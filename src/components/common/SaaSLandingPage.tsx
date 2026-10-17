@@ -6,6 +6,9 @@ import { formatPrice } from '../../utils/formatting';
 import { AnimatedNumber, CountUp, Reveal, SectionHeading } from './landing/primitives';
 import { KdsMockup, ManagerMockup, MiniQr, PhoneMockup } from './landing/mockups';
 import { DemoVideoPlayer } from './landing/DemoVideoPlayer';
+import { TypewriterText } from './TypewriterText';
+import { LAUNCH_OFFER, PLAN_PRICING, getDisplayedPlanPrice, getPlanDiscountPercent, isLaunchOfferActive } from '../../../shared/plan-pricing';
+import { buildMureehWhatsAppUrl, MUREEH_WHATSAPP_DISPLAY } from '../../../shared/mureeh-contact';
 import {
   ArrowLeft,
   BadgeCheck,
@@ -47,13 +50,14 @@ import {
 
 type FeatureGroup = { title: string; items: string[] };
 
+type PlanKey = keyof typeof PLAN_PRICING;
+
 type PlanDef = {
-  id: string;
+  id: PlanKey;
   name: string;
   tagline: string;
-  priceMonthly: number;
-  priceYearly: number;
-  priceYearlyPerMonth: number;
+  pricing: (typeof PLAN_PRICING)[PlanKey];
+  limits: string;
   features: string[];
   cta: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -64,9 +68,8 @@ const PLANS: PlanDef[] = [
     id: 'starter',
     name: 'الباقة الأساسية',
     tagline: 'للمطاعم والكافيهات الواعدة',
-    priceMonthly: 300,
-    priceYearly: 3000,
-    priceYearlyPerMonth: Math.round(3000 / 12),
+    pricing: PLAN_PRICING.starter,
+    limits: 'حتى 20 طاولة و35 صنفاً — فرع واحد',
     features: [
       'منيو رقمي فاخر وتفاعلي عبر رمز الـ QR',
       'طلب فوري مباشر من الطاولة بدون أي تطبيق',
@@ -81,9 +84,8 @@ const PLANS: PlanDef[] = [
     id: 'pro',
     name: 'الباقة الاحترافية (الأكثر طلباً)',
     tagline: 'الحل المتكامل لإدارة الصالات وشاشة المطبخ والـ POS',
-    priceMonthly: 550,
-    priceYearly: 5500,
-    priceYearlyPerMonth: Math.round(5500 / 12),
+    pricing: PLAN_PRICING.pro,
+    limits: 'حتى 50 طاولة و150 صنفاً — 3 فروع',
     features: [
       'جميع مزايا الباقة الأساسية بالكامل',
       'شاشة المطبخ الحية (KDS) بتنبيهات صوتية فورية',
@@ -98,11 +100,9 @@ const PLANS: PlanDef[] = [
     id: 'enterprise',
     name: 'باقة المؤسسات والسلاسل',
     tagline: 'لسلاسل المطاعم والفنادق والمنتجعات والفروع المتعددة',
-    priceMonthly: 850,
-    priceYearly: 8500,
-    priceYearlyPerMonth: Math.round(8500 / 12),
+    pricing: PLAN_PRICING.enterprise,
+    limits: 'حتى 10 فروع و200 طاولة و500 صنف',
     features: [
-      'حتى 10 فروع و200 طاولة و500 صنف',
       'إدارة الفروع المتعددة (Multi-Branch System)',
       'ربط نطاق خاص لموقعك (Custom Domain)',
       'مدير حساب خاص ودعم أولوية قصوى 24/7',
@@ -237,6 +237,10 @@ const FAQS = [
     a: 'نعم — من لوحة تحكم مطعمك (الباقة والاشتراك) يمكنك الترقية أو التخفيض فورياً، ويُطبق الفرق تلقائياً على اشتراكك بدون أي تعقيد.',
   },
   {
+    q: 'إلى متى يستمر عرض الإطلاق؟',
+    a: `عرض الإطلاق للمشتركين الجدد متاح حتى ${LAUNCH_OFFER.endsAtLabelAr}. بعد انتهاء المدة يعود السعر إلى السعر المعتاد الظاهر على الباقة.`,
+  },
+  {
     q: 'هل تتغير الأسعار مع عدد الطاولات؟',
     a: 'لا. سعر الباقة ثابت ويشمل كل ما هو مذكور — الطاولات داخل حدّ باقتك بدون أي رسوم إضافية مهما زاد عدد طلباتك.',
   },
@@ -270,12 +274,33 @@ export const SaaSLandingPage: FC = () => {
   const [tab, setTab] = useState(0);
   const [tabCycle, setTabCycle] = useState(0);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [pricingNow, setPricingNow] = useState(() => Date.now());
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Repaint exactly at campaign start/end so an open landing tab never keeps
+  // displaying a price after the advertised window has expired.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const syncToNextBoundary = () => {
+      const now = Date.now();
+      setPricingNow(now);
+      const nextBoundary = [Date.parse(LAUNCH_OFFER.startsAt), Date.parse(LAUNCH_OFFER.endsAt)]
+        .filter((time) => time > now)
+        .sort((a, b) => a - b)[0];
+      if (nextBoundary !== undefined) {
+        timer = setTimeout(syncToNextBoundary, nextBoundary - now + 50);
+      }
+    };
+    syncToNextBoundary();
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+    };
   }, []);
 
   // Auto-rotate showcase tabs (timer resets on manual selection)
@@ -289,11 +314,9 @@ export const SaaSLandingPage: FC = () => {
   const estimatedRevenueBoost = tablesInput * 350;
   const sliderPct = ((tablesInput - 5) / (100 - 5)) * 100;
 
-  const handleContactTelegram = (planName: string = 'الاحترافية') => {
-    const text = encodeURIComponent(
-      `مرحباً! أود الاشتراك في منصة مُريح للخدمات الإلكترونية للمطاعم (${planName}) والاستفسار عن تدشين الخدمة لمطعمي.`,
-    );
-    window.open(`https://t.me/Mureeh_tech_bot?start=${encodeURIComponent(planName)}`, '_blank');
+  const handleContactWhatsApp = (topic: string = 'الاحترافية') => {
+    const message = `مرحباً، أود التحدث مع فريق مريح بشأن ${topic}.`;
+    window.open(buildMureehWhatsAppUrl(message), '_blank', 'noopener,noreferrer');
   };
 
   const openManagerConsole = () => {
@@ -310,6 +333,7 @@ export const SaaSLandingPage: FC = () => {
   };
 
   const activeTab = SHOWCASE_TABS[tab] ?? SHOWCASE_TABS[0]!;
+  const isOfferActive = isLaunchOfferActive(pricingNow);
 
   return (
     <div
@@ -342,11 +366,11 @@ export const SaaSLandingPage: FC = () => {
           </nav>
           <div className="hidden lg:flex items-center gap-2.5">
             <button
-              onClick={() => handleContactTelegram('تواصل عام')}
-              className="px-4 py-2.5 rounded-xl bg-[#0072BC]/15 hover:bg-[#0072BC]/25 border border-[#0072BC]/40 text-[#7DD3FC] text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              onClick={() => handleContactWhatsApp('تواصل عام')}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <MessageSquare className="w-3.5 h-3.5" />
-              تليجرام المبيعات
+              واتساب مريح
             </button>
             <button
               onClick={openManagerConsole}
@@ -378,11 +402,11 @@ export const SaaSLandingPage: FC = () => {
             ))}
             <div className="flex gap-2 pt-3">
               <button
-                onClick={() => handleContactTelegram('تواصل عام')}
-                className="flex-1 py-3 rounded-xl bg-[#0072BC]/15 border border-[#0072BC]/40 text-[#7DD3FC] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => handleContactWhatsApp('تواصل عام')}
+                className="flex-1 py-3 rounded-xl bg-emerald-500/10 border border-emerald-400/30 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                تليجرام
+                واتساب
               </button>
               <button
                 onClick={openManagerConsole}
@@ -414,12 +438,15 @@ export const SaaSLandingPage: FC = () => {
             </Reveal>
             <Reveal delay={90}>
               <h1 className="text-4xl sm:text-5xl xl:text-[3.6rem] font-black leading-[1.25] text-white text-balance">
-                مطعمك كاملاً…
-                <br />
-                يُدار من{' '}
-                <span className="bg-gradient-to-l from-white via-[#7DD3FC] to-[#009FE3] bg-clip-text text-transparent">
-                  رمز QR واحد
+                <span aria-hidden="true">
+                  مطعمك كاملاً…
+                  <br />
+                  يُدار من{' '}
+                  <span className="bg-gradient-to-l from-white via-[#7DD3FC] to-[#009FE3] bg-clip-text text-transparent">
+                    <TypewriterText text="رمز QR واحد" delayMs={280} />
+                  </span>
                 </span>
+                <span className="sr-only">مطعمك كاملاً… يُدار من رمز QR واحد</span>
               </h1>
             </Reveal>
             <Reveal delay={180}>
@@ -431,11 +458,11 @@ export const SaaSLandingPage: FC = () => {
             <Reveal delay={260}>
               <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3">
                 <button
-                  onClick={openManagerConsole}
+                  onClick={() => handleContactWhatsApp(isOfferActive ? 'عرض الإطلاق' : 'اشتراك مريح')}
                   className="btn-shine w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_36px_rgba(0,114,188,0.5)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
                 >
                   <Rocket className="w-4 h-4" />
-                  ابدأ تجربتك المجانية
+                  {isOfferActive ? 'استفد من عرض الإطلاق' : 'تواصل للاشتراك'}
                 </button>
                 <a
                   href="#how"
@@ -969,7 +996,7 @@ export const SaaSLandingPage: FC = () => {
                       </p>
                     </div>
                     <button
-                      onClick={() => handleContactTelegram('استشارة باقة')}
+                      onClick={() => handleContactWhatsApp('استشارة باقة')}
                       className="btn-shine shrink-0 px-6 py-3.5 rounded-xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-white text-xs font-black shadow-[0_0_26px_rgba(0,114,188,0.45)] flex items-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
                     >
                       استشر خبير مُريح مجاناً
@@ -1005,6 +1032,29 @@ export const SaaSLandingPage: FC = () => {
               title={<>باقة لكل مرحلة من نموّك</>}
               sub="ابدأ بإطلاق منيو رقمي احترافي خلال دقائق، وطوّر باقتك كلما كبر مطعمك — بدون رسوم خفية وبدون عقود إجبارية."
             />
+            {isOfferActive && (
+              <Reveal className="max-w-3xl mx-auto -mt-8 mb-8">
+                <div
+                  role="status"
+                  aria-label={`عرض إطلاق لفترة محدودة حتى ${LAUNCH_OFFER.endsAtLabelAr}`}
+                  className="relative overflow-hidden rounded-2xl border border-amber-400/35 bg-gradient-to-l from-[#3B2608]/70 via-[#14233A] to-[#081B33] px-5 py-4 shadow-[0_12px_45px_-24px_rgba(245,158,11,0.6)]"
+                >
+                  <div className="absolute inset-y-0 right-0 w-1 bg-gradient-to-b from-amber-200 via-amber-400 to-amber-700" />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-center gap-2 sm:gap-4">
+                    <span className="inline-flex items-center justify-center gap-1.5 self-center sm:self-auto rounded-full border border-amber-300/30 bg-amber-400/10 px-3 py-1 text-[10px] font-black text-amber-200">
+                      <Clock className="h-3.5 w-3.5" />
+                      عرض إطلاق لفترة محدودة
+                    </span>
+                    <p className="m-0 text-xs sm:text-sm font-bold text-white">
+                      للمشتركين الجدد حتى {LAUNCH_OFFER.endsAtLabelAr}
+                    </p>
+                  </div>
+                  <p className="mt-2 mb-0 text-[10px] leading-relaxed text-slate-300">
+                    أسعار العرض بالشيكل ظاهرة بوضوح بجانب السعر المعتاد؛ والدفع السنوي يشمل خصم شهرين إضافيين مقارنةً بالدفع الشهري.
+                  </p>
+                </div>
+              </Reveal>
+            )}
             {/* billing toggle */}
             <Reveal className="flex justify-center">
               <div className="inline-flex items-center gap-1 p-1.5 rounded-2xl bg-[#081B33] border border-[#004B87]/60">
@@ -1038,7 +1088,9 @@ export const SaaSLandingPage: FC = () => {
             {billingPeriod === 'yearly' && (
               <p className="text-[11px] text-emerald-400 font-bold flex items-center justify-center gap-1.5 animate-saas-pop">
                 <BadgeCheck className="w-3.5 h-3.5" />
-                اخترت الدفع السنوي — وفّرت شهرين كاملين (~17%) على باقتك
+                {isOfferActive
+                  ? 'الدفع السنوي يوفّر شهرين إضافيين فوق سعر عرض الإطلاق'
+                  : 'الدفع السنوي يوفّر شهرين كاملين مقارنةً بالدفع الشهري'}
               </p>
             )}
           </div>
@@ -1048,8 +1100,15 @@ export const SaaSLandingPage: FC = () => {
             {PLANS.map((plan, i) => {
               const Icon = plan.icon;
               const isPro = plan.id === 'pro';
-              const price =
-                billingPeriod === 'monthly' ? plan.priceMonthly : plan.priceYearlyPerMonth;
+              const selectedPrice = getDisplayedPlanPrice(plan.pricing, billingPeriod, pricingNow);
+              const price = billingPeriod === 'yearly' ? Math.round(selectedPrice / 12) : selectedPrice;
+              const regularPrice =
+                billingPeriod === 'yearly'
+                  ? Math.round(plan.pricing.priceYearly / 12)
+                  : plan.pricing.priceMonthly;
+              const annualPrice = getDisplayedPlanPrice(plan.pricing, 'yearly', pricingNow);
+              const annualSavings = plan.pricing.priceYearly - annualPrice;
+              const discountPercent = getPlanDiscountPercent(plan.pricing);
 
               const card = (
                 <div
@@ -1077,9 +1136,9 @@ export const SaaSLandingPage: FC = () => {
                       >
                         <Icon className="w-6 h-6" />
                       </div>
-                      {isPro && (
-                        <span className="text-[10px] font-bold text-[#38BDF8] bg-[#040D1A] border border-[#004B87] px-2.5 py-1 rounded-full">
-                          منصة مريح للخدمات
+                      {isOfferActive && (
+                        <span className="text-[10px] font-black text-amber-200 bg-amber-400/10 border border-amber-300/25 px-2.5 py-1 rounded-full">
+                          خصم {discountPercent}% لفترة محدودة
                         </span>
                       )}
                     </div>
@@ -1087,7 +1146,12 @@ export const SaaSLandingPage: FC = () => {
                     <h3 className="text-xl font-black text-white">{plan.name}</h3>
                     <p className="text-xs text-slate-400 mt-1 mb-5 leading-relaxed">{plan.tagline}</p>
 
-                    <div className="flex items-end gap-1.5 mb-1">
+                    <div className="flex items-end gap-2 mb-1" aria-live="polite">
+                      {isOfferActive && (
+                        <span className="mb-1.5 text-sm font-bold text-slate-500 line-through tabular-nums">
+                          {regularPrice}
+                        </span>
+                      )}
                       <span
                         className={`text-4xl font-black tabular-nums ${
                           isPro ? 'text-[#38BDF8]' : 'text-white'
@@ -1095,21 +1159,30 @@ export const SaaSLandingPage: FC = () => {
                       >
                         {price}
                       </span>
-                      <span className="text-xs text-slate-400 mb-1.5">₪ / شهرياً</span>
+                      <span className="text-xs text-slate-400 mb-1.5">
+                        ₪ / شهرياً{billingPeriod === 'yearly' ? ' عند الدفع السنوي' : ''}
+                      </span>
                     </div>
-                    <div className="min-h-4 mb-5">
+                    <div className="min-h-8 mb-4 space-y-1">
                       {billingPeriod === 'yearly' ? (
-                        <span className="text-[10px] text-emerald-400 font-bold">
-                          تُدفع سنوياً: {plan.priceYearly} ₪ — وفّرت{' '}
-                          {plan.priceMonthly * 12 - plan.priceYearly} ₪
+                        <span className="block text-[10px] font-bold text-emerald-400">
+                          تُدفع سنوياً: {annualPrice} ₪
+                          {isOfferActive
+                            ? ` (بدلاً من ${plan.pricing.priceYearly} ₪) — وفّرت ${annualSavings} ₪`
+                            : ` — وفّرت ${plan.pricing.priceMonthly * 12 - annualPrice} ₪`}
+                        </span>
+                      ) : isOfferActive ? (
+                        <span className="block text-[10px] text-amber-200 font-bold">
+                          عرض الإطلاق حتى {LAUNCH_OFFER.endsAtLabelAr} · وفّر {regularPrice - price} ₪ شهرياً
                         </span>
                       ) : (
-                        <span className="text-[10px] text-slate-500">
+                        <span className="block text-[10px] text-slate-500">
                           يمكن الترقية أو الإلغاء في أي وقت
                         </span>
                       )}
                     </div>
 
+                    <p className="text-[10px] font-bold text-slate-400 mb-3">{plan.limits}</p>
                     <ul className="space-y-2.5 text-xs mb-5">
                       {plan.features.map((feature) => (
                         <li key={feature} className="flex items-start gap-2 leading-relaxed">
@@ -1129,7 +1202,7 @@ export const SaaSLandingPage: FC = () => {
 
                      <div className="mt-auto pt-2">
                        <button
-                         onClick={() => handleContactTelegram(plan.name)}
+                         onClick={() => handleContactWhatsApp(plan.name)}
                          className={`w-full py-3.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] ${
                            isPro
                              ? 'btn-shine bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white shadow-[0_0_26px_rgba(0,114,188,0.45)] hover:brightness-110'
@@ -1317,7 +1390,7 @@ export const SaaSLandingPage: FC = () => {
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
                   <button
-                    onClick={() => handleContactTelegram('تواصل عام')}
+                    onClick={() => handleContactWhatsApp('تواصل عام')}
                     className="btn-shine w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_36px_rgba(0,114,188,0.5)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
                   >
                     <MessageSquare className="w-4 h-4" />
@@ -1360,14 +1433,16 @@ export const SaaSLandingPage: FC = () => {
                 منصة مُريح للخدمات الإلكترونية — منظومة سحابية متكاملة لإدارة المطاعم والمقاهي:
                 منيو QR، شاشة مطبخ، ونقطة بيع في مكان واحد.
               </p>
-              <button
-                onClick={() => handleContactTelegram('تواصل عام')}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/30 text-sky-300 text-xs font-bold transition-all cursor-pointer"
+              <a
+                href={buildMureehWhatsAppUrl('مرحباً، أود الاستفسار عن منصة مُريح.')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-bold transition-all"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
-                <span>تليجرام: </span>
-                <span className="font-mono" dir="ltr">@Mureeh_tech_bot</span>
-              </button>
+                <span>واتساب مريح</span>
+                <span className="font-mono" dir="ltr">{MUREEH_WHATSAPP_DISPLAY}</span>
+              </a>
             </div>
             <nav aria-label="روابط سريعة">
               <h4 className="text-sm font-black text-white mb-4">روابط سريعة</h4>
@@ -1387,7 +1462,7 @@ export const SaaSLandingPage: FC = () => {
                 {PLANS.map((p) => (
                   <li key={p.id}>
                     <a href="#pricing" className="hover:text-[#38BDF8] transition-colors">
-                      {p.name} — {p.priceMonthly} ₪/شهرياً
+                      {p.name} — {getDisplayedPlanPrice(p.pricing, 'monthly', pricingNow)} ₪/شهرياً
                     </a>
                   </li>
                 ))}
@@ -1397,10 +1472,16 @@ export const SaaSLandingPage: FC = () => {
               <h4 className="text-sm font-black text-white mb-4">تواصل معنا</h4>
               <ul className="space-y-2.5 text-xs font-bold text-slate-400">
                 <li className="flex items-center gap-2">
-                  <MessageSquare className="w-3.5 h-3.5 text-[#38BDF8]" />
-                  تليجرام:{' '}
-                  <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" className="font-mono text-slate-300 hover:text-sky-400" dir="ltr">
-                    @Mureeh_tech_bot
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                  واتساب:{' '}
+                  <a
+                    href={buildMureehWhatsAppUrl('مرحباً، أود التواصل مع فريق مريح.')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-slate-300 hover:text-emerald-300"
+                    dir="ltr"
+                  >
+                    {MUREEH_WHATSAPP_DISPLAY}
                   </a>
                 </li>
                 <li className="flex items-center gap-2">

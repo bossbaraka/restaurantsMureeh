@@ -281,6 +281,10 @@ model Plan {
   nameEn          String
   priceMonthly    Float             @default(0)
   priceYearly     Float             @default(0)
+  promoPriceMonthly Float?
+  promoPriceYearly  Float?
+  promoStartsAt     DateTime?
+  promoEndsAt       DateTime?
   billingPeriod   String            @default("monthly")
   maxTables       Int               @default(50)
   maxCategories   Int               @default(20)

@@ -128,13 +128,15 @@ describe('prerendered content — mirrors the live landing page', () => {
     expect(LANDING_ROOT_HTML).toMatch(/<footer id="contact"/);
   });
 
-  it('links the Telegram sales contact the live page uses', () => {
-    expect(LANDING_ROOT_HTML).toContain('https://t.me/Mureeh_tech_bot');
-    expect(LANDING_ROOT_HTML).toContain('@Mureeh_tech_bot');
+  it('uses Mureeh WhatsApp as the only platform sales contact', () => {
+    expect(LANDING_ROOT_HTML).toContain('https://wa.me/970593498909');
+    expect(LANDING_ROOT_HTML).toContain('+970593498909');
+    expect(LANDING_ROOT_HTML).not.toMatch(/t\.me\/|Mureeh_tech_bot|تليجرام/i);
   });
 
-  it('declares no fabricated business facts (reviews, ratings, address, phone)', () => {
-    expect(LANDING_ROOT_HTML).not.toMatch(/aggregateRating|تقييم 4\.5|رقم الهاتف|هاتف:\s*\d/);
+  it('declares no fabricated reviews, ratings or address alongside the verified WhatsApp number', () => {
+    expect(LANDING_ROOT_HTML).not.toMatch(/aggregateRating|تقييم 4\.5|رقم الهاتف|عنواننا:/);
+    expect(LANDING_ROOT_HTML).toContain('+970593498909');
   });
 });
 

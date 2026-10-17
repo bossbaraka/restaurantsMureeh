@@ -20,6 +20,8 @@ import { verifyStorageReady, verifyPrivateStorageReady } from './services/storag
 import { handlePlatformSitemap, handlePlatformRobots, handleCanonicalRedirect } from './seo/platformSeo';
 import { handlePlatformOgImage } from './seo/ogImage';
 import { handlePrerenderedLanding } from './seo/landingPrerender';
+import { redactSensitiveUrl } from './utils/sensitiveUrl';
+export { redactSensitiveUrl };
 
 /** Probe object storage twice with a short delay to ride out deploy-time DNS/network blips. */
 async function verifyStorageReadyWithRetry(
@@ -140,13 +142,6 @@ app.use(
 // The previous pattern only matched `token=`, which — because it is
 // anchored on a `?`/`&` boundary — did NOT match `sessionToken=`.
 // Matching the full parameter name explicitly closes that gap.
-const SENSITIVE_QUERY_PARAMS =
-  /([?&])(sessionToken|qrToken|token|access_token|refresh_token|pin|password|secret|apiKey)=[^&\s]*/gi;
-
-export function redactSensitiveUrl(url: string): string {
-  return url.replace(SENSITIVE_QUERY_PARAMS, '$1$2=[REDACTED]');
-}
-
 morgan.token('url', (req) =>
   redactSensitiveUrl(req.originalUrl || req.url || '')
 );

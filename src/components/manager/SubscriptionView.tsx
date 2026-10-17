@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { BrandLogo } from '../brand/BrandLogo';
 import { Subscription, Plan } from '../../types/restaurant';
+import { LAUNCH_OFFER } from '../../../shared/plan-pricing';
 import { formatPrice, formatTime, daysUntil } from '../../utils/formatting';
 import {
   CreditCard,
@@ -88,7 +89,9 @@ export const SubscriptionView: React.FC = () => {
 
   if (!currentRestaurant) return null;
 
-  const currentPlan = subscription ? allPlans.find((p) => p.id === subscription?.planId) || null : null;
+  const currentPlan = subscription
+    ? subscription.plan ?? allPlans.find((p) => p.id === subscription.planId) ?? null
+    : null;
 
   const performPlanChange = async (planId: string) => {
     if (!currentRestaurant || isChanging) return;
@@ -137,8 +140,9 @@ export const SubscriptionView: React.FC = () => {
     }
     // Moving to a cheaper plan is a downgrade: warn the owner first so they
     // understand they're losing the higher-tier features before we change.
-    const currentPrice = currentPlan?.priceMonthly ?? 0;
-    if (target && target.priceMonthly < currentPrice) {
+    const currentPrice = currentPlan?.standardPriceMonthly ?? currentPlan?.priceMonthly ?? 0;
+    const targetPrice = target?.standardPriceMonthly ?? target?.priceMonthly ?? 0;
+    if (target && targetPrice < currentPrice) {
       setPendingDowngradePlan(target);
       return;
     }
@@ -234,6 +238,11 @@ export const SubscriptionView: React.FC = () => {
               <span className="text-2xl font-bold text-gold-400 font-mono">
                 {!currentPlan ? '—' : currentPlan.priceMonthly === 0 ? 'مجانية' : formatPrice(currentPlan.priceMonthly)}
               </span>
+              {currentPlan?.isPromotionActive && (currentPlan.standardPriceMonthly ?? 0) > currentPlan.priceMonthly && (
+                <span className="mr-2 text-xs text-luxury-500 line-through font-mono">
+                  {formatPrice(currentPlan.standardPriceMonthly!)}
+                </span>
+              )}
               {currentPlan?.priceMonthly !== 0 && (
                 <span className="text-xs text-luxury-400"> / شهرياً</span>
               )}
@@ -250,6 +259,11 @@ export const SubscriptionView: React.FC = () => {
             {currentPlan && currentPlan.priceMonthly > 0 && (
               <p className="text-[10px] text-luxury-500">
                 أو {formatPrice(currentPlan.priceYearly)} سنوياً — وفّر {formatPrice(currentPlan.priceMonthly * 12 - currentPlan.priceYearly)}
+              </p>
+            )}
+            {currentPlan?.isPromotionActive && (
+              <p className="text-[10px] text-amber-300 font-bold">
+                {LAUNCH_OFFER.labelAr} ساري حتى {LAUNCH_OFFER.endsAtLabelAr}
               </p>
             )}
           </div>
@@ -371,6 +385,7 @@ export const SubscriptionView: React.FC = () => {
               {allPlans.map((p) => {
                 const isCurrent = currentPlan?.id === p.id;
                 const isFreeTrial = (p.trialDays ?? 0) > 0;
+                const displayPlan = isCurrent && currentPlan ? currentPlan : p;
                 return (
                   <div
                     key={p.id}
@@ -428,13 +443,23 @@ export const SubscriptionView: React.FC = () => {
                         ) : (
                           <>
                             <div>
-                              <span className="text-2xl font-extrabold text-gold-400 font-mono">{formatPrice(p.priceMonthly)}</span>
+                              <span className="text-2xl font-extrabold text-gold-400 font-mono">{formatPrice(displayPlan.priceMonthly)}</span>
+                              {displayPlan.isPromotionActive && (displayPlan.standardPriceMonthly ?? 0) > displayPlan.priceMonthly && (
+                                <span className="mr-2 text-xs text-luxury-500 line-through font-mono">
+                                  {formatPrice(displayPlan.standardPriceMonthly!)}
+                                </span>
+                              )}
                               <span className="text-[10px] text-luxury-400"> / شهرياً</span>
                             </div>
                             <div className="text-[10px] text-luxury-400">
-                              أو <span className="font-bold text-luxury-200 font-mono">{formatPrice(p.priceYearly)}</span> سنوياً
-                              <span className="text-emerald-400 font-bold"> — وفّر {formatPrice(p.priceMonthly * 12 - p.priceYearly)}</span>
+                              أو <span className="font-bold text-luxury-200 font-mono">{formatPrice(displayPlan.priceYearly)}</span> سنوياً
+                              <span className="text-emerald-400 font-bold"> — وفّر {formatPrice(displayPlan.priceMonthly * 12 - displayPlan.priceYearly)}</span>
                             </div>
+                            {displayPlan.isPromotionActive && (
+                              <div className="text-[10px] text-amber-300 font-bold">
+                                عرض الإطلاق حتى {LAUNCH_OFFER.endsAtLabelAr}
+                              </div>
+                            )}
                           </>
                         )}
                       </div>

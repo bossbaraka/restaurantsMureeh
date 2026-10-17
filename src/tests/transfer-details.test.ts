@@ -575,6 +575,8 @@ describe('GET /api/public/restaurants/:slug — transfer details (real router)',
       '20260920120000_add_restaurant_display_settings',
       // Central Theme Management — Theme table with platform default partial unique index.
       '20260920130000_add_central_theme',
+      // Launch promotion metadata on Plan; additive and unrelated to Restaurant.
+      '20261017090000_add_plan_launch_promotion',
     ]);
   });
 });

@@ -9,9 +9,10 @@
  * 5. Branding isolation: Updating Tenant A branding never alters Tenant B branding
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma } from '../../server/db/prisma';
+import type { PrismaClient } from '@prisma/client';
 
 const hasDb = Boolean(process.env.DATABASE_URL);
+let prisma: PrismaClient;
 
 describe.skipIf(!hasDb)('Prisma + Real PostgreSQL Integration & Tenant Isolation', () => {
   const runId = Date.now();
@@ -23,6 +24,12 @@ describe.skipIf(!hasDb)('Prisma + Real PostgreSQL Integration & Tenant Isolation
   let prodAId = '';
 
   beforeAll(async () => {
+    // Defer loading the runtime Prisma client until a database-backed test is
+    // actually enabled. This keeps the suite safely skippable in environments
+    // without DATABASE_URL or generated Prisma artifacts.
+    const client = await import('../../server/db/prisma');
+    prisma = client.prisma;
+
     // 1. Connect and create isolated tenants A & B
     const a = await prisma.restaurant.create({
       data: {
