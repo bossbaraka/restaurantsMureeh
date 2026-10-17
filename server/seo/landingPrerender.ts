@@ -48,8 +48,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
-import { LAUNCH_OFFER, PLAN_PRICING, getDisplayedPlanPrice, isLaunchOfferActive } from '../../shared/plan-pricing';
-import { buildMureehWhatsAppUrl, MUREEH_WHATSAPP_DISPLAY } from '../../shared/mureeh-contact';
+import { LAUNCH_OFFER, PLAN_PRICING, getDisplayedPlanPrice, isLaunchOfferActive } from '../../shared/plan-pricing.ts';
+import { buildMureehWhatsAppUrl, MUREEH_WHATSAPP_DISPLAY } from '../../shared/mureeh-contact.ts';
 
 /** Marker injected right after `<div id="root">` — makes the
  *  injection idempotent and testable. */
