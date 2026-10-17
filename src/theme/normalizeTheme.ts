@@ -32,11 +32,10 @@
  * `presetId` is `null` for every theme that did not explicitly record one.
  * A stored theme may hold a deliberate custom combination that happens to sit
  * near a shipped preset; inferring "closest preset" would silently reinterpret
- * the manager's intent and let later derivation overwrite their values. A
- * preset id is assigned ONLY when a manager explicitly picks one in the
- * editor. Everything a legacy theme stored is preserved verbatim in
- * `colors`/`radius`/`shadows`/`typography`/`cards`/`background` and is treated
- * as an explicit override by the token builder.
+ * the manager's intent. A preset id is assigned ONLY when a manager explicitly
+ * picks one in the editor. Legacy values are retained in the normalized data
+ * for safe round-trips; the customer palette intentionally consumes only the
+ * brand, semantic status colors, typography, shape, and background roles.
  */
 
 import type {
@@ -117,7 +116,7 @@ const DEFAULT_SHADOWS: ThemeShadows = {
 };
 
 const DEFAULT_TYPOGRAPHY: ThemeTypography = {
-  fontFamily: 'auto',
+  fontFamily: 'tajawal',
   headingWeight: '700',
   bodyWeight: '400',
 };
@@ -210,7 +209,7 @@ export function normalizeTheme(
   if (!effective) {
     const hasLegacy = Boolean(str(restaurant?.primaryColor) || str(restaurant?.accentColor));
     return {
-      mode: 'auto',
+      mode: 'dark',
       presetId: null,
       brand,
       colors: { ...DEFAULT_COLORS, primary: brand.primary, accent: brand.accent },
@@ -230,7 +229,8 @@ export function normalizeTheme(
   // A Theme row exists. Every stored value is preserved verbatim — this is the
   // compatibility guarantee for existing tenants. Defaults only FILL GAPS.
   return {
-    mode: effective.mode ?? 'auto',
+    // Old persisted `auto` values are interpreted as the fixed dark default.
+    mode: effective.mode === 'light' ? 'light' : 'dark',
     // Never inferred. Only an explicit manager choice sets this.
     presetId: null,
     brand,

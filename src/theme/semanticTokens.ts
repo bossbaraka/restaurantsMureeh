@@ -17,15 +17,11 @@
  * `--menu-*` (a CSS-side derivation) families, re-emitted from the
  * same computation so old consumers kept working during migration.
  *
- * That migration COMPLETED on 2026-10-16: every consumer now reads
- * `--m-*` (index.css included), so the alias layer was deleted —
- * three of the four overlapping families no longer exist, and the
- * rendered result can no longer depend on which family happened to
- * be populated. The `--theme-*` / `--button-*` / `--card-*` /
- * `--badge-*` / `--category-*` names SURVIVE inside
- * `buildEffectiveThemeVars` on purpose: they are the advanced
- * editor's explicit-override channel, layered on top of the derived
- * `--m-*` values by index.css (`var(--theme-text-primary, var(--m-text))`).
+ * The customer scope now receives only `--m-*` semantic values and the
+ * explicitly supported background-layer settings. Legacy `--theme-*`,
+ * `--button-*`, `--card-*`, `--badge-*`, and `--category-*` color variables
+ * are not emitted into the customer DOM, so stale advanced color values can
+ * no longer compete with the brand-derived palette.
  *
  * PURITY CONTRACT
  * ---------------
@@ -39,7 +35,6 @@ import {
   buildBrandTokens,
   buildEffectiveThemeVars,
   resolveThemeMode,
-  FONT_FAMILY_MAP,
   type BrandTokens,
   type Rgb,
   type SurfaceMode,
@@ -107,7 +102,7 @@ export const SEMANTIC_TOKEN_NAMES = {
     '--m-badge-text',
     '--m-badge-radius',
   ],
-  typography: ['--m-font', '--m-font-heading-weight', '--m-font-body-weight'],
+  typography: ['--m-font', '--m-font-chosen', '--m-font-heading-weight', '--m-font-body-weight'],
   shape: [
     '--m-radius-sm',
     '--m-radius-md',
@@ -219,13 +214,11 @@ function channelTokens(tokens: TokenMap, brand: BrandTokens, mode: SurfaceMode):
 /**
  * Generic CSS font keywords (`serif`, `sans-serif`, `system-ui`, …).
  *
- * WHY THIS EXISTS — `--m-font-chosen` is consumed INSIDE a longer
- * `font-family` chain (e.g. `var(--m-font-chosen, …), 'Tajawal', sans-serif`).
- * If the chosen stack still carried its own trailing generic face, that
- * generic would match BEFORE the chain's Arabic coverage, so a Latin-only
- * display face (Cormorant) would drop Arabic glyphs onto the device serif
- * instead of onto Tajawal. Stripping the generics leaves only the real faces
- * and lets the consumer chain's own fallbacks stay in charge of coverage.
+ * WHY THIS EXISTS — `--m-font-chosen` is consumed by entry and display
+ * `font-family` chains. It contains the selected Arabic face first and the
+ * other supported Arabic face second. Stripping generic CSS keywords keeps
+ * device-dependent `system-ui` / `serif` substitutions out of the restaurant's
+ * font decision; consumers use Tajawal as their predictable final fallback.
  */
 const GENERIC_FONT_FACES = new Set([
   'serif',
@@ -415,19 +408,10 @@ export function buildSemanticTokens(
 ): TokenMap {
   const brand = buildBrandTokens(theme.brand.primary, theme.brand.accent, surfaceMode);
   const effective = toEffectiveThemeShape(theme);
-  // `prefersDark` only selects which stored background variant applies; the
-  // resolved mode already decided light vs dark, so pass it consistently.
-  const themeVars = buildEffectiveThemeVars(effective, surfaceMode === 'dark');
+  // The resolved mode selects one saved background variant; no device input
+  // participates in the customer palette.
+  const themeVars = buildEffectiveThemeVars(effective, surfaceMode);
   const surfaces = surfaceTokens(brand, surfaceMode);
-
-  // An optional per-component override is an EMPTY STRING when unset (the
-  // server contract's "absent" encoding). `pick` therefore falls back to the
-  // derived value rather than emitting an empty custom property, which would
-  // resolve to nothing and render an invisible element.
-  const pick = (override: string | undefined, derived: string): string => {
-    const value = typeof override === 'string' ? override.trim() : '';
-    return value.length > 0 ? value : derived;
-  };
 
   const tokens: TokenMap = {
     // ---- Identity -------------------------------------------------------
@@ -446,7 +430,7 @@ export function buildSemanticTokens(
     '--m-brand-line': brand.line,
 
     // ---- Surface --------------------------------------------------------
-    '--m-bg': themeVars['--theme-bg'],
+    '--m-bg': surfaceMode === 'light' ? '#FFFFFF' : '#0A0B0D',
     ...surfaces,
 
     // ---- Typography -----------------------------------------------------
@@ -455,24 +439,10 @@ export function buildSemanticTokens(
     '--m-font-body-weight': themeVars['--font-body-weight'],
   };
 
-  // OPTIONAL FONT-PRESENCE TOKEN — deliberately NOT part of
-  // SEMANTIC_TOKEN_NAMES (that registry is pinned by tests to be always
-  // non-empty). This one is the opposite on purpose: it uses the same
-  // "empty string = absent" contract as the per-component colour overrides,
-  // so consumers read `var(--m-font-chosen, <their own face>)`.
-  //
-  // Meaning: the tenant's font face ONLY when it was EXPLICITLY chosen in
-  // the theme editor (fontFamily ≠ 'auto'). Tenants that never picked a
-  // font keep rendering byte-identically (the fallback face applies), while
-  // any real font decision propagates to every guest-facing surface — the
-  // menu shell AND the entry experience — instead of stopping at the shell.
-  //
-  // Generic keywords are stripped (see stripGenericFaces) so the consumer's
-  // own Arabic-coverage fallbacks stay in charge of script fallback.
-  const chosenFontKey = theme.typography?.fontFamily;
-  const chosenFontStack =
-    chosenFontKey && chosenFontKey !== 'auto' ? FONT_FAMILY_MAP[chosenFontKey] : undefined;
-  tokens['--m-font-chosen'] = chosenFontStack ? stripGenericFaces(chosenFontStack) : '';
+  // A single Arabic-first face is used throughout the restaurant menu,
+  // including headings and the entry experience. Legacy/unsupported families
+  // are normalized to Tajawal before reaching this pipeline.
+  tokens['--m-font-chosen'] = stripGenericFaces(themeVars['--font-family']);
 
   Object.assign(tokens, {
     // ---- Shape ----------------------------------------------------------
@@ -498,41 +468,28 @@ export function buildSemanticTokens(
   Object.assign(tokens, statusExtensionTokens(surfaceMode));
 
   // ---- Component layer --------------------------------------------------
-  // Thin semantic aliases over identity/surface, with the stored per-component
-  // groups (colors.button/card/badge/category) acting as explicit overrides.
-  tokens['--m-card-bg'] = pick(
-    themeVars['--card-bg'],
-    `linear-gradient(160deg, ${tokens['--m-surface-raised']} 0%, ${tokens['--m-surface']} 100%)`
-  );
-  tokens['--m-card-border'] = pick(themeVars['--card-border'], tokens['--m-hairline']);
+  // Color is derived from one source: brand identity plus the fixed surface
+  // mode. Stored legacy per-component color overrides are intentionally inert.
+  tokens['--m-card-bg'] =
+    `linear-gradient(160deg, ${tokens['--m-surface-raised']} 0%, ${tokens['--m-surface']} 100%)`;
+  tokens['--m-card-border'] = tokens['--m-hairline'];
   tokens['--m-card-radius'] = themeVars['--card-radius'];
   tokens['--m-card-shadow'] = themeVars['--card-shadow'];
 
-  tokens['--m-chip-bg'] = pick(themeVars['--category-bg'], tokens['--m-surface-raised']);
-  tokens['--m-chip-text'] = pick(
-    themeVars['--category-text'],
-    `color-mix(in srgb, ${brand.muted} 70%, ${tokens['--m-text-muted']})`
-  );
-  tokens['--m-chip-active-bg'] = pick(themeVars['--category-active-bg'], 'transparent');
-  // When an explicit active color exists it must paint OVER the brand
-  // gradient, so the image layer is switched off. Mirrors the existing
-  // --category-active-image contract exactly.
-  tokens['--m-chip-active-image'] = pick(themeVars['--category-active-image'], brand.fill);
-  tokens['--m-chip-active-text'] = pick(themeVars['--category-active-text'], brand.ink);
+  tokens['--m-chip-bg'] = tokens['--m-surface-raised'];
+  tokens['--m-chip-text'] =
+    `color-mix(in srgb, ${brand.muted} 70%, ${tokens['--m-text-muted']})`;
+  tokens['--m-chip-active-bg'] = 'transparent';
+  tokens['--m-chip-active-image'] = brand.fill;
+  tokens['--m-chip-active-text'] = brand.ink;
 
-  tokens['--m-button-bg'] = pick(themeVars['--button-bg'], brand.fill);
-  tokens['--m-button-text'] = pick(themeVars['--button-text'], brand.ink);
-  tokens['--m-button-secondary-bg'] = pick(
-    themeVars['--button-secondary-bg'],
-    tokens['--m-surface-raised']
-  );
-  tokens['--m-button-secondary-text'] = pick(
-    themeVars['--button-secondary-text'],
-    tokens['--m-text']
-  );
+  tokens['--m-button-bg'] = brand.fill;
+  tokens['--m-button-text'] = brand.ink;
+  tokens['--m-button-secondary-bg'] = tokens['--m-surface-raised'];
+  tokens['--m-button-secondary-text'] = tokens['--m-text'];
 
-  tokens['--m-badge-bg'] = pick(themeVars['--badge-bg'], tokens['--m-surface-raised']);
-  tokens['--m-badge-text'] = pick(themeVars['--badge-text'], tokens['--m-text']);
+  tokens['--m-badge-bg'] = tokens['--m-surface-raised'];
+  tokens['--m-badge-text'] = tokens['--m-text'];
   tokens['--m-badge-radius'] = themeVars['--badge-radius'];
 
   return tokens;
@@ -541,32 +498,22 @@ export function buildSemanticTokens(
 /**
  * The complete style payload for the customer scope element.
  *
- * TWO layers, in precedence order:
- *   1. the server-contract keys (--theme-*, --bg-*, --radius-*,
- *      --shadow-*, --card-*, --font-*, --button-*, --badge-*,
- *      --category-*) — the advanced editor's explicit-override
- *      channel. index.css layers them ON TOP of the derived
- *      values (`var(--theme-text-primary, var(--m-text))`), so a
- *      stored tenant scalar must still reach the DOM here.
- *   2. the canonical `--m-*` semantic tokens, spread second so
- *      the two families can never collide on a name.
- *
- * The DERIVED legacy families (--brand-*, --menu-*) were deleted
- * with the migration's completion: every consumer reads `--m-*`.
- *
- * One object, applied once, by one owner.
+ * Only the custom background-layer contract (`--bg-*`) and canonical `--m-*`
+ * semantic tokens reach the customer DOM. Compatibility scalar/component
+ * colors are intentionally filtered out; this is what prevents old advanced
+ * overrides from competing with the identity-derived palette.
  */
 export function buildCustomerThemeStyle(
   theme: NormalizedTheme,
   surfaceMode: SurfaceMode
 ): TokenMap {
   const effective = toEffectiveThemeShape(theme);
-  const themeVars = buildEffectiveThemeVars(
-    effective,
-    surfaceMode === 'dark'
+  const themeVars = buildEffectiveThemeVars(effective, surfaceMode);
+  const backgroundVars = Object.fromEntries(
+    Object.entries(themeVars).filter(([name]) => name.startsWith('--bg-'))
   );
   return {
-    ...themeVars,
+    ...backgroundVars,
     ...buildSemanticTokens(theme, surfaceMode),
   };
 }
@@ -576,9 +523,6 @@ export function buildCustomerThemeStyle(
  * Re-exported through this module so consumers need only one import and
  * cannot accidentally resolve mode twice with different inputs.
  */
-export function resolveSurfaceMode(
-  theme: NormalizedTheme,
-  prefersDark: boolean
-): SurfaceMode {
-  return resolveThemeMode(theme.mode, prefersDark);
+export function resolveSurfaceMode(theme: NormalizedTheme): SurfaceMode {
+  return resolveThemeMode(theme.mode);
 }

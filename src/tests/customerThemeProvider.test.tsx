@@ -122,9 +122,9 @@ describe('semantic equivalence — new pipeline matches the legacy engine', () =
     '--font-body-weight': '--m-font-body-weight',
   };
 
-  const legacyOutput = (theme: EffectiveTheme, prefersDark: boolean): Record<string, string> => {
+  const legacyOutput = (theme: EffectiveTheme): Record<string, string> => {
     document.documentElement.removeAttribute('style');
-    applyEffectiveTheme(theme, null, { prefersDark });
+    applyEffectiveTheme(theme);
     const out: Record<string, string> = {};
     for (const key of Object.keys(CONTRACT_KEY_MAP)) {
       out[key] = document.documentElement.style.getPropertyValue(key);
@@ -132,18 +132,16 @@ describe('semantic equivalence — new pipeline matches the legacy engine', () =
     return out;
   };
 
-  for (const [label, mode, prefersDark] of [
-    ['dark mode', 'dark', true],
-    ['light mode', 'light', false],
-    ['auto + dark device', 'auto', true],
-    ['auto + light device', 'auto', false],
+  for (const [label, mode, surfaceMode] of [
+    ['dark mode', 'dark', 'dark'],
+    ['light mode', 'light', 'light'],
+    ['legacy auto mode (dark fallback)', 'auto', 'dark'],
   ] as const) {
     it(`produces equivalent semantic output in ${label}`, () => {
-      const theme = effectiveTheme({ mode });
-      const legacy = legacyOutput(theme, prefersDark);
+      const theme = effectiveTheme({ mode: mode as any });
+      const legacy = legacyOutput(theme);
 
       const normalized = normalizeTheme({ theme });
-      const surfaceMode = mode === 'auto' ? (prefersDark ? 'dark' : 'light') : mode;
       const next = buildCustomerThemeStyle(normalized, surfaceMode);
 
       for (const [legacyKey, canonicalKey] of Object.entries(CONTRACT_KEY_MAP)) {
@@ -192,26 +190,41 @@ describe('semantic equivalence — new pipeline matches the legacy engine', () =
         textPrimary: '#FDF6E3',
       } as EffectiveTheme['colors'],
     });
-    const tokens = buildCustomerThemeStyle(normalizeTheme({ theme: custom }), 'dark');
+    const normalized = normalizeTheme({ theme: custom });
+    const tokens = buildCustomerThemeStyle(normalized, 'dark');
     expect(tokens['--m-brand']).toBe('#4F7CFF');
-    expect(tokens['--m-bg']).toBe('#101828');
-    expect(tokens['--theme-text-primary']).toBe('#FDF6E3');
+    expect(tokens['--m-bg']).toBe('#0A0B0D');
+    // Old scalar role values remain in normalized data but do not create a
+    // second palette channel on the customer DOM.
+    expect(normalized.colors.background).toBe('#101828');
+    expect(normalized.colors.textPrimary).toBe('#FDF6E3');
+    expect(tokens).not.toHaveProperty('--theme-text-primary');
   });
 
-  it('honours stored per-component overrides over derived values', () => {
+  it('keeps legacy component color overrides stored but derives customer components from identity', () => {
     const withGroups = effectiveTheme({
       colors: {
         ...effectiveTheme().colors,
+        button: { primaryBg: '#111111', primaryText: '#FFFFFF' },
+        badge: { bg: '#222222', text: '#FFFFFF' },
         category: { bg: '#123456', activeBg: '#ABCDEF', activeText: '#000000' },
         card: { bg: '#222222', border: '#333333' },
       } as EffectiveTheme['colors'],
     });
-    const tokens = buildSemanticTokens(normalizeTheme({ theme: withGroups }), 'dark');
-    expect(tokens['--m-chip-bg']).toBe('#123456');
-    expect(tokens['--m-chip-active-bg']).toBe('#ABCDEF');
-    expect(tokens['--m-card-bg']).toBe('#222222');
-    // An explicit active colour must suppress the brand gradient image layer.
-    expect(tokens['--m-chip-active-image']).toBe('none');
+    const normalized = normalizeTheme({ theme: withGroups });
+    const tokens = buildSemanticTokens(normalized, 'dark');
+
+    expect(normalized.colors.button?.primaryBg).toBe('#111111');
+    expect(normalized.colors.category?.bg).toBe('#123456');
+    expect(normalized.colors.card?.bg).toBe('#222222');
+    expect(tokens['--m-button-bg']).toBe(tokens['--m-brand-fill']);
+    expect(tokens['--m-button-text']).toBe(tokens['--m-brand-ink']);
+    expect(tokens['--m-chip-bg']).toBe(tokens['--m-surface-raised']);
+    expect(tokens['--m-chip-active-bg']).toBe('transparent');
+    expect(tokens['--m-card-bg']).not.toBe('#222222');
+    expect(tokens['--m-badge-bg']).toBe(tokens['--m-surface-raised']);
+    expect(tokens['--m-badge-text']).toBe(tokens['--m-text']);
+    expect(tokens['--m-chip-active-image']).toBe(tokens['--m-brand-fill']);
   });
 
   it('falls back to derived values when a component group is absent', () => {
@@ -363,24 +376,30 @@ describe('CustomerThemeProvider — DOM behaviour', () => {
   });
 
   it('data-appearance carries the RESOLVED mode and never "auto"', () => {
+    const legacyAuto = effectiveTheme({ mode: 'auto' as any });
     const scope = renderScope(
-      <CustomerThemeProvider restaurant={{ theme: effectiveTheme({ mode: 'auto' }) }}>
+      <CustomerThemeProvider restaurant={{ theme: legacyAuto }}>
         <span>menu</span>
       </CustomerThemeProvider>
     );
-    expect(['light', 'dark']).toContain(scope.getAttribute('data-appearance'));
+    expect(scope.getAttribute('data-appearance')).toBe('dark');
   });
 
-  it('forceMode pins the surface for deliberately dark-canvas surfaces', () => {
+  it('keeps explicit opposite-face rendering confined to the theme editor preview', () => {
     const scope = renderScope(
       <CustomerThemeProvider
         restaurant={{ theme: effectiveTheme({ mode: 'light' }) }}
         forceMode="dark"
       >
-        <span>stage</span>
+        <span>preview</span>
       </CustomerThemeProvider>
     );
     expect(scope.getAttribute('data-appearance')).toBe('dark');
+
+    const preview = read('../components/manager/ThemePreview.tsx');
+    const liveDisplay = read('../components/display/LiveMenuStage.tsx');
+    expect(preview).toContain('forceMode={forceMode}');
+    expect(liveDisplay).not.toContain('forceMode=');
   });
 
   it('emits NO legacy family — the migration bridge is deleted', () => {

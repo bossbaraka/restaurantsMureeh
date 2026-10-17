@@ -1,13 +1,5 @@
-import type {
-  Category,
-  DisplayFontKey,
-  Product,
-  Restaurant,
-  RestaurantDisplaySettings,
-} from '../../types/restaurant';
+import type { Category, Product, Restaurant } from '../../types/restaurant';
 import {
-  buildBrandTokens,
-  hslToCss,
   parseColor,
   rgbToHsl,
   type Rgb,
@@ -24,13 +16,10 @@ import {
  *
  * Two ideas drive it:
  *
- * 1. IDENTITY FIRST — there is no fixed template. The palette, the display
- *    face, the corner radius, the Ken Burns amplitude, the reveal stagger and
- *    even how many dishes fit on a page are all *computed* from the venue's own
- *    two brand colours plus the shape of its catalog (how many dishes carry
- *    photography, how many sections it has, what kind of venue it is). A
- *    saturated-red burger joint and a desaturated-olive fine-dining room get
- *    genuinely different screens from the same code path.
+ * 1. IDENTITY FIRST — the restaurant's shared --m-* palette and Arabic font
+ *    are authoritative. This module derives the board's layout, corner radius,
+ *    motion, reveal rhythm and page density from brand/catalog characteristics
+ *    without creating another color or font source.
  *
  * 2. A FILM, NOT A PAGE — the menu is expressed as a timeline of scenes
  *    (intro → per category: title card → hero spotlight → priced boards →
@@ -154,84 +143,6 @@ export interface LiveVisualProfile {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-// ---------------------------------------------------------------------------
-// Display screen settings (شاشة العرض)
-// ---------------------------------------------------------------------------
-
-/**
- * Display faces the venue may pick for the board — the ONLY families the
- * product ships (see the Google Fonts link in index.html), so a chosen font is
- * always available on a screen that has never seen this browser before.
- *
- * `auto` is not a font: it keeps the derived identity (`--lm-title-face`
- * computed from the venue's own colours and photography by
- * `resolveLiveProfile`), i.e. today's behaviour. Every other key writes an
- * explicit face for the headings AND for the running text, and re-balances the
- * weight/tracking so a serif never renders at a sans-serif's 900.
- */
-export interface DisplayFontPreset {
-  key: Exclude<DisplayFontKey, 'auto'>;
-  /** Arabic label shown in the manager's font picker. */
-  label: string;
-  titleFace: string;
-  bodyFace: string;
-  titleWeight: string;
-  titleTracking: string;
-}
-
-export const DISPLAY_FONT_PRESETS: Record<
-  Exclude<DisplayFontKey, 'auto'>,
-  DisplayFontPreset
-> = {
-  tajawal: {
-    key: 'tajawal',
-    label: 'طجوال — عصري',
-    titleFace: "'Tajawal', 'Cairo', sans-serif",
-    bodyFace: "'Tajawal', 'Cairo', system-ui, sans-serif",
-    titleWeight: '900',
-    titleTracking: '-0.022em',
-  },
-  cairo: {
-    key: 'cairo',
-    label: 'القاهرة — حديث',
-    titleFace: "'Cairo', 'Tajawal', sans-serif",
-    bodyFace: "'Cairo', 'Tajawal', system-ui, sans-serif",
-    titleWeight: '900',
-    titleTracking: '-0.015em',
-  },
-  amiri: {
-    key: 'amiri',
-    label: 'أميري — كلاسيكي',
-    titleFace: "'Amiri', 'Cormorant Garamond', serif",
-    bodyFace: "'Amiri', 'Tajawal', serif",
-    titleWeight: '700',
-    titleTracking: '0.005em',
-  },
-  cormorant: {
-    key: 'cormorant',
-    label: 'كورمورانت — فخم',
-    titleFace: "'Cormorant Garamond', 'Amiri', serif",
-    bodyFace: "'Tajawal', 'Cairo', system-ui, sans-serif",
-    titleWeight: '600',
-    titleTracking: '0.005em',
-  },
-};
-
-/** The font tokens a chosen face overrides on the stage (`auto` → none). */
-export function displayFontVars(
-  font?: DisplayFontKey | null
-): Record<string, string> {
-  if (!font || font === 'auto') return {};
-  const preset = DISPLAY_FONT_PRESETS[font];
-  if (!preset) return {};
-  return {
-    '--lm-title-face': preset.titleFace,
-    '--lm-body-face': preset.bodyFace,
-    '--lm-title-weight': preset.titleWeight,
-    '--lm-title-tracking': preset.titleTracking,
-  };
-}
-
 /**
  * The automatic film plays on the BIG panels only — a TV or a computer. A phone
  * or a tablet gets the static, scrollable menu instead: the same read-only
@@ -281,9 +192,7 @@ export function imageCoverage(sections: LiveSection[]): number {
  *
  * Inputs and their effect (no venue type is hardcoded to a look — each input
  * only nudges a continuous value):
- *   primary hue        → the tint of the dark canvas and the ambient glow
- *   primary saturation → vivid brands get bolder type and tighter radius;
- *                        desaturated brands read as editorial (serif display)
+ *   primary saturation → nudges editorial/energetic layout density and pacing
  *   photography ratio  → image-led split boards vs. type-led dotted-leader
  *                        boards, and how much the images breathe
  *   business type      → pacing only (a café lingers, a bakery moves)
@@ -292,36 +201,22 @@ export function imageCoverage(sections: LiveSection[]): number {
 export function resolveLiveProfile(
   restaurant: Pick<
     Restaurant,
-    'primaryColor' | 'accentColor' | 'businessType' | 'name'
+    'primaryColor' | 'accentColor' | 'businessType' | 'name' | 'theme'
   > | null | undefined,
-  sections: LiveSection[],
-  /**
-   * The venue's display-screen settings (شاشة العرض). Optional: omitted (or
-   * `font: 'auto'`) keeps the derived identity untouched.
-   */
-  display?: RestaurantDisplaySettings | null
+  sections: LiveSection[]
 ): LiveVisualProfile {
   // Theme-first identity: a tenant with an effective theme must derive the
   // live profile from the theme's colors, not from stale legacy columns.
   const identity = resolveBrandIdentity(restaurant);
-  const tokens = buildBrandTokens(identity.primary, identity.accent);
-  const primary = (parseColor(tokens.primary) as Rgb) || { r: 212, g: 175, b: 55 };
-  const accent = (parseColor(tokens.accentStrong) as Rgb) || primary;
+  const primary = (parseColor(identity.primary) as Rgb) || { r: 212, g: 175, b: 55 };
   const primaryHsl = rgbToHsl(primary);
-  const accentHsl = rgbToHsl(accent);
 
   const coverage = imageCoverage(sections);
   const businessType = restaurant?.businessType || 'RESTAURANT';
 
-  // ---- Canvas: the venue's hue at near-black lightness. A red brand gets a
-  // warm charcoal, a blue brand a cold one; achromatic picks stay neutral
-  // instead of inventing a hue.
-  const canvasSat = primaryHsl.s < 0.06 ? 0.03 : clamp(primaryHsl.s, 0.1, 0.5);
-  const bg0 = hslToCss(primaryHsl.h, canvasSat, 0.045);
-  const bg1 = hslToCss(primaryHsl.h, canvasSat, 0.085);
-  const bg2 = hslToCss(primaryHsl.h, canvasSat * 1.1, 0.13);
-
   // ---- Editorial vs. energetic. A continuous score, not a switch on type.
+  // Layout personality may respond to brand/catalog data, but color itself is
+  // painted exclusively from the restaurant's canonical --m-* tokens.
   const editorialScore =
     (1 - clamp(primaryHsl.s, 0, 1)) * 0.5 +
     clamp(coverage, 0, 1) * 0.3 +
@@ -353,29 +248,27 @@ export function resolveLiveProfile(
   ];
 
   const vars: Record<string, string> = {
-    // Canvas & ink
-    '--lm-bg-0': bg0,
-    '--lm-bg-1': bg1,
-    '--lm-bg-2': bg2,
-    '--lm-ink': editorial ? '#F7F2E7' : '#FFFFFF',
-    '--lm-ink-soft': editorial ? 'rgb(247 242 231 / 0.72)' : 'rgb(255 255 255 / 0.74)',
-    '--lm-ink-faint': editorial ? 'rgb(247 242 231 / 0.46)' : 'rgb(255 255 255 / 0.48)',
-    // Brand
-    '--lm-brand': tokens.primaryStrong,
-    '--lm-brand-rgb': tokens.primaryStrongRgb,
-    '--lm-accent': tokens.accentStrong,
-    '--lm-fill': tokens.fill,
-    '--lm-ink-on-fill': tokens.ink,
-    '--lm-glow-a': hslToCss(primaryHsl.h, clamp(primaryHsl.s, 0.25, 0.9), 0.5, 0.4),
-    '--lm-glow-b': hslToCss(accentHsl.h, clamp(accentHsl.s, 0.2, 0.8), 0.55, 0.32),
-    '--lm-hairline': `rgb(${tokens.primaryStrongRgb} / 0.24)`,
-    '--lm-hairline-soft': `rgb(${tokens.primaryStrongRgb} / 0.12)`,
-    // Shape & type
+    // The canonical customer palette is the only source for display colors.
+    '--lm-bg-0': 'var(--m-bg, #0A0B0D)',
+    '--lm-bg-1': 'var(--m-surface, #15171A)',
+    '--lm-bg-2': 'var(--m-surface-raised, #20232A)',
+    '--lm-ink': 'var(--m-text, #F3F5F9)',
+    '--lm-ink-soft': 'var(--m-text-muted, #CFD6E2)',
+    '--lm-ink-faint': 'var(--m-text-subtle, #A0A0A0)',
+    '--lm-brand': 'var(--m-brand-on-surface, #E6C86E)',
+    '--lm-brand-rgb': 'var(--m-brand-on-surface-rgb, 230 200 110)',
+    '--lm-accent': 'var(--m-brand-accent-on-surface, #D9C3A3)',
+    '--lm-fill': 'var(--m-brand-fill, linear-gradient(135deg, #D4AF37, #C5A880))',
+    '--lm-ink-on-fill': 'var(--m-brand-ink, #0A0B0D)',
+    '--lm-glow-a': 'var(--m-brand-glow, rgb(230 200 110 / 0.28))',
+    '--lm-glow-b': 'rgb(var(--m-brand-accent-rgb, 197 168 128) / 0.26)',
+    '--lm-hairline': 'var(--m-hairline, rgb(230 200 110 / 0.24))',
+    '--lm-hairline-soft': 'color-mix(in srgb, var(--m-hairline, rgb(230 200 110 / 0.24)) 55%, transparent)',
+    // Shape & type; the same restaurant-selected Arabic face covers the whole menu.
     '--lm-radius': editorial ? '10px' : '22px',
     '--lm-radius-sm': editorial ? '6px' : '14px',
-    '--lm-title-face': editorial
-      ? "'Cormorant Garamond', 'Tajawal', serif"
-      : "'Tajawal', 'Cairo', sans-serif",
+    '--lm-title-face': 'var(--m-font, "Tajawal", "Cairo", sans-serif)',
+    '--lm-body-face': 'var(--m-font, "Tajawal", "Cairo", system-ui, sans-serif)',
     '--lm-title-weight': editorial ? '600' : '900',
     '--lm-title-tracking': editorial ? '0.005em' : '-0.022em',
     '--lm-eyebrow-spacing': editorial ? '0.42em' : '0.26em',
@@ -383,9 +276,6 @@ export function resolveLiveProfile(
     '--lm-ken-burns': String(1 + kenBurns),
     '--lm-stagger': `${stagger}ms`,
     '--lm-scene-in': '820ms',
-    // A font picked in «شاشة العرض» overrides the derived face (and re-balances
-    // its weight/tracking); `auto` leaves the identity above in place.
-    ...displayFontVars(display?.font),
   };
 
   return { vars, displayFace, layout, perPage, kenBurns, stagger, rhythm, rationale };

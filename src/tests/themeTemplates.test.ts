@@ -28,7 +28,7 @@ import { contrastRatio, parseColor, type Rgb } from '../theme/brandTheme';
 import type { ThemeConfig } from '../types/restaurant';
 
 const HEX6 = /^#[0-9a-fA-F]{6}$/;
-const FONT_KEYS: readonly string[] = ['auto', 'tajawal', 'cairo', 'amiri', 'cormorant'];
+const FONT_KEYS: readonly string[] = ['tajawal', 'cairo'];
 const STATUS_COLORS = { success: '#10B981', warning: '#F59E0B', error: '#EF4444' } as const;
 
 /**
@@ -104,14 +104,14 @@ describe('theme templates — data integrity', () => {
     expect(TEMPLATE_DRAFTS.size).toBe(THEME_TEMPLATES.length);
     for (const t of THEME_TEMPLATES) {
       expect(TEMPLATE_DRAFTS.has(t.id)).toBe(true);
-      expect(TEMPLATE_DRAFTS.get(t.id)?.appearance).toBe('auto');
+      expect(TEMPLATE_DRAFTS.get(t.id)?.appearance).toBe('dark');
     }
   });
 
   for (const t of THEME_TEMPLATES) {
     describe(`template ${t.id} (${t.label})`, () => {
-      it('is a full design: mode auto, valid identity, valid font', () => {
-        expect(t.config.mode).toBe('auto');
+      it('is a full design: fixed dark mode, valid identity, valid Arabic font', () => {
+        expect(t.config.mode).toBe('dark');
         expect(t.config.colors?.primary).toMatch(HEX6);
         expect(t.config.colors?.accent).toMatch(HEX6);
         expect(FONT_KEYS).toContain(t.config.typography?.fontFamily);

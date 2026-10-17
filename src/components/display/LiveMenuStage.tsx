@@ -164,20 +164,12 @@ const LiveMenuStageContent: React.FC<LiveMenuStageProps> = ({
   onToast: showToast,
 }) => {
 
-  // INDEPENDENT THEME WRITER REMOVED (Phase 2, world isolation).
+  // The display board is inside the same restaurant-owned theme scope as the
+  // QR menu. Its CSS palette reads the inherited --m-* tokens; this pure brand
+  // identity read is only for layout heuristics and the rasterized poster export.
   //
-  // The board used to call useBrandTheme(..., { surfaceMode: 'dark' }), a
-  // second engine writing tenant tokens straight onto <html>. It now renders
-  // inside a CustomerThemeProvider with an explicit `forceMode="dark"` (see
-  // the wrapper at the bottom of this file): the signage board is
-  // deliberately a fixed dark canvas, but that intent is now DECLARED through
-  // the shared pipeline rather than implemented by a separate writer.
-  //
-  // Same semantic tokens, same derivation, one owner.
-  //
-  // resolveBrandIdentity below is a PURE value read (no DOM): it feeds a memo
-  // key and the social-poster export, which rasterises to a <canvas> and
-  // therefore needs real color values rather than CSS variables.
+  // resolveBrandIdentity feeds a memo key and the social-poster canvas, which
+  // needs real color values rather than CSS variables.
   const brandIdentity = resolveBrandIdentity(currentRestaurant);
 
   const [settings, setSettings] = useState<DisplaySettings>(DISPLAY_FALLBACK);
@@ -206,10 +198,9 @@ const LiveMenuStageContent: React.FC<LiveMenuStageProps> = ({
   );
 
   const display = currentRestaurant?.display;
-  const displayKey = `${display?.backgroundMode || 'theme'}|${display?.font || 'auto'}`;
-  const profileKey = `${brandIdentity.primary || ''}|${brandIdentity.accent || ''}|${currentRestaurant?.businessType || ''}|${displayKey}`;
+  const profileKey = `${brandIdentity.primary || ''}|${brandIdentity.accent || ''}|${currentRestaurant?.businessType || ''}`;
   const profile = useMemo(
-    () => resolveLiveProfile(currentRestaurant, sections, display),
+    () => resolveLiveProfile(currentRestaurant, sections),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [profileKey, sections]
   );
@@ -944,16 +935,12 @@ const LiveMenuStageContent: React.FC<LiveMenuStageProps> = ({
 };
 
 /**
- * LiveMenuStage — the read-only signage board, wrapped in its theme scope.
- *
- * `forceMode="dark"` is an explicit contract, not a hidden default: the TV
- * board is intentionally a fixed dark canvas regardless of the tenant's
- * configured light/dark/auto mode or the device preference. It consumes the
- * SAME normalization + semantic-token pipeline as the customer menu, so the
- * board can never drift from the menu's palette.
+ * LiveMenuStage — read-only signage wrapped in the shared theme scope. The
+ * board follows the restaurant's explicit light/dark mode just like the QR
+ * menu; it has no independent or device-driven appearance setting.
  */
 export const LiveMenuStage: React.FC<LiveMenuStageProps> = (props) => (
-  <CustomerThemeProvider restaurant={props.restaurant} forceMode="dark">
+  <CustomerThemeProvider restaurant={props.restaurant}>
     <LiveMenuStageContent {...props} />
   </CustomerThemeProvider>
 );

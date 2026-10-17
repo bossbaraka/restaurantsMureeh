@@ -49,7 +49,7 @@
  * context.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import {
   buildCustomerThemeStyle,
   type SurfaceMode,
@@ -57,39 +57,21 @@ import {
 } from './semanticTokens';
 import { normalizeTheme, type NormalizedTheme, type ThemeSourceRestaurant } from './normalizeTheme';
 import { useStickyStackVars } from './StickyStack';
-import {
-  readGuestAppearanceOverride,
-  resolveCustomerSurfaceMode,
-  writeGuestAppearanceOverride,
-  type GuestAppearanceOverride,
-} from './guestAppearance';
+import { resolveThemeMode } from './brandTheme';
 
 /**
- * GUEST APPEARANCE OVERRIDE — the in-menu night/light button.
- *
- * The state model (storage key, validation, precedence resolution) lives in
- * the pure module `guestAppearance.ts`; this provider remains the ONE place
- * the result is applied, so the single-writer rule is untouched:
- *
- *     forceMode (signage)  >  guest override  >  tenant mode  >  device
- *
- *   • 'auto' is a real state: it CLEARS the override and hands control back
- *     to the tenant/device chain, so the restaurant's decision is never
- *     permanently clobbered.
- *   • `forceMode` surfaces (the TV board) ignore the override entirely —
- *     a signage canvas is an explicit contract, not a guest preference.
+ * The restaurant owns the public-menu mode. There is no guest override and no
+ * operating-system fallback: legacy `auto` values resolve to dark. `forceMode`
+ * remains available only for isolated editor previews that intentionally show
+ * the opposite face without changing the saved restaurant setting.
  */
 
 /** What descendants can read about the active customer theme. */
 export interface CustomerThemeContextValue {
   theme: NormalizedTheme;
-  /** The RESOLVED surface mode — 'light' or 'dark'. Never 'auto'. */
+  /** Fixed restaurant mode, resolved to 'light' or 'dark'. */
   surfaceMode: SurfaceMode;
   tokens: TokenMap;
-  /** The guest's night/light choice ('auto' = follow tenant/device). */
-  appearanceOverride: GuestAppearanceOverride;
-  /** Sets + persists the guest choice. The whole scope re-themes at once. */
-  setAppearanceOverride: (value: GuestAppearanceOverride) => void;
 }
 
 const CustomerThemeContext = createContext<CustomerThemeContextValue | null>(null);
@@ -102,43 +84,18 @@ export function useCustomerTheme(): CustomerThemeContextValue | null {
   return useContext(CustomerThemeContext);
 }
 
-/**
- * Tracks the device colour preference.
- *
- * Subscribed in ONE place. Previously `applyEffectiveTheme` and
- * `useEffectiveTheme` each had their own `matchMedia` logic with different
- * lifetimes, so an `auto` theme could be resolved against a stale preference.
- */
-function usePrefersDark(): boolean {
-  const [prefersDark, setPrefersDark] = useState<boolean>(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (event: MediaQueryListEvent) => setPrefersDark(event.matches);
-    // Re-sync on mount in case the preference changed before subscription.
-    setPrefersDark(mq.matches);
-    mq.addEventListener?.('change', handler);
-    return () => mq.removeEventListener?.('change', handler);
-  }, []);
-
-  return prefersDark;
+/** Resolve the restaurant mode, allowing an explicit face only for previews. */
+export function resolveCustomerSurfaceMode(
+  themeMode: string | undefined | null,
+  forceMode?: SurfaceMode
+): SurfaceMode {
+  return forceMode ?? resolveThemeMode(themeMode);
 }
 
 export interface CustomerThemeProviderProps {
   /** The restaurant whose theme applies (theme row + legacy columns). */
   restaurant: ThemeSourceRestaurant | null | undefined;
-  /**
-   * Pins the surface mode regardless of the stored mode and the device.
-   *
-   * For surfaces that are deliberately dark-canvas by design — the QR entry
-   * overlay, the signage board. Previously these passed a hidden
-   * `surfaceMode: 'dark'` argument to a second writer; making it an explicit
-   * prop turns a side effect into a declared intent without adding a writer.
-   */
+  /** Optional face override for editor previews only; production views follow the restaurant. */
   forceMode?: SurfaceMode;
   /** Extra classes on the scope element. */
   className?: string;
@@ -167,11 +124,9 @@ export const CustomerThemeProvider: React.FC<CustomerThemeProviderProps> = ({
   style,
   children,
 }) => {
-  const prefersDark = usePrefersDark();
-
   // Identity of the inputs, not of the object: `currentRestaurant` is replaced
   // by reference on every 10s poll, so memoizing on the object would recompute
-  // (and, in the old design, REPAINT) continuously.
+  // continuously.
   const themeSignature = JSON.stringify({
     theme: restaurant?.theme ?? null,
     primaryColor: restaurant?.primaryColor ?? null,
@@ -184,27 +139,9 @@ export const CustomerThemeProvider: React.FC<CustomerThemeProviderProps> = ({
     [themeSignature]
   );
 
-  // The guest's night/light choice. Initialized from storage so a returning
-  // guest keeps their pick across reloads; 'auto' until they touch the
-  // in-menu toggle. Reading happens in the lazy initializer (one read, on
-  // mount), never during render of descendants.
-  const [appearanceOverride, setOverrideState] = useState<GuestAppearanceOverride>(
-    () => readGuestAppearanceOverride()
-  );
-
-  const setAppearanceOverride = useCallback((value: GuestAppearanceOverride) => {
-    setOverrideState(value);
-    writeGuestAppearanceOverride(value);
-  }, []);
-
-  // One precedence chain, defined ONCE in resolveCustomerSurfaceMode:
-  // forceMode (signage) > guest override > tenant mode > device preference.
-  const surfaceMode: SurfaceMode = resolveCustomerSurfaceMode({
-    forceMode,
-    override: appearanceOverride,
-    themeMode: theme.mode,
-    prefersDark,
-  });
+  // Restaurant mode is the only production input. Old `auto` values and
+  // missing modes resolve to dark; no storage or device preference is read.
+  const surfaceMode = resolveCustomerSurfaceMode(theme.mode, forceMode);
 
   const tokens = useMemo(
     () => buildCustomerThemeStyle(theme, surfaceMode),
@@ -219,8 +156,8 @@ export const CustomerThemeProvider: React.FC<CustomerThemeProviderProps> = ({
   const stackVars = useStickyStackVars();
 
   const contextValue = useMemo<CustomerThemeContextValue>(
-    () => ({ theme, surfaceMode, tokens, appearanceOverride, setAppearanceOverride }),
-    [theme, surfaceMode, tokens, appearanceOverride, setAppearanceOverride]
+    () => ({ theme, surfaceMode, tokens }),
+    [theme, surfaceMode, tokens]
   );
 
   return (
@@ -229,7 +166,7 @@ export const CustomerThemeProvider: React.FC<CustomerThemeProviderProps> = ({
         className={`customer-theme-scope${className ? ` ${className}` : ''}`}
         data-appearance={surfaceMode}
         data-theme-source={theme.source}
-        style={{ ...(tokens as React.CSSProperties), ...stackVars, ...style }}
+        style={{ ...(tokens as React.CSSProperties), ...stackVars, ...style, colorScheme: surfaceMode }}
       >
         {children}
       </div>

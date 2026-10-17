@@ -214,17 +214,17 @@ describe('customer menu consumes the Effective Theme tokens', () => {
     expect(value('.menu-badge', 'border-radius')).toContain('var(--m-badge-radius');
   });
 
-  it('text roles consume the theme text colours and font weights', () => {
-    expect(value('.menu-card__title', 'color')).toContain('var(--theme-text-primary');
+  it('text roles consume the canonical mode-aware text tokens and font weights', () => {
+    expect(value('.menu-card__title', 'color')).toBe('var(--m-text)');
     expect(value('.menu-card__title', 'font-weight')).toContain('var(--m-font-heading-weight');
-    expect(value('.menu-card__desc', 'color')).toContain('var(--theme-text-secondary');
+    expect(value('.menu-card__desc', 'color')).toBe('var(--m-text-muted)');
     expect(value('.menu-card__desc', 'font-weight')).toContain('var(--m-font-body-weight');
-    expect(value('.menu-section-head__title', 'color')).toContain('var(--theme-text-primary');
+    expect(value('.menu-section-head__title', 'color')).toBe('var(--m-text)');
   });
 
-  it('status colours consume success/warning/error/border tokens', () => {
+  it('status colours consume status and hairline tokens', () => {
     expect(value('.menu-badge--danger', 'background')).toContain('var(--m-error');
-    expect(value('.menu-badge--dark', 'border')).toContain('var(--theme-border');
+    expect(value('.menu-badge--dark', 'border')).toContain('var(--m-hairline');
   });
 
   it('the stepper focus ring flips with the surface instead of staying white', () => {
@@ -236,58 +236,29 @@ describe('customer menu consumes the Effective Theme tokens', () => {
   });
 });
 
-/**
- * MODE-AWARE FALLBACKS FOR THE LEGACY TEXT VARS.
- *
- * `--theme-text-primary/-secondary` are a DELIBERATE legacy exception: the
- * advanced theme editor persists them per tenant, so components must keep
- * reading them rather than switching to the derived `--m-text` (which would
- * drop the stored values). What they must NOT do is fall back to a hardcoded
- * hex.
- *
- * Measured: `.menu-card__title` fell back to `#f4f6fa`. Any theme whose
- * textPrimary is absent therefore rendered near-white text on a #FFFFFF card
- * in LIGHT mode — ratio 1.04:1, i.e. invisible — and light is the default for
- * this menu. The tenant value is still honoured verbatim when present; only
- * the fallback had to become mode-aware.
- */
-describe('legacy text vars fall back to mode-aware tokens, never to a hex', () => {
-  const HEX_FALLBACK = /var\(--theme-text-(primary|secondary),\s*#[0-9a-fA-F]{3,8}\s*\)/;
-
-  const LEGACY_USERS = [
-    '.menu-card__title',
-    '.menu-card__desc',
-    '.menu-meta',
-    '.menu-section-head__title',
+describe('customer text roles use the canonical mode-aware token set', () => {
+  const TEXT_ROLES: Array<[string, string]> = [
+    ['.menu-card__title', '--m-text'],
+    ['.menu-card__desc', '--m-text-muted'],
+    ['.menu-meta', '--m-text-subtle'],
+    ['.menu-section-head__title', '--m-text'],
   ];
 
-  it.each(LEGACY_USERS)('%s still reads the tenant var first', (selector) => {
-    const color = value(selector, 'color');
-    expect(color).toMatch(/var\(--theme-text-(primary|secondary)/);
+  it.each(TEXT_ROLES)('%s reads %s rather than a stored scalar override', (selector, token) => {
+    expect(value(selector, 'color')).toBe(`var(${token})`);
   });
 
-  it.each(LEGACY_USERS)('%s falls back to an --m-* token, not a literal hex', (selector) => {
-    const color = value(selector, 'color');
-    expect(color, `${selector}: ${color}`).not.toMatch(HEX_FALLBACK);
-    // The fallback argument (after the comma) must be a var() reference.
-    const fallback = color.match(/var\(--theme-text-(?:primary|secondary),\s*([^)]+(?:\([^)]*\))?)\)/);
-    expect(fallback, `no fallback parsed from ${color}`).not.toBeNull();
-    expect(fallback![1].trim()).toMatch(/^var\(--m-text/);
+  it.each(TEXT_ROLES)('%s contains no hardcoded text color', (selector) => {
+    expect(value(selector, 'color')).not.toMatch(/#[0-9a-fA-F]{3,8}/);
   });
 });
 
-/**
- * The resting add-button ink sits on a 12% tint of ITSELF. A value tuned to
- * clear 4.5:1 against the canvas only reached 3.96:1 against that tint. The
- * fix mixes the ink toward --m-text so it tracks the mode; a plain
- * var(--m-brand-on-surface) is the regression.
- */
-describe('add control ink stays legible on its own tinted background', () => {
-  it('mixes the brand ink toward --m-text instead of using it raw', () => {
-    const color = value('.menu-add', 'color');
-    expect(color).toContain('color-mix');
-    expect(color).toContain('var(--m-text');
-    expect(color).toContain('var(--m-brand-on-surface');
+describe('add control uses the shared button semantic roles', () => {
+  it('uses the derived secondary button ink and surface', () => {
+    expect(value('.menu-add', 'color')).toBe('var(--m-button-secondary-text)');
+    expect(value('.menu-add', 'background')).toBe('var(--m-button-secondary-bg)');
+    expect(value('.menu-add:hover', 'background-image')).toBe('var(--m-brand-fill)');
+    expect(value('.menu-add:hover', 'color')).toBe('var(--m-brand-ink)');
   });
 });
 

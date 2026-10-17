@@ -54,23 +54,18 @@ import { optimizeImageUrl } from './ProductImage';
  *
  * TYPE
  * ----
- * `--font-serif` and `--font-sans` are the theme's typography knobs and this
- * layer reads them verbatim: no family is named here, so a theme that changes
- * its display face re-types the whole page, and no restaurant's identity is
- * baked in. Hierarchy comes from size, tracking and tone — never from weight
+ * The entry page inherits the restaurant's single Arabic-first `--m-font`
+ * decision. Hierarchy comes from size, tracking and tone — never from weight
  * alone — and every tracking rule is gated to Latin (either by direction or by
  * a name that carries no Arabic glyphs), because letter-spacing breaks
  * connected Arabic script.
  *
  * LIGHT / DARK
  * ------------
- * The canvas stays dark on purpose. The tenant palette is DERIVED for a dark
- * surface (`--m-brand-soft`, `--m-brand-line`, `--m-text-subtle`, `--m-brand-ink`
- * in theme/brandTheme), the menu behind this layer is `#0A0B0D`, and the hand-off
- * must not flash from one canvas to another. What adapts per restaurant is
- * ATMOSPHERE — hue, glow, metal, depth — which is exactly what the tokens
- * already carry: a bright brand gets a bright room on a dark canvas, it does
- * not get a different colour scheme.
+ * The restaurant's explicit mode is provided by CustomerThemeProvider and is
+ * shared with the menu behind this layer. Canvas, ink, glass and photo scrims
+ * use the same `--m-*` tokens, so both faces remain consistent through the
+ * hand-off without consulting the guest's device or adding another writer.
  *
  * MOTION
  * ------
@@ -212,10 +207,9 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
   // to undo it, which is exactly the kind of order-dependent correctness the
   // single-writer rule removes.
   //
-  // This component renders INSIDE CustomerThemeProvider's scope and simply
-  // inherits its tokens. Its own fixed dark-canvas gradient is unchanged; the
-  // deliberate dark surface for the entry stage is expressed in the scope, not
-  // by a second writer.
+  // This component renders INSIDE CustomerThemeProvider's scope and inherits
+  // its restaurant-owned tokens. The cover, text and photo scrim all resolve
+  // from the same `--m-*` palette as the menu; there is no separate mode.
 
   const [reducedMotion, setReducedMotion] = useState<boolean>(prefersReducedMotion);
   const [stage, setStage] = useState<EntryStage>('COVER');

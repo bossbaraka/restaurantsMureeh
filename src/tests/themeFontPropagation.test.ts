@@ -1,29 +1,9 @@
 /**
- * FONT PROPAGATION GUARD — every guest-facing surface follows ONE font decision.
- * ===========================================================================
- *
- * WHAT THIS PINS
- * --------------
- * The theme engine's contract for typography propagation:
- *
- *   1. `--m-font-chosen` is emitted ONLY when the tenant explicitly chose a
- *      font (typography.fontFamily ≠ 'auto'). It is an OPTIONAL presence
- *      token — deliberately outside SEMANTIC_TOKEN_NAMES, whose members are
- *      pinned to be always non-empty. Its "absent" encoding is the empty
- *      string, the exact convention the per-component colour overrides use,
- *      so `var(--m-font-chosen, <face>)` falls back cleanly.
- *
- *   2. When present, the value contains ONLY authored faces — generic CSS
- *      keywords (`serif`, `system-ui`, …) are stripped, so consumers keep
- *      control of script-coverage fallbacks (Arabic stays on Tajawal instead
- *      of falling into a device serif behind a Latin-only display face).
- *
- *   3. The entry experience consumes the token theme-first with its shipped
- *      faces as fallbacks — an explicit font re-types the entry page, a
- *      tenant without a font choice renders byte-identically to before.
- *
- *   4. The pipeline end-to-end: normalizeTheme → buildSemanticTokens →
- *      buildCustomerThemeStyle carries the token to the single writer.
+ * ARABIC FONT PROPAGATION GUARD
+ * ============================
+ * The restaurant menu, entry experience, and display screen all follow one
+ * Arabic-first font choice. The manager may choose Cairo or Tajawal; legacy and
+ * unsupported stored keys remain readable but resolve safely to Tajawal.
  */
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -34,13 +14,14 @@ import {
   stripGenericFaces,
 } from '../theme/semanticTokens';
 import { normalizeTheme } from '../theme/normalizeTheme';
+import { EDITOR_FONTS } from '../theme/editorModel';
 import type { EffectiveTheme } from '../types/restaurant';
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
 const effectiveTheme = (fontFamily: string): EffectiveTheme =>
   ({
-    mode: 'auto',
+    mode: 'dark',
     colors: {
       primary: '#D4AF37',
       accent: '#C5A880',
@@ -62,106 +43,69 @@ const effectiveTheme = (fontFamily: string): EffectiveTheme =>
     rawConfig: {},
   }) as unknown as EffectiveTheme;
 
-const GENERIC_KEYWORDS = [
-  'serif',
-  'sans-serif',
-  'monospace',
-  'cursive',
-  'fantasy',
-  'system-ui',
-];
+const fontToken = (fontFamily: string) =>
+  buildSemanticTokens(normalizeTheme({ theme: effectiveTheme(fontFamily) }), 'dark')['--m-font-chosen'];
 
-describe('--m-font-chosen — presence contract', () => {
-  it('is ABSENT (empty) when no font was explicitly chosen', () => {
-    for (const source of [effectiveTheme('auto'), null, undefined]) {
-      const tokens = buildSemanticTokens(normalizeTheme({ theme: source }), 'dark');
-      expect(tokens['--m-font-chosen']).toBe('');
+describe('restaurant font choice — Arabic-first Cairo / Tajawal', () => {
+  it('offers only the two modern Arabic menu faces', () => {
+    expect(EDITOR_FONTS.map(({ id }) => id)).toEqual(['tajawal', 'cairo']);
+  });
+
+  it('puts the explicitly chosen face first and keeps the other supported Arabic face as fallback', () => {
+    expect(fontToken('tajawal')).toBe('"Tajawal", "Cairo"');
+    expect(fontToken('cairo')).toBe('"Cairo", "Tajawal"');
+  });
+
+  it('maps the legacy auto and unsupported font keys to the Tajawal-first stack', () => {
+    for (const legacyKey of ['auto', 'amiri', 'cormorant', 'inter', 'unknown-font']) {
+      expect(fontToken(legacyKey), `fontFamily=${legacyKey}`).toBe('"Tajawal", "Cairo"');
     }
   });
 
-  it('is emitted for every editor font choice with its authored face', () => {
-    const cases: Array<[string, string]> = [
-      ['tajawal', '"Tajawal"'],
-      ['cairo', '"Cairo"'],
-      ['amiri', '"Amiri"'],
-      ['cormorant', '"Cormorant Garamond"'],
-    ];
-    for (const [fontFamily, expected] of cases) {
-      const tokens = buildSemanticTokens(normalizeTheme({ theme: effectiveTheme(fontFamily) }), 'dark');
-      expect(tokens['--m-font-chosen'], `fontFamily=${fontFamily}`).toBe(expected);
-    }
+  it('uses the Tajawal-first stack for a restaurant with no stored theme', () => {
+    const tokens = buildSemanticTokens(normalizeTheme(null), 'dark');
+    expect(tokens['--m-font-chosen']).toBe('"Tajawal", "Cairo"');
   });
 
-  it('carries no generic CSS font keywords', () => {
-    for (const fontFamily of ['tajawal', 'cairo', 'amiri', 'cormorant']) {
-      const tokens = buildSemanticTokens(normalizeTheme({ theme: effectiveTheme(fontFamily) }), 'dark');
-      const faces = tokens['--m-font-chosen'].split(',').map((f) =>
-        f.trim().replace(/^['"]|['"]$/g, '').toLowerCase()
-      );
-      for (const keyword of GENERIC_KEYWORDS) {
-        expect(faces, `fontFamily=${fontFamily}`).not.toContain(keyword);
-      }
-    }
-  });
-
-  it('never invents a face for an unknown legacy font key — falls back to absent', () => {
-    const tokens = buildSemanticTokens(
-      normalizeTheme({ theme: effectiveTheme('definitely-not-a-font') }),
-      'dark'
+  it('removes generic CSS faces without dropping the authored Arabic fallbacks', () => {
+    expect(stripGenericFaces('"Tajawal", "Cairo", system-ui, sans-serif')).toBe(
+      '"Tajawal", "Cairo"'
     );
-    expect(tokens['--m-font-chosen']).toBe('');
-  });
-
-  it('does not disturb the always-present --m-font token', () => {
-    const auto = buildSemanticTokens(normalizeTheme({ theme: effectiveTheme('auto') }), 'dark');
-    const chosen = buildSemanticTokens(normalizeTheme({ theme: effectiveTheme('cairo') }), 'dark');
-    expect(auto['--m-font']).not.toBe('');
-    expect(chosen['--m-font']).toContain('Cairo');
-    expect(chosen['--m-font-chosen']).toBe('"Cairo"');
-  });
-});
-
-describe('stripGenericFaces', () => {
-  it('keeps authored faces and drops every generic keyword', () => {
-    expect(stripGenericFaces('"Tajawal", system-ui, sans-serif')).toBe('"Tajawal"');
-    expect(stripGenericFaces('"Cormorant Garamond", serif')).toBe('"Cormorant Garamond"');
+    expect(stripGenericFaces('"Cairo", "Tajawal", ui-sans-serif')).toBe(
+      '"Cairo", "Tajawal"'
+    );
     expect(stripGenericFaces('Tajawal, Cairo, system-ui, -apple-system, sans-serif')).toBe(
       'Tajawal, Cairo, -apple-system'
     );
   });
 
-  it('is idempotent on an already-clean stack', () => {
-    expect(stripGenericFaces('"Amiri"')).toBe('"Amiri"');
+  it('is idempotent on a clean stack', () => {
+    expect(stripGenericFaces('"Tajawal", "Cairo"')).toBe('"Tajawal", "Cairo"');
   });
 });
 
-describe('entry experience consumes the token theme-first', () => {
-  const css = read('../index.css');
-
-  it('entry display face chains --m-font-chosen before the shipped serif', () => {
-    expect(css).toContain(
-      '--entry-font-display: var(--m-font-chosen, var(--font-serif, Georgia, serif));'
-    );
-  });
-
-  it('entry text face chains --m-font-chosen before the shipped sans stack', () => {
-    expect(css).toContain(
-      '--entry-font-text: var(--m-font-chosen, var(--font-sans, system-ui, -apple-system, sans-serif));'
-    );
-  });
-});
-
-describe('single-writer delivery', () => {
-  it('buildCustomerThemeStyle carries the token to the scope for explicit fonts', () => {
+describe('font propagation — shared menu, entry, and display contract', () => {
+  it('emits the selected face on the canonical customer scope style', () => {
     const style = buildCustomerThemeStyle(
-      normalizeTheme({ theme: effectiveTheme('amiri') }),
-      'dark'
+      normalizeTheme({ theme: effectiveTheme('cairo') }),
+      'light'
     );
-    expect(style['--m-font-chosen']).toBe('"Amiri"');
+    expect(style['--m-font-chosen']).toBe('"Cairo", "Tajawal"');
+    expect(style['--m-font']).toContain('"Cairo", "Tajawal"');
   });
 
-  it('buildCustomerThemeStyle emits the absent encoding for auto fonts', () => {
-    const style = buildCustomerThemeStyle(normalizeTheme({ theme: effectiveTheme('auto') }), 'light');
-    expect(style['--m-font-chosen']).toBe('');
+  it('entry typography inherits the same canonical Arabic-first token', () => {
+    const css = read('../index.css');
+    expect(css).toContain("--entry-font-display: var(--m-font-chosen, 'Tajawal', sans-serif);");
+    expect(css).toContain("--entry-font-text: var(--m-font-chosen, 'Tajawal', sans-serif);");
+  });
+
+  it('display typography uses --m-font and exposes no independent font picker', () => {
+    const liveModel = read('../components/display/liveMenuModel.ts');
+    const displaySettings = read('../components/manager/DisplayScreenSettingsView.tsx');
+    expect(liveModel).toContain("'--lm-title-face': 'var(--m-font");
+    expect(liveModel).toContain("'--lm-body-face': 'var(--m-font");
+    expect(displaySettings).toContain('خط القائمة نفسه (Cairo أو Tajawal)');
+    expect(displaySettings).not.toContain('fontFamily');
   });
 });

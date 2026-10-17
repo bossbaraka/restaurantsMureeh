@@ -9,7 +9,7 @@ import type { Prisma } from '@prisma/client';
 // Single source of truth for effective theme applied to public menu.
 // ============================================================
 
-export type ThemeMode = 'light' | 'dark' | 'auto';
+export type ThemeMode = 'light' | 'dark';
 
 export interface BackgroundImageRef {
   storagePath: string;
@@ -134,7 +134,7 @@ export interface ResolvedTheme {
 
 // Hardcoded fallback — mirrors legacy #D4AF37/#C5A880 dark #0A0B0D
 export const FALLBACK_THEME: ResolvedTheme = {
-  mode: 'auto',
+  mode: 'dark',
   colors: {
     primary: '#D4AF37',
     secondary: '#C5A880',
@@ -183,7 +183,7 @@ export const FALLBACK_THEME: ResolvedTheme = {
     lg: '0 10px 40px rgba(0,0,0,0.5)',
   },
   typography: {
-    fontFamily: 'auto',
+    fontFamily: 'tajawal',
     headingWeight: 700,
     bodyWeight: 400,
   },
@@ -207,7 +207,7 @@ export const FALLBACK_THEME: ResolvedTheme = {
 
 // Default platform theme config — used when no platform row exists
 export const DEFAULT_PLATFORM_CONFIG: ThemeConfig = {
-  mode: 'auto',
+  mode: 'dark',
   colors: {
     primary: '#D4AF37',
     secondary: '#C5A880',
@@ -256,7 +256,7 @@ export const DEFAULT_PLATFORM_CONFIG: ThemeConfig = {
     lg: '0 10px 40px rgba(0,0,0,0.5)',
   },
   typography: {
-    fontFamily: 'auto',
+    fontFamily: 'tajawal',
     headingWeight: 700,
     bodyWeight: 400,
   },
@@ -432,7 +432,7 @@ export async function resolveEffectiveTheme(params: {
 
   // Build resolved theme with defaults filled
   const resolved: ResolvedTheme = {
-    mode: merged.mode || 'auto',
+    mode: merged.mode === 'light' ? 'light' : 'dark',
     colors: {
       ...FALLBACK_THEME.colors,
       ...(merged.colors || {}),
@@ -470,7 +470,7 @@ export async function resolveEffectiveTheme(params: {
       dark: darkBg,
     },
     source,
-    rawConfig: merged,
+    rawConfig: { ...merged, mode: merged.mode === 'light' ? 'light' : 'dark' },
   };
 
   return resolved;

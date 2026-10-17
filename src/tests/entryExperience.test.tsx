@@ -198,14 +198,21 @@ describe('entry experience — tenant-driven content', () => {
     currentRestaurant = baseRestaurant;
   });
 
-  it('carries no platform palette of its own', () => {
-    // The old splash hard-coded navy/gold. The entry experience must live off
-    // the tenant tokens written by theme/brandTheme.
+  it('inherits the restaurant mode and uses semantic theme tokens throughout', () => {
+    // Theme ownership stays with CustomerThemeProvider; the entry overlay must
+    // not register another writer or freeze its own dark/light palette.
+    expect(componentSource).not.toMatch(/^\s*useBrandTheme\s*\(/m);
+    expect(valueOf('.entry-root', 'background')).toContain('var(--m-bg');
+    expect(valueOf('.entry-root', 'color')).toContain('var(--m-text');
+    expect(valueOf('.entry-cover__scrim', 'background')).toContain('--m-bg-rgb');
+    expect(valueOf('.entry-identity__name', 'color')).toContain('--m-text');
+    expect(valueOf('.entry-action__button', 'background-image')).toBe('var(--m-brand-fill)');
+    expect(valueOf('.entry-action__button', 'color')).toBe('var(--m-brand-ink)');
+
     for (const hardcoded of ['#D4AF37', '#E2C067', '#00072D', '#051650', '#123499']) {
       expect(componentSource).not.toContain(hardcoded);
       expect(cssSource.slice(cssSource.indexOf('.entry-root'))).not.toContain(hardcoded);
     }
-    expect(componentSource).toContain('useBrandTheme');
   });
 });
 

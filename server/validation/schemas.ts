@@ -1366,7 +1366,7 @@ export const onboardSchema = z
 // Central Theme Management — validation (closed, storagePath-only)
 // ============================================================
 
-export const THEME_MODES = ['light', 'dark', 'auto'] as const;
+export const THEME_MODES = ['light', 'dark'] as const;
 export const BACKGROUND_TYPES = ['solid', 'gradient', 'image', 'image+overlay', 'none'] as const;
 export const BACKGROUND_SIZES = ['cover', 'contain', 'auto'] as const;
 export const THEME_FONT_KEYS = ['tajawal', 'cairo', 'amiri', 'cormorant', 'auto'] as const;
