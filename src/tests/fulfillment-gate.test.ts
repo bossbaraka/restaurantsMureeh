@@ -236,8 +236,11 @@ describe('schema + migration', () => {
       // Central theme management: Theme model with Platform→Restaurant→Branch inheritance
       // Additive table + indexes, no Order change.
       '20260920130000_add_central_theme',
+      // Temporary launch prices and validity window on Plan; regular rates are
+      // retained and the migration is additive.
+      '20261017090000_add_plan_launch_promotion',
     ]);
-    expect(sorted[sorted.length - 1]).toBe('20260920130000_add_central_theme');
+    expect(sorted[sorted.length - 1]).toBe('20261017090000_add_plan_launch_promotion');
   });
 });
 

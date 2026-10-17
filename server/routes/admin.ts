@@ -21,6 +21,7 @@ import {
   trialWindow,
   withTrialMeta,
 } from '../services/plans';
+import { withCurrentPlanPricing } from '../services/planPricing';
 import { onboardLimiter } from '../middleware/rateLimit';
 import { generateQrToken, parsePagination } from '../utils/security';
 
@@ -134,8 +135,18 @@ router.get('/overview', async (req: Request, res: Response) => {
             createdAt: r.createdAt.toISOString(),
           };
         }),
-        subscriptions,
-        plans: plans.map(withTrialMeta),
+        subscriptions: subscriptions.map((subscription) => ({
+          ...subscription,
+          plan: subscription.plan
+            ? {
+                ...subscription.plan,
+                standardPriceMonthly: subscription.plan.priceMonthly,
+                standardPriceYearly: subscription.plan.priceYearly,
+                isPromotionActive: false,
+              }
+            : subscription.plan,
+        })),
+        plans: plans.map((plan) => withTrialMeta(withCurrentPlanPricing(plan))),
         auditLogs: auditLogs.map((l) => ({
           id: l.id,
           restaurantId: l.restaurantId || undefined,

@@ -11,6 +11,7 @@ import {
 import { useRestaurant } from '../../context/RestaurantContext';
 import { soundFX } from '../../utils/audio';
 import { optimizeImageUrl } from './ProductImage';
+import { TypewriterText } from '../common/TypewriterText';
 
 /**
  * Restaurant Entry Experience — the layer a guest lands on right after
@@ -77,18 +78,18 @@ import { optimizeImageUrl } from './ProductImage';
  *             glints and the content column each travel at their own rate as
  *             the guest drags, all read from `--entry-progress`.
  *   IDENTITY  the seal springs into place (overshoot, then a slow floating
- *             breath), the brand light blooms behind it, and the Arabic type
- *             writes itself on from the reading edge — a right-to-left mask
- *             for Arabic, mirrored for Latin — with a per-line stagger.
+ *             breath), the brand light blooms behind it, and the greeting and
+ *             venue name are written a grapheme at a time from their script's
+ *             reading edge — Arabic from the right, Latin from the left.
  *   HAND-OFF  the sheet steps aside, the cover recedes a half-step and a
  *             brand-tinted veil dissolves over the seam, so the menu arrives
  *             through a curtain instead of appearing by deletion.
  *
- * Everything is CSS (opacity / transform / filter only) — no motion library, no
- * canvas, no requestAnimationFrame. Glints are a fixed, deterministic table and
- * are dropped on short viewports and under `prefers-reduced-motion`, because a
- * guest on a 5-year-old Android phone arriving through a QR code must never
- * wait on decoration.
+ * The choreography is CSS (opacity / transform / filter) with one small,
+ * grapheme-aware timer for the short typewriter lines — no motion library,
+ * canvas or requestAnimationFrame. Glints are a fixed, deterministic table and
+ * are dropped on short viewports and under `prefers-reduced-motion`; the full
+ * text is immediately available to assistive technology.
  */
 
 interface RestaurantEntryExperienceProps {
@@ -247,6 +248,8 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
     const english = currentRestaurant.nameEn || currentRestaurant.name;
     return isEnglish ? english : arabic;
   }, [currentRestaurant, isEnglish]);
+  const welcomeText = isEnglish ? 'Welcome' : 'أهلاً بكم';
+  const identityGreeting = isEnglish ? 'WELCOME TO' : 'أهلاً بكم في';
 
   // An empty description is omitted entirely — no invented copy.
   const description = (currentRestaurant?.description || '').trim();
@@ -655,7 +658,15 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
         <div className="entry-stage entry-stage--cover" data-active={stage === 'COVER'}>
           <div className="entry-invite">
             <div className="entry-invite__lead">
-              <p className="entry-eyebrow">{isEnglish ? 'Welcome' : 'أهلاً بكم'}</p>
+              <p className="entry-eyebrow">
+                <span className="sr-only">{welcomeText}</span>
+                <TypewriterText
+                  text={welcomeText}
+                  active={stage === 'COVER'}
+                  delayMs={140}
+                  reducedMotion={reducedMotion}
+                />
+              </p>
               {stage === 'COVER' && (
                 <button
                   type="button"
@@ -733,14 +744,26 @@ export const RestaurantEntryExperience: React.FC<RestaurantEntryExperienceProps>
             {/* The table badge now lives in the persistent top bar, so the
                 identity block reads as a single centred composition. */}
             <p className="entry-eyebrow entry-eyebrow--identity">
-              {isEnglish ? 'WELCOME TO' : 'أهلاً بكم في'}
+              <span className="sr-only">{identityGreeting}</span>
+              <TypewriterText
+                text={identityGreeting}
+                active={revealed}
+                delayMs={180}
+                reducedMotion={reducedMotion}
+              />
             </p>
 
-            {/* The name is wrapped so it can be revealed by a directional
-                mask on the child while the h1 itself keeps the generic
-                per-line rise — two owners, two properties, no fight. */}
+            {/* The full name stays available to screen readers; the visual
+                fragment types the restaurant name from its reading edge. */}
             <h1 className="entry-identity__name">
-              <span className="entry-name__type">{displayName}</span>
+              <span className="sr-only">{displayName}</span>
+              <TypewriterText
+                className="entry-name__type"
+                text={displayName}
+                active={revealed}
+                delayMs={420}
+                reducedMotion={reducedMotion}
+              />
             </h1>
 
             {/* Latin lockup — the tracked second line of the reference's

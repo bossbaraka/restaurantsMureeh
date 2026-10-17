@@ -19,7 +19,6 @@ import { describe, it, expect, vi, afterEach, beforeAll } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
-import { execSync } from 'node:child_process';
 
 import { RealtimeService, MAX_PER_TENANT, MAX_PER_SUBJECT, GLOBAL_MAX_CLIENTS } from '../../server/services/realtime';
 import {
@@ -345,10 +344,9 @@ describe('P1: POS cash reconciliation', () => {
 // ---------------------------------------------------------------------------
 describe('P1: shipped log redaction covers every credential query param', () => {
   it('redacts sessionToken / qrToken / pin / token / password values', async () => {
-    process.env.NODE_ENV = 'test';
-    process.env.JWT_SECRET = 'r'.repeat(40);
-    const mod = (await vi.importActual('../../server/index.ts')) as any;
-    const redact = mod.redactSensitiveUrl as (u: string) => string;
+    const { redactSensitiveUrl } = await import('../../server/utils/sensitiveUrl.ts');
+    const redact = redactSensitiveUrl;
+    expect(read('server/index.ts')).toMatch(/morgan\.token\('url',[\s\S]*?redactSensitiveUrl\(/);
 
     const cases: Array<[string, string]> = [
       ['/api/public/events?restaurantId=r1&tableId=t1&sessionToken=sess-SUPER-SECRET', 'sess-SUPER-SECRET'],
@@ -727,6 +725,10 @@ describe('P2: frontend XSS sinks', () => {
           (arg === 'whatsappUrl' &&
             /const whatsappUrl = buildWhatsappUrl\(/.test(src) &&
             src.includes("from '../../utils/whatsapp'")) ||
+          // Mureeh sales/support deep links are generated from a fixed,
+          // platform-owned WhatsApp number by the shared URL builder.
+          (arg.startsWith('buildMureehWhatsAppUrl(') &&
+            src.includes("from '../../../shared/mureeh-contact'")) ||
           /^['"]https:/.test(arg);
         expect({ file: f, arg, ok }).toEqual({ file: f, arg, ok: true });
       }

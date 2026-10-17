@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { FREE_TRIAL_PLAN } from '../services/plans';
+import { LAUNCH_OFFER, PLAN_PRICING } from '../../shared/plan-pricing';
 import { seedShoqrahCafe } from './seed-shoqrah';
 import { seedGhosnCafe } from './seed-ghosn';
 import { assertStrongSeedPassword, isDemoSeedAllowed } from './seed-utils';
@@ -46,8 +47,9 @@ export async function seedDatabase() {
       id: 'plan-starter',
       name: 'الباقة الأساسية',
       nameEn: 'Starter Plan',
-      priceMonthly: 300,
-      priceYearly: 3000,
+      ...PLAN_PRICING.starter,
+      promoStartsAt: new Date(LAUNCH_OFFER.startsAt),
+      promoEndsAt: new Date(LAUNCH_OFFER.endsAt),
       billingPeriod: 'monthly',
       maxTables: 20,
       maxCategories: 6,
@@ -61,8 +63,9 @@ export async function seedDatabase() {
       id: 'plan-pro',
       name: 'باقة المحترفين الفاخرة',
       nameEn: 'Professional Hospitality',
-      priceMonthly: 550,
-      priceYearly: 5500,
+      ...PLAN_PRICING.pro,
+      promoStartsAt: new Date(LAUNCH_OFFER.startsAt),
+      promoEndsAt: new Date(LAUNCH_OFFER.endsAt),
       billingPeriod: 'monthly',
       maxTables: 50,
       maxCategories: 20,
@@ -81,8 +84,9 @@ export async function seedDatabase() {
       id: 'plan-enterprise',
       name: 'باقة المؤسسات وسلاسل المطاعم',
       nameEn: 'Enterprise & Multi-Branch',
-      priceMonthly: 850,
-      priceYearly: 8500,
+      ...PLAN_PRICING.enterprise,
+      promoStartsAt: new Date(LAUNCH_OFFER.startsAt),
+      promoEndsAt: new Date(LAUNCH_OFFER.endsAt),
       billingPeriod: 'monthly',
       // Bounded, not "unlimited": each table/branch/category/dish carries real
       // hosting, QR-print and support cost. These ceilings keep platform spend

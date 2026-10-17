@@ -33,25 +33,45 @@
  *
  * Purity contract
  * ================
- * Prisma-free, DB-free, env-free. The content is a constant string so
- * the injected HTML is byte-identical on every node and every deploy —
- * the same discipline `platformSeo.ts` applies to sitemap/robots.
+ * Prisma-free, DB-free, env-free. Marketing copy is static; the public plan
+ * prices and campaign label come from the shared pricing config at build or
+ * process start, so crawlers see the same current offer as the React page.
  *
  * Content policy
  * ==============
  * Every word below is marketing copy the page already shows to
  * users (or a structural duplicate of it). No fabricated reviews,
- * addresses, phone numbers or ratings — the structured-data policy in
- * `index.html` locks that down, and this mirror obeys the same rule.
+ * addresses or ratings — the only contact number shown is the official
+ * Mureeh WhatsApp number supplied in `shared/mureeh-contact.ts`.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { NextFunction, Request, Response } from 'express';
+import { LAUNCH_OFFER, PLAN_PRICING, getDisplayedPlanPrice, isLaunchOfferActive } from '../../shared/plan-pricing';
+import { buildMureehWhatsAppUrl, MUREEH_WHATSAPP_DISPLAY } from '../../shared/mureeh-contact';
 
 /** Marker injected right after `<div id="root">` — makes the
  *  injection idempotent and testable. */
 export const PRERENDER_MARKER = '<!--mureeh:landing-prerendered-->';
+
+// Resolve the static mirror's price copy at build/process time from the same
+// campaign configuration as the live React landing page.
+const landingRenderedAt = Date.now();
+const landingOfferActive = isLaunchOfferActive(landingRenderedAt);
+
+type LandingPlanKey = keyof typeof PLAN_PRICING;
+function renderLandingMonthlyPrice(planKey: LandingPlanKey): string {
+  const pricing = PLAN_PRICING[planKey];
+  const displayedPrice = getDisplayedPlanPrice(pricing, 'monthly', landingRenderedAt);
+  const standardPrice = landingOfferActive
+    ? `<span class="mr-2 text-sm text-slate-500 line-through">${pricing.priceMonthly}</span>`
+    : '';
+  const offerNote = landingOfferActive
+    ? `<p class="text-[10px] font-bold text-amber-200">عرض الإطلاق حتى ${LAUNCH_OFFER.endsAtLabelAr}</p>`
+    : '';
+  return `<p class="text-4xl font-black text-white tabular-nums">${displayedPrice} ${standardPrice}<span class="text-sm font-bold text-slate-400">₪/شهرياً</span></p>${offerNote}`;
+}
 
 /**
  * Static mirror of `SaaSLandingPage.tsx`.
@@ -94,8 +114,8 @@ export const LANDING_ROOT_HTML = `
         وتقارير مبيعات لحظية — منظومة مُريح السحابية تحوّل كل طاولة إلى مصدر ربح ذكي.
       </p>
       <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
-        <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" class="px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white font-bold text-sm">
-          ابدأ تجربتك المجانية
+        <a href="${buildMureehWhatsAppUrl(landingOfferActive ? 'أود الاستفادة من عرض الإطلاق' : 'أود الاستفسار عن الاشتراك')}" target="_blank" rel="noopener noreferrer" class="px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white font-bold text-sm">
+          ${landingOfferActive ? 'استفد من عرض الإطلاق' : 'تواصل للاشتراك'}
         </a>
         <a href="#how" class="px-8 py-4 rounded-2xl bg-white/5 border border-white/15 text-white font-bold text-sm">
           شاهد كيف يعمل
@@ -288,12 +308,13 @@ export const LANDING_ROOT_HTML = `
       <p class="text-xs font-black tracking-[0.2em] text-[#38BDF8] uppercase">باقات الاشتراك</p>
       <h2 id="pricing-title" class="text-2xl sm:text-4xl font-black text-white leading-snug text-balance">باقة لكل مرحلة من نموّك</h2>
       <p class="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto">ابدأ بإطلاق منيو رقمي احترافي خلال دقائق، وطوّر باقتك كلما كبر مطعمك — بدون رسوم خفية وبدون عقود إجبارية.</p>
+      ${landingOfferActive ? `<div class="max-w-3xl mx-auto rounded-2xl border border-amber-400/35 bg-[#14233A] px-5 py-4"><p class="text-xs sm:text-sm font-bold text-white">عرض إطلاق لفترة محدودة للمشتركين الجدد حتى ${LAUNCH_OFFER.endsAtLabelAr}</p><p class="mt-2 mb-0 text-[10px] text-slate-300">الأسعار بالشيكل، والسعر المعتاد ظاهر بجانب سعر العرض.</p></div>` : ''}
     </div>
     <div class="grid md:grid-cols-3 gap-5">
       <article class="rounded-3xl bg-[#081B33]/60 border border-[#004B87]/40 p-7 space-y-5">
         <h3 class="text-lg font-black text-white">الباقة الأساسية</h3>
         <p class="text-xs text-slate-400">للمطاعم والكافيهات الواعدة</p>
-        <p class="text-4xl font-black text-white tabular-nums">300 <span class="text-sm font-bold text-slate-400">₪/شهرياً</span></p>
+        ${renderLandingMonthlyPrice('starter')}
         <ul class="space-y-2.5 text-xs text-slate-300 list-none">
           <li>منيو رقمي فاخر وتفاعلي عبر رمز الـ QR</li>
           <li>طلب فوري مباشر من الطاولة بدون أي تطبيق</li>
@@ -301,12 +322,12 @@ export const LANDING_ROOT_HTML = `
           <li>نظام كاشير أساسي وتصفية الفواتير</li>
           <li>لوحة تحكم ودعم فني من منصة مريح</li>
         </ul>
-        <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" class="block text-center px-6 py-3.5 rounded-xl bg-white/5 border border-white/15 text-white text-xs font-bold">اشترك الآن</a>
+        <a href="${buildMureehWhatsAppUrl('أود الاشتراك في الباقة الأساسية من مريح.')}" target="_blank" rel="noopener noreferrer" class="block text-center px-6 py-3.5 rounded-xl bg-white/5 border border-white/15 text-white text-xs font-bold">اشترك الآن عبر واتساب</a>
       </article>
       <article class="rounded-3xl bg-gradient-to-br from-[#003865] to-[#04142B] border border-[#0072BC]/60 p-7 space-y-5 shadow-[0_24px_60px_-20px_rgba(0,114,188,0.45)]">
         <h3 class="text-lg font-black text-white">الباقة الاحترافية <span class="text-[10px] font-black text-emerald-300 bg-emerald-400/10 border border-emerald-400/30 rounded-full px-2 py-0.5 mr-2">الأكثر طلباً</span></h3>
         <p class="text-xs text-slate-400">الحل المتكامل لإدارة الصالات وشاشة المطبخ والـ POS</p>
-        <p class="text-4xl font-black text-white tabular-nums">550 <span class="text-sm font-bold text-slate-400">₪/شهرياً</span></p>
+        ${renderLandingMonthlyPrice('pro')}
         <ul class="space-y-2.5 text-xs text-slate-300 list-none">
           <li>جميع مزايا الباقة الأساسية بالكامل</li>
           <li>شاشة المطبخ الحية (KDS) بتنبيهات صوتية فورية</li>
@@ -314,19 +335,19 @@ export const LANDING_ROOT_HTML = `
           <li>تحليلات مبيعات تفاعلية وتخصيص الهوية البصرية</li>
           <li>إدارة العروض والكومبو وشارات الترويج</li>
         </ul>
-        <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" class="block text-center px-6 py-3.5 rounded-xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white text-xs font-black">احصل على الباقة الاحترافية</a>
+        <a href="${buildMureehWhatsAppUrl('أود الاشتراك في الباقة الاحترافية من مريح.')}" target="_blank" rel="noopener noreferrer" class="block text-center px-6 py-3.5 rounded-xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white text-xs font-black">احصل على الباقة الاحترافية عبر واتساب</a>
       </article>
       <article class="rounded-3xl bg-[#081B33]/60 border border-[#004B87]/40 p-7 space-y-5">
         <h3 class="text-lg font-black text-white">باقة المؤسسات والسلاسل</h3>
         <p class="text-xs text-slate-400">لسلاسل المطاعم والفنادق والمنتجعات والفروع المتعددة</p>
-        <p class="text-4xl font-black text-white tabular-nums">850 <span class="text-sm font-bold text-slate-400">₪/شهرياً</span></p>
+        ${renderLandingMonthlyPrice('enterprise')}
         <ul class="space-y-2.5 text-xs text-slate-300 list-none">
           <li>حتى 10 فروع و200 طاولة و500 صنف</li>
           <li>إدارة الفروع المتعددة (Multi-Branch System)</li>
           <li>ربط نطاق خاص لموقعك (Custom Domain)</li>
           <li>مدير حساب خاص ودعم أولوية قصوى 24/7</li>
         </ul>
-        <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" class="block text-center px-6 py-3.5 rounded-xl bg-white/5 border border-white/15 text-white text-xs font-bold">تواصل مع مبيعات مُريح</a>
+        <a href="${buildMureehWhatsAppUrl('أود الاستفسار عن باقة المؤسسات من مريح.')}" target="_blank" rel="noopener noreferrer" class="block text-center px-6 py-3.5 rounded-xl bg-white/5 border border-white/15 text-white text-xs font-bold">تواصل مع مبيعات مريح عبر واتساب</a>
       </article>
     </div>
   </div>
@@ -407,7 +428,7 @@ export const LANDING_ROOT_HTML = `
         <h2 id="final-cta-title" class="text-2xl sm:text-4xl font-black text-white leading-snug text-balance">جاهز تحوّل مطعمك إلى تجربة رقمية كاملة؟</h2>
         <p class="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">انضم إلى المطاعم التي تدير طاولاتها ومطبخها وكاشيرها من منظومة واحدة. التفعيل خلال دقائق — والدعم معك خطوة بخطوة.</p>
         <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-          <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" class="px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white font-bold text-sm">تحدث مع المبيعات</a>
+          <a href="${buildMureehWhatsAppUrl('أود التحدث مع مبيعات مريح.')}" target="_blank" rel="noopener noreferrer" class="px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#0072BC] to-[#009FE3] text-white font-bold text-sm">تحدث مع المبيعات عبر واتساب</a>
         </div>
         <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[11px] font-bold text-slate-400 pt-1">
           <span class="inline-flex items-center gap-1.5">بدون بطاقة ائتمانية</span>
@@ -425,8 +446,8 @@ export const LANDING_ROOT_HTML = `
       <div class="space-y-4">
         <p class="text-base font-black text-white">مُريح <span class="text-[#38BDF8] text-xs font-bold">MUREEH OS</span></p>
         <p class="text-xs text-slate-400 leading-relaxed">منصة مُريح للخدمات الإلكترونية — منظومة سحابية متكاملة لإدارة المطاعم والمقاهي: منيو QR، شاشة مطبخ، ونقطة بيع في مكان واحد.</p>
-        <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500/10 border border-sky-500/30 text-sky-300 text-xs font-bold">
-          تليجرام: <span dir="ltr">@Mureeh_tech_bot</span>
+        <a href="${buildMureehWhatsAppUrl('مرحباً، أود الاستفسار عن منصة مريح.')}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-400/30 text-emerald-300 text-xs font-bold">
+          واتساب مريح: <span dir="ltr">${MUREEH_WHATSAPP_DISPLAY}</span>
         </a>
       </div>
       <nav aria-label="روابط سريعة">
@@ -443,15 +464,15 @@ export const LANDING_ROOT_HTML = `
       <nav aria-label="الباقات">
         <h4 class="text-sm font-black text-white mb-4">الباقات</h4>
         <ul class="space-y-2.5 text-xs font-bold text-slate-400 list-none">
-          <li><a href="#pricing" class="hover:text-[#38BDF8] transition-colors">الباقة الأساسية — 300 ₪/شهرياً</a></li>
-          <li><a href="#pricing" class="hover:text-[#38BDF8] transition-colors">الباقة الاحترافية — 550 ₪/شهرياً</a></li>
-          <li><a href="#pricing" class="hover:text-[#38BDF8] transition-colors">باقة المؤسسات والسلاسل — 850 ₪/شهرياً</a></li>
+          <li><a href="#pricing" class="hover:text-[#38BDF8] transition-colors">الباقة الأساسية — ${getDisplayedPlanPrice(PLAN_PRICING.starter, 'monthly', landingRenderedAt)} ₪/شهرياً</a></li>
+          <li><a href="#pricing" class="hover:text-[#38BDF8] transition-colors">الباقة الاحترافية — ${getDisplayedPlanPrice(PLAN_PRICING.pro, 'monthly', landingRenderedAt)} ₪/شهرياً</a></li>
+          <li><a href="#pricing" class="hover:text-[#38BDF8] transition-colors">باقة المؤسسات والسلاسل — ${getDisplayedPlanPrice(PLAN_PRICING.enterprise, 'monthly', landingRenderedAt)} ₪/شهرياً</a></li>
         </ul>
       </nav>
       <div>
         <h4 class="text-sm font-black text-white mb-4">تواصل معنا</h4>
         <ul class="space-y-2.5 text-xs font-bold text-slate-400 list-none">
-          <li class="flex items-center gap-2">تليجرام: <a href="https://t.me/Mureeh_tech_bot" target="_blank" rel="noopener noreferrer" class="font-mono text-slate-300 hover:text-sky-400" dir="ltr">@Mureeh_tech_bot</a></li>
+          <li class="flex items-center gap-2">واتساب: <a href="${buildMureehWhatsAppUrl('مرحباً، أود التواصل مع فريق مريح.')}" target="_blank" rel="noopener noreferrer" class="font-mono text-slate-300 hover:text-emerald-300" dir="ltr">${MUREEH_WHATSAPP_DISPLAY}</a></li>
           <li class="flex items-center gap-2">دعم فني يومي في أوقات العمل</li>
           <li class="flex items-center gap-2">منصة سحابية آمنة متعددة المستأجرين</li>
         </ul>

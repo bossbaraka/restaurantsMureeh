@@ -10,6 +10,7 @@ import {
   isPaymentVerificationPending,
 } from '../../utils/orderLifecycle';
 import { useDialog } from '../../hooks/useDialog';
+import { buildMureehWhatsAppUrl, MUREEH_WHATSAPP_DISPLAY } from '../../../shared/mureeh-contact';
 import {
   X,
   CheckCircle2,
@@ -27,6 +28,7 @@ import {
   CreditCard,
   Clock,
   AlertTriangle,
+  MessageCircle,
 } from 'lucide-react';
 
 export const OrderTrackingDrawer: React.FC = () => {
@@ -66,6 +68,9 @@ export const OrderTrackingDrawer: React.FC = () => {
       : activeTableId
       ? formatTableNumber(activeTableId) || '—'
       : '—';
+  const supportWhatsAppUrl = buildMureehWhatsAppUrl(
+    `مرحباً، أحتاج مساعدة من مريح بخصوص طلب في ${currentRestaurant?.name || 'مطعم'}، الطاولة ${tableNumStr}.`,
+  );
 
   const handleStartEditNotes = (order: Order) => {
     setEditingNotesOrderId(order.id);
@@ -548,17 +553,18 @@ export const OrderTrackingDrawer: React.FC = () => {
         )}
       </div>
 
-        {/* Sticky Footer: Order More, Call Waiter & Telegram Bot Support */}
+        {/* Sticky Footer: Order More, Call Waiter & Mureeh WhatsApp Support */}
         <div className="p-4 bg-m-bg border-t border-m-hairline space-y-2 shrink-0">
           <div className="flex items-center gap-2 text-xs justify-between">
             <a
-              href="https://t.me/Mureeh_tech_bot"
+              href={supportWhatsAppUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 py-2 px-3 rounded-xl bg-sky-950/80 hover:bg-sky-900 border border-sky-500/40 text-sky-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              className="flex-1 py-2 px-3 rounded-xl bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-500/35 text-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
             >
-              <span>تليجرام الخدمة الدعم الفني:</span>
-              <span className="font-mono direction-ltr">@Mureeh_tech_bot</span>
+              <MessageCircle className="w-3.5 h-3.5" />
+              <span>دعم مريح عبر واتساب:</span>
+              <span className="font-mono direction-ltr">{MUREEH_WHATSAPP_DISPLAY}</span>
             </a>
           </div>
 

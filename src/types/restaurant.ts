@@ -387,8 +387,17 @@ export interface Plan {
   id: string;
   name: string;
   nameEn: string;
+  /** Effective price (promotional while an active offer is running). */
   priceMonthly: number;
   priceYearly: number;
+  /** Regular catalog price, included by the API for transparent sale display. */
+  standardPriceMonthly?: number;
+  standardPriceYearly?: number;
+  promoPriceMonthly?: number | null;
+  promoPriceYearly?: number | null;
+  promoStartsAt?: string | null;
+  promoEndsAt?: string | null;
+  isPromotionActive?: boolean;
   maxTables: number;
   maxCategories: number;
   maxProducts: number;
@@ -410,6 +419,8 @@ export interface Subscription {
   currentPeriodEnd: string;
   cancelAtPeriodEnd: boolean;
   trialEndsAt?: string;
+  /** Current subscription price context; the catalog may have an active offer. */
+  plan?: Plan | null;
 }
 
 // Anonymous Customer Table Session

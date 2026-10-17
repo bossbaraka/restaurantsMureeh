@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useAuth } from '../../context/AuthContext';
 import { Restaurant, Subscription, Plan, AuditLog, ThemeConfig, ThemeRow } from '../../types/restaurant';
+import { LAUNCH_OFFER } from '../../../shared/plan-pricing';
 import { api } from '../../services/api';
 import { formatPrice, formatTime, formatRelativeMinutes, daysUntil } from '../../utils/formatting';
 import {
@@ -425,7 +426,17 @@ export const PlatformAdminPortal: React.FC = () => {
                 <p className="text-xs text-luxury-400 mt-1">{p.description}</p>
                 <div className="my-4">
                   <span className="text-2xl font-bold text-gold-400">{formatPrice(p.priceMonthly)}</span>
+                  {p.isPromotionActive && (p.standardPriceMonthly ?? 0) > p.priceMonthly && (
+                    <span className="mr-2 text-xs text-luxury-500 line-through">
+                      {formatPrice(p.standardPriceMonthly!)}
+                    </span>
+                  )}
                   <span className="text-xs text-luxury-400"> / شهرياً</span>
+                  {p.isPromotionActive && (
+                    <p className="mt-1 text-[10px] font-bold text-amber-300">
+                      عرض الإطلاق حتى {LAUNCH_OFFER.endsAtLabelAr}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2 pt-3 border-t border-luxury-800 text-xs text-luxury-300">

@@ -8,6 +8,7 @@ import { RestaurantMapModal } from '../common/RestaurantMapModal';
 import { openCustomerGuide } from './guideBus';
 import { optimizeImageUrl } from './ProductImage';
 import { useDialog } from '../../hooks/useDialog';
+import { buildMureehWhatsAppUrl, MUREEH_WHATSAPP_DISPLAY } from '../../../shared/mureeh-contact';
 
 export const CustomerHeader: React.FC = () => {
   const {
@@ -56,7 +57,9 @@ export const CustomerHeader: React.FC = () => {
   const restNameEn = currentRestaurant?.nameEn || '';
   const initialLetter = restNameEn.charAt(0) || 'M';
 
-  const whatsappUrl = `https://wa.me/970593498909?text=${encodeURIComponent(`السلام عليكم، أتواصل معكم عبر قائمة الطعام في ${restName}`)}`;
+  const whatsappUrl = buildMureehWhatsAppUrl(
+    `مرحباً، أحتاج مساعدة من فريق مريح بخصوص قائمة ${restName}.`,
+  );
 
   return (
     <>
@@ -376,19 +379,19 @@ export const CustomerHeader: React.FC = () => {
                 )}
               </button>
 
-              {/* Telegram Bot Direct Support */}
+              {/* Mureeh platform support is routed through its official WhatsApp only. */}
               <a
-                href="https://t.me/Mureeh_tech_bot"
+                href={whatsappUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="w-full p-3 rounded-xl bg-sky-950/80 border border-sky-500/40 text-sky-300 text-xs font-bold flex items-center justify-between transition-all"
+                className="w-full p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/35 text-emerald-300 text-xs font-bold flex items-center justify-between transition-all"
               >
                 <div className="flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4 text-sky-400" />
-                  <span>تواصل عبر بوت تليجرام المنصة</span>
+                  <MessageCircle className="w-4 h-4 text-emerald-400" />
+                  <span>تواصل مع دعم مريح عبر واتساب</span>
                 </div>
-                <span className="font-mono text-[11px] text-sky-300 direction-ltr">@Mureeh_tech_bot</span>
+                <span className="font-mono text-[11px] text-emerald-300 direction-ltr">{MUREEH_WHATSAPP_DISPLAY}</span>
               </a>
 
               {/* Admin Login */}
