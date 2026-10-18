@@ -321,6 +321,7 @@ router.post(
         }
         return res.status(err.statusCode).json({
           success: false,
+          code: err.code,
           error: err.message,
           statusCode: err.statusCode,
         });

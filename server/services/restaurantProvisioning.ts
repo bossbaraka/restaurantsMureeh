@@ -262,7 +262,7 @@ export function buildVerificationReference(restaurantId: string): string {
  */
 export function computeRestaurantVerificationCode(
   restaurantId: string,
-  secret: string
+  secret: string = process.env.JWT_SECRET || ''
 ): string {
   if (!restaurantId || !secret) {
     throw new Error('restaurantId and secret are required for verification code');
@@ -280,7 +280,7 @@ export function computeRestaurantVerificationCode(
 export function verifyRestaurantActivationCode(
   restaurantId: string,
   suppliedCode: string,
-  secret: string
+  secret: string = process.env.JWT_SECRET || ''
 ): boolean {
   const clean = String(suppliedCode ?? '').trim();
   if (!/^\d{6}$/.test(clean)) return false;

@@ -235,6 +235,7 @@ describe.skipIf(!hasDb)('Self-service registration & onboarding (real PostgreSQL
       const { computeRestaurantVerificationCode } = await import(
         '../../server/services/restaurantProvisioning'
       );
+      const { config } = await import('../../server/config');
       const { token, userId } = await freshOwner('full');
       const res = await onboard(token, {
         name: 'مطعم الياسمين الفاخر',
@@ -311,7 +312,7 @@ describe.skipIf(!hasDb)('Self-service registration & onboarding (real PostgreSQL
       expect(statusCheck.json.data.verificationReference).toBe(verificationReference);
 
       // Wrong 6-digit code is rejected with 400.
-      const officialCode = computeRestaurantVerificationCode(restaurant.id);
+      const officialCode = computeRestaurantVerificationCode(restaurant.id, config.jwtSecret);
       const wrongCode = officialCode === '000000' ? '999999' : '000000';
       const badVerify = await call('POST', '/api/onboarding/verify', {
         token,
