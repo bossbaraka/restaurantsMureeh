@@ -506,6 +506,7 @@ router.post(
 
         return res.status(400).json({
           success: false,
+          code: 'INVALID_VERIFICATION_CODE',
           error:
             'رمز التفعيل الرسمي غير صحيح — تأكد من الرمز المكون من 6 أرقام الصادر من منصة مريح',
           statusCode: 400,
