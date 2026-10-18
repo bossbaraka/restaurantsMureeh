@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mureeh — سitemap النمو (ملف جديد، لا يستبدل sitemap.xml الأصلي)
+  أرسِل هذا الملف يدوياً في Google Search Console: Sitemaps → Add a new sitemap
+  الرابط المرسل: https://mureehmenu.com/sitemap-growth.xml
+  يجمع الصفحة الرئيسية + صفحات الدلائل الجديدة (أكتوبر 2026).
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://mureehmenu.com/</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://mureehmenu.com/nazer-edaret-almata3em.html</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://mureehmenu.com/manassa-edaret-almata3em.html</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://mureehmenu.com/menu-qr-raqmi.html</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://mureehmenu.com/prices-nazer-edaret-almata3em.html</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://mureehmenu.com/roi-calculator.html</loc>
+    <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+</urlset>

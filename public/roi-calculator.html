@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>حاسبة عائد نظام إدارة المطاعم | احسب توفيرك وزيادة مبيعاتك — مُريح</title>
+<meta name="description" content="حاسبة تفاعلية مجانية: احسب بالتقريب الشهري توفير الطباعة والعمالة وزيادة المبيعات المتوقعة من التحول إلى نظام إدارة المطاعم الرقمي (منيو QR + طلب الطاولة)، مقارنةً بسعر الاشتراك. أرقام تعليمية قابلة للتعديل." />
+<link rel="canonical" href="https://mureehmenu.com/roi-calculator.html" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="مُريح" />
+<meta property="og:url" content="https://mureehmenu.com/roi-calculator.html" />
+<meta property="og:locale" content="ar_AR" />
+<meta property="og:title" content="حاسبة عائد نظام إدارة المطاعم — مُريح" />
+<meta property="og:description" content="احسب تقديرياً: توفيرك الشهري من الطباعة والعمالة وزيادة المبيعات من التحول الرقمي، مقابل سعر الاشتراك." />
+<meta property="og:image" content="https://mureehmenu.com/og-image.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="حاسبة عائد نظام إدارة المطاعم | مُريح" />
+<meta name="twitter:description" content="أداة مجانية: قيّم عائد التحول إلى منيو QR ونظام طلبات رقمي قبل الاشتراك." />
+<meta name="twitter:image" content="https://mureehmenu.com/og-image.png" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "الرئيسية", "item": "https://mureehmenu.com/" },
+        { "@type": "ListItem", "position": 2, "name": "حاسبة العائد على الاستثمار", "item": "https://mureehmenu.com/roi-calculator.html" }
+      ]
+    },
+    {
+      "@type": "WebApplication",
+      "name": "حاسبة عائد نظام إدارة المطاعم",
+      "url": "https://mureehmenu.com/roi-calculator.html",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "inLanguage": "ar",
+      "description": "أداة تفاعلية مجانية تقدّر توفير الطباعة والعمالة وزيادة المبيعات المتوقعة من التحول إلى نظام إدارة المطاعم الرقمي، وتقارنها بسعر الاشتراك.",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "ILS" },
+      "publisher": { "@type": "Organization", "name": "مُريح للخدمات الإلكترونية", "url": "https://mureehmenu.com/" }
+    }
+  ]
+}
+</script>
+<style>
+  :root { --bg:#020A14; --card:#081B33; --line:#004B87; --brand:#0072BC; --accent:#38BDF8; --green:#34D399; --text:#E8F1F8; --muted:#9FB3C8; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Tajawal','Segoe UI',Tahoma,-apple-system,sans-serif; line-height:1.9; padding:0 0 4rem; }
+  .wrap { max-width:920px; margin:0 auto; padding:0 1.25rem; }
+  header { padding:2.2rem 0 1.2rem; border-bottom:1px solid rgba(0,75,135,.4); background:linear-gradient(180deg,rgba(0,114,188,.14),transparent); }
+  .brand { font-weight:900; font-size:.95rem; color:var(--accent); text-decoration:none; }
+  h1 { font-size:clamp(1.65rem,5vw,2.45rem); font-weight:900; line-height:1.45; margin:.8rem 0 .7rem; }
+  .lead { color:var(--muted); font-size:1.02rem; max-width:46rem; }
+  .badge { display:inline-block; background:rgba(0,114,188,.22); border:1px solid rgba(56,189,248,.4); color:#9BE0FF; border-radius:99px; padding:.28rem .85rem; font-size:.78rem; font-weight:800; }
+  section { padding:1.9rem 0 .6rem; }
+  h2 { font-size:1.4rem; font-weight:900; margin:0 0 .8rem; color:#fff; }
+  p { margin:.55rem 0; color:#CFE2F0; font-size:.97rem; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1rem; }
+  .card { background:var(--card); border:1px solid rgba(0,75,135,.45); border-radius:1.15rem; padding:1.15rem 1.25rem; }
+  label { display:block; font-weight:800; font-size:.92rem; margin:.75rem 0 .3rem; color:#fff; }
+  .hint { font-size:.78rem; color:var(--muted); font-weight:400; }
+  input[type=number], select { width:100%; padding:.65rem .85rem; border-radius:.75rem; border:1px solid rgba(56,189,248,.35); background:#04101F; color:#fff; font-size:1.02rem; font-family:inherit; }
+  input[type=range] { width:100%; accent-color:var(--accent); margin:.45rem 0 .15rem; }
+  .out { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:.9rem; margin:1.15rem 0; }
+  .stat { background:linear-gradient(180deg,rgba(0,114,188,.16),var(--card)); border:1px solid rgba(0,75,135,.5); border-radius:1.15rem; padding:1.05rem 1.15rem; text-align:center; }
+  .stat .num { font-size:1.85rem; font-weight:900; color:var(--accent); }
+  .stat.green .num { color:var(--green); }
+  .stat .lbl { font-size:.85rem; color:var(--muted); margin-top:.15rem; }
+  .stat .sub { font-size:.75rem; color:#7C93A8; }
+  .cta { display:flex; flex-wrap:wrap; gap:.75rem; margin:1.25rem 0; }
+  .btn { display:inline-block; padding:.85rem 1.6rem; border-radius:.95rem; font-weight:800; font-size:.95rem; text-decoration:none; }
+  .btn-primary { background:linear-gradient(270deg,var(--brand),#009FE3); color:#fff; }
+  .btn-ghost { background:rgba(255,255,255,.05); color:#fff; border:1px solid rgba(255,255,255,.2); }
+  .note { border-right:4px solid var(--accent); background:rgba(56,189,248,.08); padding:.85rem 1.1rem; border-radius:.8rem; margin:.95rem 0; font-size:.9rem; }
+  .warn { border-right:4px solid #FBBF24; background:rgba(251,191,36,.08); padding:.85rem 1.1rem; border-radius:.8rem; margin:.95rem 0; font-size:.88rem; }
+  table { width:100%; border-collapse:collapse; margin:.9rem 0 1.2rem; font-size:.88rem; }
+  th, td { border:1px solid rgba(0,75,135,.5); padding:.6rem .7rem; text-align:right; }
+  th { background:rgba(0,114,188,.16); color:#fff; }
+  td { background:rgba(8,27,51,.5); }
+  footer { margin-top:2.5rem; border-top:1px solid rgba(0,75,135,.4); padding:1.4rem 0; font-size:.85rem; color:var(--muted); }
+  footer a, .links a { color:var(--accent); text-decoration:none; }
+  .links { display:flex; flex-wrap:wrap; gap:.75rem; margin:.75rem 0; }
+  .links a { font-size:.88rem; font-weight:700; border-bottom:1px dashed rgba(56,189,248,.5); }
+  strong { color:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="https://mureehmenu.com/">← مُريح — منصة إدارة المطاعم</a>
+    <p class="badge">أداة مجانية · أرقامك أنت</p>
+    <h1>حاسبة عائد نظام إدارة المطاعم</h1>
+    <p class="lead">قبل أن تسأل «كم يكلف؟» — اسأل «كم سيوفر ويرفع؟». أدخل أرقام مطعمك (أو ابدأ بالقيم الافتراضية) واحصل على تقدير شهري شفاف: <strong>توفير الطباعة والعمالة</strong> + <strong>زيادة المبيعات المتوقعة</strong> من الطلب الرقمي — مقابل سعر الاشتراك.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="calc">
+    <h2>أدخل أرقام مطعمك</h2>
+    <div class="grid">
+      <div class="card">
+        <label for="tables">عدد الطاولات <span class="hint">(افتراضي: 20)</span></label>
+        <input type="number" id="tables" min="1" max="500" value="20" />
+        <label for="orders">الطلبات لكل طاولة يومياً <span class="hint">(افتراضي: 6)</span></label>
+        <input type="number" id="orders" min="1" max="50" value="6" />
+        <label for="ticket">متوسط قيمة الطلب (₪) <span class="hint">(افتراضي: 40)</span></label>
+        <input type="number" id="ticket" min="5" max="1000" value="40" />
+      </div>
+      <div class="card">
+        <label for="save">توفير الطباعة والعمالة لكل طاولة شهرياً (₪) <span class="hint">(افتراضي: 120)</span></label>
+        <input type="number" id="save" min="0" max="1000" value="120" />
+        <label for="upsell">رفع متوسط الطلب عبر الإضافات: <strong id="upsellV">3%</strong></label>
+        <input type="range" id="upsell" min="0" max="15" value="3" />
+        <label for="turn">تسريع تدوير الطاولات: <strong id="turnV">2%</strong></label>
+        <input type="range" id="turn" min="0" max="15" value="2" />
+      </div>
+      <div class="card">
+        <label for="plan">باقة مُريح للمقارنة</label>
+        <select id="plan">
+          <option value="129">الأساسية — ₪129/شهرياً (عرض الإطلاق)</option>
+          <option value="249" selected>الاحترافية — ₪249/شهرياً (عرض الإطلاق)</option>
+          <option value="499">المؤسسات — ₪499/شهرياً (عرض الإطلاق)</option>
+        </select>
+        <label for="days">أيام العمل شهرياً <span class="hint">(افتراضي: 30)</span></label>
+        <input type="number" id="days" min="1" max="31" value="30" />
+        <p class="hint" style="margin-top:.75rem">القيم الافتراضية لـ20 طاولة تعيد إنتاج نفس منهجية المثال المنشور على صفحة مُريح (توفير ≈ ₪2,400 وزيادة مبيعات ≈ ₪7,000 شهرياً).</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="results" aria-live="polite">
+    <h2>النتيجة التقديرية (تتحدث فوراً)</h2>
+    <div class="out">
+      <div class="stat">
+        <div class="num" id="outSave">₪2,400</div>
+        <div class="lbl">توفير الطباعة والعمالة / شهرياً</div>
+        <div class="sub">الطاولات × التوفير لكل طاولة</div>
+      </div>
+      <div class="stat">
+        <div class="num" id="outSales">₪7,200</div>
+        <div class="lbl">زيادة المبيعات المتوقعة / شهرياً</div>
+        <div class="sub">إيرادك الحالي × نسبة الزيادة</div>
+      </div>
+      <div class="stat green">
+        <div class="num" id="outNet">₪9,351</div>
+        <div class="lbl">الصافي التقديري / شهرياً</div>
+        <div class="sub">التوفير + الزيادة − الاشتراك</div>
+      </div>
+      <div class="stat green">
+        <div class="num" id="outRoi">×39</div>
+        <div class="lbl">العائد مقابل الاشتراك</div>
+        <div class="sub">(التوفير + الزيادة) ÷ الاشتراك</div>
+      </div>
+    </div>
+    <p class="warn"><strong>تنبيه منهجي:</strong> هذه تقديرات تعليمية مبنية على متوسطات قابلة للتعديل (ليست ضماناً ولا عرضاً مالياً). النتائج الفعلية تختلف حسب مطعمك وشبكتك وفريقك — <a class="brand" href="https://wa.me/970593498909?text=%D8%A3%D9%88%D8%AF%20%D8%AD%D8%B3%D8%A8%D8%A9%20%D8%AF%D9%82%D9%8A%D9%82%D8%A9%20%D9%84%D9%85%D8%B7%D8%B9%D9%85%D9%8A" style="color:#38BDF8">اطلب حسبة دقيقة لمطعمك عبر واتساب</a>.</p>
+  </section>
+
+  <section id="how">
+    <h2>كيف تُحسب الأرقام؟ (شفافية كاملة)</h2>
+    <table>
+      <thead><tr><th>البند</th><th>المعادلة</th></tr></thead>
+      <tbody>
+        <tr><td>إيرادك الشهري الحالي</td><td>الطاولات × الطلبات/يوم × متوسط الطلب × أيام العمل</td></tr>
+        <tr><td>توفير الطباعة والعمالة</td><td>الطاولات × التوفير لكل طاولة شهرياً</td></tr>
+        <tr><td>زيادة المبيعات</td><td>الإيراد الشهري × (رفع متوسط الطلب + تسريع التدوير)</td></tr>
+        <tr><td>الصافي التقديري</td><td>التوفير + الزيادة − سعر الاشتراك</td></tr>
+        <tr><td>نسبة العائد</td><td>(التوفير + الزيادة) ÷ سعر الاشتراك</td></tr>
+      </tbody>
+    </table>
+    <p>مصادر الزيادة في التجربة الرقمية: <strong>الإضافات والأحجام</strong> تُعرض بوضوح عند الطلب (رفع متوسط الطلب)، و<strong>الطلب المبكر من الطاولة</strong> يقلل زمن الانتظار ويسرّع تدوير الطاولات في الذروة. أما التوفير فيشمل القوائم الورقية وإعادة الطباعة وساعات العمل الضائعة في الطلب اليدوي.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://wa.me/970593498909?text=%D8%B9%D8%B1%D8%B6%D8%AA%D9%86%D9%8A%20%D8%AD%D8%A7%D8%B3%D8%A8%D8%A9%20%D8%A7%D9%84%D8%B9%D8%A7%D8%A6%D8%AF%20%D9%81%D9%8A%20%D9%85%D9%88%D9%82%D8%B9%20%D9%85%D8%B1%D9%8A%D8%AD" target="_blank" rel="noopener">شارك نتيجتك مع فريق مُريح</a>
+      <a class="btn btn-ghost" href="https://mureehmenu.com/prices-nazer-edaret-almata3em.html">راجع تفاصيل الأسعار</a>
+    </div>
+    <div class="links" aria-label="صفحات ذات صلة">
+      <a href="https://mureehmenu.com/nazer-edaret-almata3em.html">نظام إدارة المطاعم</a>
+      <a href="https://mureehmenu.com/manassa-edaret-almata3em.html">منصة إدارة المطاعم</a>
+      <a href="https://mureehmenu.com/menu-qr-raqmi.html">المنيو الرقمي QR</a>
+      <a href="https://mureehmenu.com/prices-nazer-edaret-almata3em.html">الأسعار</a>
+      <a href="https://mureehmenu.com/">الصفحة الرئيسية</a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><a href="https://mureehmenu.com/">مُريح — منصة إدارة المطاعم والمنيو الرقمي QR</a> · واتساب: <a href="https://wa.me/970593498909" dir="ltr">+970593498909</a></p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var ids = ['tables','orders','ticket','save','upsell','turn','plan','days'];
+  function fmt(n) { return '₪' + Math.round(n).toLocaleString('en-US'); }
+  function calc() {
+    var t = Math.max(1, +document.getElementById('tables').value || 0);
+    var o = Math.max(0, +document.getElementById('orders').value || 0);
+    var k = Math.max(0, +document.getElementById('ticket').value || 0);
+    var s = Math.max(0, +document.getElementById('save').value || 0);
+    var u = +document.getElementById('upsell').value || 0;
+    var r = +document.getElementById('turn').value || 0;
+    var p = Math.max(0, +document.getElementById('plan').value || 0);
+    var d = Math.max(1, +document.getElementById('days').value || 30);
+    document.getElementById('upsellV').textContent = u + '%';
+    document.getElementById('turnV').textContent = r + '%';
+    var revenue = t * o * k * d;
+    var saving = t * s;
+    var sales = revenue * (u + r) / 100;
+    var net = saving + sales - p;
+    var roi = p > 0 ? (saving + sales) / p : 0;
+    document.getElementById('outSave').textContent = fmt(saving);
+    document.getElementById('outSales').textContent = fmt(sales);
+    document.getElementById('outNet').textContent = fmt(net);
+    document.getElementById('outRoi').textContent = '×' + (roi >= 10 ? Math.round(roi) : roi.toFixed(1));
+  }
+  ids.forEach(function (id) {
+    var el = document.getElementById(id);
+    el.addEventListener('input', calc);
+    el.addEventListener('change', calc);
+  });
+  calc();
+})();
+</script>
+</body>
+</html>
