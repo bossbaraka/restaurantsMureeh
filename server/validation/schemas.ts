@@ -430,6 +430,30 @@ export const stepUpSchema = z
   })
   .strict();
 
+/**
+ * Self-service account creation (POST /api/auth/register, 2026-10).
+ *
+ * Deliberately MINIMAL and closed: the role is fixed server-side
+ * (RESTAURANT_MANAGER), the account starts WITHOUT a restaurant binding, and
+ * nothing here may carry status/role/restaurantId/planId (`.strict()` rejects
+ * unknown keys — the mass-assignment contract every other schema upholds).
+ * Password policy reuses the shared safePasswordSchema (min 8 + common-
+ * password blocklist), identical to staff manager accounts and the admin
+ * onboarding manager password.
+ */
+export const registerSchema = z
+  .object({
+    name: safeName('اسم صاحب الحساب'),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(254)
+      .email('صيغة البريد الإلكتروني غير صحيحة'),
+    password: safePasswordSchema('كلمة المرور', 8),
+  })
+  .strict();
+
 // ---------------- Staff ----------------
 
 export const staffCreateSchema = z
@@ -1363,6 +1387,36 @@ export const onboardSchema = z
       )
       .max(500)
       .optional(),
+  })
+  .strict();
+
+// ============================================================
+// Self-service onboarding (POST /api/onboarding/restaurant, 2026-10)
+// --------------------------------------------------------------
+// The CLOSED counterpart of the admin `onboardSchema`: an owner supplies a
+// name and one of exactly three table counts. Everything else — slug, plan,
+// subscription data, logo, tenant id, categories, products — is generated or
+// fixed server-side, and `.strict()` rejects any attempt to smuggle it in.
+// ============================================================
+
+/** The only initial table counts accepted by the self-service flow. */
+export const SELF_ONBOARD_TABLE_COUNTS = [10, 15, 20] as const;
+
+export const selfOnboardSchema = z
+  .object({
+    name: safeName('اسم المطعم', 120),
+    // Literals (not a range): 9, 11, 0, 500, 1.5 and the string "10" all
+    // fail. The count is validated again in the route against plan ceilings.
+    tablesCount: z.union(
+      [
+        z.literal(SELF_ONBOARD_TABLE_COUNTS[0]),
+        z.literal(SELF_ONBOARD_TABLE_COUNTS[1]),
+        z.literal(SELF_ONBOARD_TABLE_COUNTS[2]),
+      ],
+      {
+        error: 'عدد الطاولات يجب أن يكون 10 أو 15 أو 20 بالضبط',
+      }
+    ),
   })
   .strict();
 

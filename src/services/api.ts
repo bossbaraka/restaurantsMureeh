@@ -930,6 +930,54 @@ class RestaurantApiService {
     return res as ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>;
   }
 
+  /**
+   * Self-service account creation (2026-10). Same token/user contract as
+   * login — the account starts WITHOUT a restaurant binding; the tenant is
+   * created afterwards via selfOnboardRestaurant() while authenticated.
+   */
+  public async register(
+    name: string,
+    email: string,
+    password: string
+  ): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>> {
+    const res = await this.request<{ user: any; restaurant: any | null; token?: string }>('POST', '/auth/register', {
+      auth: false,
+      body: { name: name.trim(), email: email.trim().toLowerCase(), password },
+    });
+    if (res.success && res.data) {
+      if (res.data.token && typeof window !== 'undefined') {
+        localStorage.setItem(AUTH_TOKEN_KEY, res.data.token);
+      }
+      res.data.user = mapUserRow(res.data.user);
+      res.data.restaurant = res.data.restaurant ? mapRestaurantRow(res.data.restaurant) : null;
+    }
+    return res as ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null; token?: string }>;
+  }
+
+  /**
+   * Self-service restaurant onboarding: the ONLY payload an owner sends is a
+   * name and one closed table count (10 | 15 | 20). Slug, plan, subscription,
+   * logo and membership are all server-owned (see server/routes/onboarding.ts
+   *); nothing here may carry a restaurantId/planId key.
+   */
+  public async selfOnboardRestaurant(payload: {
+    name: string;
+    tablesCount: 10 | 15 | 20;
+  }): Promise<ApiResponse<{ restaurant: Restaurant; tablesCount: number; planId: string; planName: string }>> {
+    const res = await this.request<{
+      restaurant: Restaurant;
+      tablesCount: number;
+      planId: string;
+      planName: string;
+    }>('POST', '/onboarding/restaurant', {
+      body: { name: payload.name.trim(), tablesCount: payload.tablesCount },
+    });
+    if (res.success && res.data?.restaurant) {
+      res.data.restaurant = mapRestaurantRow(res.data.restaurant);
+    }
+    return res;
+  }
+
   public async getCurrentUser(): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null }>> {
     if (!this.getAuthToken()) {
       return { success: false, error: 'جلسة الدخول غير صالحة', statusCode: 401 };

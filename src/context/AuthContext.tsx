@@ -17,6 +17,7 @@ interface AuthContextType {
   canAccessManagerTab: (tab: string) => boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
   employeeLogin: (restaurantCode: string, username: string, pin: string) => Promise<{ success: boolean; role?: TenantRole; error?: string }>;
+  register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   switchManagerRestaurant: (restaurantId: string) => void;
   isLoginModalOpen: boolean;
@@ -224,6 +225,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [failedAttempts, lockoutRemainingSeconds]
   );
 
+  // Self-service registration (2026-10) — creates ONLY the identity
+  // (RESTAURANT_MANAGER without a tenant). Deliberately SEPARATE from the
+  // login failure budget: registration errors are not guessed secrets, they
+  // must never tick the per-device login lockout counter. On success the
+  // session follows the exact login contract (token + user persisted here,
+  // the App-level onboarding gate then offers the restaurant setup wizard).
+  const register = useCallback(
+    async (name: string, email: string, password: string) => {
+      const res = await api.register(name, email, password);
+      if (res.success && res.data?.user) {
+        setCurrentUser(res.data.user);
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify(res.data.user));
+        if (res.data.restaurant) {
+          setCurrentManagerRestaurant(res.data.restaurant);
+          localStorage.setItem(RESTAURANT_SESSION_KEY, JSON.stringify(res.data.restaurant));
+        }
+        setIsLoginModalOpen(false);
+        return { success: true };
+      }
+      return { success: false, error: res.error || 'تعذر إنشاء الحساب، تحقق من البيانات وحاول مجدداً' };
+    },
+    []
+  );
+
   // Employee login — restaurant code + username + 6-digit PIN, validated
   // against the real DB. The tenant is resolved SERVER-SIDE from the public
   // restaurant code; a username valid in one venue can never authenticate in
@@ -336,11 +361,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isStaff,
         failedAttempts,
         lockoutRemainingSeconds,
-        canAccessView,
-        canAccessManagerTab,
-        login,
-        employeeLogin,
-        logout,
+      canAccessView,
+      canAccessManagerTab,
+      login,
+      employeeLogin,
+      register,
+      logout,
         switchManagerRestaurant,
         isLoginModalOpen,
         setIsLoginModalOpen,

@@ -131,6 +131,30 @@ export const onboardLimiter = rateLimit({
 
 export const adminOnboardLimiter = onboardLimiter;
 
+// ============================================================
+// Self-service onboarding (2026-10) — the anonymous registration gate and
+// its authenticated follow-up. Unlike the LOGIN limiter (failures only),
+// these count EVERY request: their abuse vector is spam creation, not
+// guessing. BUDGET_SCALE keeps the automated suites deterministic without
+// weakening a real deployment (same convention as the limiters above).
+// ============================================================
+
+export const registerLimiter = rateLimit({
+  ...base,
+  windowMs: 60 * 60 * 1000,
+  limit: 12 * BUDGET_SCALE,
+  message: limiterError(
+    'محاولات تسجيل كثيرة من هذا الجهاز. يرجى الانتظار ساعة قبل إعادة المحاولة.'
+  ),
+});
+
+export const selfOnboardLimiter = rateLimit({
+  ...base,
+  windowMs: 15 * 60 * 1000,
+  limit: 10 * BUDGET_SCALE,
+  message: limiterError('محاولات إنشاء مطاعم كثيرة. يرجى الانتظار 15 دقيقة.'),
+});
+
 export const paymentLimiter = rateLimit({
   ...base,
   windowMs: 15 * 60 * 1000,

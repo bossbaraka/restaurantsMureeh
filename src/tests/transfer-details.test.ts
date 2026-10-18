@@ -577,6 +577,9 @@ describe('GET /api/public/restaurants/:slug — transfer details (real router)',
       '20260920130000_add_central_theme',
       // Launch promotion metadata on Plan; additive and unrelated to Restaurant.
       '20261017090000_add_plan_launch_promotion',
+      // Self-service free plan — DATA-ONLY idempotent INSERT into Plan
+      // (ON CONFLICT DO NOTHING); no Restaurant change.
+      '20261018120000_add_plan_free',
     ]);
   });
 });

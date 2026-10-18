@@ -190,7 +190,9 @@ async function getPlanLimits(restaurantId: string): Promise<typeof FREE_LIMITS> 
     include: { plan: true },
   });
   // Effective period state: a row still marked ACTIVE/TRIAL after its period
-  // end (e.g. scheduler never ran) must not keep unlocking paid quotas.
+  // end (e.g. scheduler never ran) must not keep unlocking paid quotas. The
+  // included plan's billingPeriod also lets the permanent-free row stay
+  // entitled whatever its stored period is (plans.ts isFreeSubscription).
   const state = effectiveSubscriptionState(subscription);
   if (
     !subscription ||
@@ -216,6 +218,7 @@ async function restaurantHasEntitlement(
     where: { restaurantId },
     include: { plan: true },
   });
+  // plan.billingPeriod rides along for the permanent-free rule (plans.ts).
   const state = effectiveSubscriptionState(subscription);
   return (
     !!subscription &&

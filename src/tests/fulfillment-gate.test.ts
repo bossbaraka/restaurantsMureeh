@@ -239,8 +239,12 @@ describe('schema + migration', () => {
       // Temporary launch prices and validity window on Plan; regular rates are
       // retained and the migration is additive.
       '20261017090000_add_plan_launch_promotion',
+      // Permanent free plan for self-service onboarding (2026-10): a DATA-ONLY
+      // idempotent INSERT of the 'plan-free' catalog row (ON CONFLICT DO
+      // NOTHING). No table/column changes, no Order change, no index.
+      '20261018120000_add_plan_free',
     ]);
-    expect(sorted[sorted.length - 1]).toBe('20261017090000_add_plan_launch_promotion');
+    expect(sorted[sorted.length - 1]).toBe('20261018120000_add_plan_free');
   });
 });
 

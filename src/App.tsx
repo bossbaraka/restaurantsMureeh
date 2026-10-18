@@ -10,6 +10,7 @@ import { KitchenDisplaySystem } from './components/manager/KitchenDisplaySystem'
 import { LiveRestaurantScreen } from './components/manager/LiveRestaurantScreen';
 import { SaaSLandingPage } from './components/common/SaaSLandingPage';
 import { RestaurantOnboardingModal } from './components/onboarding/RestaurantOnboardingModal';
+import { OwnerSelfOnboarding } from './components/onboarding/OwnerSelfOnboarding';
 import { LoginModal } from './components/auth/LoginModal';
 import { ToastContainer } from './components/common/Toast';
 import { PlatformAppearanceProvider } from './theme/PlatformAppearanceProvider';
@@ -17,7 +18,7 @@ import { StickyStackProvider } from './theme/StickyStack';
 
 const AppContent: React.FC = () => {
   const { viewMode, isOnboardingOpen, setIsOnboardingOpen } = useRestaurant();
-  const { canAccessView, isLoginModalOpen } = useAuth();
+  const { canAccessView, isLoginModalOpen, currentUser } = useAuth();
 
   // APP-LEVEL CUSTOMER THEME WRITER REMOVED (theme single-writer foundation).
   //
@@ -55,6 +56,28 @@ const AppContent: React.FC = () => {
       style={{ backgroundColor: 'var(--mureeh-bg)', color: 'var(--mureeh-text)' }}
     >
         <LoginModal />
+      </div>
+    );
+  }
+
+  // SELF-SERVICE ONBOARDING GATE (2026-10) — a signed-in RESTAURANT_MANAGER
+  // whose account has NO restaurant yet sees ONLY the setup wizard: never the
+  // public shell and never ManagerLayout (which would render headless without
+  // a tenant). The flag derives from the server-revalidated session, so the
+  // flow also RESUMES here after «إنهاء لاحقاً» + re-login, and it lifts by
+  // itself the moment the wizard's server-side claim attaches the tenant.
+  const needsSelfOnboarding =
+    !!currentUser &&
+    currentUser.role === 'RESTAURANT_MANAGER' &&
+    !currentUser.restaurantId;
+  if (needsSelfOnboarding) {
+    return (
+      <div
+        className="min-h-screen flex flex-col font-sans selection:bg-[#0072BC]/30 selection:text-[#38BDF8]"
+        style={{ backgroundColor: 'var(--mureeh-bg)', color: 'var(--mureeh-text)' }}
+      >
+        <OwnerSelfOnboarding />
+        <ToastContainer />
       </div>
     );
   }
