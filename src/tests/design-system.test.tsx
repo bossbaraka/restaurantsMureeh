@@ -121,6 +121,8 @@ describe('UX-001: dialog behaviour is shared, not re-invented', () => {
     'src/components/customer/WaiterCallModal.tsx',
     'src/components/manager/ProductFormModal.tsx',
     'src/components/onboarding/RestaurantOnboardingModal.tsx',
+    // 2026-10 owner-facing setup wizard — same overlay contract.
+    'src/components/onboarding/OwnerSelfOnboarding.tsx',
   ];
   it.each(overlays)('%s uses the useDialog hook', (file) => {
     expect(read(file)).toContain('useDialog(');
@@ -146,6 +148,7 @@ describe('A11Y-002: form labelling', () => {
     'src/components/manager/StaffManagement.tsx',
     'src/components/manager/BrandingSettingsView.tsx',
     'src/components/onboarding/RestaurantOnboardingModal.tsx',
+    'src/components/onboarding/OwnerSelfOnboarding.tsx',
   ];
 
   it.each(formFiles)('%s links labels to controls with htmlFor', (f) => {
@@ -197,6 +200,7 @@ describe('TYPO-001: minimum legible font size', () => {
       'src/components/customer/DirectTableEntryModal.tsx',
       'src/components/customer/CustomerOrderLiveNotifier.tsx',
       'src/components/onboarding/RestaurantOnboardingModal.tsx',
+      'src/components/onboarding/OwnerSelfOnboarding.tsx',
     ];
     for (const f of files) {
       const hits = read(f).match(/text-\[[89]px\]/g);

@@ -37,6 +37,9 @@ export async function processExpiringSubscriptions(
   const dryRun = options.dryRun ?? false;
 
   // Only rows that can still expire need to be examined.
+  // The plan's billingPeriod is loaded because a permanent-free row must be
+  // skipped outright (dueStatusTransition returns null for it) — the sweep
+  // can never expire a free tenant through its stored period.
   const rows = await db.subscription.findMany({
     where: { status: { in: ['ACTIVE', 'TRIAL', 'PAST_DUE'] } },
     select: {
@@ -45,6 +48,7 @@ export async function processExpiringSubscriptions(
       status: true,
       currentPeriodEnd: true,
       trialEndsAt: true,
+      plan: { select: { billingPeriod: true } },
     },
   });
 
@@ -56,6 +60,8 @@ export async function processExpiringSubscriptions(
   };
 
   for (const sub of rows) {
+    // `sub.plan.billingPeriod` is read by the effective-state rules (free
+    // rows never transition) — no reshaping needed here.
     const transition = dueStatusTransition(sub, now, graceDays);
     if (!transition) continue;
 

@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
-import { FREE_TRIAL_PLAN } from '../services/plans';
+import { FREE_PLAN, FREE_TRIAL_PLAN } from '../services/plans';
 import { LAUNCH_OFFER, PLAN_PRICING } from '../../shared/plan-pricing.ts';
 import { seedShoqrahCafe } from './seed-shoqrah';
 import { seedGhosnCafe } from './seed-ghosn';
@@ -41,6 +41,9 @@ export async function seedDatabase() {
   // ------------------------------------------------------------------
   const planIdByKey: Record<string, string> = {};
   for (const plan of [
+    // Permanent free plan — granted automatically by self-service onboarding.
+    // NOT a trial: no expiry, no trialEndsAt, platform never "activates" it.
+    FREE_PLAN,
     // Free 7-day trial — limited entitlements, activated by platform admins only.
     FREE_TRIAL_PLAN,
     {

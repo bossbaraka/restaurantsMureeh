@@ -12,6 +12,7 @@ import { config, isProd, allowedOrigins } from './config';
 
 import { authenticateToken } from './middleware/auth';
 import authRoutes from './routes/auth';
+import onboardingRoutes from './routes/onboarding';
 import publicRoutes from './routes/public';
 import managerRoutes from './routes/manager';
 import adminRoutes from './routes/admin';
@@ -209,6 +210,10 @@ app.use('/api', (_req, res, next) => {
 });
 
 app.use('/api/auth', authenticateToken, authRoutes);
+
+// Self-service restaurant onboarding (2026-10): authenticated (requireAuth
+// inside), tenantless manager only; strictly separate from /api/admin.
+app.use('/api/onboarding', authenticateToken, onboardingRoutes);
 
 app.use('/api/public', publicRoutes);
 

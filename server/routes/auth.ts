@@ -12,6 +12,7 @@ import {
 import { signToken, signStepUpToken, requireAuth } from '../middleware/auth';
 import {
   loginLimiter,
+  registerLimiter,
   employeeLoginLimiter,
   stepUpLimiter,
   passwordResetLimiter,
@@ -19,6 +20,7 @@ import {
 import {
   validateBody,
   loginSchema,
+  registerSchema,
   employeeLoginSchema,
   stepUpSchema,
 } from '../validation/schemas';
@@ -325,6 +327,113 @@ router.post(
       return res.status(500).json({
         success: false,
         error: 'حدث خطأ في الخادم أثناء تسجيل الدخول. يرجى التأكد من بيانات الدخول.',
+        statusCode: 500,
+      });
+    }
+  }
+);
+
+// POST /api/auth/register — self-service account creation for restaurant
+// owners (2026-10). Creates ONLY the identity:
+//   * role is FIXED to RESTAURANT_MANAGER (never platform, never staff);
+//   * restaurantId stays NULL — tenant binding happens exclusively through
+//     POST /api/onboarding/restaurant, server-side, after authentication;
+//   * password policy/hash cost identical to the platform's manager rules
+//     (safePasswordSchema min 8 + common-password blocklist; bcrypt 12, the
+//     same cost the admin onboarding route uses for manager accounts).
+// Login behavior, timing flattening (DUMMY_HASH) and the failure budget are
+// untouched. The enumeration surface ("this email exists") is an accepted,
+// documented tradeoff of public registration, bounded per IP by
+// registerLimiter — the unique index remains the final arbiter under races.
+router.post(
+  '/register',
+  registerLimiter,
+  validateBody(registerSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const { name, email, password } = req.body as {
+        name: string;
+        email: string;
+        password: string;
+      };
+
+      const emailTaken = await prisma.restaurantUser.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+      if (emailTaken) {
+        return res.status(409).json({
+          success: false,
+          error: 'هذا البريد الإلكتروني مسجّل مسبقاً — جرّب بريداً آخر أو سجّل الدخول',
+          statusCode: 409,
+        });
+      }
+
+      let user;
+      try {
+        user = await prisma.restaurantUser.create({
+          data: {
+            name,
+            email,
+            passwordHash: await bcrypt.hash(password, 12),
+            role: 'RESTAURANT_MANAGER',
+            status: 'ACTIVE',
+            // No restaurantId, no username, no PIN: the owner account starts
+            // identity-only. Everything else is server-issued later.
+          },
+        });
+      } catch (createErr: unknown) {
+        // Concurrent registrations of the same email: the unique index decides,
+        // and both callers receive the same generic conflict (never partial).
+        if ((createErr as { code?: string })?.code === 'P2002') {
+          return res.status(409).json({
+            success: false,
+            error: 'هذا البريد الإلكتروني مسجّل مسبقاً — جرّب بريداً آخر أو سجّل الدخول',
+            statusCode: 409,
+          });
+        }
+        throw createErr;
+      }
+
+      // Same token contract as login (issuer/audience/expiry/tokenVersion).
+      const token = signToken({
+        id: user.id,
+        restaurantId: user.restaurantId,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        tv: user.tokenVersion,
+      });
+
+      await logAuditEvent({
+        restaurantId: null,
+        userId: user.id,
+        actor: user.name,
+        actorRole: user.role,
+        action: 'ACCOUNT_REGISTERED',
+        entity: 'RestaurantUser',
+        entityId: user.id,
+        details: `تم إنشاء حساب صاحب مطعم جديد: ${user.name} (${user.email}) بانتظار تهيئة المطعم`,
+        ipAddress: req.ip,
+      }).catch(() => {});
+
+      // Mirrors the issueSession payload shape so the client's session code
+      // path (token + user + restaurant) is identical for login and register.
+      return res.status(201).json({
+        success: true,
+        data: {
+          user: publicUserShape(user),
+          restaurant: null,
+          token,
+        },
+        statusCode: 201,
+      });
+    } catch (err: unknown) {
+      console.error('Register error:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'تعذر إنشاء الحساب حالياً. يرجى المحاولة لاحقاً.',
         statusCode: 500,
       });
     }

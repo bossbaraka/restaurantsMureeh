@@ -19,6 +19,19 @@ export const FREE_TRIAL_DAYS = 7;
 export const TRIAL_BILLING_PERIOD = 'trial';
 
 /**
+ * Permanent FREE plan (self-service onboarding, 2026-10).
+ *
+ * This is deliberately NOT the 7-day trial: no `trialEndsAt`, no expiry.
+ * A tenant on `plan-free` is entitled forever (subject to the ordinary
+ * CANCELLED/SUSPENDED subscription states and platform tenant suspension),
+ * within the plan's usage ceilings. `billingPeriod: 'free'` is the marker
+ * consumed by the subscription lifecycle so a free row can never drift into
+ * PAST_DUE/CANCELLED through period-end rules.
+ */
+export const FREE_PLAN_ID = 'plan-free';
+export const FREE_BILLING_PERIOD = 'free';
+
+/**
  * What the free trial unlocks: the core digital menu + QR ordering flow only.
  * Analytics, custom branding, multi-branch, exports and custom domains stay
  * locked until the tenant upgrades to a paid plan.
@@ -61,6 +74,34 @@ export const FREE_TRIAL_PLAN: TrialPlanDefinition = {
   isPopular: false,
 };
 
+/**
+ * What the free plan unlocks: the core digital menu + QR ordering flow,
+ * forever. It carries EXACTLY the same entitlement keys as the trial and
+ * Starter (verified: no server route gates on CAN_USE_ADVANCED_FEATURES;
+ * it is the catalog's "core ordering" label in the manager's subscription
+ * screen). Analytics, custom branding, exports, branches and custom domains
+ * stay locked — those keys are the ones actually enforced server-side.
+ */
+export const FREE_PLAN: TrialPlanDefinition = {
+  id: FREE_PLAN_ID,
+  name: 'الخطة المجانية الدائمة',
+  nameEn: 'Permanent Free Plan',
+  priceMonthly: 0,
+  priceYearly: 0,
+  billingPeriod: FREE_BILLING_PERIOD,
+  // Ceilings approved for the self-service launch tier: 20 tables (the
+  // largest initial table choice), and the Starter catalog content limits
+  // so the free tier never exceeds a paid tier.
+  maxTables: 20,
+  maxCategories: 6,
+  maxProducts: 35,
+  maxBranches: 1,
+  entitlements: [...TRIAL_ENTITLEMENTS],
+  description:
+    'خطة مجانية دائمة للمطاعم التي تُسجّل ذاتياً: منيو رقمي كامل وطلبات QR حتى 20 طاولة.',
+  isPopular: false,
+};
+
 /** Minimal shape this module needs from a plan row. */
 export interface PlanLike {
   id: string;
@@ -77,6 +118,15 @@ export interface SubscriptionLike {
 export function isTrialPlan(plan?: PlanLike | null): boolean {
   if (!plan) return false;
   return plan.id === FREE_TRIAL_PLAN_ID || plan.billingPeriod === TRIAL_BILLING_PERIOD;
+}
+
+/**
+ * Permanent free plan? Independent of the trial on purpose: a free row must
+ * never be treated as expiring, and a trial must never be promoted to free.
+ */
+export function isFreePlan(plan?: PlanLike | null): boolean {
+  if (!plan) return false;
+  return plan.id === FREE_PLAN_ID || plan.billingPeriod === FREE_BILLING_PERIOD;
 }
 
 /** Trial length for a plan, in days (0 for every paid plan). */
@@ -207,6 +257,25 @@ export interface EffectiveSubscriptionInput {
   status?: string | null;
   currentPeriodEnd?: Date | string | null;
   trialEndsAt?: Date | string | null;
+  /**
+   * The bound plan's billingPeriod. Two accepted shapes (no call-site
+   * reshaping): the nested `plan` relation as loaded by every consumer
+   * (`include`/`select: { plan: { billingPeriod } }`), or a flattened field
+   * for direct callers. 'free' marks the permanent self-service plan, which
+   * must be entitled regardless of any period-end value on the row.
+   */
+  billingPeriod?: string | null;
+  plan?: { billingPeriod?: string | null } | null;
+}
+
+/**
+ * True when a subscription input carries the permanent-free marker. The
+ * period-end arithmetic below must never expire such a row; terminal states
+ * (CANCELLED / SUSPENDED) still win, because those are explicit actions.
+ */
+function isFreeSubscription(sub: EffectiveSubscriptionInput): boolean {
+  const period = sub.billingPeriod ?? sub.plan?.billingPeriod ?? null;
+  return period === FREE_BILLING_PERIOD;
 }
 
 export interface EffectiveSubscriptionState {
@@ -246,6 +315,13 @@ export function effectiveSubscriptionState(
       daysRemaining: 0,
       daysPastDue: 0,
     };
+  }
+
+  // Permanent free plan: entitled forever, no expiry arithmetic. Placed AFTER
+  // the terminal-state block so an explicit cancel/suspend still takes effect.
+  // Paid plans and trials fall through untouched — this branch is new-only.
+  if (isFreeSubscription(sub)) {
+    return { effectiveStatus: 'ACTIVE', entitled: true, daysRemaining: 0, daysPastDue: 0 };
   }
 
   const isTrial = sub.status === 'TRIAL';
@@ -296,6 +372,10 @@ export function dueStatusTransition(
 ): 'PAST_DUE' | 'CANCELLED' | null {
   const stored = (sub.status || '').toUpperCase();
   if (stored === 'CANCELLED' || stored === 'SUSPENDED') return null;
+  // The scheduler must never expire a permanent-free row (belt AND braces:
+  // self-onboard also persists a normal period, so the arithmetic would be
+  // the only thing that could ever touch it).
+  if (isFreeSubscription(sub)) return null;
 
   const state = effectiveSubscriptionState(sub, now, graceDays);
   if (state.effectiveStatus === 'PAST_DUE' && stored !== 'PAST_DUE') return 'PAST_DUE';
