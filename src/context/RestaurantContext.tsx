@@ -324,6 +324,10 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const isPublicRestaurantLink = pathname.startsWith('/r/') || hasQr;
       if (isPublicRestaurantLink) return 'CUSTOMER';
 
+      if (pathname === '/onboard' || pathname.startsWith('/onboard/')) {
+        return 'ONBOARDING';
+      }
+
       const isRootPath = pathname === '/' || pathname === '';
       if (isRootPath) return 'SAAS_LANDING';
 
@@ -337,7 +341,33 @@ export const RestaurantProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setViewModeState(mode);
     if (typeof window !== 'undefined') {
       localStorage.setItem('merar_view_mode', mode);
+      try {
+        if (mode === 'ONBOARDING' && window.location.pathname !== '/onboard') {
+          window.history.pushState({}, '', '/onboard');
+        } else if (
+          mode !== 'ONBOARDING' &&
+          (window.location.pathname === '/onboard' || window.location.pathname.startsWith('/onboard/'))
+        ) {
+          window.history.pushState({}, '', '/');
+        }
+      } catch {
+        /* ignore history errors in sandboxed/test environments */
+      }
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handlePopState = () => {
+      const pathname = window.location.pathname;
+      if (pathname === '/onboard' || pathname.startsWith('/onboard/')) {
+        setViewModeState('ONBOARDING');
+      } else if (pathname === '/' || pathname === '') {
+        setViewModeState('SAAS_LANDING');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');

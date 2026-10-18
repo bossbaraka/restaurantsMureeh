@@ -22,6 +22,10 @@ import {
   withTrialMeta,
 } from '../services/plans';
 import { withCurrentPlanPricing } from '../services/planPricing';
+import {
+  buildVerificationReference,
+  computeRestaurantVerificationCode,
+} from '../services/restaurantProvisioning';
 import { onboardLimiter } from '../middleware/rateLimit';
 import { generateQrToken, parsePagination } from '../utils/security';
 
@@ -132,6 +136,11 @@ router.get('/overview', async (req: Request, res: Response) => {
             tablesCount: r._count.tables,
             productsCount: r._count.products,
             ordersCount: r._count.orders,
+            verificationReference: buildVerificationReference(r.id),
+            verificationCode:
+              r.status === 'ONBOARDING'
+                ? computeRestaurantVerificationCode(r.id, config.jwtSecret)
+                : undefined,
             createdAt: r.createdAt.toISOString(),
           };
         }),

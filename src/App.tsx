@@ -18,7 +18,7 @@ import { StickyStackProvider } from './theme/StickyStack';
 
 const AppContent: React.FC = () => {
   const { viewMode, isOnboardingOpen, setIsOnboardingOpen } = useRestaurant();
-  const { canAccessView, isLoginModalOpen, currentUser } = useAuth();
+  const { canAccessView, isLoginModalOpen, currentUser, currentManagerRestaurant } = useAuth();
 
   // APP-LEVEL CUSTOMER THEME WRITER REMOVED (theme single-writer foundation).
   //
@@ -35,7 +35,10 @@ const AppContent: React.FC = () => {
   // The customer theme is now applied by CustomerThemeProvider, scoped to the
   // customer menu subtree. Platform surfaces keep their own appearance.
 
-  const safeViewMode = canAccessView(viewMode) || viewMode === 'SAAS_LANDING' ? viewMode : 'CUSTOMER';
+  const safeViewMode =
+    canAccessView(viewMode) || viewMode === 'SAAS_LANDING' || viewMode === 'ONBOARDING'
+      ? viewMode
+      : 'CUSTOMER';
 
   // PUBLIC_CUSTOMER vs PLATFORM_CUSTOMER_PREVIEW.
   //
@@ -60,17 +63,17 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // SELF-SERVICE ONBOARDING GATE (2026-10) — a signed-in RESTAURANT_MANAGER
-  // whose account has NO restaurant yet sees ONLY the setup wizard: never the
-  // public shell and never ManagerLayout (which would render headless without
-  // a tenant). The flag derives from the server-revalidated session, so the
-  // flow also RESUMES here after «إنهاء لاحقاً» + re-login, and it lifts by
-  // itself the moment the wizard's server-side claim attaches the tenant.
+  // SELF-SERVICE ONBOARDING & OFFICIAL VERIFICATION GATE (2026-10) — a
+  // signed-in RESTAURANT_MANAGER whose account has NO restaurant yet OR whose
+  // restaurant is still in ONBOARDING quarantine sees ONLY the setup &
+  // official verification wizard: never the public shell and never
+  // ManagerLayout. The gate lifts automatically once the restaurant is
+  // verified and transitions to ACTIVE.
   const needsSelfOnboarding =
     !!currentUser &&
     currentUser.role === 'RESTAURANT_MANAGER' &&
-    !currentUser.restaurantId;
-  if (needsSelfOnboarding) {
+    (!currentUser.restaurantId || currentManagerRestaurant?.status === 'ONBOARDING');
+  if (needsSelfOnboarding || safeViewMode === 'ONBOARDING') {
     return (
       <div
         className="min-h-screen flex flex-col font-sans selection:bg-[#0072BC]/30 selection:text-[#38BDF8]"

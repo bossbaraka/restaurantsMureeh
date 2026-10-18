@@ -292,10 +292,17 @@ router.post(
         });
       }
 
-      // Suspended restaurants cannot be used (platform staff exempt).
+      // Suspended restaurants cannot be used (platform staff exempt; a
+      // RESTAURANT_MANAGER whose venue is in ONBOARDING may sign in to reach
+      // the Official Verification Gate, while operational manager routes
+      // remain blocked until verification completes).
+      const isOnboardingManager =
+        user.role === 'RESTAURANT_MANAGER' &&
+        user.restaurant?.status === 'ONBOARDING';
       if (
         user.restaurant &&
         user.restaurant.status !== 'ACTIVE' &&
+        !isOnboardingManager &&
         user.role !== 'SUPER_ADMIN' &&
         user.role !== 'PLATFORM_ADMIN'
       ) {

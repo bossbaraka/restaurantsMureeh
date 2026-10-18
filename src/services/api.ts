@@ -1,5 +1,6 @@
 import {
   Restaurant,
+  RestaurantStatus,
   RestaurantTransferDetails,
   RestaurantSocials,
   RestaurantDisplaySettings,
@@ -295,6 +296,14 @@ export function mapRestaurantRow(raw: any): Restaurant {
         : undefined,
     display: mapDisplaySettings(raw),
     theme: mapEffectiveTheme(themeRaw) || undefined,
+    verificationReference:
+      typeof raw.verificationReference === 'string' && raw.verificationReference
+        ? raw.verificationReference
+        : undefined,
+    verificationCode:
+      typeof raw.verificationCode === 'string' && raw.verificationCode
+        ? raw.verificationCode
+        : undefined,
     createdAt: toISO(raw.createdAt),
     updatedAt: toISO(raw.updatedAt),
   };
@@ -955,27 +964,106 @@ class RestaurantApiService {
   }
 
   /**
-   * Self-service restaurant onboarding: the ONLY payload an owner sends is a
-   * name and one closed table count (10 | 15 | 20). Slug, plan, subscription,
-   * logo and membership are all server-owned (see server/routes/onboarding.ts
-   *); nothing here may carry a restaurantId/planId key.
+   * Self-service restaurant onboarding: the owner sends a venue name, official
+   * phone/WhatsApp number, and one closed table count (10 | 15 | 20). Slug,
+   * plan, subscription, logo, membership and ONBOARDING quarantine status are
+   * all server-owned (see server/routes/onboarding.ts).
    */
   public async selfOnboardRestaurant(payload: {
     name: string;
     tablesCount: 10 | 15 | 20;
-  }): Promise<ApiResponse<{ restaurant: Restaurant; tablesCount: number; planId: string; planName: string }>> {
+    phone?: string;
+  }): Promise<
+    ApiResponse<{
+      restaurant: Restaurant;
+      tablesCount: number;
+      planId: string;
+      planName: string;
+      verificationRequired?: boolean;
+      verificationReference?: string;
+    }>
+  > {
+    const body: Record<string, unknown> = {
+      name: payload.name.trim(),
+      tablesCount: payload.tablesCount,
+    };
+    if (payload.phone && payload.phone.trim()) {
+      body.phone = payload.phone.trim();
+    }
     const res = await this.request<{
       restaurant: Restaurant;
       tablesCount: number;
       planId: string;
       planName: string;
+      verificationRequired?: boolean;
+      verificationReference?: string;
     }>('POST', '/onboarding/restaurant', {
-      body: { name: payload.name.trim(), tablesCount: payload.tablesCount },
+      body,
     });
     if (res.success && res.data?.restaurant) {
       res.data.restaurant = mapRestaurantRow(res.data.restaurant);
     }
     return res;
+  }
+
+  public async getOnboardingStatus(): Promise<
+    ApiResponse<{
+      restaurant: Restaurant;
+      status: RestaurantStatus;
+      verified: boolean;
+      verificationReference: string;
+      tablesCount: number;
+      planName: string;
+    }>
+  > {
+    const res = await this.request<{
+      restaurant: any;
+      status: RestaurantStatus;
+      verified: boolean;
+      verificationReference: string;
+      tablesCount: number;
+      planName: string;
+    }>('GET', '/onboarding/status');
+    if (res.success && res.data?.restaurant) {
+      res.data.restaurant = mapRestaurantRow(res.data.restaurant);
+    }
+    return res as ApiResponse<{
+      restaurant: Restaurant;
+      status: RestaurantStatus;
+      verified: boolean;
+      verificationReference: string;
+      tablesCount: number;
+      planName: string;
+    }>;
+  }
+
+  public async verifyOnboardingRestaurant(
+    code: string
+  ): Promise<
+    ApiResponse<{
+      restaurant: Restaurant;
+      verified: boolean;
+      alreadyVerified?: boolean;
+      verificationReference: string;
+    }>
+  > {
+    const res = await this.request<{
+      restaurant: any;
+      verified: boolean;
+      alreadyVerified?: boolean;
+      verificationReference: string;
+    }>('POST', '/onboarding/verify', {
+      body: { code: code.trim() },
+    });
+    if (res.success && res.data?.restaurant) {
+      res.data.restaurant = mapRestaurantRow(res.data.restaurant);
+    }
+    return res as ApiResponse<{
+      restaurant: Restaurant;
+      verified: boolean;
+      alreadyVerified?: boolean;
+      verificationReference: string;
+    }>;
   }
 
   public async getCurrentUser(): Promise<ApiResponse<{ user: RestaurantUser; restaurant: Restaurant | null }>> {

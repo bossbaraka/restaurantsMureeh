@@ -107,6 +107,7 @@ const NAV_LINKS = [
   { href: '#how', label: 'كيف يعمل' },
   { href: '#features', label: 'المزايا' },
   { href: '#showcase', label: 'جولة حيّة' },
+  { href: '#launch-now', label: 'دشّن مطعمك الآن' },
   { href: '#pricing', label: 'الباقات' },
   { href: '#faq', label: 'الأسئلة الشائعة' },
 ];
@@ -266,6 +267,11 @@ export const SaaSLandingPage: FC = () => {
     }
   };
 
+  const handleLaunchRestaurantNow = () => {
+    setMenuOpen(false);
+    setViewMode('ONBOARDING');
+  };
+
   const selectTab = (i: number) => {
     setTab(i);
   };
@@ -302,14 +308,21 @@ export const SaaSLandingPage: FC = () => {
           <div className="hidden lg:flex items-center gap-2.5">
             <button
               onClick={() => handleContactWhatsApp('تواصل عام')}
-              className="px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-400/30 text-emerald-800 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-400/30 text-emerald-800 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
             >
               <MessageSquare className="w-3.5 h-3.5" />
               واتساب مريح
             </button>
             <button
+              onClick={handleLaunchRestaurantNow}
+              className="btn-shine px-4 py-2.5 rounded-xl bg-gradient-to-l from-[#003865] via-[#00649C] to-[#0072BC] hover:brightness-110 text-white text-xs font-bold shadow-[0_0_24px_rgba(0,114,188,0.4)] transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Store className="w-3.5 h-3.5" />
+              اضغط لتدشين مطعمك
+            </button>
+            <button
               onClick={openManagerConsole}
-              className="btn-shine px-4 py-2.5 rounded-xl bg-gradient-to-l from-[#003865] via-[#00649C] to-[#0072BC] hover:brightness-110 text-white text-xs font-bold shadow-[0_0_24px_rgba(0,114,188,0.4)] transition-all cursor-pointer"
+              className="px-3.5 py-2.5 rounded-xl bg-white/90 hover:bg-white border border-[#004B87]/35 text-[#003865] text-xs font-bold transition-all cursor-pointer"
             >
               دخول لوحة التحكم
             </button>
@@ -335,20 +348,29 @@ export const SaaSLandingPage: FC = () => {
                 {l.label}
               </a>
             ))}
-            <div className="flex gap-2 pt-3">
+            <div className="flex flex-col gap-2 pt-3">
               <button
-                onClick={() => handleContactWhatsApp('تواصل عام')}
-                className="flex-1 py-3 rounded-xl bg-emerald-500/10 border border-emerald-400/30 text-emerald-800 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={handleLaunchRestaurantNow}
+                className="w-full py-3 rounded-xl bg-gradient-to-l from-[#003865] via-[#00649C] to-[#0072BC] text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
               >
-                <MessageSquare className="w-3.5 h-3.5" />
-                واتساب
+                <Store className="w-3.5 h-3.5" />
+                اضغط لتدشين مطعمك (صفحة التدشين المستقلة)
               </button>
-              <button
-                onClick={openManagerConsole}
-                className="flex-1 py-3 rounded-xl bg-gradient-to-l from-[#003865] to-[#00649C] text-white text-xs font-bold cursor-pointer"
-              >
-                دخول لوحة التحكم
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleContactWhatsApp('تواصل عام')}
+                  className="flex-1 py-3 rounded-xl bg-emerald-500/10 border border-emerald-400/30 text-emerald-800 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  واتساب
+                </button>
+                <button
+                  onClick={openManagerConsole}
+                  className="flex-1 py-3 rounded-xl bg-white border border-[#004B87]/35 text-[#003865] text-xs font-bold cursor-pointer"
+                >
+                  دخول لوحة التحكم
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -413,17 +435,24 @@ export const SaaSLandingPage: FC = () => {
               </p>
             </Reveal>
             <Reveal delay={260}>
-              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3">
+              <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center lg:justify-start gap-3">
+                <button
+                  onClick={handleLaunchRestaurantNow}
+                  className="btn-shine w-full sm:w-auto px-7 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#00649C] to-[#0072BC] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_36px_rgba(0,114,188,0.5)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
+                >
+                  <Store className="w-4 h-4" />
+                  اضغط لتدشين مطعمك
+                </button>
                 <button
                   onClick={() => handleContactWhatsApp('عرض توضيحي لمنصة مريح')}
-                  className="btn-shine w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#00649C] to-[#0072BC] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_36px_rgba(0,114,188,0.5)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
+                  className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/35 text-emerald-900 font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
                 >
-                  <Rocket className="w-4 h-4" />
+                  <Rocket className="w-4 h-4 text-emerald-700" />
                   اطلب عرضاً توضيحياً
                 </button>
                 <a
                   href="#how"
-                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white/85 hover:bg-[#F0EFE9] border border-[#D8DFE2] text-[#1D3548] font-bold text-sm flex items-center justify-center gap-2 transition-all backdrop-blur"
+                  className="w-full sm:w-auto px-6 py-4 rounded-2xl bg-white/85 hover:bg-[#F0EFE9] border border-[#D8DFE2] text-[#1D3548] font-bold text-sm flex items-center justify-center gap-2 transition-all backdrop-blur"
                 >
                   <span className="w-6 h-6 rounded-full bg-[#0072BC] flex items-center justify-center">
                     <Play className="w-3 h-3 fill-white text-white" />
@@ -778,6 +807,90 @@ export const SaaSLandingPage: FC = () => {
         </div>
       </section>
 
+      {/* ================= Official Launch & Verification Gate Menu ================= */}
+      <section id="launch-now" className="relative overflow-hidden py-16 sm:py-24 px-4 sm:px-6 bg-gradient-to-b from-[#F7F6F1] via-[#EFECE4] to-[#F7F6F1] border-y border-[#004B87]/20">
+        <div className="max-w-6xl mx-auto relative z-10">
+          <SectionHeading
+            eyebrow="استوديو التدشين والتحقق الرسمي"
+            title={<>انطلاقتك الرقمية تبدأ الآن — مجاناً وبأناقة تليق بمطعمك!</>}
+            sub="افتح حساب مالك مطعمك على الخطة المجانية الدائمة (حتى 20 طاولة مع رموز QR مستقلة لكل طاولة). صمّمنا لك استوديو تدشين تفاعلياً وبوابة تحقق ذكية تحمي اسم مطعمك وتجهّزه للعمل في دقائق."
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+            {[
+              {
+                step: '01',
+                icon: Users,
+                title: 'حساب المالك المتألق',
+                desc: 'سجّل اسمك وبريدك الرسمي في ثوانٍ — مع درع ذكي يحظر البريد الوهمي ليحافظ على رقيّ المنصة.',
+              },
+              {
+                step: '02',
+                icon: Store,
+                title: 'هوية مطعمك الفريدة',
+                desc: 'أدخل اسم مطعمك ورقم الجوال/واتساب الرسمي الفريد، وشاهد رابطك الرقمي يولد أمامك مباشرةً.',
+              },
+              {
+                step: '03',
+                icon: QrCode,
+                title: 'صالتك الذكية برموز QR',
+                desc: 'اختر 10 أو 15 أو 20 طاولة لنولّد لكل طاولة رمز QR مستقلاً جاهزاً للطباعة والمسح الفوري.',
+              },
+              {
+                step: '04',
+                icon: ShieldCheck,
+                title: 'توثيق رسمي وانطلاق فوري',
+                desc: 'يُعتمد مطعمك برقم مرجع رسمي (#MRH) عبر واتساب مريح أو رمز التفعيل من 6 أرقام لتنطلق بقوة!',
+              },
+            ].map((item, idx) => (
+              <Reveal key={item.step} delay={idx * 80}>
+                <div className="h-full rounded-2xl bg-[#FFFDF8] hover:bg-white border border-[#004B87]/35 hover:border-[#0072BC] p-5 shadow-sm hover:shadow-[0_18px_40px_-20px_rgba(0,114,188,0.45)] transition-all duration-300 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="w-10 h-10 rounded-xl bg-[#0072BC]/15 border border-[#0072BC]/30 text-[#004B87] flex items-center justify-center">
+                        <item.icon className="w-5 h-5" />
+                      </span>
+                      <span className="text-xs font-black font-mono text-[#0072BC] bg-[#EAF2F6] px-2.5 py-1 rounded-lg">
+                        خطوة {item.step}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black text-[#1D3548] mb-1.5">{item.title}</h3>
+                    <p className="text-xs text-[#536879] leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal>
+            <div className="rounded-3xl bg-gradient-to-l from-[#003865] via-[#005288] to-[#0072BC] text-white p-6 sm:p-8 shadow-[0_20px_50px_-20px_rgba(0,114,188,0.55)] flex flex-col lg:flex-row items-center justify-between gap-6">
+              <div className="space-y-2 text-center lg:text-right max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-xs font-bold">
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>الخطة المجانية الدائمة · استوديو تدشين تفاعلي مع معاينة حية</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black">
+                  جاهز لترى مطعمك يتألق بمنيو رقمي فاخر وطاولات QR ذكية؟
+                </h3>
+                <p className="text-xs sm:text-sm text-white/85 leading-relaxed">
+                  لا حاجة لبطاقة ائتمانية — انتقل الآن إلى صفحة التدشين المستقلة وشاهد هوية مطعمك وطاولاتك تتشكل أمامك لحظة بلحظة!
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto shrink-0">
+                <button
+                  onClick={handleLaunchRestaurantNow}
+                  className="btn-shine w-full sm:w-auto px-7 py-4 rounded-2xl bg-[#FFFDF8] hover:bg-white text-[#003865] font-black text-sm shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
+                >
+                  <Store className="w-4 h-4 text-[#0072BC]" />
+                  <span>اضغط لتدشين مطعمك</span>
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
       {/* ================= Pricing ================= */}
       <section id="pricing" className="relative overflow-hidden py-16 sm:py-24 px-4 sm:px-6">
         <div className="absolute top-24 left-1/2 -translate-x-1/2 w-[560px] h-[320px] rounded-full bg-[#0072BC]/10 blur-3xl pointer-events-none" />
@@ -1112,17 +1225,24 @@ export const SaaSLandingPage: FC = () => {
                   انضم إلى المطاعم التي تدير طاولاتها ومطبخها وكاشيرها من منظومة واحدة.
                   التفعيل خلال دقائق — والدعم معك خطوة بخطوة.
                 </p>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3 pt-2">
                   <button
-                    onClick={() => handleContactWhatsApp('تواصل عام')}
+                    onClick={handleLaunchRestaurantNow}
                     className="btn-shine w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-l from-[#003865] via-[#00649C] to-[#0072BC] hover:brightness-110 text-white font-bold text-sm shadow-[0_0_36px_rgba(0,114,188,0.5)] flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-[0.98]"
                   >
-                    <MessageSquare className="w-4 h-4" />
+                    <Store className="w-4 h-4" />
+                    اضغط لتدشين مطعمك
+                  </button>
+                  <button
+                    onClick={() => handleContactWhatsApp('تواصل عام')}
+                    className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/35 text-emerald-900 font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    <MessageSquare className="w-4 h-4 text-emerald-700" />
                     تحدث مع المبيعات
                   </button>
                   <button
                     onClick={openManagerConsole}
-                    className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white/85 hover:bg-[#F0EFE9] border border-[#D8DFE2] text-[#1D3548] font-bold text-sm transition-all cursor-pointer backdrop-blur"
+                    className="w-full sm:w-auto px-7 py-4 rounded-2xl bg-white/85 hover:bg-[#F0EFE9] border border-[#D8DFE2] text-[#1D3548] font-bold text-sm transition-all cursor-pointer backdrop-blur"
                   >
                     ادخل لوحة التحكم
                   </button>

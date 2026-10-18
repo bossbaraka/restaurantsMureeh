@@ -35,7 +35,6 @@ export const LoginModal: React.FC = () => {
     setIsLoginModalOpen,
     login,
     employeeLogin,
-    register,
     currentUser,
     logout,
     lockoutRemainingSeconds,
@@ -45,7 +44,7 @@ export const LoginModal: React.FC = () => {
   const WORKER_REST_CODE_KEY = 'merar_worker_restaurant_code';
   const WORKER_USERNAME_KEY = 'merar_worker_username';
 
-  const [authTab, setAuthTab] = useState<'MANAGERS' | 'STAFF_PIN' | 'REGISTER'>('MANAGERS');
+  const [authTab, setAuthTab] = useState<'MANAGERS' | 'STAFF_PIN'>('MANAGERS');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -66,18 +65,15 @@ export const LoginModal: React.FC = () => {
   });
   const [pinInput, setPinInput] = useState('');
 
-  // Self-service registration state (2026-10). No lockout interplay BY
-  // DESIGN: the login failure budget guards existing secrets; a failed
-  // registration attempt is not a guess at anyone's password (the server
-  // rate-limits it on its own separate budget).
-  const [regName, setRegName] = useState('');
-  const [regEmail, setRegEmail] = useState('');
-  const [regPassword, setRegPassword] = useState('');
-
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  useDialog({ isOpen: isLoginModalOpen, onClose: () => setIsLoginModalOpen(false) });
+  useDialog({
+    isOpen: isLoginModalOpen,
+    onClose: () => {
+      setIsLoginModalOpen(false);
+    },
+  });
 
   if (!isLoginModalOpen) return null;
 
@@ -110,29 +106,6 @@ export const LoginModal: React.FC = () => {
     } else {
       setErrorMsg(res.error || 'بيانات الدخول غير صحيحة');
     }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!regName.trim() || !regEmail.trim() || !regPassword) {
-      setErrorMsg('أكمل الاسم والبريد الإلكتروني وكلمة المرور');
-      return;
-    }
-    if (regPassword.length < 8) {
-      setErrorMsg('كلمة المرور يجب أن تكون 8 أحرف على الأقل');
-      return;
-    }
-    setIsLoading(true);
-    setErrorMsg('');
-    const res = await register(regName, regEmail, regPassword);
-    setIsLoading(false);
-    if (!res.success) {
-      setErrorMsg(res.error || 'تعذر إنشاء الحساب، حاول مجدداً');
-      return;
-    }
-    // Success: AuthContext persisted the session + closed the modal. The
-    // App-level gate now swaps in the owner's restaurant-setup wizard.
-    showToast('success', 'تم إنشاء حسابك بنجاح', 'أكملوا الآن تهيئة مطعمكم — اسم وعدد طاولات فقط.');
   };
 
   const handleEmployeeLogin = async (pinToVerify: string) => {
@@ -248,22 +221,6 @@ export const LoginModal: React.FC = () => {
             <Users className="w-3.5 h-3.5" />
             <span>دخول الموظفين</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setAuthTab('REGISTER');
-              setErrorMsg('');
-            }}
-            className={`flex-1 py-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-              authTab === 'REGISTER'
-                ? 'bg-gold-500 text-luxury-950 shadow-gold-glow'
-                : 'text-luxury-400 hover:text-luxury-200 hover:bg-luxury-850'
-            }`}
-          >
-            <Store className="w-3.5 h-3.5" />
-            <span>أنشئ مطعمك</span>
-          </button>
         </div>
 
         {/* Modal Body */}
@@ -353,6 +310,20 @@ export const LoginModal: React.FC = () => {
               <p className="text-[10px] text-luxury-500 text-center">
                 حسابات الموظفين (نادل / كاشير / مطبخ) تستخدم تبويب «دخول الموظفين».
               </p>
+
+              <div className="pt-2 border-t border-luxury-800/70">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLoginModalOpen(false);
+                    setViewMode('ONBOARDING');
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-luxury-950 hover:bg-luxury-850 border border-gold-500/30 text-gold-300 text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <Store className="w-3.5 h-3.5 text-gold-400" />
+                  <span>ليس لديك مطعم بعد؟ اضغط لتدشين مطعمك</span>
+                </button>
+              </div>
             </form>
           )}
 
@@ -463,96 +434,6 @@ export const LoginModal: React.FC = () => {
               )}
             </div>
           )}
-
-          {/* TAB 3: SELF-SERVICE REGISTRATION — owner creates their own account
-              (no admin). The account starts WITHOUT a restaurant; the platform
-              gate then offers the minimal setup wizard. Fixed role, fixed
-              status, closed validation — all enforced server-side. */}
-          {authTab === 'REGISTER' && (
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div className="p-3 rounded-2xl bg-gold-500/5 border border-gold-500/20 text-[11px] text-luxury-300 leading-relaxed">
-                ابدأ مجاناً للخطة الدائمة حتى 20 طاولة مع رموز QR جاهزة — بدون واسطة إداري.
-                بعد إنشاء الحساب نأخذكم خطوة بخطوة لتهيئة المطعم.
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-luxury-300 mb-1.5" htmlFor="loginmodal-reg-name">
-                  اسمك الكامل *
-                </label>
-                <input id="loginmodal-reg-name"
-                  type="text"
-                  required
-                  placeholder="مثال: عمر صاحب المطعم"
-                  value={regName}
-                  onChange={(e) => setRegName(e.target.value)}
-                  autoComplete="name"
-                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-luxury-300 mb-1.5" htmlFor="loginmodal-reg-email">
-                  البريد الإلكتروني *
-                </label>
-                <input id="loginmodal-reg-email"
-                  type="email"
-                  required
-                  dir="ltr"
-                  placeholder="owner@example.com"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
-                  autoComplete="email"
-                  className="w-full bg-luxury-950 border border-luxury-800 rounded-xl px-3.5 py-2.5 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60 text-left"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-luxury-300 mb-1.5" htmlFor="loginmodal-reg-password">
-                  كلمة المرور * <span className="text-[10px] text-luxury-500">(8 أحرف على الأقل)</span>
-                </label>
-                <div className="relative">
-                  <input id="loginmodal-reg-password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    placeholder="••••••••"
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    autoComplete="new-password"
-                    className="w-full bg-luxury-950 border border-luxury-800 rounded-xl pr-3.5 pl-10 py-2.5 text-xs text-luxury-100 font-mono placeholder-luxury-600 focus:outline-none focus:border-gold-500/60"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-luxury-400 hover:text-luxury-200 cursor-pointer"
-                    aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {errorMsg && (
-                <div role="alert" className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-gold-500 to-gold-600 hover:from-gold-400 hover:to-gold-500 text-luxury-950 font-bold text-xs shadow-gold-glow transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <Store className="w-4 h-4" />
-                <span>{isLoading ? 'جاري إنشاء الحساب...' : 'إنشاء الحساب والبدء مجاناً'}</span>
-              </button>
-
-              <p className="text-[10px] text-luxury-500 text-center">
-                الحساب يُنشأ دوراً ثابتاً «مدير المطعم» وبدون مطعم — تهيئته تتم في المعالج التالي مباشرة.
-              </p>
-            </form>
-          )}
-
         </div>
 
         {/* Footer */}

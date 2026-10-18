@@ -11,6 +11,12 @@ import {
   normalizeWhatsappNumber,
   type SocialPlatform,
 } from '../utils/contactChannels';
+import {
+  SELF_ONBOARD_TABLE_COUNTS,
+  isDisposableEmail,
+  normalizeVerificationPhone,
+} from '../services/restaurantProvisioning';
+export { SELF_ONBOARD_TABLE_COUNTS };
 
 // ============================================================
 // Central input validation (OWASP API3/API4, CWE-20).
@@ -449,7 +455,11 @@ export const registerSchema = z
       .trim()
       .toLowerCase()
       .max(254)
-      .email('صيغة البريد الإلكتروني غير صحيحة'),
+      .email('صيغة البريد الإلكتروني غير صحيحة')
+      .refine((email) => !isDisposableEmail(email), {
+        message:
+          'يرجى استخدام بريد إلكتروني رسمي وحقيقي — نطاقات البريد المؤقت أو الوهمي غير مسموحة في بوابة التحقق الرسمية',
+      }),
     password: safePasswordSchema('كلمة المرور', 8),
   })
   .strict();
@@ -1399,9 +1409,6 @@ export const onboardSchema = z
 // fixed server-side, and `.strict()` rejects any attempt to smuggle it in.
 // ============================================================
 
-/** The only initial table counts accepted by the self-service flow. */
-export const SELF_ONBOARD_TABLE_COUNTS = [10, 15, 20] as const;
-
 export const selfOnboardSchema = z
   .object({
     name: safeName('اسم المطعم', 120),
@@ -1417,6 +1424,24 @@ export const selfOnboardSchema = z
         error: 'عدد الطاولات يجب أن يكون 10 أو 15 أو 20 بالضبط',
       }
     ),
+    // Official verification phone/WhatsApp number (Triple Free Shield Layer 1).
+    phone: z
+      .string()
+      .trim()
+      .max(MAX_WHATSAPP_INPUT_LENGTH, 'رقم الجوال طويل جداً')
+      .refine((val) => !val || normalizeVerificationPhone(val) !== null, {
+        message: 'يرجى إدخال رقم جوال/واتساب رسمي صحيح (مثال: +970599123456 أو 0599123456)',
+      })
+      .optional(),
+  })
+  .strict();
+
+export const onboardingVerifySchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/, 'رمز التفعيل الرسمي يجب أن يتكون من 6 أرقام بالضبط'),
   })
   .strict();
 

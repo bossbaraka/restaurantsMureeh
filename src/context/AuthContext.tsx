@@ -22,6 +22,9 @@ interface AuthContextType {
   switchManagerRestaurant: (restaurantId: string) => void;
   isLoginModalOpen: boolean;
   setIsLoginModalOpen: (open: boolean) => void;
+  loginModalInitialTab: 'MANAGERS' | 'STAFF_PIN' | 'REGISTER';
+  setLoginModalInitialTab: (tab: 'MANAGERS' | 'STAFF_PIN' | 'REGISTER') => void;
+  openRegisterModal: () => void;
 }
 
 const ROLE_VIEW_ACCESS: Record<string, string[]> = {
@@ -86,8 +89,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [loginModalInitialTab, setLoginModalInitialTab] = useState<'MANAGERS' | 'STAFF_PIN' | 'REGISTER'>('MANAGERS');
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [lockoutRemainingSeconds, setLockoutRemainingSeconds] = useState(0);
+
+  const openRegisterModal = useCallback(() => {
+    setLoginModalInitialTab('REGISTER');
+    setIsLoginModalOpen(true);
+  }, []);
 
   // Sync state changes with localStorage
   useEffect(() => {
@@ -370,6 +379,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         switchManagerRestaurant,
         isLoginModalOpen,
         setIsLoginModalOpen,
+        loginModalInitialTab,
+        setLoginModalInitialTab,
+        openRegisterModal,
       }}
     >
       {children}

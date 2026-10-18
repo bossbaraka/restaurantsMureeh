@@ -213,9 +213,18 @@ export async function authenticateToken(
     }
     const isPlatformRole =
       dbUser.role === 'PLATFORM_ADMIN' || dbUser.role === 'SUPER_ADMIN';
+    // A RESTAURANT_MANAGER whose venue is in ONBOARDING (Official Verification
+    // Gate) may access /api/auth and /api/onboarding to check verification
+    // status or submit their 6-digit activation code, while /api/manager and
+    // /api/uploads remain locked until the venue is ACTIVE.
+    const isOnboardingGateRoute =
+      dbUser.role === 'RESTAURANT_MANAGER' &&
+      dbUser.restaurant?.status === 'ONBOARDING' &&
+      (req.baseUrl === '/api/auth' || req.baseUrl === '/api/onboarding');
     if (
       dbUser.restaurantId &&
       !isPlatformRole &&
+      !isOnboardingGateRoute &&
       dbUser.restaurant &&
       dbUser.restaurant.status !== 'ACTIVE'
     ) {
