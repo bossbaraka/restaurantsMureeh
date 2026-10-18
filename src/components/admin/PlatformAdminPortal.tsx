@@ -27,6 +27,9 @@ import {
   Palette,
   Save,
   Loader2,
+  KeyRound,
+  Copy,
+  Phone,
 } from 'lucide-react';
 
 export const PlatformAdminPortal: React.FC = () => {
@@ -151,6 +154,17 @@ export const PlatformAdminPortal: React.FC = () => {
     return r.name.toLowerCase().includes(q) || r.nameEn.toLowerCase().includes(q) || r.slug.toLowerCase().includes(q);
   });
 
+  const onboardingRestaurants = restaurants.filter((r) => r.status === 'ONBOARDING');
+
+  const copyActivationCode = async (code: string, restName: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      showToast('info', `تم نسخ رمز التفعيل لمطعم ${restName}`, `الرمز: ${code}`);
+    } catch {
+      showToast('info', `رمز التفعيل لمطعم ${restName}`, code);
+    }
+  };
+
   return (
     <div className="space-y-6 text-right max-w-7xl mx-auto p-4 sm:p-6">
       {/* Top Header Banner */}
@@ -261,6 +275,83 @@ export const PlatformAdminPortal: React.FC = () => {
       {/* TAB 1: RESTAURANTS LIST */}
       {activeTab === 'RESTAURANTS' && (
         <div className="space-y-4">
+          {/* Official Verification Gate — Pending Onboarding Approvals */}
+          {onboardingRestaurants.length > 0 && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-l from-amber-500/15 via-luxury-900 to-luxury-950 border border-amber-500/40 space-y-3 shadow-luxury">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    <ShieldCheck className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-bold text-amber-200">
+                      بوابة التحقق الرسمي — طلبات تدشين مطاعم بانتظار التوثيق ({onboardingRestaurants.length})
+                    </h3>
+                    <p className="text-[11px] text-luxury-300">
+                      هذه المطاعم محجوزة في حالة (ONBOARDING) ومعزولة عن العامة حتى تعتمدها مباشرة أو تزود المالك برمز التفعيل الرسمي المكوّن من 6 أرقام.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                {onboardingRestaurants.map((pending) => (
+                  <div
+                    key={pending.id}
+                    className="p-3.5 rounded-xl bg-luxury-950/90 border border-amber-500/30 flex flex-col justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <strong className="text-luxury-50 font-bold text-sm block">{pending.name}</strong>
+                        <span className="text-gold-400 font-mono text-[11px]" dir="ltr">/r/{pending.slug}</span>
+                        {pending.phone && (
+                          <span className="flex items-center gap-1 text-luxury-300 font-mono text-[11px] mt-1" dir="ltr">
+                            <Phone className="w-3 h-3 text-emerald-400" />
+                            {pending.phone}
+                          </span>
+                        )}
+                      </div>
+                      {pending.verificationReference && (
+                        <span className="px-2 py-0.5 rounded-md bg-luxury-900 border border-luxury-800 text-amber-300 font-mono text-[11px] font-bold" dir="ltr">
+                          #{pending.verificationReference}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-luxury-800/80">
+                      {pending.verificationCode && (
+                        <div className="flex items-center gap-1.5 bg-luxury-900 border border-gold-500/30 rounded-lg px-2.5 py-1">
+                          <KeyRound className="w-3.5 h-3.5 text-gold-400" />
+                          <span className="text-[11px] text-luxury-400">رمز التفعيل:</span>
+                          <strong className="font-mono text-gold-300 tracking-wider text-xs" dir="ltr">
+                            {pending.verificationCode}
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={() => copyActivationCode(pending.verificationCode!, pending.name)}
+                            className="p-1 rounded hover:bg-luxury-800 text-luxury-300 hover:text-white cursor-pointer"
+                            title="نسخ رمز التفعيل الرسمي"
+                          >
+                            <Copy className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleStatus(pending.id, pending.status)}
+                        className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-luxury-950 font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>اعتماد وتفعيل المطعم رسمياً</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between gap-3">
             <div className="relative w-full sm:w-72">
               <input aria-label="بحث عن مطعم بالاسم أو الرابط..."
@@ -292,6 +383,7 @@ export const PlatformAdminPortal: React.FC = () => {
                     const sub = subscriptions.find((s) => s.restaurantId === rest.id);
                     const plan = sub ? plans.find((p) => p.id === sub.planId) : null;
                     const isActive = rest.status === 'ACTIVE';
+                    const isOnboarding = rest.status === 'ONBOARDING';
 
                     return (
                       <tr key={rest.id} className="hover:bg-luxury-850/40 transition-colors">
@@ -305,6 +397,11 @@ export const PlatformAdminPortal: React.FC = () => {
                             <div>
                               <strong className="block text-luxury-100 font-bold">{rest.name}</strong>
                               <span className="text-[11px] text-luxury-400">{rest.nameEn}</span>
+                              {rest.phone && (
+                                <span className="block text-[10px] text-luxury-400 font-mono mt-0.5" dir="ltr">
+                                  {rest.phone}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </td>
@@ -344,12 +441,31 @@ export const PlatformAdminPortal: React.FC = () => {
                             className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
                               isActive
                                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : isOnboarding
+                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
                                 : 'bg-red-500/10 border-red-500/30 text-red-400'
                             }`}
                           >
-                            {isActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                            <span>{isActive ? 'نشط ويعمل' : 'موقوف مؤقتاً'}</span>
+                            {isActive ? (
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            ) : isOnboarding ? (
+                              <Clock className="w-3.5 h-3.5" />
+                            ) : (
+                              <XCircle className="w-3.5 h-3.5" />
+                            )}
+                            <span>
+                              {isActive
+                                ? 'نشط ويعمل'
+                                : isOnboarding
+                                ? 'قيد التحقق الرسمي'
+                                : 'موقوف مؤقتاً'}
+                            </span>
                           </span>
+                          {isOnboarding && rest.verificationCode && (
+                            <div className="mt-1 text-[10px] font-mono text-gold-300" dir="ltr">
+                              Code: {rest.verificationCode}
+                            </div>
+                          )}
                         </td>
 
                         <td className="p-4 text-luxury-400 text-[11px]">
@@ -392,7 +508,7 @@ export const PlatformAdminPortal: React.FC = () => {
                                   : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                               }`}
                             >
-                              {isActive ? 'إيقاف' : 'تفعيل'}
+                              {isActive ? 'إيقاف' : isOnboarding ? 'اعتماد وتفعيل' : 'تفعيل'}
                             </button>
                           </div>
                         </td>

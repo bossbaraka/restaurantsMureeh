@@ -14,12 +14,18 @@ import {
   SELF_ONBOARD_TABLE_COUNTS,
   selfOnboardSchema,
   registerSchema,
+  onboardingVerifySchema,
 } from '../../server/validation/schemas';
 import {
   ProvisioningError,
   buildInitialTables,
   generateUniqueSlug,
   slugifyRestaurantName,
+  isDisposableEmail,
+  normalizeVerificationPhone,
+  buildVerificationReference,
+  computeRestaurantVerificationCode,
+  verifyRestaurantActivationCode,
 } from '../../server/services/restaurantProvisioning';
 
 /**
@@ -355,5 +361,115 @@ describe('buildInitialTables', () => {
       expect(() => buildInitialTables('rest-x', bad as number)).toThrowError(ProvisioningError);
     }
     expect(() => buildInitialTables('', 10)).toThrowError(ProvisioningError);
+  });
+});
+
+// ---------------------------------------------------------------
+// 5. Triple Free Shield & Official Verification Gate (2026-10)
+// ---------------------------------------------------------------
+describe('Triple Free Shield — disposable email & phone validation', () => {
+  it('blocks disposable and temporary email domains in registerSchema', () => {
+    for (const disposable of [
+      'bot@mailinator.com',
+      'fake@10minutemail.com',
+      'spam@yopmail.com',
+      'temp@guerrillamail.com',
+      'user@sub.tempmail.com',
+      'throwaway@trashmail.com',
+    ]) {
+      expect(isDisposableEmail(disposable)).toBe(true);
+      expect(
+        registerSchema.safeParse({
+          name: 'Fake Owner',
+          email: disposable,
+          password: 'Str0ng-Pass!2026',
+        }).success,
+        disposable
+      ).toBe(false);
+    }
+
+    for (const legitimate of [
+      'owner@gmail.com',
+      'manager@mureeh.com',
+      'info@al-yasmin-restaurant.ps',
+    ]) {
+      expect(isDisposableEmail(legitimate)).toBe(false);
+      expect(
+        registerSchema.safeParse({
+          name: 'Real Owner',
+          email: legitimate,
+          password: 'Str0ng-Pass!2026',
+        }).success,
+        legitimate
+      ).toBe(true);
+    }
+  });
+
+  it('normalizes official verification phone numbers and rejects invalid ones', () => {
+    expect(normalizeVerificationPhone('0599 123 456')).toBe('+970599123456');
+    expect(normalizeVerificationPhone('+972-56-904-9704')).toBe('+972569049704');
+    expect(normalizeVerificationPhone('00970599112233')).toBe('+970599112233');
+    expect(normalizeVerificationPhone('0000000000')).toBeNull();
+    expect(normalizeVerificationPhone('12345')).toBeNull();
+    expect(normalizeVerificationPhone('<script>alert(1)</script>')).toBeNull();
+
+    expect(
+      selfOnboardSchema.safeParse({
+        name: 'مطعم الياسمين',
+        tablesCount: 15,
+        phone: '+970 599 123 456',
+      }).success
+    ).toBe(true);
+
+    expect(
+      selfOnboardSchema.safeParse({
+        name: 'مطعم الياسمين',
+        tablesCount: 15,
+        phone: '0000000000',
+      }).success
+    ).toBe(false);
+  });
+
+  it('generates deterministic 6-digit HMAC activation codes and verifies in constant time', () => {
+    const ref = buildVerificationReference('rest-al-yasmin');
+    expect(ref).toMatch(/^MRH-[A-Z0-9]{6}$/);
+
+    const code = computeRestaurantVerificationCode('rest-al-yasmin', 'test-secret-key');
+    expect(code).toMatch(/^\d{6}$/);
+    expect(computeRestaurantVerificationCode('rest-al-yasmin', 'test-secret-key')).toBe(code);
+    expect(computeRestaurantVerificationCode('rest-other', 'test-secret-key')).not.toBe(code);
+
+    expect(verifyRestaurantActivationCode('rest-al-yasmin', code, 'test-secret-key')).toBe(true);
+    expect(verifyRestaurantActivationCode('rest-al-yasmin', '000000', 'test-secret-key')).toBe(
+      code === '000000'
+    );
+    expect(verifyRestaurantActivationCode('rest-al-yasmin', '12345', 'test-secret-key')).toBe(
+      false
+    );
+
+    expect(onboardingVerifySchema.safeParse({ code }).success).toBe(true);
+    expect(onboardingVerifySchema.safeParse({ code: '12345' }).success).toBe(false);
+    expect(onboardingVerifySchema.safeParse({ code, extra: 1 }).success).toBe(false);
+  });
+
+  it('separates restaurant registration from LoginModal into the standalone /onboard page', () => {
+    const loginModal = read('../components/auth/LoginModal.tsx');
+    const standaloneOnboard = read('../components/onboarding/OwnerSelfOnboarding.tsx');
+    const landingPage = read('../components/common/SaaSLandingPage.tsx');
+
+    // LoginModal is strictly for signing in (no REGISTER tab inside LoginModal)
+    expect(loginModal).not.toContain('أنشئ مطعمك');
+    expect(loginModal).toContain('اضغط لتدشين مطعمك');
+    expect(loginModal).toContain("setViewMode('ONBOARDING')");
+
+    // Standalone onboarding page handles all 4 steps including owner account registration
+    expect(standaloneOnboard).toContain('1. حساب المالك');
+    expect(standaloneOnboard).toContain('2. بيانات المطعم');
+    expect(standaloneOnboard).toContain('3. الطاولات');
+    expect(standaloneOnboard).toContain('4. بوابة التحقق');
+
+    // SaaSLandingPage button navigates to the standalone ONBOARDING page
+    expect(landingPage).toContain('اضغط لتدشين مطعمك');
+    expect(landingPage).toContain("setViewMode('ONBOARDING')");
   });
 });

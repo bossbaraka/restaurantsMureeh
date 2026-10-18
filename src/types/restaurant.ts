@@ -362,6 +362,10 @@ export interface Restaurant {
   theme?: EffectiveTheme;
   planId: string;
   customDomain?: string;
+  /** Public reference id (`MRH-XXXXXX`) for the Official Verification Gate. */
+  verificationReference?: string;
+  /** Secret 6-digit HMAC activation code (returned to platform admins only). */
+  verificationCode?: string;
   createdAt: string;
   updatedAt: string;
 }

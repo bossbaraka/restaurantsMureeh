@@ -7,7 +7,10 @@ import { FREE_PLAN_ID } from '../services/plans';
 import {
   ProvisioningError,
   buildInitialTables,
+  buildVerificationReference,
   generateUniqueSlug,
+  normalizeVerificationPhone,
+  verifyRestaurantActivationCode,
 } from '../services/restaurantProvisioning';
 import {
   getStorage,
@@ -16,7 +19,11 @@ import {
   resolveRestaurantAssets,
 } from '../services/storage';
 import { selfOnboardLimiter } from '../middleware/rateLimit';
-import { validateBody, selfOnboardSchema } from '../validation/schemas';
+import {
+  validateBody,
+  selfOnboardSchema,
+  onboardingVerifySchema,
+} from '../validation/schemas';
 
 /**
  * Self-service restaurant onboarding (2026-10).
@@ -111,7 +118,12 @@ router.post(
         });
       }
 
-      const { name, tablesCount } = req.body as { name: string; tablesCount: number };
+      const { name, tablesCount, phone } = req.body as {
+        name: string;
+        tablesCount: number;
+        phone?: string;
+      };
+      const canonicalPhone = phone ? normalizeVerificationPhone(phone) : null;
 
       // ---- entitlement precondition --------------------------------------
       // The plan row is data (seed / idempotent migration). If the catalog
@@ -173,22 +185,46 @@ router.post(
           );
         }
 
+        // Triple Free Shield Layer 1: one restaurant per verified contact phone.
+        if (canonicalPhone) {
+          const existingPhoneTenant = await tx.restaurant.findFirst({
+            where: {
+              OR: [
+                { phone: canonicalPhone },
+                { whatsappNumber: canonicalPhone },
+              ],
+            },
+            select: { id: true },
+          });
+          if (existingPhoneTenant) {
+            throw new ProvisioningError(
+              409,
+              'PHONE_ALREADY_USED',
+              'رقم الجوال/واتساب هذا مرتبط بمطعم مسجّل مسبقاً — يُسمح بمطعم واحد لكل رقم تواصل رسمي لمنع الحسابات الوهمية'
+            );
+          }
+        }
+
         const restaurant = await tx.restaurant.create({
           data: {
             id: restId,
             name,
-            // nameEn/description/phone/address: NOT NULL columns get the
+            // nameEn/description/address: NOT NULL columns get the
             // platform's HONEST empties — the venue fills them later in its
             // branding settings. No invented marketing copy, no fake data.
             nameEn: '',
             slug,
             description: '',
-            phone: '',
+            phone: canonicalPhone ?? '',
+            whatsappNumber: canonicalPhone ?? null,
             address: '',
             // '' is the schema-documented "no logo" marker; every surface
             // falls back to the platform default (BrandMark/initial avatar).
             logoUrl: '',
-            status: 'ACTIVE',
+            // Triple Free Shield Layer 3: self-onboarded venues start in
+            // ONBOARDING quarantine until verified via the Official
+            // Verification Gate (6-digit activation code or admin approval).
+            status: 'ONBOARDING',
             planId: plan.id,
           },
         });
@@ -236,6 +272,7 @@ router.post(
 
       // ---- post-commit: read-only asset resolution + audit ----------------
       const resolved = resolveRestaurantRow(result.restaurant);
+      const verificationReference = buildVerificationReference(result.restaurant.id);
 
       await logAuditEvent({
         restaurantId: result.restaurant.id,
@@ -245,7 +282,7 @@ router.post(
         action: 'RESTAURANT_SELF_ONBOARDED',
         entity: 'Restaurant',
         entityId: result.restaurant.id,
-        details: `تم إنشاء مطعم ذاتياً: ${result.restaurant.name} (${result.restaurant.slug}) مع ${result.tablesCreated} طاولة ورموز QR — الخطة: ${plan.name}`,
+        details: `تم تقديم طلب تدشين مطعم ذاتياً (بوابة التحقق الرسمي ${verificationReference}): ${result.restaurant.name} (${result.restaurant.slug}) مع ${result.tablesCreated} طاولة — الخطة: ${plan.name}`,
         ipAddress: req.ip,
       }).catch(() => {});
 
@@ -263,6 +300,8 @@ router.post(
           tablesCount: result.tablesCreated,
           planId: plan.id,
           planName: plan.name,
+          verificationRequired: true,
+          verificationReference,
         },
         statusCode: 201,
       });
@@ -282,6 +321,7 @@ router.post(
         }
         return res.status(err.statusCode).json({
           success: false,
+          code: err.code,
           error: err.message,
           statusCode: err.statusCode,
         });
@@ -307,8 +347,217 @@ router.post(
   }
 );
 
-// NOTE: intentionally no other handlers. Reads after onboarding go through
-// the existing /api/manager routes (tenant-scoped) and /api/auth/me, so
-// this router never becomes a second management surface.
+/**
+ * GET /api/onboarding/status
+ *
+ * Returns the current Official Verification Gate state for a signed-in
+ * RESTAURANT_MANAGER whose restaurant is in ONBOARDING (or freshly activated
+ * to ACTIVE by a platform admin). Never exposes the secret 6-digit HMAC
+ * activation code — only the public `verificationReference` (`MRH-XXXXXX`).
+ */
+router.get('/status', async (req: Request, res: Response) => {
+  const user = req.user!;
+  try {
+    if (user.role !== 'RESTAURANT_MANAGER' || !user.restaurantId) {
+      return res.status(404).json({
+        success: false,
+        error: 'لا يوجد طلب تدشين مرتبط بهذا الحساب حالياً',
+        statusCode: 404,
+      });
+    }
+
+    const restaurant = await prisma.restaurant.findUnique({
+      where: { id: user.restaurantId },
+      include: {
+        subscription: { include: { plan: true } },
+        _count: { select: { tables: true } },
+      },
+    });
+
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        error: 'المطعم غير موجود',
+        statusCode: 404,
+      });
+    }
+
+    const resolved = resolveRestaurantRow(restaurant);
+    const verificationReference = buildVerificationReference(restaurant.id);
+
+    return res.json({
+      success: true,
+      data: {
+        restaurant: {
+          ...restaurant,
+          logoUrl: resolved.logoUrl,
+          coverImageUrl: resolved.coverImageUrl,
+          mapImageUrl: resolved.mapImageUrl,
+          galleryImages: resolved.galleryImages,
+          logoStoragePath: resolved.logoStoragePath,
+        },
+        status: restaurant.status,
+        verified: restaurant.status === 'ACTIVE',
+        verificationReference,
+        tablesCount: restaurant._count.tables,
+        planName: restaurant.subscription?.plan?.name || 'الخطة المجانية الدائمة',
+      },
+      statusCode: 200,
+    });
+  } catch (err) {
+    console.error('Onboarding status error:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'تعذر التحقق من حالة اعتماد المطعم',
+      statusCode: 500,
+    });
+  }
+});
+
+/**
+ * POST /api/onboarding/verify
+ *
+ * Official Verification Gate (Triple Free Shield Layer 2):
+ * Accepts the 6-digit Official Activation Code issued by platform management
+ * (or after WhatsApp reverse verification) and transitions the restaurant
+ * from `ONBOARDING` quarantine to `ACTIVE`.
+ */
+router.post(
+  '/verify',
+  selfOnboardLimiter,
+  validateBody(onboardingVerifySchema),
+  async (req: Request, res: Response) => {
+    const user = req.user!;
+    const { code } = req.body as { code: string };
+
+    try {
+      if (isPlatformUser(req) || user.role !== 'RESTAURANT_MANAGER') {
+        return res.status(403).json({
+          success: false,
+          error: 'هذا المسار مخصص لمديري المطاعم فقط',
+          statusCode: 403,
+        });
+      }
+      if (!user.restaurantId) {
+        return res.status(400).json({
+          success: false,
+          error: 'أكمل خطوة تسجيل بيانات المطعم أولاً قبل إدخال رمز التفعيل',
+          statusCode: 400,
+        });
+      }
+
+      const restaurant = await prisma.restaurant.findUnique({
+        where: { id: user.restaurantId },
+      });
+      if (!restaurant) {
+        return res.status(404).json({
+          success: false,
+          error: 'المطعم غير موجود',
+          statusCode: 404,
+        });
+      }
+
+      if (restaurant.status === 'ACTIVE') {
+        const resolved = resolveRestaurantRow(restaurant);
+        return res.json({
+          success: true,
+          data: {
+            restaurant: {
+              ...restaurant,
+              logoUrl: resolved.logoUrl,
+              coverImageUrl: resolved.coverImageUrl,
+              mapImageUrl: resolved.mapImageUrl,
+              galleryImages: resolved.galleryImages,
+              logoStoragePath: resolved.logoStoragePath,
+            },
+            verified: true,
+            alreadyVerified: true,
+            verificationReference: buildVerificationReference(restaurant.id),
+          },
+          statusCode: 200,
+        });
+      }
+
+      if (restaurant.status !== 'ONBOARDING') {
+        return res.status(403).json({
+          success: false,
+          error: 'حساب المطعم موقوف حالياً من قبل إدارة المنصة',
+          statusCode: 403,
+        });
+      }
+
+      const isValid = verifyRestaurantActivationCode(
+        restaurant.id,
+        code,
+        config.jwtSecret
+      );
+      if (!isValid) {
+        await logAuditEvent({
+          restaurantId: restaurant.id,
+          userId: user.id,
+          actor: user.name,
+          actorRole: user.role,
+          action: 'RESTAURANT_VERIFICATION_FAILED',
+          entity: 'Restaurant',
+          entityId: restaurant.id,
+          details: `محاولة إدخال رمز تفعيل رسمي غير صحيح لمطعم ${restaurant.name} (${restaurant.slug})`,
+          ipAddress: req.ip,
+        }).catch(() => {});
+
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_VERIFICATION_CODE',
+          error:
+            'رمز التفعيل الرسمي غير صحيح — تأكد من الرمز المكون من 6 أرقام الصادر من منصة مريح',
+          statusCode: 400,
+        });
+      }
+
+      const activated = await prisma.restaurant.update({
+        where: { id: restaurant.id },
+        data: { status: 'ACTIVE' },
+      });
+
+      const resolved = resolveRestaurantRow(activated);
+      const verificationReference = buildVerificationReference(activated.id);
+
+      await logAuditEvent({
+        restaurantId: activated.id,
+        userId: user.id,
+        actor: user.name,
+        actorRole: user.role,
+        action: 'RESTAURANT_VERIFIED_AND_ACTIVATED',
+        entity: 'Restaurant',
+        entityId: activated.id,
+        details: `تم توثيق وتفعيل المطعم رسمياً عبر بوابة التحقق (${verificationReference}): ${activated.name} (${activated.slug})`,
+        ipAddress: req.ip,
+      }).catch(() => {});
+
+      return res.json({
+        success: true,
+        data: {
+          restaurant: {
+            ...activated,
+            logoUrl: resolved.logoUrl,
+            coverImageUrl: resolved.coverImageUrl,
+            mapImageUrl: resolved.mapImageUrl,
+            galleryImages: resolved.galleryImages,
+            logoStoragePath: resolved.logoStoragePath,
+          },
+          verified: true,
+          verificationReference,
+        },
+        statusCode: 200,
+      });
+    } catch (err) {
+      console.error('Onboarding verify error:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'تعذر إتمام التحقق الرسمي للمطعم. يرجى المحاولة لاحقاً.',
+        statusCode: 500,
+      });
+    }
+  }
+);
 
 export default router;

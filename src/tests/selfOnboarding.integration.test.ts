@@ -231,20 +231,36 @@ describe.skipIf(!hasDb)('Self-service registration & onboarding (real PostgreSQL
       return { token: res.json.data.token as string, userId: res.json.data.user.id as string, email };
     };
 
-    it('provisions restaurant + free subscription + tables + QR in one shot', async () => {
+    it('provisions restaurant in ONBOARDING quarantine + free subscription + tables + QR, then activates via Official Verification Gate', async () => {
+      const { computeRestaurantVerificationCode } = await import(
+        '../../server/services/restaurantProvisioning'
+      );
+      const { config } = await import('../../server/config');
       const { token, userId } = await freshOwner('full');
-      const res = await onboard(token, { name: 'مطعم الياسمين الفاخر', tablesCount: 15 });
+      const res = await onboard(token, {
+        name: 'مطعم الياسمين الفاخر',
+        tablesCount: 15,
+        phone: '+970 599 123 456',
+      });
       expect(res.status).toBe(201);
-      const { restaurant, tablesCount, planId, planName } = res.json.data;
+      const {
+        restaurant,
+        tablesCount,
+        planId,
+        planName,
+        verificationRequired,
+        verificationReference,
+      } = res.json.data;
       expect(tablesCount).toBe(15);
       expect(planId).toBe('plan-free');
       expect(planName).toContain('مجانية');
       expect(restaurant.slug).toBeTruthy();
+      expect(restaurant.status).toBe('ONBOARDING');
+      expect(verificationRequired).toBe(true);
+      expect(verificationReference).toMatch(/^MRH-[A-Z0-9]{6}$/);
       // Server-owned slug: never the raw Arabic name, never client-supplied.
       expect(restaurant.slug).toMatch(/^[a-z0-9-]+$/);
       expect(restaurant.id).toBe(`rest-${restaurant.slug}`);
-      // Default-logo fallback contract: the row keeps an empty/default logo
-      // until the owner uploads — the response must not 500 on rendering it.
       expect(typeof restaurant.name).toBe('string');
 
       const tables = await prisma.table.findMany({
@@ -282,8 +298,39 @@ describe.skipIf(!hasDb)('Self-service registration & onboarding (real PostgreSQL
       });
       expect(audit).toBeTruthy();
 
-      // The public menu goes live instantly with ZERO fake content and the
-      // owner's own tables answer on their QR tokens.
+      // WHILE IN ONBOARDING QUARANTINE: public menu and QR table endpoints
+      // are blocked (403) so fake/unverified restaurants never go live!
+      const quarantinedMenu = await call('GET', `/api/public/restaurants/${restaurant.slug}`);
+      expect(quarantinedMenu.status).toBe(403);
+      const quarantinedScan = await call('GET', `/api/public/tables/qr/${tables[0].qrToken}`);
+      expect(quarantinedScan.status).toBe(403);
+
+      // Status endpoint works for the owner while in ONBOARDING quarantine.
+      const statusCheck = await call('GET', '/api/onboarding/status', { token });
+      expect(statusCheck.status).toBe(200);
+      expect(statusCheck.json.data.verified).toBe(false);
+      expect(statusCheck.json.data.verificationReference).toBe(verificationReference);
+
+      // Wrong 6-digit code is rejected with 400.
+      const officialCode = computeRestaurantVerificationCode(restaurant.id, config.jwtSecret);
+      const wrongCode = officialCode === '000000' ? '999999' : '000000';
+      const badVerify = await call('POST', '/api/onboarding/verify', {
+        token,
+        body: { code: wrongCode },
+      });
+      expect(badVerify.status).toBe(400);
+      expect(badVerify.json.code).toBe('INVALID_VERIFICATION_CODE');
+
+      // Official 6-digit activation code transitions the restaurant to ACTIVE!
+      const goodVerify = await call('POST', '/api/onboarding/verify', {
+        token,
+        body: { code: officialCode },
+      });
+      expect(goodVerify.status).toBe(200);
+      expect(goodVerify.json.data.verified).toBe(true);
+      expect(goodVerify.json.data.restaurant.status).toBe('ACTIVE');
+
+      // Now the public menu goes live with ZERO fake content and QR tokens work!
       const menu = await call('GET', `/api/public/restaurants/${restaurant.slug}`);
       expect(menu.status).toBe(200);
       expect(JSON.stringify(menu.json)).toContain(restaurant.slug);
@@ -293,10 +340,31 @@ describe.skipIf(!hasDb)('Self-service registration & onboarding (real PostgreSQL
       expect(scan.status).toBe(200);
       expect(JSON.stringify(scan.json)).toContain(restaurant.slug);
 
-      // /auth/me now carries the tenant (App gate lifts on this fact alone).
+      // /auth/me carries the active tenant.
       const me = await call('GET', '/api/auth/me', { token });
       expect(me.json.data.user.restaurantId).toBe(restaurant.id);
       expect(me.json.data.restaurant.id).toBe(restaurant.id);
+      expect(me.json.data.restaurant.status).toBe('ACTIVE');
+    });
+
+    it('rejects duplicate phone numbers across restaurants with 409 PHONE_ALREADY_USED', async () => {
+      const ownerA = await freshOwner('phone-a');
+      const ownerB = await freshOwner('phone-b');
+
+      const resA = await onboard(ownerA.token, {
+        name: 'First Phone Venue',
+        tablesCount: 10,
+        phone: '0599887766',
+      });
+      expect(resA.status).toBe(201);
+
+      const resB = await onboard(ownerB.token, {
+        name: 'Duplicate Phone Venue',
+        tablesCount: 10,
+        phone: '+970 599 887 766',
+      });
+      expect(resB.status).toBe(409);
+      expect(resB.json.code).toBe('PHONE_ALREADY_USED');
     });
 
     it('resumes after logout/login — pending owners get the wizard, not a tenant', async () => {

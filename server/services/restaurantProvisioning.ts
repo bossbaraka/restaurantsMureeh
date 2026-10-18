@@ -1,5 +1,6 @@
-import { randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { generateQrToken } from '../utils/security';
+import { normalizeWhatsappNumber } from '../utils/contactChannels';
 
 /**
  * Self-service restaurant provisioning rules (2026-10) — a deliberately
@@ -25,10 +26,9 @@ import { generateQrToken } from '../utils/security';
  * lookup, which keeps this module unit-testable without a database.
  */
 
-// Re-export the closed table-count set from the validation hub so route and
-// builder validate against ONE list (9/11/0/500/1.5/"10" all rejected).
-import { SELF_ONBOARD_TABLE_COUNTS } from '../validation/schemas';
-export { SELF_ONBOARD_TABLE_COUNTS };
+// Closed table-count set shared by the route, builder, and validation hub
+// (9/11/0/500/1.5/"10" all rejected).
+export const SELF_ONBOARD_TABLE_COUNTS = [10, 15, 20] as const;
 
 export const SELF_ONBOARD_SLUG_MIN_LENGTH = 3;
 export const SELF_ONBOARD_SLUG_MAX_LENGTH = 60;
@@ -157,3 +157,137 @@ export function buildInitialTables(
     };
   });
 }
+
+// ============================================================
+// Triple Free Shield — Official Verification Gate (2026-10)
+// ============================================================
+
+/**
+ * Layer 1: Disposable / temporary / burner email domains blocked at self-
+ * service registration to prevent automated fake-restaurant spam.
+ */
+export const DISPOSABLE_EMAIL_DOMAINS: ReadonlySet<string> = new Set([
+  '10minutemail.com',
+  '10minutemail.net',
+  'burnermail.io',
+  'dispostable.com',
+  'emailondeck.com',
+  'fake.com',
+  'fakeinbox.com',
+  'getairmail.com',
+  'getnada.com',
+  'guerrillamail.com',
+  'guerrillamail.net',
+  'guerrillamailblock.com',
+  'inboxbear.com',
+  'mailcatch.com',
+  'maildrop.cc',
+  'mailinator.com',
+  'mailnesia.com',
+  'mintemail.com',
+  'mohmal.com',
+  'mytemp.email',
+  'sharklasers.com',
+  'temp-mail.io',
+  'temp-mail.org',
+  'tempail.com',
+  'tempmail.com',
+  'tempmail.net',
+  'tempmailo.com',
+  'throwawaymail.com',
+  'trashmail.com',
+  'yopmail.com',
+  'yopmail.fr',
+  'yopmail.net',
+]);
+
+/**
+ * True when an email address uses a disposable/burner domain (or subdomain).
+ */
+export function isDisposableEmail(email: string): boolean {
+  const normalized = String(email ?? '').trim().toLowerCase();
+  const atIndex = normalized.lastIndexOf('@');
+  if (atIndex === -1) return false;
+  const domain = normalized.slice(atIndex + 1).trim();
+  if (!domain) return false;
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) return true;
+  const parts = domain.split('.');
+  for (let i = 1; i < parts.length - 1; i += 1) {
+    const parent = parts.slice(i).join('.');
+    if (DISPOSABLE_EMAIL_DOMAINS.has(parent)) return true;
+  }
+  return false;
+}
+
+/**
+ * Normalize an owner's verification phone/WhatsApp number to a canonical E.164
+ * identifier (`+` + digits) so that `0599123456`, `00970599123456`, and
+ * `+970599123456` resolve to the SAME canonical string (`+970599123456`).
+ * Returns `null` if the input is not a valid reachable phone number.
+ */
+export function normalizeVerificationPhone(raw: unknown): string | null {
+  const parsed = normalizeWhatsappNumber(raw);
+  if (!parsed) return null;
+  let digits = parsed.dial;
+  if (digits.startsWith('00') && digits.length >= 9) {
+    digits = digits.slice(2);
+  } else if (/^05\d{8}$/.test(digits)) {
+    digits = `970${digits.slice(1)}`;
+  }
+  if (digits.length < 8 || digits.length > 15 || /^0+$/.test(digits)) {
+    return null;
+  }
+  return `+${digits}`;
+}
+
+/**
+ * Public, non-secret verification request reference (`MRH-XXXXXX`) displayed
+ * to the owner on the Official Verification Hold Screen and embedded in the
+ * WhatsApp Reverse Verification message. Never reveals the activation code.
+ */
+export function buildVerificationReference(restaurantId: string): string {
+  const hex = createHash('sha256')
+    .update(`mureeh-ref-v1:${restaurantId}`)
+    .digest('hex')
+    .slice(0, 6)
+    .toUpperCase();
+  return `MRH-${hex}`;
+}
+
+/**
+ * Deterministic 6-digit Official Activation Code derived via HMAC-SHA256 from
+ * the server's `JWT_SECRET` and the tenant id. Zero schema changes required,
+ * impossible to predict or forge without `JWT_SECRET`, and surfaced ONLY to
+ * platform admins (`PLATFORM_ADMIN` / `SUPER_ADMIN`).
+ */
+export function computeRestaurantVerificationCode(
+  restaurantId: string,
+  secret: string = process.env.JWT_SECRET || ''
+): string {
+  if (!restaurantId || !secret) {
+    throw new Error('restaurantId and secret are required for verification code');
+  }
+  const digest = createHmac('sha256', secret)
+    .update(`mureeh-onboard-verify-v1:${restaurantId}`)
+    .digest();
+  const num = (digest.readUInt32BE(0) % 900_000) + 100_000;
+  return String(num);
+}
+
+/**
+ * Constant-time verification of a 6-digit Official Activation Code.
+ */
+export function verifyRestaurantActivationCode(
+  restaurantId: string,
+  suppliedCode: string,
+  secret: string = process.env.JWT_SECRET || ''
+): boolean {
+  const clean = String(suppliedCode ?? '').trim();
+  if (!/^\d{6}$/.test(clean)) return false;
+  const expected = computeRestaurantVerificationCode(restaurantId, secret);
+  const a = Buffer.from(clean, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
