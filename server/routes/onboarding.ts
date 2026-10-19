@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import type { Prisma, Restaurant, TenantRole } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import { config } from '../config';
 import { requireAuth, isPlatformUser } from '../middleware/auth';
@@ -61,14 +62,37 @@ router.use(requireAuth);
 // table, no in-memory state, survives restarts): after 5 failures within 15
 // minutes the gate answers 429 for that restaurant — for a wrong AND for the
 // correct code alike — until the oldest counted failure ages out.
+//
+// CONCURRENCY (F-01 follow-up, post-merge audit of cbeaa42): counting rows
+// and recording a new failure as separate statements is a check-then-act
+// race — N parallel attempts can all observe "4 failures" and all be
+// evaluated, overspending the budget; two parallel correct codes could both
+// perform (and both audit-log) the activation. The whole verify decision
+// therefore runs in ONE transaction that first takes `SELECT … FOR UPDATE`
+// on the Restaurant row, serializing attempts per restaurant (other tenants
+// are unaffected; the lock is held only for a few indexed statements).
+//
+// FAIL-CLOSED AUDIT COUPLING: the failure row is written with tx.auditLog
+// (never the error-swallowing logAuditEvent) inside that transaction, and
+// the 400 is only sent after the transaction commits — if the row cannot be
+// persisted the request fails 500 and is NOT presented as a counted
+// rejection. Symmetrically, the ONBOARDING→ACTIVE transition and its
+// RESTAURANT_VERIFIED_AND_ACTIVATED row commit or roll back together, so a
+// restaurant can never end up activated without its success record (or with
+// a success record but no activation); the owner simply retries.
 // ============================================================
 const VERIFY_FAILURE_LIMIT = 5;
 const VERIFY_FAILURE_WINDOW_MS = 15 * 60_000;
 const VERIFICATION_FAILED_ACTION = 'RESTAURANT_VERIFICATION_FAILED';
+const VERIFICATION_SUCCEEDED_ACTION = 'RESTAURANT_VERIFIED_AND_ACTIVATED';
 
 /** Seconds until the restaurant may try again, or 0 when not locked. */
-async function verificationLockRemainingSeconds(restaurantId: string, now: Date): Promise<number> {
-  const recent = await prisma.auditLog.findMany({
+async function verificationLockRemainingSeconds(
+  db: Prisma.TransactionClient,
+  restaurantId: string,
+  now: Date
+): Promise<number> {
+  const recent = await db.auditLog.findMany({
     where: {
       restaurantId,
       action: VERIFICATION_FAILED_ACTION,
@@ -478,124 +502,206 @@ router.post(
         });
       }
 
-      const restaurant = await prisma.restaurant.findUnique({
-        where: { id: user.restaurantId },
-      });
-      if (!restaurant) {
-        return res.status(404).json({
-          success: false,
-          error: 'المطعم غير موجود',
-          statusCode: 404,
-        });
-      }
+      const restaurantId = user.restaurantId;
+      // Captured for the transaction closure's audit writes; the guard above
+      // has already established role === 'RESTAURANT_MANAGER' (same assertion
+      // pattern as the direct audit writes in manager.ts).
+      const actorRole = user.role as TenantRole;
 
-      if (restaurant.status === 'ACTIVE') {
-        const resolved = resolveRestaurantRow(restaurant);
-        return res.json({
-          success: true,
-          data: {
-            restaurant: {
-              ...restaurant,
-              logoUrl: resolved.logoUrl,
-              coverImageUrl: resolved.coverImageUrl,
-              mapImageUrl: resolved.mapImageUrl,
-              galleryImages: resolved.galleryImages,
-              logoStoragePath: resolved.logoStoragePath,
+      // The entire decision — status, budget count, code evaluation, and the
+      // audit write that backs the outcome — runs in ONE transaction holding
+      // a row lock on the Restaurant row (see the budget block above). The
+      // transaction only RETURNS an outcome; HTTP mapping happens after
+      // commit, so a 400 below always means the failure row was persisted
+      // and a 200 always means activation + success row committed together.
+      // Any throw (including a failed audit insert) rolls everything back
+      // and surfaces as the generic 500 in the catch — fail-closed.
+      type VerifyOutcome =
+        | { kind: 'not_found' }
+        | { kind: 'already_verified'; restaurant: Restaurant }
+        | { kind: 'not_onboarding' }
+        | { kind: 'locked'; lockSeconds: number }
+        | { kind: 'invalid' }
+        | { kind: 'activated'; restaurant: Restaurant };
+
+      const outcome: VerifyOutcome = await prisma.$transaction(
+        async (tx) => {
+          // Serialize concurrent attempts for THIS restaurant. A missing row
+          // locks nothing and is reported as not_found below.
+          await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT "id" FROM "Restaurant" WHERE "id" = ${restaurantId} FOR UPDATE
+          `;
+          const restaurant = await tx.restaurant.findUnique({
+            where: { id: restaurantId },
+          });
+          if (!restaurant) return { kind: 'not_found' } as const;
+
+          if (restaurant.status === 'ACTIVE') {
+            return { kind: 'already_verified', restaurant } as const;
+          }
+          if (restaurant.status !== 'ONBOARDING') {
+            return { kind: 'not_onboarding' } as const;
+          }
+
+          // Budget check BEFORE the code is evaluated: while locked, the
+          // correct code is refused exactly like a wrong one (no oracle, no
+          // bypass). Attempts during the lock write no row, so they cannot
+          // extend it.
+          const now = new Date();
+          const lockRemaining = await verificationLockRemainingSeconds(tx, restaurant.id, now);
+          if (lockRemaining > 0) {
+            return { kind: 'locked', lockSeconds: lockRemaining } as const;
+          }
+
+          const isValid = verifyRestaurantActivationCode(restaurant.id, code, config.jwtSecret, {
+            now,
+            // Codes communicated before the rotating scheme shipped keep
+            // working for restaurants that existed at that time (see the
+            // cut-off constant).
+            allowLegacy: acceptsLegacyVerificationCode(restaurant),
+          });
+          if (!isValid) {
+            // This row is also the durable counter behind the 429 above. A
+            // failure here aborts the transaction (→ 500): the rejection is
+            // never reported as counted unless it was actually persisted.
+            await tx.auditLog.create({
+              data: {
+                restaurantId: restaurant.id,
+                userId: user.id,
+                actor: user.name,
+                actorRole,
+                action: VERIFICATION_FAILED_ACTION,
+                entity: 'Restaurant',
+                entityId: restaurant.id,
+                details: `محاولة إدخال رمز تفعيل رسمي غير صحيح لمطعم ${restaurant.name} (${restaurant.slug})`,
+                ipAddress: req.ip || null,
+              },
+            });
+            return { kind: 'invalid' } as const;
+          }
+
+          // Exactly-once activation: the CAS is anchored on the status read
+          // under the row lock; a concurrent activator (this route is
+          // serialized, but a platform admin can also approve) turns this
+          // request into the idempotent already-verified outcome instead of
+          // a second transition + second success row.
+          const transition = await tx.restaurant.updateMany({
+            where: { id: restaurant.id, status: 'ONBOARDING' },
+            data: { status: 'ACTIVE' },
+          });
+          if (transition.count !== 1) {
+            const fresh = await tx.restaurant.findUnique({ where: { id: restaurant.id } });
+            if (fresh?.status === 'ACTIVE') {
+              return { kind: 'already_verified', restaurant: fresh } as const;
+            }
+            return { kind: 'not_onboarding' } as const;
+          }
+
+          const verificationReference = buildVerificationReference(restaurant.id);
+          await tx.auditLog.create({
+            data: {
+              restaurantId: restaurant.id,
+              userId: user.id,
+              actor: user.name,
+              actorRole,
+              action: VERIFICATION_SUCCEEDED_ACTION,
+              entity: 'Restaurant',
+              entityId: restaurant.id,
+              details: `تم توثيق وتفعيل المطعم رسمياً عبر بوابة التحقق (${verificationReference}): ${restaurant.name} (${restaurant.slug})`,
+              ipAddress: req.ip || null,
             },
-            verified: true,
-            alreadyVerified: true,
-            verificationReference: buildVerificationReference(restaurant.id),
-          },
-          statusCode: 200,
-        });
-      }
+          });
 
-      if (restaurant.status !== 'ONBOARDING') {
-        return res.status(403).json({
-          success: false,
-          error: 'حساب المطعم موقوف حالياً من قبل إدارة المنصة',
-          statusCode: 403,
-        });
-      }
-
-      // Budget check BEFORE the code is evaluated: while locked, the correct
-      // code is refused exactly like a wrong one (no oracle, no bypass).
-      const now = new Date();
-      const lockRemaining = await verificationLockRemainingSeconds(restaurant.id, now);
-      if (lockRemaining > 0) {
-        return res.status(429).json({
-          success: false,
-          code: 'VERIFICATION_LOCKED',
-          error: `محاولات كثيرة لإدخال رمز التفعيل. حاول مجدداً بعد ${Math.ceil(lockRemaining / 60)} دقيقة.`,
-          statusCode: 429,
-        });
-      }
-
-      const isValid = verifyRestaurantActivationCode(restaurant.id, code, config.jwtSecret, {
-        now,
-        // Codes communicated before the rotating scheme shipped keep working
-        // for restaurants that existed at that time (see the cut-off constant).
-        allowLegacy: acceptsLegacyVerificationCode(restaurant),
-      });
-      if (!isValid) {
-        // This row is also the durable counter behind the 429 above.
-        await logAuditEvent({
-          restaurantId: restaurant.id,
-          userId: user.id,
-          actor: user.name,
-          actorRole: user.role,
-          action: VERIFICATION_FAILED_ACTION,
-          entity: 'Restaurant',
-          entityId: restaurant.id,
-          details: `محاولة إدخال رمز تفعيل رسمي غير صحيح لمطعم ${restaurant.name} (${restaurant.slug})`,
-          ipAddress: req.ip,
-        }).catch(() => {});
-
-        return res.status(400).json({
-          success: false,
-          code: 'INVALID_VERIFICATION_CODE',
-          error:
-            'رمز التفعيل الرسمي غير صحيح — تأكد من الرمز المكون من 6 أرقام الصادر من منصة مريح',
-          statusCode: 400,
-        });
-      }
-
-      const activated = await prisma.restaurant.update({
-        where: { id: restaurant.id },
-        data: { status: 'ACTIVE' },
-      });
-
-      const resolved = resolveRestaurantRow(activated);
-      const verificationReference = buildVerificationReference(activated.id);
-
-      await logAuditEvent({
-        restaurantId: activated.id,
-        userId: user.id,
-        actor: user.name,
-        actorRole: user.role,
-        action: 'RESTAURANT_VERIFIED_AND_ACTIVATED',
-        entity: 'Restaurant',
-        entityId: activated.id,
-        details: `تم توثيق وتفعيل المطعم رسمياً عبر بوابة التحقق (${verificationReference}): ${activated.name} (${activated.slug})`,
-        ipAddress: req.ip,
-      }).catch(() => {});
-
-      return res.json({
-        success: true,
-        data: {
-          restaurant: {
-            ...activated,
-            logoUrl: resolved.logoUrl,
-            coverImageUrl: resolved.coverImageUrl,
-            mapImageUrl: resolved.mapImageUrl,
-            galleryImages: resolved.galleryImages,
-            logoStoragePath: resolved.logoStoragePath,
-          },
-          verified: true,
-          verificationReference,
+          const activated = await tx.restaurant.findUnique({
+            where: { id: restaurant.id },
+          });
+          return { kind: 'activated', restaurant: activated! } as const;
         },
-        statusCode: 200,
-      });
+        // Isolation is pinned, not inherited (F-01-E): correctness needs
+        // ReadCommitted, where the budget count issued AFTER the row lock
+        // sees failures committed by attempts that held the lock before us.
+        // Under a snapshot level (RepeatableRead/Serializable without
+        // retries) the count could read a pre-lock snapshot and overspend —
+        // the database default is an environment setting (postgresql.conf /
+        // ALTER DATABASE / starter-string), never something to rely on.
+        // Lock waiting happens inside the transaction window; allow headroom
+        // for a burst of queued attempts on a slow database before failing
+        // closed (a timed-out attempt is a 500, never an uncounted guess).
+        { isolationLevel: 'ReadCommitted', maxWait: 5_000, timeout: 15_000 }
+      );
+
+      switch (outcome.kind) {
+        case 'not_found':
+          return res.status(404).json({
+            success: false,
+            error: 'المطعم غير موجود',
+            statusCode: 404,
+          });
+        case 'already_verified': {
+          const resolved = resolveRestaurantRow(outcome.restaurant);
+          return res.json({
+            success: true,
+            data: {
+              restaurant: {
+                ...outcome.restaurant,
+                logoUrl: resolved.logoUrl,
+                coverImageUrl: resolved.coverImageUrl,
+                mapImageUrl: resolved.mapImageUrl,
+                galleryImages: resolved.galleryImages,
+                logoStoragePath: resolved.logoStoragePath,
+              },
+              verified: true,
+              alreadyVerified: true,
+              verificationReference: buildVerificationReference(outcome.restaurant.id),
+            },
+            statusCode: 200,
+          });
+        }
+        case 'not_onboarding':
+          return res.status(403).json({
+            success: false,
+            error: 'حساب المطعم موقوف حالياً من قبل إدارة المنصة',
+            statusCode: 403,
+          });
+        case 'locked':
+          return res.status(429).json({
+            success: false,
+            code: 'VERIFICATION_LOCKED',
+            error: `محاولات كثيرة لإدخال رمز التفعيل. حاول مجدداً بعد ${Math.ceil(outcome.lockSeconds / 60)} دقيقة.`,
+            statusCode: 429,
+          });
+        case 'invalid':
+          return res.status(400).json({
+            success: false,
+            code: 'INVALID_VERIFICATION_CODE',
+            error:
+              'رمز التفعيل الرسمي غير صحيح — تأكد من الرمز المكون من 6 أرقام الصادر من منصة مريح',
+            statusCode: 400,
+          });
+        case 'activated': {
+          const resolved = resolveRestaurantRow(outcome.restaurant);
+          return res.json({
+            success: true,
+            data: {
+              restaurant: {
+                ...outcome.restaurant,
+                logoUrl: resolved.logoUrl,
+                coverImageUrl: resolved.coverImageUrl,
+                mapImageUrl: resolved.mapImageUrl,
+                galleryImages: resolved.galleryImages,
+                logoStoragePath: resolved.logoStoragePath,
+              },
+              verified: true,
+              verificationReference: buildVerificationReference(outcome.restaurant.id),
+            },
+            statusCode: 200,
+          });
+        }
+        default:
+          // Unreachable by construction (exhaustive union); fail closed
+          // through the generic 500 below rather than hanging the request.
+          throw new Error('unreachable verify outcome');
+      }
     } catch (err) {
       console.error('Onboarding verify error:', err);
       return res.status(500).json({

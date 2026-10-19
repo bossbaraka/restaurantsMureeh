@@ -273,6 +273,22 @@ export const VERIFICATION_CODE_WINDOW_MS = 24 * 60 * 60 * 1000;
  * created after it accept v2 codes only. Must be >= the production rollout
  * date of the v2 scheme (bump it if the rollout slips); remove once no
  * ONBOARDING restaurant created before the cut-off remains.
+ *
+ * The relevant rollout is the API service (Render), not the merge and not
+ * the frontend: until the API runs the rotating scheme, the old overview
+ * keeps issuing v1 codes — including to restaurants created after the v2
+ * code merged. That condition is satisfied for this date: the deployed
+ * Render API was confirmed (by the project owner, 2026-10-19) to run merge
+ * cbeaa42, i.e. the rotating scheme went live on 2026-10-19 — comfortably
+ * before 2026-11-01 — so no restaurant created on/after the cut-off could
+ * ever have been issued a v1 code. (An earlier follow-up draft moved this
+ * to 2026-12-01 while the API deploy was still unconfirmed; that margin is
+ * no longer needed and keeping it would only extend the never-expiring v1
+ * surface for new sign-ups.) If the API is EVER rolled back to pre-v2 code
+ * and later re-deployed, re-check this constant against the rollback window
+ * BEFORE re-deploying; a refused legitimate v1 code is always recoverable
+ * operationally (re-issue the current v2 code from the admin overview, or
+ * approve manually) — never by weakening the check at runtime.
  */
 export const LEGACY_VERIFICATION_CODE_CUTOFF = new Date('2026-11-01T00:00:00Z');
 
