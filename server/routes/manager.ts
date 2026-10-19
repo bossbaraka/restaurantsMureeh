@@ -996,14 +996,20 @@ router.put(
             .json({ success: false, error: decision.error, statusCode: decision.statusCode });
         }
 
-        const proofDeleted =
-          decision.clearsPendingVerification && order.paymentProofPath
-            ? await discardPaymentProof(order.paymentProofPath)
-            : true;
-
         const cancelledAt = new Date();
+        // State FIRST, storage second. The claim is pinned to BOTH the kitchen
+        // status and the money state the decision was computed from: a cashier
+        // confirmation that landed in between (→ PAID) makes this claim miss
+        // (409) instead of being overwritten to UNPAID/CANCELLED. The receipt
+        // pointer is left intact here and only cleared after the object is
+        // actually gone (below).
         const cancelClaim = await prisma.order.updateMany({
-          where: { id: orderId, restaurantId: targetRestId, status: order.status },
+          where: {
+            id: orderId,
+            restaurantId: targetRestId,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+          },
           data: {
             status: 'CANCELLED',
             cancelledAt,
@@ -1015,7 +1021,6 @@ router.put(
                   fulfillmentState: FULFILLMENT_STATE.PAYMENT_REJECTED,
                   paymentRejectedAt: cancelledAt,
                   paymentRejectionReason: reason || CANCELLATION_AUTO_REJECT_REASON,
-                  ...(proofDeleted ? { paymentProofPath: null } : {}),
                 }
               : {}),
           },
@@ -1026,6 +1031,28 @@ router.put(
             error: 'تغيرت حالة الطلب بواسطة مستخدم آخر. حدّث القائمة وحاول مجدداً.',
             statusCode: 409,
           });
+        }
+
+        // The cancellation is committed — now the pending receipt may go. If the
+        // object cannot be removed we KEEP the pointer so the retention sweep
+        // retries it; the pointer is cleared only while it still references the
+        // object we deleted (a concurrent guest re-upload keeps its new key).
+        const proofDeleted =
+          decision.clearsPendingVerification && order.paymentProofPath
+            ? await discardPaymentProof(order.paymentProofPath)
+            : true;
+        if (decision.clearsPendingVerification && order.paymentProofPath && proofDeleted) {
+          await prisma.order
+            .updateMany({
+              where: { id: order.id, restaurantId: targetRestId, paymentProofPath: order.paymentProofPath },
+              data: { paymentProofPath: null },
+            })
+            .catch((err: unknown) => {
+              console.error('[Order Cancel] receipt pointer clear failed (object already removed):', {
+                orderId,
+                message: (err as any)?.message || String(err),
+              });
+            });
         }
         const cancelledOrder = await prisma.order.findUnique({ where: { id: orderId } });
 
@@ -4916,12 +4943,10 @@ router.post(
         });
       }
 
-      // Storage first: if the object cannot be removed we KEEP the pointer so
-      // the retention sweep retries it, instead of losing track of the file.
-      const proofDeleted = order.paymentProofPath
-        ? await discardPaymentProof(order.paymentProofPath)
-        : true;
-
+      // State FIRST, storage second: the receipt object is deleted only after
+      // this conditional claim succeeded. A concurrent confirmation (→ PAID)
+      // makes the claim miss and the receipt of the paid order survives. The
+      // pointer is left intact here and cleared below once the object is gone.
       const now = new Date();
       const claimed = await prisma.order.updateMany({
         where: {
@@ -4938,7 +4963,6 @@ router.post(
           fulfillmentState: FULFILLMENT_STATE.PAYMENT_REJECTED,
           paymentRejectedAt: now,
           paymentRejectionReason: reason || 'لم يتم التحقق من إشعار الحوالة',
-          ...(proofDeleted ? { paymentProofPath: null } : {}),
         },
       });
 
@@ -4948,6 +4972,28 @@ router.post(
           error: 'تمت معالجة هذا الإشعار للتو من جهاز آخر. حدّث القائمة وحاول مجدداً.',
           statusCode: 409,
         });
+      }
+
+      // The rejected receipt serves no financial purpose. If the object cannot
+      // be removed we KEEP the pointer so the retention sweep retries it,
+      // instead of losing track of the file. The pointer is cleared only while
+      // it still references the object we deleted: a guest re-upload that
+      // raced in keeps its new key.
+      const proofDeleted = order.paymentProofPath
+        ? await discardPaymentProof(order.paymentProofPath)
+        : true;
+      if (order.paymentProofPath && proofDeleted) {
+        await prisma.order
+          .updateMany({
+            where: { id: order.id, restaurantId, paymentProofPath: order.paymentProofPath },
+            data: { paymentProofPath: null },
+          })
+          .catch((err: unknown) => {
+            console.error('[Payment Reject] receipt pointer clear failed (object already removed):', {
+              orderId: order.id,
+              message: (err as any)?.message || String(err),
+            });
+          });
       }
 
       await logAuditEvent({

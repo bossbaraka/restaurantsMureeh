@@ -255,39 +255,120 @@ export function buildVerificationReference(restaurantId: string): string {
 }
 
 /**
- * Deterministic 6-digit Official Activation Code derived via HMAC-SHA256 from
- * the server's `JWT_SECRET` and the tenant id. Zero schema changes required,
- * impossible to predict or forge without `JWT_SECRET`, and surfaced ONLY to
+ * Official Activation Code — time-windowed derivation (v2).
+ *
+ * The code is a 6-digit HMAC-SHA256 of the server's `JWT_SECRET`, the tenant
+ * id AND the current 24-hour window index, so it rotates automatically and a
+ * leaked or guessed code has a bounded lifetime. Zero schema changes: nothing
+ * is stored, the platform admin screen simply computes the code of the
+ * current window, and verification accepts the current and the previous
+ * window (a code handed to an owner stays valid for at least 24 h).
+ */
+export const VERIFICATION_CODE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Compatibility cut-off for codes issued by the previous, non-rotating (v1)
+ * derivation: restaurants created BEFORE this date may still activate with
+ * the v1 code the platform team already communicated to them. Restaurants
+ * created after it accept v2 codes only. Must be >= the production rollout
+ * date of the v2 scheme (bump it if the rollout slips); remove once no
+ * ONBOARDING restaurant created before the cut-off remains.
+ */
+export const LEGACY_VERIFICATION_CODE_CUTOFF = new Date('2026-11-01T00:00:00Z');
+
+function sixDigitHmac(secret: string, material: string): string {
+  const digest = createHmac('sha256', secret).update(material).digest();
+  const num = (digest.readUInt32BE(0) % 900_000) + 100_000;
+  return String(num);
+}
+
+function toMillis(now: number | Date): number {
+  return now instanceof Date ? now.getTime() : now;
+}
+
+export function verificationCodeWindowIndex(now: number | Date = Date.now()): number {
+  return Math.floor(toMillis(now) / VERIFICATION_CODE_WINDOW_MS);
+}
+
+/** Last instant at which the code of the window containing `now` is accepted. */
+export function verificationCodeExpiresAt(now: number | Date = Date.now()): Date {
+  return new Date((verificationCodeWindowIndex(now) + 2) * VERIFICATION_CODE_WINDOW_MS);
+}
+
+/**
+ * Deterministic 6-digit Official Activation Code for the window containing
+ * `now`. Impossible to predict or forge without `JWT_SECRET`, surfaced ONLY to
  * platform admins (`PLATFORM_ADMIN` / `SUPER_ADMIN`).
  */
 export function computeRestaurantVerificationCode(
+  restaurantId: string,
+  secret: string = process.env.JWT_SECRET || '',
+  now: number | Date = Date.now()
+): string {
+  if (!restaurantId || !secret) {
+    throw new Error('restaurantId and secret are required for verification code');
+  }
+  return sixDigitHmac(
+    secret,
+    `mureeh-onboard-verify-v2:${restaurantId}:${verificationCodeWindowIndex(now)}`
+  );
+}
+
+/**
+ * Previous, non-rotating derivation (v1). Kept ONLY so codes already handed
+ * out before the v2 rollout keep working for restaurants created before
+ * `LEGACY_VERIFICATION_CODE_CUTOFF`. Never displayed anywhere any more.
+ */
+export function computeLegacyRestaurantVerificationCode(
   restaurantId: string,
   secret: string = process.env.JWT_SECRET || ''
 ): string {
   if (!restaurantId || !secret) {
     throw new Error('restaurantId and secret are required for verification code');
   }
-  const digest = createHmac('sha256', secret)
-    .update(`mureeh-onboard-verify-v1:${restaurantId}`)
-    .digest();
-  const num = (digest.readUInt32BE(0) % 900_000) + 100_000;
-  return String(num);
+  return sixDigitHmac(secret, `mureeh-onboard-verify-v1:${restaurantId}`);
+}
+
+function codesMatch(supplied: string, expected: string): boolean {
+  const a = Buffer.from(supplied, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 /**
- * Constant-time verification of a 6-digit Official Activation Code.
+ * Constant-time verification of a 6-digit Official Activation Code against
+ * the current window, the previous window and — only when `allowLegacy` is
+ * set by the caller for a pre-cut-off restaurant — the v1 code.
  */
 export function verifyRestaurantActivationCode(
   restaurantId: string,
   suppliedCode: string,
-  secret: string = process.env.JWT_SECRET || ''
+  secret: string = process.env.JWT_SECRET || '',
+  options: { now?: number | Date; allowLegacy?: boolean } = {}
 ): boolean {
   const clean = String(suppliedCode ?? '').trim();
   if (!/^\d{6}$/.test(clean)) return false;
-  const expected = computeRestaurantVerificationCode(restaurantId, secret);
-  const a = Buffer.from(clean, 'utf8');
-  const b = Buffer.from(expected, 'utf8');
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
+  const nowMs = toMillis(options.now ?? Date.now());
+  const candidates = [
+    computeRestaurantVerificationCode(restaurantId, secret, nowMs),
+    computeRestaurantVerificationCode(restaurantId, secret, nowMs - VERIFICATION_CODE_WINDOW_MS),
+  ];
+  if (options.allowLegacy) {
+    candidates.push(computeLegacyRestaurantVerificationCode(restaurantId, secret));
+  }
+  // Evaluate every candidate (no early exit) so the comparison cost does not
+  // depend on which candidate — if any — matched.
+  let matched = false;
+  for (const expected of candidates) {
+    if (codesMatch(clean, expected)) matched = true;
+  }
+  return matched;
+}
+
+/** True when a restaurant may still activate with a pre-rotation (v1) code. */
+export function acceptsLegacyVerificationCode(restaurant: { createdAt: Date | string }): boolean {
+  const created = new Date(restaurant.createdAt).getTime();
+  return Number.isFinite(created) && created < LEGACY_VERIFICATION_CODE_CUTOFF.getTime();
 }
 

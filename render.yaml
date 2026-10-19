@@ -1,4 +1,15 @@
 services:
+  # SINGLE-INSTANCE CONSTRAINT (audit F-04, 2026-10-19). The API keeps three
+  # pieces of state in process memory: the SSE client registry
+  # (server/services/realtime.ts), the express-rate-limit MemoryStore behind
+  # every per-IP limiter (server/middleware/rateLimit.ts) and the optional
+  # in-process retention timer (server/index.ts). They are correct for exactly
+  # ONE running instance, which is what this manifest declares (no
+  # `numInstances`/`scaling` → Render default of 1). Do NOT raise the instance
+  # count or enable autoscaling for restaurant-api without first moving that
+  # state to a shared store (separate proposal) — otherwise live updates reach
+  # only the instance a guest happens to be connected to and the limiters
+  # become N× looser.
   - type: web
     name: restaurant-api
     runtime: node
