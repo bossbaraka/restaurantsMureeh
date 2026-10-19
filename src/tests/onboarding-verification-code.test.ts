@@ -132,4 +132,17 @@ describe('legacy (v1) code compatibility', () => {
     expect(acceptsLegacyVerificationCode({ createdAt: after })).toBe(false);
     expect(acceptsLegacyVerificationCode({ createdAt: 'not-a-date' })).toBe(false);
   });
+
+  it('the cut-off stays after the confirmed API deploy of the rotating scheme (pinned at 2026-11-01)', () => {
+    // The deployed Render API was confirmed (project owner, 2026-10-19) to
+    // run merge cbeaa42, so v1 issuance stopped on 2026-10-19 and every
+    // restaurant that could hold a legitimate v1 code was created before
+    // this cut-off. Moving the constant requires re-verifying that deploy
+    // fact and updating this pin in the same change (see its comment).
+    expect(LEGACY_VERIFICATION_CODE_CUTOFF.toISOString()).toBe('2026-11-01T00:00:00.000Z');
+    expect(acceptsLegacyVerificationCode({ createdAt: '2026-10-19T12:00:00Z' })).toBe(true);
+    expect(acceptsLegacyVerificationCode({ createdAt: '2026-10-31T23:59:59Z' })).toBe(true);
+    expect(acceptsLegacyVerificationCode({ createdAt: '2026-11-01T00:00:00Z' })).toBe(false);
+    expect(acceptsLegacyVerificationCode({ createdAt: '2026-11-15T12:00:00Z' })).toBe(false);
+  });
 });

@@ -187,6 +187,35 @@ router.post('/restaurants/:id/status', validateBody(tenantStatusSchema), async (
     const { id } = req.params;
     const { status } = req.body as { status: 'ACTIVE' | 'SUSPENDED' | 'ONBOARDING' | 'MAINTENANCE' };
 
+    // ONBOARDING is the pre-activation quarantine of the FIRST activation
+    // cycle, not a general-purpose "disable" state (that is SUSPENDED).
+    // No product flow moves an operating tenant back into it — the admin UI
+    // only ever sends ACTIVE/SUSPENDED — and allowing the transition would
+    // silently start a new verification cycle in which codes communicated
+    // during the previous cycle are evaluated again (for pre-cut-off
+    // tenants the non-rotating v1 code never expires). Reject it; a future
+    // re-verification feature must be a distinct, audited flow with its own
+    // code epoch, not a status toggle. Setting ONBOARDING on a tenant that
+    // is already ONBOARDING stays a harmless no-op.
+    if (status === 'ONBOARDING') {
+      const current = await prisma.restaurant.findUnique({
+        where: { id: Array.isArray(id) ? id[0] : id },
+        select: { status: true },
+      });
+      if (!current) {
+        return res.status(404).json({ success: false, error: 'المطعم غير موجود', statusCode: 404 });
+      }
+      if (current.status !== 'ONBOARDING') {
+        return res.status(409).json({
+          success: false,
+          code: 'INVALID_STATUS_TRANSITION',
+          error:
+            'لا يمكن إعادة مطعم مُفعَّل أو موقوف إلى حالة التدشين (ONBOARDING) — استخدم الإيقاف (SUSPENDED) لتعطيل مطعم قيد التشغيل',
+          statusCode: 409,
+        });
+      }
+    }
+
     const updated = await prisma.restaurant.update({
       where: { id },
       data: { status },
