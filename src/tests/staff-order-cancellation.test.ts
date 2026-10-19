@@ -193,9 +193,26 @@ describe('H-02 · route + persistence contract', () => {
   const schemaPrisma = read('prisma/schema.prisma');
   const migrationSql = read('prisma/migrations/20260915120000_staff_cancel_and_payment_void/migration.sql');
 
-  it('cancellation runs through a compare-and-set pinned on the status snapshot', () => {
-    expect(managerTs).toContain("where: { id: orderId, restaurantId: targetRestId, status: order.status }");
+  it('cancellation runs through a compare-and-set pinned on the status AND payment-status snapshot', () => {
+    const claim = managerTs.slice(
+      managerTs.indexOf('const cancelClaim = await prisma.order.updateMany({'),
+      managerTs.indexOf('cancelClaim.count !== 1')
+    );
+    expect(claim).toContain('id: orderId,');
+    expect(claim).toContain('restaurantId: targetRestId,');
+    expect(claim).toContain('status: order.status,');
+    // Money guard under concurrency: a confirmation that lands between the
+    // read and the claim (→ PAID) must make the claim miss, not be overwritten.
+    expect(claim).toContain('paymentStatus: order.paymentStatus,');
     expect(managerTs).toContain('cancelClaim.count !== 1');
+  });
+  it('the pending receipt is discarded only AFTER the cancellation claim succeeded', () => {
+    const claimMiss = managerTs.indexOf('cancelClaim.count !== 1');
+    const discard = managerTs.indexOf(
+      'decision.clearsPendingVerification && order.paymentProofPath\n            ? await discardPaymentProof(order.paymentProofPath)'
+    );
+    expect(claimMiss).toBeGreaterThan(-1);
+    expect(discard).toBeGreaterThan(claimMiss);
   });
   it('cancellation writes the marker columns and never deletes the order', () => {
     expect(managerTs).toContain("status: 'CANCELLED',");

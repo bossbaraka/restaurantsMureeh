@@ -25,6 +25,7 @@ import { withCurrentPlanPricing } from '../services/planPricing';
 import {
   buildVerificationReference,
   computeRestaurantVerificationCode,
+  verificationCodeExpiresAt,
 } from '../services/restaurantProvisioning';
 import { onboardLimiter } from '../middleware/rateLimit';
 import { generateQrToken, parsePagination } from '../utils/security';
@@ -95,6 +96,8 @@ router.get('/overview', async (req: Request, res: Response) => {
       ]);
 
     const totalRevenue = revenueAgg._sum.total ?? 0;
+    // One instant for the whole overview so every tenant's code/expiry agree.
+    const overviewNow = new Date();
 
     return res.json({
       success: true,
@@ -139,8 +142,11 @@ router.get('/overview', async (req: Request, res: Response) => {
             verificationReference: buildVerificationReference(r.id),
             verificationCode:
               r.status === 'ONBOARDING'
-                ? computeRestaurantVerificationCode(r.id, config.jwtSecret)
+                ? computeRestaurantVerificationCode(r.id, config.jwtSecret, overviewNow)
                 : undefined,
+            // Additive: the code above rotates — it is accepted until this instant.
+            verificationCodeExpiresAt:
+              r.status === 'ONBOARDING' ? verificationCodeExpiresAt(overviewNow).toISOString() : undefined,
             createdAt: r.createdAt.toISOString(),
           };
         }),

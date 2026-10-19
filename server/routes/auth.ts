@@ -245,6 +245,25 @@ router.post(
         include: { restaurant: true },
       });
 
+      // Per-account progressive lock — evaluated BEFORE the password proof
+      // (parity with /employee-login and /step-up). While the lock holds, a
+      // wrong and a correct password receive the identical 429, so the lock
+      // never acts as a password oracle, and attempts made during the lock
+      // do not inflate the failure counter (no remote lock extension).
+      // Unknown e-mails never reach this branch: they keep the DUMMY_HASH
+      // compare and the generic 401 below, so lock state is only ever shown
+      // for an identity that already absorbed 5 failures (AUTH-02 design).
+      if (user) {
+        const lockRemaining = lockRemainingSeconds(user.authLockedUntil);
+        if (lockRemaining > 0) {
+          return res.status(429).json({
+            success: false,
+            error: `محاولات دخول كثيرة لهذا الحساب. حاول مجدداً بعد ${lockRemaining} ثانية أو راجع مدير المطعم.`,
+            statusCode: 429,
+          });
+        }
+      }
+
       // Password comparison: bcrypt compare against user hash or dummy hash
       // (DUMMY_HASH) for timing attack prevention (uniform work factor).
       const hashToCheck = user ? user.passwordHash : DUMMY_HASH;
@@ -273,16 +292,8 @@ router.post(
         });
       }
 
-      // Per-account progressive lock (checked AFTER the password proof so a
-      // locked manager still gets the lock message, not a generic 401).
-      const lockRemaining = lockRemainingSeconds(user.authLockedUntil);
-      if (lockRemaining > 0) {
-        return res.status(429).json({
-          success: false,
-          error: `محاولات دخول كثيرة لهذا الحساب. حاول مجدداً بعد ${lockRemaining} ثانية أو راجع مدير المطعم.`,
-          statusCode: 429,
-        });
-      }
+      // (The per-account lock was already enforced above, before the
+      // password proof — see the comment next to the lookup.)
 
       if (user.status === 'SUSPENDED' || user.status === 'INACTIVE') {
         return res.status(403).json({

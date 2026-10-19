@@ -6,6 +6,7 @@ import { logAuditEvent } from '../services/audit';
 import { FREE_PLAN_ID } from '../services/plans';
 import {
   ProvisioningError,
+  acceptsLegacyVerificationCode,
   buildInitialTables,
   buildVerificationReference,
   generateUniqueSlug,
@@ -50,6 +51,37 @@ import {
 const router = Router();
 
 router.use(requireAuth);
+
+// ============================================================
+// Official Activation Code guessing budget — PER RESTAURANT, durable.
+//
+// The per-IP selfOnboardLimiter alone cannot stop distributed guessing of a
+// 6-digit code. Every wrong code already leaves a RESTAURANT_VERIFICATION_FAILED
+// audit row for the tenant, so the budget is derived from those rows (no new
+// table, no in-memory state, survives restarts): after 5 failures within 15
+// minutes the gate answers 429 for that restaurant — for a wrong AND for the
+// correct code alike — until the oldest counted failure ages out.
+// ============================================================
+const VERIFY_FAILURE_LIMIT = 5;
+const VERIFY_FAILURE_WINDOW_MS = 15 * 60_000;
+const VERIFICATION_FAILED_ACTION = 'RESTAURANT_VERIFICATION_FAILED';
+
+/** Seconds until the restaurant may try again, or 0 when not locked. */
+async function verificationLockRemainingSeconds(restaurantId: string, now: Date): Promise<number> {
+  const recent = await prisma.auditLog.findMany({
+    where: {
+      restaurantId,
+      action: VERIFICATION_FAILED_ACTION,
+      createdAt: { gte: new Date(now.getTime() - VERIFY_FAILURE_WINDOW_MS) },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: VERIFY_FAILURE_LIMIT,
+    select: { createdAt: true },
+  });
+  if (recent.length < VERIFY_FAILURE_LIMIT) return 0;
+  const oldestCounted = recent[recent.length - 1].createdAt.getTime();
+  return Math.max(1, Math.ceil((oldestCounted + VERIFY_FAILURE_WINDOW_MS - now.getTime()) / 1000));
+}
 
 // Same single asset contract the auth/admin surfaces use (read-only, lazy).
 let onboardingAssetContract: {
@@ -486,18 +518,33 @@ router.post(
         });
       }
 
-      const isValid = verifyRestaurantActivationCode(
-        restaurant.id,
-        code,
-        config.jwtSecret
-      );
+      // Budget check BEFORE the code is evaluated: while locked, the correct
+      // code is refused exactly like a wrong one (no oracle, no bypass).
+      const now = new Date();
+      const lockRemaining = await verificationLockRemainingSeconds(restaurant.id, now);
+      if (lockRemaining > 0) {
+        return res.status(429).json({
+          success: false,
+          code: 'VERIFICATION_LOCKED',
+          error: `محاولات كثيرة لإدخال رمز التفعيل. حاول مجدداً بعد ${Math.ceil(lockRemaining / 60)} دقيقة.`,
+          statusCode: 429,
+        });
+      }
+
+      const isValid = verifyRestaurantActivationCode(restaurant.id, code, config.jwtSecret, {
+        now,
+        // Codes communicated before the rotating scheme shipped keep working
+        // for restaurants that existed at that time (see the cut-off constant).
+        allowLegacy: acceptsLegacyVerificationCode(restaurant),
+      });
       if (!isValid) {
+        // This row is also the durable counter behind the 429 above.
         await logAuditEvent({
           restaurantId: restaurant.id,
           userId: user.id,
           actor: user.name,
           actorRole: user.role,
-          action: 'RESTAURANT_VERIFICATION_FAILED',
+          action: VERIFICATION_FAILED_ACTION,
           entity: 'Restaurant',
           entityId: restaurant.id,
           details: `محاولة إدخال رمز تفعيل رسمي غير صحيح لمطعم ${restaurant.name} (${restaurant.slug})`,

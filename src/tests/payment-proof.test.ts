@@ -633,13 +633,22 @@ describe('cashier routes contract', () => {
     expect(reject).toContain('const { reason } = req.body as { reason?: string };');
   });
 
-  it('rejects by returning to UNPAID and discarding the receipt first', () => {
+  it('rejects by returning to UNPAID first and discarding the receipt only after the claim succeeded', () => {
     expect(reject).toContain('PAYMENT_STATUS.UNPAID');
     expect(reject).toContain('paymentRejectedAt: now');
     expect(reject).toContain('paymentRejectionReason: reason');
     expect(reject).toContain('await discardPaymentProof(order.paymentProofPath)');
-    // Pointer kept when the object could not be removed (retention retries it).
-    expect(reject).toContain('...(proofDeleted ? { paymentProofPath: null } : {})');
+    // Ordering: the conditional claim (and its 409 miss) come BEFORE the
+    // storage delete — a losing reject must never destroy a paid order's receipt.
+    const claimAt = reject.indexOf('claimed.count !== 1');
+    const discardAt = reject.indexOf('await discardPaymentProof(order.paymentProofPath)');
+    expect(claimAt).toBeGreaterThan(-1);
+    expect(discardAt).toBeGreaterThan(claimAt);
+    // Pointer kept when the object could not be removed (retention retries it),
+    // and cleared only while it still references the deleted object.
+    expect(reject).toContain('if (order.paymentProofPath && proofDeleted)');
+    expect(reject).toContain('paymentProofPath: order.paymentProofPath },');
+    expect(reject).toContain('data: { paymentProofPath: null }');
     expect(reject).toContain("action: 'PAYMENT_REJECTED'");
     expect(reject).toContain("'PAYMENT_PROOF_REJECTED'");
   });
